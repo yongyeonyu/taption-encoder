@@ -19,7 +19,7 @@ Core value:
 Primary constraints:
 
 - iPhone and iPad portrait only.
-- Minimum OS is iOS/iPadOS 15.0 to support older devices through software encoding where practical.
+- Minimum OS is iOS/iPadOS 18.0 for the current SwiftVLC software fallback binary; lower OS support requires a codec stack built for that target.
 - iPad uses the same centered, mobile-width UI and flow as iPhone.
 - Visible app strings stay in English.
 - MVP input is AV1 video.
@@ -27,8 +27,8 @@ Primary constraints:
 - Long-term output remains H.265 video, with future container/preset choices around that H.265 stream.
 - Default output should preserve the source video's resolution, frame rate, orientation, aspect ratio, and color characteristics whenever technically possible.
 - Default quality should target visually source-like output, not aggressive compression.
-- Hardware encoding is recommended.
-- Software encoding remains selectable and clearly labeled.
+- Hardware encoding is preferred automatically when supported.
+- Software fallback is automatic, not user-selectable, and the UI displays the path actually used.
 - Software codec paths are required for unsupported hardware codecs, broad input support, simulator validation, and older-device fallback.
 - Older devices should be supported where performance, OS APIs, and codec availability make the experience honest.
 - Files and Photos are the first input sources.
@@ -63,7 +63,7 @@ Primary constraints:
 - Lock orientation to portrait.
 - Establish the app module layout.
 - Build the main screen with Files, Photos, and Reset actions.
-- Add encoder backend selection with Hardware as the default.
+- Add automatic codec-path information with hardware preferred by policy.
 - Add output summary fixed to H.265.
 - Add placeholder surfaces for banner ads, progress, cancellation, storage errors, and rewarded-save flow.
 - Add ad placement containers for banner, app-open, interstitial, native, and rewarded save ads behind protocol abstractions.
@@ -411,11 +411,11 @@ struct CodecCapability: Equatable {
 Backend policy:
 
 - Prefer hardware H.265 encoding when available.
-- Use software encoding when hardware H.265 is unavailable, unsupported for the selected settings, or required for simulator/legacy fallback.
+- Use software fallback automatically when hardware H.265 is unavailable, native decode fails, selected settings are unsupported, or simulator/legacy fallback is required.
 - Use software decoding for input codecs/containers not supported by AVFoundation.
 - Keep software codec integration behind protocols so licensing, binary size, and App Store risks are contained.
 - Add a license review before shipping any bundled third-party codec stack.
-- Display the actual path used: `Hardware Encoder`, `Software Encoder`, or `Mixed Codec Path`.
+- Display the actual path used: `Hardware Codec Path`, `Software Codec Path`, or `Mixed Codec Path`.
 - For older devices, expose honest speed/thermal warnings instead of pretending the experience will match newer hardware.
 
 ## Progress And Background UX
@@ -449,7 +449,7 @@ System-surface rules:
 - Use Live Activities for active encoding status on the Lock Screen, Dynamic Island, StandBy, and other supported system surfaces.
 - Do not request notification permission for the MVP.
 - On iOS and iPadOS 26 or later, let users choose background encoding and use `BGContinuedProcessingTask` for user-started jobs that should continue after the app moves to the background.
-- On iOS/iPadOS 15-25, use `beginBackgroundTask` only to finish short critical cleanup or finalization; do not promise long background encoding.
+- On iOS/iPadOS 18-25, use `beginBackgroundTask` only to finish short critical cleanup or finalization; do not promise long background encoding.
 - If background continuation is unavailable, tell the user to keep the app open for reliable long encodes.
 - Never show full-screen ads while a background continuation task is active.
 
@@ -468,11 +468,9 @@ Top to bottom:
   - `Files` with `folder`.
   - `Photos` with `photo.on.rectangle`.
   - `Reset` with `arrow.counterclockwise`.
-- Encoder segmented control:
-  - `Hardware`
-  - `Software`
-- Recommendation text:
-  - `Hardware encoder is recommended.`
+- Codec path info:
+  - `Codec Path: Automatic`
+  - `Hardware is used where supported. Software fallback is automatic.`
 - Output summary:
   - `Output`
   - `H.265`
@@ -839,7 +837,7 @@ protocol BackgroundEncodingCoordinator {
 Implementation policy:
 
 - iOS/iPadOS 26 or later: offer a background encoding option and use BackgroundTasks continued processing for user-started encoding where available.
-- iOS/iPadOS 15-25: use short background task time only for cleanup, file closing, and final metadata writing.
+- iOS/iPadOS 18-25: use short background task time only for cleanup, file closing, and final metadata writing.
 - Live Activity updates should continue while the app has runtime and should end with a completed, failed, or cancelled state.
 - The app should persist enough job state to recover cleanly if the system terminates the process.
 - A background-capability message should be visible before long jobs if the device cannot continue encoding reliably in the background.
@@ -851,11 +849,11 @@ Hardware backend:
 - Default recommendation.
 - Uses strict hardware capability checks where possible.
 - Displays `Hardware Encoder`.
-- If hardware is unavailable, fail with a clear message or ask the user to switch to Software.
+- If hardware is unavailable or native decode fails, switch automatically to the software fallback when available.
 
 Software backend:
 
-- User-selectable fallback.
+- Info-only fallback display; HW/SW is not a user-selectable mode.
 - Displays `Software Encoder`.
 - Slower but useful for broad codec coverage, older-device compatibility, compatibility testing, and simulator validation.
 - May be disabled or warned when the estimated runtime, thermal load, or memory use is not acceptable for the current device.
@@ -1052,7 +1050,7 @@ User-facing error text must be short and in English.
 - Photos output creates a new saved asset.
 - Live Activity or equivalent supported system progress surface appears during active encoding.
 - iOS 26+ continued background encoding is verified on a real device.
-- iOS/iPadOS 15-25 fallback behavior is documented.
+- iOS/iPadOS 18-25 fallback behavior is documented.
 - Software codec fallback is verified on at least one older supported device.
 - Mixed codec path is verified with an input not fully covered by Apple-native APIs.
 - Multi-camera merge is verified with at least two different source containers/codecs.

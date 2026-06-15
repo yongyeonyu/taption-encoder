@@ -13,7 +13,7 @@ Product path: **AV1 to H.265 first, All to H.265 final.**
 - Bundle identifier: `com.taption.encoder`
 - Display name: `Taption Encoder`
 - Initial platform: iPhone and iPad portrait only
-- Minimum OS: iOS/iPadOS 15.0
+- Minimum OS: iOS/iPadOS 18.0
 - iPad UX: use the same portrait-first flow and centered mobile-width layout as iPhone
 
 ## Source Core To Port
@@ -42,13 +42,13 @@ Next implementation pass should isolate the media conversion core before importi
 - Default output: preserve source-like resolution, frame rate, orientation, color characteristics, audio timing, and visual quality whenever technically possible
 - Device orientation: iPhone and iPad portrait only
 - Shared UX: iPad uses the same main-screen flow and control density as iPhone
-- Encoder backends: hardware encoder recommended, software encoder available
+- Codec path: the app automatically uses hardware where supported and falls back to software when needed; the UI only displays the actual path.
 - Sources: Files and Photos
 - Photos output: save as a new Photos asset
 - Flow: select a video, start encoding immediately, show progress, allow cancellation or reset, then save after rewarded ad completion
 - Rewarded save failure: keep the completed temporary output and let the user retry later without re-encoding
 - Progress: show progress bar, percentage, elapsed time, and estimated time remaining when enough progress samples are available
-- Background status: on iOS/iPadOS 26 or later, let users opt into background encoding; on iOS/iPadOS 15-25, tell users to keep the app open for reliable encoding
+- Background status: on iOS/iPadOS 26 or later, let users opt into background encoding; on iOS/iPadOS 18-25, tell users to keep the app open for reliable encoding
 - Save path: create a sibling output named with `_taption` appended to the original filename
 - Safety: warn before output when available storage is insufficient
 - Ads: non-personalized AdMob banner on the main screen and AdMob rewarded ad before final save
@@ -58,8 +58,8 @@ Next implementation pass should isolate the media conversion core before importi
 - Phase 0 foundation is implemented as of 2026-06-15.
 - The app now has `AppEnvironment`, `FeatureFlags`, `AppConfiguration`, the `Features/Home` screen shell, protocol boundaries, and real AVFoundation services for the first AV1-to-H.265 path.
 - Phase 1 fake UX/state machine is implemented as of 2026-06-15.
-- Files entry now runs a real `importing -> inspecting -> storage checking -> encoding -> rewarded save -> completed` flow for AV1 input, with AVFoundation progress, percentage, elapsed time, estimated remaining time, cancellation, reset, and pending-save recovery surfaces.
-- Files output saves after the rewarded-save gate to the same folder as the source file, using `_taption` before the `.mp4` extension. Photos import/save, AdMob, and broad software codec support remain later-phase implementation work.
+- Files entry now runs a real `importing -> inspecting -> storage checking -> encoding -> rewarded save -> completed` flow for AV1 input, with AVFoundation progress, software AV1 decode fallback, percentage, elapsed time, estimated remaining time, cancellation, reset, and pending-save recovery surfaces.
+- Files output saves after the rewarded-save gate to the same folder as the source file, using `_taption` before the `.mp4` extension. Photos import/save, AdMob, audio preservation in the software fallback path, and broad software codec support remain later-phase implementation work.
 
 ## Encoder Roadmap
 

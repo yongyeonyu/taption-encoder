@@ -7,16 +7,16 @@ Status date: 2026-06-15
 - Product path is AV1 to H.265 first, All to H.265 final.
 - Project shell exists.
 - App is configured for iPhone and iPad.
-- Minimum OS is iOS/iPadOS 15.0.
+- Minimum OS is iOS/iPadOS 18.0 for the current SwiftVLC software fallback binary.
 - Orientation is portrait only.
 - README and architecture documents exist.
 - Detailed development plan exists in `docs/DEVELOPMENT_PLAN.md`.
 - Detailed phase-by-phase implementation guide exists in `docs/DETAILED_DEVELOPMENT_PLAN.md`.
 - Phase 0 foundation is implemented: app environment, feature flags, Home feature shell, protocol boundaries, and Xcode project grouping exist.
 - Phase 1 fake UX/state machine is implemented: Files and Photos can drive fake inspecting, storage checking, encoding progress, cancellation, rewarded-save waiting, pending-save recovery, and completed states.
-- Phase 2 first real encoder slice is partially implemented: Files import now uses AVFoundation media inspection, AV1-only validation, AVFoundation H.265 export, real export progress, hardware-first encoder reporting with software fallback policy, security-scoped file access, storage checks, cancellation cleanup, and `_taption.mp4` final save after the rewarded-save gate.
+- Phase 2 first real encoder slice is partially implemented: Files import now uses AVFoundation media inspection, AV1-only validation, AVFoundation H.265 export, automatic software AV1 decode fallback, real export/fallback progress, codec-path reporting, security-scoped file access, storage checks, cancellation cleanup, and `_taption.mp4` final save after the rewarded-save gate.
 - Development is planned as 9 execution phases, with version 1.0 launching after Phase 3 and final product completion after Phase 8.
-- Main screen is componentized with banner, title, Files, Photos, Reset, Automatic/Hardware/Software mode, H.265 output summary, status, progress, ETA, cancel, pending-save, and save completion surfaces.
+- Main screen is componentized with banner, title, Files, Photos, Reset, automatic codec-path info, H.265 output summary, status, progress, ETA, cancel, pending-save, and save completion surfaces.
 - AdMob is not integrated.
 - App Store release assets and metadata are not ready.
 - The project is in Git and pushed to `https://github.com/yongyeonyu/taption-encoder`.
@@ -32,9 +32,9 @@ Status date: 2026-06-15
 - [x] MVP output container is `.mp4` with H.265 video.
 - [x] Default quality prioritizes source-like visual quality over smallest file size.
 - [x] iOS/iPadOS 26 or later can offer user-selectable background encoding.
-- [x] Minimum OS is iOS/iPadOS 15.0 for old-device software encoding support.
+- [x] Minimum OS is iOS/iPadOS 18.0 for the current SwiftVLC software fallback binary.
 - [x] Main screen uses `Reset` instead of `Exit`.
-- [x] iOS/iPadOS 15-25 should show guidance to keep the app open for reliable encoding.
+- [x] iOS/iPadOS 18-25 should show guidance to keep the app open for reliable encoding.
 - [x] Notification permission and local notifications are not part of the MVP.
 - [x] Photos source output saves as a new Photos asset.
 - [x] Initial ad policy is non-personalized ads.
@@ -52,8 +52,8 @@ Status date: 2026-06-15
 
 ## P0 Release Blockers
 
-- [x] Apply iOS/iPadOS 15.0 deployment target for old-device software encoding support.
-- [x] Build Phase 0 main UI: banner area, title, Files, Photos, Reset, encoder mode, H.265 output summary, status/progress/cancel area.
+- [x] Apply iOS/iPadOS 18.0 deployment target for the current SwiftVLC software fallback binary.
+- [x] Build Phase 0 main UI: banner area, title, Files, Photos, Reset, automatic codec-path info, H.265 output summary, status/progress/cancel area.
 - [x] Create app module structure from `docs/APP_ARCHITECTURE.md`.
 - [x] Create `AppEnvironment` and protocol shells for encoder, media inspection, storage, ads, background, and project files.
 - [x] Implement AV1 media inspection by codec metadata.
@@ -74,7 +74,7 @@ Status date: 2026-06-15
 - [x] Implement storage checks before encoding and before final save.
 - [ ] Implement Live Activity progress for active encoding.
 - [ ] Implement user-selectable iOS 26+ continued background processing for user-started encoding.
-- [ ] Implement iOS/iPadOS 15-25 keep-the-app-open guidance for reliable encoding.
+- [ ] Implement iOS/iPadOS 18-25 keep-the-app-open guidance for reliable encoding.
 - [ ] Implement user-facing error states in English.
 
 ## P1 Final Product Architecture
@@ -94,13 +94,13 @@ Status date: 2026-06-15
 - [x] Add enum-based Home screen states for idle, importing, inspecting, storage checking, encoding, cancelling, waiting for reward, pending save, saving, completed, failed, and cancelled.
 - [x] Add fake Files flow from file import to encoding progress.
 - [x] Add fake Photos flow placeholder.
-- [x] Add Hardware / Software encoder mode picker.
+- [x] Add automatic codec-path info display; HW/SW is not a user-selectable mode.
 - [x] Add H.265 / MP4 output summary.
 - [x] Add progress percentage, elapsed time, and estimated remaining time.
 - [x] Add fake cancellation flow.
 - [x] Add rewarded-save waiting surface.
 - [x] Add pending-save recovery surface backed by `FakePendingSaveStore`.
-- [x] Add shared UI components for source actions, progress, status, output summary, encoder mode, and pending save.
+- [x] Add shared UI components for source actions, progress, status, output summary, codec-path info, and pending save.
 
 ## P1 Merge And Lightweight Editing
 
@@ -223,7 +223,7 @@ Status date: 2026-06-15
 - [ ] Verify storage warning behavior.
 - [ ] Verify Live Activity/system progress during active encoding.
 - [ ] Verify user-selectable background continuation on iOS/iPadOS 26+ real device.
-- [ ] Verify iOS/iPadOS 15-25 fallback messaging.
+- [ ] Verify iOS/iPadOS 18-25 fallback messaging.
 - [ ] Verify software codec fallback on an older supported device.
 - [ ] Verify mixed codec path with a non-native input sample.
 - [ ] Verify merge output from at least two cameras/formats.

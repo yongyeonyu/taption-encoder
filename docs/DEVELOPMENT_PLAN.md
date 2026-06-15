@@ -22,7 +22,7 @@ The app is considered complete when it can:
 - Use hardware, software, or mixed codec paths based on file and device capability.
 - Support older iPhones and iPads honestly through software encoding, warnings, and capability checks.
 - Run background encoding on iOS/iPadOS 26 or later when the user selects it.
-- Tell iOS/iPadOS 15-25 users to keep the app open for reliable long encodes.
+- Tell iOS/iPadOS 18-25 users to keep the app open for reliable long encodes.
 - Save output automatically with `_taption` naming or Photos equivalent.
 - Gate final save through rewarded AdMob ads.
 - Preserve completed temporary outputs if rewarded save cannot finish, then restore a pending-save state later without re-encoding.
@@ -42,7 +42,7 @@ Status, 2026-06-15: implemented. The source tree, environment object, feature fl
 Scope:
 
 - Keep the app separate from `/Users/u_mo_c/Documents/taption`.
-- Use iOS/iPadOS 15.0 as the minimum OS for old-device support, with feature gates for newer APIs.
+- Use iOS/iPadOS 18.0 as the minimum OS for the current SwiftVLC software fallback, with feature gates for newer APIs.
 - Keep iPhone and iPad portrait-only.
 - Keep iPad using the same centered mobile-width UX as iPhone.
 - Establish the source tree from `docs/APP_ARCHITECTURE.md`.
@@ -84,7 +84,7 @@ Scope:
   - `Files`
   - `Photos`
   - `Reset`
-  - Hardware / Software segmented control
+  - automatic codec-path info display
   - H.265 output summary
   - status, progress, ETA, and cancel area
 - Implement `HomeScreenState`.
@@ -114,7 +114,7 @@ Exit criteria:
 
 ## Phase 2: AV1 To H.265 Core
 
-Status, 2026-06-15: partially implemented for the first Files-based AV1 path. The app now uses AVFoundation media inspection, AV1-only validation, AVFoundation HEVC export, VideoToolbox hardware encoder capability reporting, real export progress, cancellation cleanup, storage checks, security-scoped Files access, and `_taption.mp4` final copy after the save gate. Photos save, durable pending-save restoration, AdMob, and broad software codec integration remain open.
+Status, 2026-06-15: partially implemented for the first Files-based AV1 path. The app now uses AVFoundation media inspection, AV1-only validation, AVFoundation HEVC export, automatic software AV1 decode fallback through SwiftVLC/libVLC, VideoToolbox hardware encoder capability reporting, real export/fallback progress, cancellation cleanup, storage checks, security-scoped Files access, and `_taption.mp4` final copy after the save gate. Photos save, durable pending-save restoration, AdMob, software fallback audio preservation, and broad software codec integration remain open.
 
 Goal: complete the first real conversion path.
 
@@ -134,7 +134,7 @@ Scope:
   - color matrix
   - audio timing
 - Implement hardware H.265 encode path.
-- Implement software H.265 encode path or an explicit software fallback shim.
+- Implement automatic software fallback paths for unsupported native decode/encode cases.
 - Surface actual path:
   - `Hardware Encoder`
   - `Software Encoder`
@@ -186,7 +186,7 @@ Scope:
 - Add production AdMob IDs and `app-ads.txt`, privacy policy URL, and support URL through the existing account/site setup.
 - Add Live Activity progress where supported.
 - Add iOS/iPadOS 26 background encoding option.
-- Add iOS/iPadOS 15-25 keep-app-open messaging.
+- Add iOS/iPadOS 18-25 keep-app-open messaging.
 - Add TestFlight and device proof checklist.
 - Prepare App Store metadata, screenshots, review notes, and release build.
 
@@ -216,7 +216,7 @@ Goal: make the launched app reliable, especially on old devices.
 
 Scope:
 
-- Maintain iOS/iPadOS 15.0 deployment target according to the old-device policy.
+- Maintain iOS/iPadOS 18.0 deployment target for the current SwiftVLC software fallback, or rebuild the software codec stack for a lower deployment target before promising older OS support.
 - Build a legacy-device capability matrix.
 - Test software encoding on older supported iPhones and iPads.
 - Add runtime warnings for slow software encoding.
@@ -457,7 +457,7 @@ Documentation:
 
 Recommended next sprint scope:
 
-- Keep iOS/iPadOS 15.0 deployment target and old-device policy.
+- Keep iOS/iPadOS 18.0 deployment target for the current SwiftVLC fallback, and track any lower-OS codec build needed for older devices.
 - Use `Reset` instead of `Exit`.
 - Create module folders.
 - Add `AppEnvironment`.

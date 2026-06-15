@@ -17,7 +17,7 @@ This plan is more detailed than `docs/DEVELOPMENT_PLAN.md`. Use this document as
 
 ## Global Product Rules
 
-- Minimum OS is iOS/iPadOS 15.0.
+- Minimum OS is iOS/iPadOS 18.0 for the current SwiftVLC software fallback binary.
 - iPhone and iPad are portrait-only.
 - iPad uses the same centered, mobile-width UX as iPhone.
 - Visible app strings must be English.
@@ -144,7 +144,7 @@ Make the repository safe for implementation and lock the non-negotiable technica
 - No real encoding yet.
 - No real AdMob yet.
 - No merge/editor UI yet.
-- The app should compile as an iOS/iPadOS 15.0+ portrait app.
+- The app should compile as an iOS/iPadOS 18.0+ portrait app.
 - The app should have the correct project policy documented and visible to future agents.
 
 ### Engineering Tasks
@@ -172,7 +172,7 @@ Code skeleton:
 - Create feature flag container.
 - Create protocol directories.
 - Move placeholder `ContentView` toward `Features/Home`.
-- Keep iOS 15-compatible SwiftUI APIs.
+- Keep APIs compatible with the declared iOS/iPadOS 18.0 deployment target.
 - Avoid `NavigationStack` until a version-gated replacement is intentionally added.
 
 Architecture protocols:
@@ -212,14 +212,14 @@ Documentation:
 
 - Build test on iPhone simulator.
 - Build test on iPad simulator.
-- Static search for forbidden `NavigationStack` if minimum target remains iOS 15.
+- Static search for APIs above iOS/iPadOS 18.0 unless they are feature-gated.
 - Static search for direct `GoogleMobileAds` imports outside infrastructure once ads are added.
 
 ### Exit Criteria
 
 - iPhone simulator build succeeds.
 - iPad simulator build succeeds.
-- The project target is iOS/iPadOS 15.0.
+- The project target is iOS/iPadOS 18.0.
 - No UI string violates English-visible-string rule.
 - Architecture skeleton compiles.
 - Documents agree on Phase 0 decisions.
@@ -232,7 +232,7 @@ Documentation:
 
 ## Phase 1: Main UX And State Machine
 
-Implementation status, 2026-06-15: completed for fake UX/state-machine scope. The app has componentized Home UI, encoder mode picker, output summary, progress display, pending-save recovery view, fake progress/ETA, cancellation, reset, rewarded-save waiting, and completed state surfaces. Real AV1 inspection, real H.265 conversion, real Photos import, real AdMob, and final save execution remain later-phase work.
+Implementation status, 2026-06-15: completed for fake UX/state-machine scope. The app has componentized Home UI, automatic codec-path info, output summary, progress display, pending-save recovery view, fake progress/ETA, cancellation, reset, rewarded-save waiting, and completed state surfaces. Real AV1 inspection, real H.265 conversion, real Photos import, real AdMob, and final save execution remain later-phase work.
 
 ### Objective
 
@@ -249,11 +249,9 @@ Main screen top-to-bottom:
   - `Files`
   - `Photos`
   - `Reset`
-- Encoder mode segmented control:
-  - `Hardware`
-  - `Software`
-- Recommendation text:
-  - `Hardware encoder is recommended.`
+- Codec path info:
+  - `Codec Path: Automatic`
+  - `Hardware is used where supported. Software fallback is automatic.`
 - Output summary:
   - `Output`
   - `H.265`
@@ -398,7 +396,7 @@ Simulator tests:
 
 ## Phase 2: AV1 To H.265 Core
 
-Implementation status, 2026-06-15: partially implemented for the first Files-based AV1 path. AVFoundation inspection, AV1 codec validation, AVFoundation HEVC export, VideoToolbox hardware capability reporting, real progress/ETA, cancellation cleanup, storage checks, security-scoped Files access, and `_taption.mp4` final save after the save gate are in place. Photos import/save, durable pending-save restoration, AdMob, and broad software codec fallback remain open.
+Implementation status, 2026-06-15: partially implemented for the first Files-based AV1 path. AVFoundation inspection, AV1 codec validation, AVFoundation HEVC export, automatic SwiftVLC/libVLC software AV1 decode fallback, VideoToolbox hardware capability reporting, real progress/ETA, cancellation cleanup, storage checks, security-scoped Files access, and `_taption.mp4` final save after the save gate are in place. Photos import/save, durable pending-save restoration, AdMob, software fallback audio preservation, and broad software codec fallback remain open.
 
 ### Objective
 
@@ -420,9 +418,9 @@ Implement the real single-file AV1 to H.265 encoding path with source-like defau
   - YCbCr matrix
   - audio timing
   - source-like visual quality
-- Encoder modes:
-  - Hardware
-  - Software
+- Codec paths:
+  - Hardware Codec Path
+  - Software Codec Path
   - Mixed Codec Path
 
 ### Domain Models
@@ -599,14 +597,14 @@ Ship the first App Store-ready product: free AV1 to H.265 conversion with non-pe
 ### Product Scope
 
 - AV1 to H.265 `.mp4`.
-- Hardware/software selection.
+- Automatic hardware/software codec path with info-only display.
 - Files and Photos inputs.
 - Progress, ETA, cancel, reset.
 - Pending save recovery.
 - Non-personalized ads.
 - Rewarded save gate.
 - iOS 26+ background option.
-- iOS 15-25 keep-app-open guidance.
+- iOS 18-25 keep-app-open guidance.
 
 ### Ad Policy
 
@@ -666,7 +664,7 @@ Privacy:
 Background:
 
 - Add iOS/iPadOS 26+ background encoding option behind availability checks.
-- Add iOS/iPadOS 15-25 keep-app-open guidance.
+- Add iOS/iPadOS 18-25 keep-app-open guidance.
 - Add Live Activity progress where supported.
 - Do not request notification permission for MVP.
 
@@ -729,7 +727,7 @@ Device tests:
 - Photos save after reward.
 - Pending save restore after force quit.
 - iOS 26+ background option proof.
-- iOS 15-25 fallback message proof.
+- iOS 18-25 fallback message proof.
 
 ### Exit Criteria
 
@@ -1309,7 +1307,7 @@ Old-device gate:
 
 - Software path is available or clearly explains why it is unavailable.
 - Slow devices receive honest warnings.
-- iOS/iPadOS 15-25 receives keep-app-open guidance.
+- iOS/iPadOS 18-25 receives keep-app-open guidance.
 - iOS/iPadOS 26+ receives background option where available.
 
 ## Immediate Implementation Order

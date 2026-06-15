@@ -40,6 +40,7 @@
 		4A2B3C4D5E6F701000000006 /* PrimaryActionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000106 /* PrimaryActionButton.swift */; };
 		4A2B3C4D5E6F701000000007 /* StatusBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000107 /* StatusBanner.swift */; };
 		4A2B3C4D5E6F701000000008 /* ProgressCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000108 /* ProgressCard.swift */; };
+		5A2B3C4D5E6F701000000001 /* SwiftVLC in Frameworks */ = {isa = PBXBuildFile; productRef = 5A2B3C4D5E6F701000000102 /* SwiftVLC */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -86,6 +87,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5A2B3C4D5E6F701000000001 /* SwiftVLC in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -310,6 +312,9 @@
 			dependencies = (
 			);
 			name = TaptionEncoder;
+			packageProductDependencies = (
+				5A2B3C4D5E6F701000000102 /* SwiftVLC */,
+			);
 			productName = "Taption Encoder";
 			productReference = 1A2B3C4D5E6F701000000100 /* Taption Encoder.app */;
 			productType = "com.apple.product-type.application";
@@ -338,6 +343,9 @@
 				Base,
 			);
 			mainGroup = 1A2B3C4D5E6F701000000300;
+			packageReferences = (
+				5A2B3C4D5E6F701000000101 /* XCRemoteSwiftPackageReference "SwiftVLC" */,
+			);
 			productRefGroup = 1A2B3C4D5E6F701000000302 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -400,6 +408,25 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		5A2B3C4D5E6F701000000101 /* XCRemoteSwiftPackageReference "SwiftVLC" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/harflabs/SwiftVLC.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.10.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5A2B3C4D5E6F701000000102 /* SwiftVLC */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5A2B3C4D5E6F701000000101 /* XCRemoteSwiftPackageReference "SwiftVLC" */;
+			productName = SwiftVLC;
+		};
+/* End XCSwiftPackageProductDependency section */
+
 /* Begin XCBuildConfiguration section */
 		1A2B3C4D5E6F701000001000 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -452,7 +479,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -508,7 +535,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -538,7 +565,7 @@
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -575,7 +602,7 @@
 				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

@@ -3,7 +3,6 @@ import Foundation
 @MainActor
 final class HomeViewModel: ObservableObject {
     @Published private(set) var state: HomeScreenState
-    @Published var preferredEncoderMode: TaptionEncoderMode
 
     private let environment: AppEnvironment
     private var activeTask: Task<Void, Never>?
@@ -14,7 +13,6 @@ final class HomeViewModel: ObservableObject {
     init(environment: AppEnvironment = .phase0) {
         self.environment = environment
         self.state = .idle
-        self.preferredEncoderMode = environment.configuration.defaultEncoderMode
     }
 
     deinit {
@@ -33,34 +31,39 @@ final class HomeViewModel: ObservableObject {
         "H.265 / \(environment.configuration.defaultOutputContainer.defaultFileExtension.uppercased()) / same folder + \(environment.configuration.outputSuffix)"
     }
 
-    var encoderModeSummary: String {
-        switch preferredEncoderMode {
-        case .automatic:
-            return "Automatic"
-        case .hardware:
-            return "Hardware"
-        case .software:
-            return "Software"
+    var encoderPathTitle: String {
+        if let output = state.completedTemporaryOutput {
+            return codecPathTitle(mode: output.usedEncoderMode)
         }
+        if case .completed = state {
+            return "Codec Path: Complete"
+        }
+        return "Codec Path: Automatic"
     }
 
-    var encoderRecommendation: String {
-        switch preferredEncoderMode {
-        case .automatic:
-            return "Automatic uses hardware first, then falls back when needed."
-        case .hardware:
-            return "Hardware is preferred; unsupported devices fall back automatically."
-        case .software:
-            return "Software fallback is slower but keeps older devices supported."
+    var encoderPathDetail: String {
+        if let output = state.completedTemporaryOutput {
+            return codecPathDetail(mode: output.usedEncoderMode, backend: output.usedBackend)
         }
+        return "The app checks this device and automatically uses hardware first, then software fallback when needed."
+    }
+
+    var encoderPathSystemImage: String {
+        if let output = state.completedTemporaryOutput {
+            switch output.usedEncoderMode {
+            case .hardware:
+                return "cpu"
+            case .software:
+                return "gearshape.2"
+            case .automatic:
+                return "wand.and.stars"
+            }
+        }
+        return "wand.and.stars"
     }
 
     var backgroundSummary: String {
-        "Keep the app open on iOS 15-25. Background encoding can be offered on iOS 26+."
-    }
-
-    var canEditEncoderMode: Bool {
-        !state.isBusy
+        "Keep the app open on iOS 18-25. Background encoding can be offered on iOS 26+."
     }
 
     func restorePendingSavesIfNeeded() async {
@@ -173,7 +176,7 @@ final class HomeViewModel: ObservableObject {
                 let job = try await core.prepareSingleAssetHEVCJob(
                     sourceURL: source.url,
                     temporaryOutputURL: temporaryOutputURL,
-                    preferredMode: preferredEncoderMode,
+                    preferredMode: .automatic,
                     savePolicy: TaptionSavePolicy(
                         destination: source.kind == .photos ? .photosLibrary : .sourceFolder,
                         saveGate: .rewardedAdBeforeFinalSave,
@@ -206,7 +209,7 @@ final class HomeViewModel: ObservableObject {
                             fractionCompleted: progress.fractionCompleted,
                             elapsedTime: progress.elapsedTime,
                             estimatedRemainingTime: progress.estimatedRemainingTime,
-                            backendLabel: self.backendLabel(for: self.preferredEncoderMode)
+                            backendLabel: "Automatic Codec Path"
                         ))
                     }
                 }
@@ -331,14 +334,29 @@ final class HomeViewModel: ObservableObject {
         return PendingSaveJob(sourceName: sourceName, state: state)
     }
 
-    private func backendLabel(for mode: TaptionEncoderMode) -> String {
+    private func codecPathTitle(mode: TaptionEncoderMode) -> String {
         switch mode {
-        case .automatic:
-            return "Hardware-first Encoder"
         case .hardware:
-            return "Hardware Encoder"
+            return "Codec Path: Hardware"
         case .software:
-            return "Software Encoder"
+            return "Codec Path: Software"
+        case .automatic:
+            return "Codec Path: Automatic"
+        }
+    }
+
+    private func codecPathDetail(mode: TaptionEncoderMode, backend: TaptionEncodingBackend) -> String {
+        switch (mode, backend) {
+        case (.hardware, .appleVideoToolbox):
+            return "This file was converted with the device H.265 hardware encoder."
+        case (.software, .softwareAV1Decoder):
+            return "Native AV1 conversion was unavailable, so the app used software AV1 decoding automatically."
+        case (.software, _):
+            return "Hardware conversion was unavailable, so the app used the software fallback automatically."
+        case (.automatic, _):
+            return "The app selected the available codec path automatically."
+        case (.hardware, _):
+            return "The app selected the available hardware codec path automatically."
         }
     }
 

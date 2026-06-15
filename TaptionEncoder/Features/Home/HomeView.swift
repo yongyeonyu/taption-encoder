@@ -24,10 +24,10 @@ struct HomeView: View {
                         onReset: { viewModel.reset() }
                     )
 
-                    EncoderModePicker(
-                        selectedMode: $viewModel.preferredEncoderMode,
-                        isEnabled: viewModel.canEditEncoderMode,
-                        recommendation: viewModel.encoderRecommendation
+                    EncoderPathInfoView(
+                        title: viewModel.encoderPathTitle,
+                        detail: viewModel.encoderPathDetail,
+                        systemImage: viewModel.encoderPathSystemImage
                     )
 
                     OutputSummaryView(

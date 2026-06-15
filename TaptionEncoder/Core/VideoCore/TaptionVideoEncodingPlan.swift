@@ -114,9 +114,9 @@ struct TaptionEncoderSelection: Codable, Equatable {
     var reason: String
 
     init(
-        requestedMode: TaptionEncoderMode = .hardware,
+        requestedMode: TaptionEncoderMode = .automatic,
         backend: TaptionEncodingBackend? = nil,
-        reason: String = "Hardware encoding is recommended when available."
+        reason: String = "The app chooses hardware first and falls back automatically."
     ) {
         self.requestedMode = requestedMode
         self.backend = backend
@@ -273,7 +273,7 @@ enum TaptionEncodingPlanner {
         asset: TaptionVideoAsset,
         sourceURL: URL,
         temporaryOutputURL: URL,
-        preferredMode: TaptionEncoderMode = .hardware,
+        preferredMode: TaptionEncoderMode = .automatic,
         savePolicy: TaptionSavePolicy = TaptionSavePolicy()
     ) -> TaptionEncodingPlan {
         let outputPolicy = TaptionHEVCOutputPolicy(
@@ -306,17 +306,17 @@ enum TaptionEncoderRecommendation {
     ) -> TaptionEncoderSelection {
         if canUseHardwareHEVC {
             return TaptionEncoderSelection(
-                requestedMode: .hardware,
+                requestedMode: .automatic,
                 backend: .appleVideoToolbox,
-                reason: "Hardware encoding is recommended when available."
+                reason: "Hardware encoding will be used automatically when available."
             )
         }
 
         if allowsSoftwareFallback {
             return TaptionEncoderSelection(
-                requestedMode: .software,
+                requestedMode: .automatic,
                 backend: .customSoftware,
-                reason: "Software encoding keeps older devices supported."
+                reason: "Software fallback will be used automatically when needed."
             )
         }
 

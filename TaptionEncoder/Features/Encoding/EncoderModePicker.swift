@@ -1,23 +1,29 @@
 import SwiftUI
 
-struct EncoderModePicker: View {
-    @Binding var selectedMode: TaptionEncoderMode
-    var isEnabled: Bool
-    var recommendation: String
+struct EncoderPathInfoView: View {
+    var title: String
+    var detail: String
+    var systemImage: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Picker("Encoder", selection: $selectedMode) {
-                Text("Auto").tag(TaptionEncoderMode.automatic)
-                Text("Hardware").tag(TaptionEncoderMode.hardware)
-                Text("Software").tag(TaptionEncoderMode.software)
-            }
-            .pickerStyle(.segmented)
-            .disabled(!isEnabled)
+        Label {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
 
-            Label(recommendation, systemImage: "cpu")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } icon: {
+            Image(systemName: systemImage)
+                .foregroundStyle(.tint)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }

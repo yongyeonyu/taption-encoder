@@ -83,7 +83,7 @@ struct EncodingProgressSnapshot: Equatable {
         fractionCompleted: 0,
         elapsedTime: 0,
         estimatedRemainingTime: nil,
-        backendLabel: "Hardware Encoder"
+        backendLabel: "Automatic Codec Path"
     )
 }
 

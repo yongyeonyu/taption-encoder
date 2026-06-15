@@ -37,7 +37,7 @@ struct TaptionVideoCore {
     func prepareSingleAssetHEVCJob(
         sourceURL: URL,
         temporaryOutputURL: URL,
-        preferredMode: TaptionEncoderMode = .hardware,
+        preferredMode: TaptionEncoderMode = .automatic,
         savePolicy: TaptionSavePolicy = TaptionSavePolicy()
     ) async throws -> TaptionPreparedEncodingJob {
         let asset = try await services.inspector.inspectVideo(at: sourceURL)
