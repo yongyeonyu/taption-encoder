@@ -12,14 +12,14 @@ Status date: 2026-06-15
 - README and architecture documents exist.
 - Detailed development plan exists in `docs/DEVELOPMENT_PLAN.md`.
 - Detailed phase-by-phase implementation guide exists in `docs/DETAILED_DEVELOPMENT_PLAN.md`.
-- Phase 0 foundation is implemented: app environment, feature flags, Home feature shell, protocol boundaries, fake services, and Xcode project grouping exist.
+- Phase 0 foundation is implemented: app environment, feature flags, Home feature shell, protocol boundaries, and Xcode project grouping exist.
 - Phase 1 fake UX/state machine is implemented: Files and Photos can drive fake inspecting, storage checking, encoding progress, cancellation, rewarded-save waiting, pending-save recovery, and completed states.
+- Phase 2 first real encoder slice is partially implemented: Files import now uses AVFoundation media inspection, AV1-only validation, AVFoundation H.265 export, real export progress, hardware-first encoder reporting with software fallback policy, security-scoped file access, storage checks, cancellation cleanup, and `_taption.mp4` final save after the rewarded-save gate.
 - Development is planned as 9 execution phases, with version 1.0 launching after Phase 3 and final product completion after Phase 8.
-- Main screen is componentized with banner, title, Files, Photos, Reset, Hardware/Software mode, H.265 output summary, status, progress, ETA, cancel, pending-save, and save completion surfaces.
-- Real AV1 inspection and H.265 encoding are not implemented yet.
+- Main screen is componentized with banner, title, Files, Photos, Reset, Automatic/Hardware/Software mode, H.265 output summary, status, progress, ETA, cancel, pending-save, and save completion surfaces.
 - AdMob is not integrated.
 - App Store release assets and metadata are not ready.
-- This folder is not currently a git repository.
+- The project is in Git and pushed to `https://github.com/yongyeonyu/taption-encoder`.
 
 ## P0 Decisions Needed
 
@@ -56,22 +56,22 @@ Status date: 2026-06-15
 - [x] Build Phase 0 main UI: banner area, title, Files, Photos, Reset, encoder mode, H.265 output summary, status/progress/cancel area.
 - [x] Create app module structure from `docs/APP_ARCHITECTURE.md`.
 - [x] Create `AppEnvironment` and protocol shells for encoder, media inspection, storage, ads, background, and project files.
-- [ ] Implement AV1 media inspection by codec metadata.
-- [ ] Port or rewrite the narrow AV1 to H.265 conversion core.
+- [x] Implement AV1 media inspection by codec metadata.
+- [x] Port or rewrite the narrow AV1 to H.265 conversion core.
 - [ ] Implement source-preserving defaults for resolution, frame rate, orientation, color metadata, HDR/SDR mode, audio timing, and visual quality.
-- [ ] Implement hardware encoder path.
-- [ ] Implement software encoder path or a clear software fallback policy.
-- [ ] Implement codec capability detection that can report hardware, software, or mixed codec path.
-- [ ] Implement progress reporting.
-- [ ] Implement elapsed time and estimated time remaining.
-- [ ] Implement cancellation that safely cleans temporary output.
-- [ ] Implement output naming policy with `_taption`.
-- [ ] Implement temporary output first, then final save after reward.
+- [x] Implement hardware-first encoder path through AVFoundation/VideoToolbox reporting.
+- [x] Implement software encoder path or a clear software fallback policy.
+- [x] Implement codec capability detection that can report hardware, software, or mixed codec path.
+- [x] Implement progress reporting.
+- [x] Implement elapsed time and estimated time remaining.
+- [x] Implement cancellation that safely cleans temporary output.
+- [x] Implement output naming policy with `_taption`.
+- [x] Implement temporary output first, then final save after reward.
 - [ ] Persist completed temporary outputs when rewarded save cannot finish.
 - [ ] Restore pending save jobs on app launch so the user can retry saving without re-encoding.
-- [ ] Implement Files source import with security-scoped access.
+- [x] Implement Files source import with security-scoped access.
 - [ ] Implement Photos source import and new Photos asset save.
-- [ ] Implement storage checks before encoding and before final save.
+- [x] Implement storage checks before encoding and before final save.
 - [ ] Implement Live Activity progress for active encoding.
 - [ ] Implement user-selectable iOS 26+ continued background processing for user-started encoding.
 - [ ] Implement iOS/iPadOS 15-25 keep-the-app-open guidance for reliable encoding.

@@ -16,6 +16,33 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
     case theora
     case dv
     case unknown
+
+    var displayName: String {
+        switch self {
+        case .av1:
+            return "AV1"
+        case .hevc:
+            return "H.265 / HEVC"
+        case .h264:
+            return "H.264 / AVC"
+        case .proRes:
+            return "Apple ProRes"
+        case .vp9:
+            return "VP9"
+        case .vp8:
+            return "VP8"
+        case .mpeg2:
+            return "MPEG-2"
+        case .mpeg4Visual:
+            return "MPEG-4 Visual"
+        case .theora:
+            return "Theora"
+        case .dv:
+            return "DV"
+        case .unknown:
+            return "Unknown"
+        }
+    }
 }
 
 enum TaptionAudioCodec: String, Codable, Equatable, CaseIterable {

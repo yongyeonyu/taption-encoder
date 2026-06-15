@@ -8,6 +8,7 @@ struct EncoderModePicker: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker("Encoder", selection: $selectedMode) {
+                Text("Auto").tag(TaptionEncoderMode.automatic)
                 Text("Hardware").tag(TaptionEncoderMode.hardware)
                 Text("Software").tag(TaptionEncoderMode.software)
             }

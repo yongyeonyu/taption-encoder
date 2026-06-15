@@ -56,10 +56,10 @@ Next implementation pass should isolate the media conversion core before importi
 ## Implementation Status
 
 - Phase 0 foundation is implemented as of 2026-06-15.
-- The app now has `AppEnvironment`, `FeatureFlags`, `AppConfiguration`, the `Features/Home` screen shell, protocol boundaries, and fake services for simulator-safe development.
+- The app now has `AppEnvironment`, `FeatureFlags`, `AppConfiguration`, the `Features/Home` screen shell, protocol boundaries, and real AVFoundation services for the first AV1-to-H.265 path.
 - Phase 1 fake UX/state machine is implemented as of 2026-06-15.
-- Files and Photos entry points now run a fake `importing -> inspecting -> storage checking -> encoding -> rewarded save -> completed` flow with progress, percentage, elapsed time, estimated remaining time, cancellation, reset, and pending-save recovery surfaces.
-- The current build is still pre-encoding: real AV1 inspection, H.265 conversion, AdMob, Photos import, and final rewarded save execution are later-phase implementation work.
+- Files entry now runs a real `importing -> inspecting -> storage checking -> encoding -> rewarded save -> completed` flow for AV1 input, with AVFoundation progress, percentage, elapsed time, estimated remaining time, cancellation, reset, and pending-save recovery surfaces.
+- Files output saves after the rewarded-save gate to the same folder as the source file, using `_taption` before the `.mp4` extension. Photos import/save, AdMob, and broad software codec support remain later-phase implementation work.
 
 ## Encoder Roadmap
 

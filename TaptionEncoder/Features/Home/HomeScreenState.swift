@@ -182,6 +182,9 @@ enum HomeScreenState: Equatable {
         case .cancelling:
             return "Stopping the current job."
         case .waitingForReward(let output):
+            if let finalOutputURL = output.finalOutputURL {
+                return "\(output.sourceName) finished encoding. Watch a rewarded ad to save \(finalOutputURL.lastPathComponent)."
+            }
             return "\(output.sourceName) finished encoding. Watch a rewarded ad to save."
         case .pendingSave(let job):
             return "\(job.sourceName) can be saved without re-encoding."

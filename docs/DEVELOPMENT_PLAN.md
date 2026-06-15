@@ -114,6 +114,8 @@ Exit criteria:
 
 ## Phase 2: AV1 To H.265 Core
 
+Status, 2026-06-15: partially implemented for the first Files-based AV1 path. The app now uses AVFoundation media inspection, AV1-only validation, AVFoundation HEVC export, VideoToolbox hardware encoder capability reporting, real export progress, cancellation cleanup, storage checks, security-scoped Files access, and `_taption.mp4` final copy after the save gate. Photos save, durable pending-save restoration, AdMob, and broad software codec integration remain open.
+
 Goal: complete the first real conversion path.
 
 Scope:

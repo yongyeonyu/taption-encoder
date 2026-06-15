@@ -3,6 +3,12 @@ import Foundation
 enum TaptionVideoCoreError: Error, Equatable {
     case insufficientStorage(requiredBytes: Int64, availableBytes: Int64?)
     case missingTemporaryOutputURL
+    case missingSourceURL
+    case noVideoTrack
+    case unsupportedSourceCodec(TaptionVideoCodec)
+    case compatibleHEVCPresetUnavailable
+    case exportFailed(String)
+    case finalSaveFailed(String)
 }
 
 struct TaptionPreparedEncodingJob: Equatable {
@@ -35,6 +41,12 @@ struct TaptionVideoCore {
         savePolicy: TaptionSavePolicy = TaptionSavePolicy()
     ) async throws -> TaptionPreparedEncodingJob {
         let asset = try await services.inspector.inspectVideo(at: sourceURL)
+        guard let videoTrack = asset.videoTrack else {
+            throw TaptionVideoCoreError.noVideoTrack
+        }
+        guard videoTrack.codec == .av1 else {
+            throw TaptionVideoCoreError.unsupportedSourceCodec(videoTrack.codec)
+        }
         let plan = TaptionEncodingPlanner.makeSingleAssetHEVCPlan(
             asset: asset,
             sourceURL: sourceURL,
@@ -115,5 +127,32 @@ struct TaptionVideoCore {
             saveDestination: plan.savePolicy.destination,
             requiresRewardedAd: true
         )
+    }
+}
+
+extension TaptionVideoCoreError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .insufficientStorage(let requiredBytes, let availableBytes):
+            let required = ByteCountFormatter.string(fromByteCount: requiredBytes, countStyle: .file)
+            let available = availableBytes.map {
+                ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)
+            } ?? "unknown"
+            return "Not enough storage. Required: \(required). Available: \(available)."
+        case .missingTemporaryOutputURL:
+            return "The temporary output path was not prepared."
+        case .missingSourceURL:
+            return "The source file path is missing."
+        case .noVideoTrack:
+            return "This file does not contain a readable video track."
+        case .unsupportedSourceCodec(let codec):
+            return "This build only supports AV1 input. Detected codec: \(codec.displayName)."
+        case .compatibleHEVCPresetUnavailable:
+            return "This device cannot create a compatible H.265 export session for this file."
+        case .exportFailed(let message):
+            return message
+        case .finalSaveFailed(let message):
+            return message
+        }
     }
 }

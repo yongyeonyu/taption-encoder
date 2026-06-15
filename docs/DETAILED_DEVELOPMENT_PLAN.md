@@ -398,6 +398,8 @@ Simulator tests:
 
 ## Phase 2: AV1 To H.265 Core
 
+Implementation status, 2026-06-15: partially implemented for the first Files-based AV1 path. AVFoundation inspection, AV1 codec validation, AVFoundation HEVC export, VideoToolbox hardware capability reporting, real progress/ETA, cancellation cleanup, storage checks, security-scoped Files access, and `_taption.mp4` final save after the save gate are in place. Photos import/save, durable pending-save restoration, AdMob, and broad software codec fallback remain open.
+
 ### Objective
 
 Implement the real single-file AV1 to H.265 encoding path with source-like defaults, storage safety, progress, cancellation, and pending save support.

@@ -8,6 +8,8 @@ final class HomeViewModel: ObservableObject {
     private let environment: AppEnvironment
     private var activeTask: Task<Void, Never>?
     private var hasRestoredPendingSaves = false
+    private var securityScopedURL: URL?
+    private var isAccessingSecurityScopedURL = false
 
     init(environment: AppEnvironment = .phase0) {
         self.environment = environment
@@ -28,7 +30,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     var outputSummary: String {
-        "H.265 / \(environment.configuration.defaultOutputContainer.defaultFileExtension.uppercased())"
+        "H.265 / \(environment.configuration.defaultOutputContainer.defaultFileExtension.uppercased()) / same folder + \(environment.configuration.outputSuffix)"
     }
 
     var encoderModeSummary: String {
@@ -43,9 +45,14 @@ final class HomeViewModel: ObservableObject {
     }
 
     var encoderRecommendation: String {
-        preferredEncoderMode == .hardware
-            ? "Hardware encoder is recommended."
-            : "Software encoder keeps older devices supported."
+        switch preferredEncoderMode {
+        case .automatic:
+            return "Automatic uses hardware first, then falls back when needed."
+        case .hardware:
+            return "Hardware is preferred; unsupported devices fall back automatically."
+        case .software:
+            return "Software fallback is slower but keeps older devices supported."
+        }
     }
 
     var backgroundSummary: String {
@@ -81,6 +88,7 @@ final class HomeViewModel: ObservableObject {
             displayName: url.lastPathComponent,
             url: url
         )
+        beginSecurityScopedAccessIfNeeded(for: url)
         startEncodingFlow(source: source)
     }
 
@@ -120,6 +128,7 @@ final class HomeViewModel: ObservableObject {
         activeTask?.cancel()
         activeTask = nil
         state = .idle
+        stopSecurityScopedAccess()
 
         if let pendingStateID {
             Task {
@@ -156,7 +165,6 @@ final class HomeViewModel: ObservableObject {
             }
 
             do {
-                try await Task.sleep(nanoseconds: 250_000_000)
                 try Task.checkCancellation()
                 state = .inspecting(source)
 
@@ -176,7 +184,6 @@ final class HomeViewModel: ObservableObject {
 
                 try Task.checkCancellation()
                 state = .storageChecking(source)
-                try await Task.sleep(nanoseconds: 250_000_000)
                 try Task.checkCancellation()
 
                 guard job.storageRequirement.hasEnoughSpace else {
@@ -223,18 +230,21 @@ final class HomeViewModel: ObservableObject {
             } catch is CancellationError {
                 state = .cancelled
                 activeTask = nil
+                stopSecurityScopedAccess()
             } catch let error as TaptionVideoCoreError {
                 state = .failed(HomeEncodingError(
                     title: "Encoding failed",
                     message: error.localizedDescription
                 ))
                 activeTask = nil
+                stopSecurityScopedAccess()
             } catch {
                 state = .failed(HomeEncodingError(
                     title: "Encoding failed",
                     message: error.localizedDescription
                 ))
                 activeTask = nil
+                stopSecurityScopedAccess()
             }
         }
     }
@@ -257,13 +267,15 @@ final class HomeViewModel: ObservableObject {
                 let isAuthorized = try await environment.adGate.authorizeFinalSave(for: job.state)
 
                 if isAuthorized {
+                    let savedURL = try finalizeSave(for: job.state)
                     try await environment.pendingSaveStore.removePendingState(id: job.state.id)
-                    let displayName = job.state.finalOutputURL?.lastPathComponent ?? job.sourceName
+                    let displayName = savedURL.lastPathComponent
                     let destination = destinationDescription(for: job.state)
                     state = .completed(SavedOutput(
                         displayName: displayName,
                         destinationDescription: destination
                     ))
+                    stopSecurityScopedAccess()
                 } else {
                     state = .pendingSave(job)
                 }
@@ -272,7 +284,10 @@ final class HomeViewModel: ObservableObject {
                 state = .pendingSave(job)
                 activeTask = nil
             } catch {
-                state = .pendingSave(job)
+                state = .failed(HomeEncodingError(
+                    title: "Save failed",
+                    message: error.localizedDescription
+                ))
                 activeTask = nil
             }
         }
@@ -285,6 +300,31 @@ final class HomeViewModel: ObservableObject {
             .appendingPathExtension(environment.configuration.defaultOutputContainer.defaultFileExtension)
     }
 
+    private func finalizeSave(for state: TaptionPendingSaveState) throws -> URL {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: state.temporaryOutputURL.path) else {
+            throw TaptionVideoCoreError.finalSaveFailed("The temporary H.265 output is missing. Please encode again.")
+        }
+
+        switch state.saveDestination {
+        case .sourceFolder:
+            guard let finalOutputURL = state.finalOutputURL else {
+                throw TaptionVideoCoreError.finalSaveFailed("The final output path is missing.")
+            }
+            try fileManager.createDirectory(
+                at: finalOutputURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try? fileManager.removeItem(at: finalOutputURL)
+            try fileManager.copyItem(at: state.temporaryOutputURL, to: finalOutputURL)
+            return finalOutputURL
+        case .photosLibrary:
+            throw TaptionVideoCoreError.finalSaveFailed("Photos saving is not enabled in this build yet.")
+        case .temporaryOnly:
+            return state.temporaryOutputURL
+        }
+    }
+
     private func makePendingSaveJob(from state: TaptionPendingSaveState) -> PendingSaveJob {
         let sourceName = state.finalOutputURL?.lastPathComponent
             ?? state.temporaryOutputURL.lastPathComponent
@@ -294,12 +334,27 @@ final class HomeViewModel: ObservableObject {
     private func backendLabel(for mode: TaptionEncoderMode) -> String {
         switch mode {
         case .automatic:
-            return "Automatic Encoder"
+            return "Hardware-first Encoder"
         case .hardware:
             return "Hardware Encoder"
         case .software:
             return "Software Encoder"
         }
+    }
+
+    private func beginSecurityScopedAccessIfNeeded(for url: URL) {
+        stopSecurityScopedAccess()
+        let didStartAccess = url.startAccessingSecurityScopedResource()
+        securityScopedURL = didStartAccess ? url : nil
+        isAccessingSecurityScopedURL = didStartAccess
+    }
+
+    private func stopSecurityScopedAccess() {
+        if isAccessingSecurityScopedURL {
+            securityScopedURL?.stopAccessingSecurityScopedResource()
+        }
+        securityScopedURL = nil
+        isAccessingSecurityScopedURL = false
     }
 
     private func destinationDescription(for state: TaptionPendingSaveState) -> String {

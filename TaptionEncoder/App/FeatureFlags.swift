@@ -27,5 +27,8 @@ struct FeatureFlags: Equatable {
         self.usesFakeServices = usesFakeServices
     }
 
-    static let phase0 = FeatureFlags()
+    static let phase0 = FeatureFlags(
+        isRealEncodingEnabled: true,
+        usesFakeServices: false
+    )
 }

@@ -6,13 +6,15 @@ struct OutputSummaryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Label("Output", systemImage: "video")
                     .font(.headline)
                 Spacer()
                 Text(outputSummary)
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
+                    .multilineTextAlignment(.trailing)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Label(backgroundSummary, systemImage: "clock")

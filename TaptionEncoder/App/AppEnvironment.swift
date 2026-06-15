@@ -52,9 +52,9 @@ struct AppEnvironment {
         return AppEnvironment(
             configuration: configuration,
             featureFlags: .phase0,
-            mediaInspector: FakeMediaInspector(),
-            encoderService: FakeEncoderService(),
-            storageChecker: FakeStorageChecker(),
+            mediaInspector: AVFoundationMediaInspector(),
+            encoderService: AVFoundationHEVCEncoderService(),
+            storageChecker: FileSystemStorageChecker(),
             sourceOpener: FakeSourceOpener(),
             outputResolver: DefaultOutputResolver(namingPolicy: TaptionOutputNamingPolicy(suffix: configuration.outputSuffix)),
             pendingSaveStore: pendingSaveStore,

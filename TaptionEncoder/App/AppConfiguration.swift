@@ -17,7 +17,7 @@ struct AppConfiguration: Equatable {
         outputSuffix: String = "_taption",
         defaultOutputContainer: TaptionVideoContainer = .mp4,
         defaultOutputCodec: TaptionVideoCodec = .hevc,
-        defaultEncoderMode: TaptionEncoderMode = .hardware,
+        defaultEncoderMode: TaptionEncoderMode = .automatic,
         backgroundEncodingMinimumMajorVersion: Int = 26
     ) {
         self.appName = appName

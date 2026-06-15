@@ -1,3 +1,5 @@
+import AVFoundation
+import CoreMedia
 import Foundation
 
 protocol MediaInspecting: TaptionVideoInspecting {}
@@ -20,5 +22,260 @@ struct FakeMediaInspector: MediaInspecting {
             ),
             audioTracks: []
         )
+    }
+}
+
+struct AVFoundationMediaInspector: MediaInspecting {
+    func inspectVideo(at url: URL) async throws -> TaptionVideoAsset {
+        let asset = AVURLAsset(url: url)
+        let duration = try await asset.load(.duration).seconds
+        let videoTracks = try await asset.loadTracks(withMediaType: .video)
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        let videoTrack: TaptionVideoTrackInfo?
+        if let firstVideoTrack = videoTracks.first {
+            videoTrack = try await inspectVideoTrack(firstVideoTrack)
+        } else {
+            videoTrack = nil
+        }
+        let audioTrackInfo = try await audioTracks.asyncMap { try await inspectAudioTrack($0) }
+
+        return TaptionVideoAsset(
+            displayName: url.lastPathComponent,
+            location: TaptionVideoAssetLocation(kind: .file, url: url),
+            container: container(for: url),
+            duration: duration.isFinite ? duration : nil,
+            videoTrack: videoTrack,
+            audioTracks: audioTrackInfo,
+            fingerprint: fingerprint(for: url)
+        )
+    }
+
+    private func inspectVideoTrack(_ track: AVAssetTrack) async throws -> TaptionVideoTrackInfo {
+        let naturalSize = try await track.load(.naturalSize)
+        let preferredTransform = try await track.load(.preferredTransform)
+        let nominalFrameRate = try await track.load(.nominalFrameRate)
+        let estimatedDataRate = try await track.load(.estimatedDataRate)
+        let formatDescriptions = try await track.load(.formatDescriptions)
+        let codec = codec(from: formatDescriptions)
+        let displaySize = naturalSize.applying(preferredTransform)
+        let normalizedDisplaySize = CGSize(
+            width: abs(displaySize.width),
+            height: abs(displaySize.height)
+        )
+
+        return TaptionVideoTrackInfo(
+            codec: codec,
+            naturalSize: TaptionPixelSize(
+                width: Int(abs(naturalSize.width).rounded()),
+                height: Int(abs(naturalSize.height).rounded())
+            ),
+            displaySize: TaptionPixelSize(
+                width: Int(normalizedDisplaySize.width.rounded()),
+                height: Int(normalizedDisplaySize.height.rounded())
+            ),
+            nominalFrameRate: frameRate(from: nominalFrameRate),
+            estimatedBitrate: estimatedDataRate > 0 ? Int(estimatedDataRate) : nil,
+            color: colorDescription(from: formatDescriptions),
+            rotationDegrees: rotationDegrees(from: preferredTransform)
+        )
+    }
+
+    private func inspectAudioTrack(_ track: AVAssetTrack) async throws -> TaptionAudioTrackInfo {
+        let estimatedDataRate = try await track.load(.estimatedDataRate)
+        let formatDescriptions = try await track.load(.formatDescriptions)
+        return TaptionAudioTrackInfo(
+            codec: audioCodec(from: formatDescriptions),
+            channelCount: nil,
+            sampleRate: nil,
+            estimatedBitrate: estimatedDataRate > 0 ? Int(estimatedDataRate) : nil
+        )
+    }
+
+    private func codec(from descriptions: [CMFormatDescription]) -> TaptionVideoCodec {
+        guard let description = descriptions.first else {
+            return .unknown
+        }
+        switch fourCharacterCode(CMFormatDescriptionGetMediaSubType(description)) {
+        case "av01", "av1":
+            return .av1
+        case "hvc1", "hev1":
+            return .hevc
+        case "avc1", "avc3":
+            return .h264
+        case "vp09":
+            return .vp9
+        case "vp08":
+            return .vp8
+        case "mp4v":
+            return .mpeg4Visual
+        default:
+            return .unknown
+        }
+    }
+
+    private func audioCodec(from descriptions: [CMFormatDescription]) -> TaptionAudioCodec {
+        guard let description = descriptions.first else {
+            return .unknown
+        }
+        switch fourCharacterCode(CMFormatDescriptionGetMediaSubType(description)) {
+        case "aac ", "aach", "aacl":
+            return .aac
+        case "alac":
+            return .alac
+        case "opus":
+            return .opus
+        case ".mp3":
+            return .mp3
+        case "ac-3":
+            return .ac3
+        case "ec-3":
+            return .eac3
+        default:
+            return .unknown
+        }
+    }
+
+    private func colorDescription(from descriptions: [CMFormatDescription]) -> TaptionColorDescription {
+        guard let description = descriptions.first,
+              let extensions = CMFormatDescriptionGetExtensions(description) as? [String: Any] else {
+            return TaptionColorDescription()
+        }
+
+        let primaries = extensions[kCMFormatDescriptionExtension_ColorPrimaries as String] as? String
+        let transfer = extensions[kCMFormatDescriptionExtension_TransferFunction as String] as? String
+        let matrix = extensions[kCMFormatDescriptionExtension_YCbCrMatrix as String] as? String
+
+        return TaptionColorDescription(
+            primaries: mapColorPrimaries(primaries),
+            transfer: mapColorTransfer(transfer),
+            matrix: mapColorMatrix(matrix),
+            bitDepth: nil,
+            isHDR: transfer == string(kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ)
+                || transfer == string(kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG)
+        )
+    }
+
+    private func frameRate(from value: Float) -> TaptionRationalFrameRate? {
+        guard value.isFinite, value > 0 else {
+            return nil
+        }
+        let scaled = Int((Double(value) * 1000).rounded())
+        return TaptionRationalFrameRate(numerator: scaled, denominator: 1000)
+    }
+
+    private func rotationDegrees(from transform: CGAffineTransform) -> Int {
+        let radians = atan2(transform.b, transform.a)
+        let degrees = Int((radians * 180 / .pi).rounded())
+        return (degrees + 360) % 360
+    }
+
+    private func container(for url: URL) -> TaptionVideoContainer {
+        switch url.pathExtension.lowercased() {
+        case "mp4", "m4v":
+            return .mp4
+        case "mov", "qt":
+            return .mov
+        case "mkv":
+            return .mkv
+        case "avi":
+            return .avi
+        case "webm":
+            return .webm
+        case "mxf":
+            return .mxf
+        case "ts", "mts", "m2ts":
+            return .mpegTransportStream
+        case "mpg", "mpeg":
+            return .mpegProgramStream
+        default:
+            return .unknown
+        }
+    }
+
+    private func fingerprint(for url: URL) -> TaptionMediaFingerprint {
+        guard let values = try? url.resourceValues(forKeys: [
+            .fileSizeKey,
+            .creationDateKey,
+            .contentModificationDateKey
+        ]) else {
+            return TaptionMediaFingerprint()
+        }
+
+        return TaptionMediaFingerprint(
+            fileSize: values.fileSize.map(Int64.init),
+            creationDate: values.creationDate,
+            modificationDate: values.contentModificationDate,
+            contentIdentifier: nil
+        )
+    }
+
+    private func fourCharacterCode(_ code: FourCharCode) -> String {
+        String(bytes: [
+            UInt8((code >> 24) & 0xFF),
+            UInt8((code >> 16) & 0xFF),
+            UInt8((code >> 8) & 0xFF),
+            UInt8(code & 0xFF)
+        ], encoding: .ascii)?
+            .trimmingCharacters(in: .controlCharacters.union(.whitespacesAndNewlines))
+            .lowercased() ?? ""
+    }
+
+    private func mapColorPrimaries(_ value: String?) -> TaptionColorPrimaries {
+        switch value {
+        case string(kCMFormatDescriptionColorPrimaries_ITU_R_709_2):
+            return .bt709
+        case string(kCMFormatDescriptionColorPrimaries_ITU_R_2020):
+            return .bt2020
+        case string(kCMFormatDescriptionColorPrimaries_P3_D65):
+            return .p3D65
+        case string(kCMFormatDescriptionColorPrimaries_SMPTE_C):
+            return .smpteC
+        default:
+            return .unknown
+        }
+    }
+
+    private func mapColorTransfer(_ value: String?) -> TaptionColorTransfer {
+        switch value {
+        case string(kCMFormatDescriptionTransferFunction_ITU_R_709_2):
+            return .bt709
+        case string(kCMFormatDescriptionTransferFunction_sRGB):
+            return .sRGB
+        case string(kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ):
+            return .pq
+        case string(kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG):
+            return .hlg
+        default:
+            return .unknown
+        }
+    }
+
+    private func mapColorMatrix(_ value: String?) -> TaptionColorMatrix {
+        switch value {
+        case string(kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2):
+            return .bt709
+        case string(kCMFormatDescriptionYCbCrMatrix_ITU_R_2020):
+            return .bt2020NonConstantLuminance
+        case string(kCMFormatDescriptionYCbCrMatrix_SMPTE_240M_1995):
+            return .smpte240M
+        default:
+            return .unknown
+        }
+    }
+
+    private func string(_ value: CFString) -> String {
+        value as String
+    }
+}
+
+private extension Array {
+    func asyncMap<T>(_ transform: (Element) async throws -> T) async rethrows -> [T] {
+        var values: [T] = []
+        values.reserveCapacity(count)
+        for element in self {
+            let value = try await transform(element)
+            values.append(value)
+        }
+        return values
     }
 }
