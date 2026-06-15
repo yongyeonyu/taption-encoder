@@ -14,9 +14,9 @@ Status date: 2026-06-15
 - Detailed phase-by-phase implementation guide exists in `docs/DETAILED_DEVELOPMENT_PLAN.md`.
 - Phase 0 foundation is implemented: app environment, feature flags, Home feature shell, protocol boundaries, and Xcode project grouping exist.
 - Phase 1 fake UX/state machine is implemented: Files and Photos can drive fake inspecting, storage checking, encoding progress, cancellation, rewarded-save waiting, pending-save recovery, and completed states.
-- Phase 2 first real encoder slice is partially implemented: Files import now uses AVFoundation media inspection, AV1-only validation, AVFoundation H.265 export, automatic software AV1 decode fallback, real export/fallback progress, codec-path reporting, security-scoped file access, storage checks, cancellation cleanup, and `_taption.mp4` final save after the rewarded-save gate.
+- Phase 2 first real encoder slice is partially implemented: Files import now uses AVFoundation media inspection, AV1-only validation, video-info review before Start, AVFoundation H.265 export, automatic software AV1 decode fallback, real export/fallback progress, codec-path reporting, security-scoped file access, storage checks, cancellation cleanup, and `_taption.mp4` final save after the rewarded-save gate.
 - Development is planned as 9 execution phases, with version 1.0 launching after Phase 3 and final product completion after Phase 8.
-- Main screen is componentized with banner, title, Files, Photos, Reset, automatic codec-path info, H.265 output summary, status, progress, ETA, cancel, pending-save, and save completion surfaces.
+- Main screen is componentized with banner, title, Files, Photos, Reset, automatic codec-path info, video-info review, H.265 output summary, status, progress, ETA, Start, Cancel, pending-save, and save completion surfaces.
 - AdMob is not integrated.
 - App Store release assets and metadata are not ready.
 - The project is in Git and pushed to `https://github.com/yongyeonyu/taption-encoder`.
@@ -64,6 +64,8 @@ Status date: 2026-06-15
 - [x] Implement codec capability detection that can report hardware, software, or mixed codec path.
 - [x] Implement progress reporting.
 - [x] Implement elapsed time and estimated time remaining.
+- [x] Show video info after file inspection and before encoding starts.
+- [x] Require Start before encoding, then switch the action button to Cancel during encoding.
 - [x] Implement cancellation that safely cleans temporary output.
 - [x] Implement output naming policy with `_taption`.
 - [x] Implement temporary output first, then final save after reward.

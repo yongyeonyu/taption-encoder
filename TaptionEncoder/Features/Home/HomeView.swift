@@ -31,10 +31,14 @@ struct HomeView: View {
                     systemImage: viewModel.encoderPathSystemImage
                 )
 
-                OutputSummaryView(
-                    outputSummary: viewModel.outputSummary,
-                    backgroundSummary: viewModel.backgroundSummary
-                )
+                if let videoInfo = viewModel.state.videoInfo {
+                    VideoInfoSummaryView(info: videoInfo)
+                } else {
+                    OutputSummaryView(
+                        outputSummary: viewModel.outputSummary,
+                        backgroundSummary: viewModel.backgroundSummary
+                    )
+                }
 
                 if let pendingJob = viewModel.state.pendingSaveJob {
                     PendingSaveRecoveryView(
@@ -46,6 +50,7 @@ struct HomeView: View {
 
                 EncodingProgressView(
                     state: viewModel.state,
+                    onStart: { viewModel.startPreparedEncoding() },
                     onCancel: { viewModel.cancel() }
                 )
 
@@ -111,6 +116,58 @@ struct HomeView: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+private struct VideoInfoSummaryView: View {
+    var info: LoadedVideoInfo
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(info.fileName, systemImage: "doc.richtext")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
+            HStack(spacing: 8) {
+                infoPill(title: "Input", value: info.inputSummary)
+                infoPill(title: "Size", value: info.resolution)
+            }
+
+            HStack(spacing: 8) {
+                infoPill(title: "FPS", value: info.frameRate)
+                infoPill(title: "Time", value: info.duration)
+            }
+
+            HStack(spacing: 8) {
+                infoPill(title: "Audio", value: info.audio)
+                infoPill(title: "File", value: info.fileSize)
+            }
+
+            Label(info.outputName, systemImage: "arrow.down.doc")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
+    private func infoPill(title: String, value: String) -> some View {
+        HStack(spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

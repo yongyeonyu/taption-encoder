@@ -30,6 +30,23 @@ struct StorageIssue: Equatable {
     var message: String
 }
 
+struct LoadedVideoInfo: Equatable {
+    var fileName: String
+    var inputSummary: String
+    var resolution: String
+    var frameRate: String
+    var duration: String
+    var audio: String
+    var fileSize: String
+    var outputName: String
+}
+
+struct PreparedEncodingReview: Equatable {
+    var source: HomeSelectedSource
+    var job: TaptionPreparedEncodingJob
+    var videoInfo: LoadedVideoInfo
+}
+
 struct EncodingProgressSnapshot: Equatable {
     var stage: TaptionEncodingStage
     var fractionCompleted: Double
@@ -125,6 +142,7 @@ enum HomeScreenState: Equatable {
     case inspecting(HomeSelectedSource)
     case storageChecking(HomeSelectedSource)
     case storageBlocked(StorageIssue)
+    case readyToStart(PreparedEncodingReview)
     case encoding(EncodingProgressSnapshot)
     case cancelling
     case waitingForReward(CompletedTemporaryOutput)
@@ -146,6 +164,8 @@ enum HomeScreenState: Equatable {
             return "Checking storage"
         case .storageBlocked:
             return "Storage needed"
+        case .readyToStart:
+            return "Ready to encode"
         case .encoding(let progress):
             return progress.stageTitle
         case .cancelling:
@@ -177,6 +197,8 @@ enum HomeScreenState: Equatable {
             return "Checking temporary and final output space."
         case .storageBlocked(let issue):
             return issue.message
+        case .readyToStart:
+            return "Review the video info, then start H.265 encoding."
         case .encoding(let progress):
             return "\(progress.backendLabel) is converting the source to H.265."
         case .cancelling:
@@ -203,7 +225,7 @@ enum HomeScreenState: Equatable {
         switch self {
         case .importing, .inspecting, .storageChecking, .encoding, .cancelling, .saving:
             return true
-        case .idle, .storageBlocked, .waitingForReward, .pendingSave, .completed, .failed, .cancelled:
+        case .idle, .storageBlocked, .readyToStart, .waitingForReward, .pendingSave, .completed, .failed, .cancelled:
             return false
         }
     }
@@ -216,16 +238,23 @@ enum HomeScreenState: Equatable {
         switch self {
         case .importing, .inspecting, .storageChecking, .encoding:
             return true
-        case .idle, .storageBlocked, .cancelling, .waitingForReward, .pendingSave, .saving, .completed, .failed, .cancelled:
+        case .idle, .storageBlocked, .readyToStart, .cancelling, .waitingForReward, .pendingSave, .saving, .completed, .failed, .cancelled:
             return false
         }
+    }
+
+    var canStartEncoding: Bool {
+        if case .readyToStart = self {
+            return true
+        }
+        return false
     }
 
     var canReset: Bool {
         switch self {
         case .idle, .importing, .inspecting, .storageChecking, .encoding, .cancelling, .saving:
             return false
-        case .storageBlocked, .waitingForReward, .pendingSave, .completed, .failed, .cancelled:
+        case .storageBlocked, .readyToStart, .waitingForReward, .pendingSave, .completed, .failed, .cancelled:
             return true
         }
     }
@@ -234,6 +263,8 @@ enum HomeScreenState: Equatable {
         switch self {
         case .importing(let source), .inspecting(let source), .storageChecking(let source):
             return source.displayName
+        case .readyToStart(let review):
+            return review.source.displayName
         case .waitingForReward(let output):
             return output.sourceName
         case .pendingSave(let job), .saving(let job):
@@ -273,7 +304,7 @@ enum HomeScreenState: Equatable {
                 estimatedRemainingTime: 0,
                 backendLabel: "Encoder"
             )
-        case .idle, .importing, .inspecting, .storageChecking, .storageBlocked, .cancelling, .pendingSave, .failed, .cancelled:
+        case .idle, .importing, .inspecting, .storageChecking, .storageBlocked, .readyToStart, .cancelling, .pendingSave, .failed, .cancelled:
             return nil
         }
     }
@@ -282,7 +313,7 @@ enum HomeScreenState: Equatable {
         switch self {
         case .waitingForReward(let output):
             return output
-        case .idle, .importing, .inspecting, .storageChecking, .storageBlocked, .encoding, .cancelling, .pendingSave, .saving, .completed, .failed, .cancelled:
+        case .idle, .importing, .inspecting, .storageChecking, .storageBlocked, .readyToStart, .encoding, .cancelling, .pendingSave, .saving, .completed, .failed, .cancelled:
             return nil
         }
     }
@@ -291,8 +322,21 @@ enum HomeScreenState: Equatable {
         switch self {
         case .pendingSave(let job), .saving(let job):
             return job
-        case .idle, .importing, .inspecting, .storageChecking, .storageBlocked, .encoding, .cancelling, .waitingForReward, .completed, .failed, .cancelled:
+        case .idle, .importing, .inspecting, .storageChecking, .storageBlocked, .readyToStart, .encoding, .cancelling, .waitingForReward, .completed, .failed, .cancelled:
             return nil
         }
+    }
+
+    var preparedEncodingReview: PreparedEncodingReview? {
+        switch self {
+        case .readyToStart(let review):
+            return review
+        case .idle, .importing, .inspecting, .storageChecking, .storageBlocked, .encoding, .cancelling, .waitingForReward, .pendingSave, .saving, .completed, .failed, .cancelled:
+            return nil
+        }
+    }
+
+    var videoInfo: LoadedVideoInfo? {
+        preparedEncodingReview?.videoInfo
     }
 }

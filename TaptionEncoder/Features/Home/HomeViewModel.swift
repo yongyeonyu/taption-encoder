@@ -92,7 +92,7 @@ final class HomeViewModel: ObservableObject {
             url: url
         )
         beginSecurityScopedAccessIfNeeded(for: url)
-        startEncodingFlow(source: source)
+        prepareEncodingFlow(source: source)
     }
 
     func startPhotosFlow() {
@@ -104,7 +104,14 @@ final class HomeViewModel: ObservableObject {
             displayName: "Photos video",
             url: url
         )
-        startEncodingFlow(source: source)
+        prepareEncodingFlow(source: source)
+    }
+
+    func startPreparedEncoding() {
+        guard let review = state.preparedEncodingReview else {
+            return
+        }
+        startEncoding(review: review)
     }
 
     func retryPendingSave() {
@@ -154,7 +161,7 @@ final class HomeViewModel: ObservableObject {
         state = .failed(HomeEncodingError(title: "Import failed", message: message))
     }
 
-    private func startEncodingFlow(source: HomeSelectedSource) {
+    private func prepareEncodingFlow(source: HomeSelectedSource) {
         guard state.canSelectSource else {
             return
         }
@@ -199,7 +206,56 @@ final class HomeViewModel: ObservableObject {
                     return
                 }
 
-                let result = try await core.encodePreparedJob(job) { [weak self] progress in
+                state = .readyToStart(PreparedEncodingReview(
+                    source: source,
+                    job: job,
+                    videoInfo: makeLoadedVideoInfo(source: source, job: job)
+                ))
+                activeTask = nil
+            } catch is CancellationError {
+                state = .cancelled
+                activeTask = nil
+                stopSecurityScopedAccess()
+            } catch let error as TaptionVideoCoreError {
+                state = .failed(HomeEncodingError(
+                    title: "Encoding failed",
+                    message: error.localizedDescription
+                ))
+                activeTask = nil
+                stopSecurityScopedAccess()
+            } catch {
+                state = .failed(HomeEncodingError(
+                    title: "Encoding failed",
+                    message: error.localizedDescription
+                ))
+                activeTask = nil
+                stopSecurityScopedAccess()
+            }
+        }
+    }
+
+    private func startEncoding(review: PreparedEncodingReview) {
+        guard !state.isBusy else {
+            return
+        }
+
+        activeTask?.cancel()
+        state = .encoding(EncodingProgressSnapshot(
+            stage: .queued,
+            fractionCompleted: 0,
+            elapsedTime: 0,
+            estimatedRemainingTime: nil,
+            backendLabel: "Automatic Codec Path"
+        ))
+
+        activeTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+
+            do {
+                let core = TaptionVideoCore(services: environment.videoCoreServices)
+                let result = try await core.encodePreparedJob(review.job) { [weak self] progress in
                     Task { @MainActor [weak self] in
                         guard let self else {
                             return
@@ -222,7 +278,7 @@ final class HomeViewModel: ObservableObject {
 
                 state = .waitingForReward(CompletedTemporaryOutput(
                     planID: result.planID,
-                    sourceName: source.displayName,
+                    sourceName: review.source.displayName,
                     temporaryOutputURL: result.temporaryOutputURL,
                     finalOutputURL: result.finalOutputURL,
                     pendingSaveState: pendingState,
@@ -294,6 +350,97 @@ final class HomeViewModel: ObservableObject {
                 activeTask = nil
             }
         }
+    }
+
+    private func makeLoadedVideoInfo(
+        source: HomeSelectedSource,
+        job: TaptionPreparedEncodingJob
+    ) -> LoadedVideoInfo {
+        let asset = job.asset
+        let videoTrack = asset.videoTrack
+        let audioTrack = asset.audioTracks.first
+        return LoadedVideoInfo(
+            fileName: source.displayName,
+            inputSummary: "\(videoTrack?.codec.displayName ?? "Unknown") / \(asset.container.defaultFileExtension.uppercased())",
+            resolution: resolutionText(for: videoTrack),
+            frameRate: frameRateText(for: videoTrack?.nominalFrameRate),
+            duration: durationText(asset.duration),
+            audio: audioText(for: audioTrack, count: asset.audioTracks.count),
+            fileSize: fileSizeText(asset.fingerprint.fileSize),
+            outputName: job.plan.finalOutputURL?.lastPathComponent ?? "Output not ready"
+        )
+    }
+
+    private func resolutionText(for track: TaptionVideoTrackInfo?) -> String {
+        guard let track else {
+            return "Unknown"
+        }
+        return "\(track.displaySize.width)x\(track.displaySize.height)"
+    }
+
+    private func frameRateText(for frameRate: TaptionRationalFrameRate?) -> String {
+        guard let frameRate else {
+            return "Unknown fps"
+        }
+        let value = frameRate.value
+        if abs(value.rounded() - value) < 0.01 {
+            return "\(Int(value.rounded())) fps"
+        }
+        return String(format: "%.2f fps", value)
+    }
+
+    private func durationText(_ duration: TimeInterval?) -> String {
+        guard let duration, duration.isFinite else {
+            return "Unknown"
+        }
+        let totalSeconds = max(0, Int(duration.rounded()))
+        let hours = totalSeconds / 3600
+        let minutes = (totalSeconds / 60) % 60
+        let seconds = totalSeconds % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+
+    private func audioText(for audioTrack: TaptionAudioTrackInfo?, count: Int) -> String {
+        guard let audioTrack else {
+            return "No audio"
+        }
+        let suffix = count > 1 ? " +\(count - 1)" : ""
+        return "\(audioCodecName(audioTrack.codec))\(suffix)"
+    }
+
+    private func audioCodecName(_ codec: TaptionAudioCodec) -> String {
+        switch codec {
+        case .aac:
+            return "AAC"
+        case .pcm:
+            return "PCM"
+        case .alac:
+            return "ALAC"
+        case .opus:
+            return "Opus"
+        case .mp3:
+            return "MP3"
+        case .ac3:
+            return "AC-3"
+        case .eac3:
+            return "E-AC-3"
+        case .flac:
+            return "FLAC"
+        case .vorbis:
+            return "Vorbis"
+        case .unknown:
+            return "Unknown audio"
+        }
+    }
+
+    private func fileSizeText(_ bytes: Int64?) -> String {
+        guard let bytes else {
+            return "Unknown size"
+        }
+        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
     private func makeTemporaryOutputURL(for source: HomeSelectedSource) -> URL {

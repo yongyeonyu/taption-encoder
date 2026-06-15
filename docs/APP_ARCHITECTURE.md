@@ -32,7 +32,7 @@ Primary constraints:
 - Software codec paths are required for unsupported hardware codecs, broad input support, simulator validation, and older-device fallback.
 - Older devices should be supported where performance, OS APIs, and codec availability make the experience honest.
 - Files and Photos are the first input sources.
-- Encoding starts immediately after a valid file is selected.
+- After a valid file is selected, the app inspects it, shows video info, and starts encoding only after the user taps Start.
 - Progress and cancellation are first-class states.
 - Progress should include a determinate bar, percent complete, processed duration, and estimated time remaining when enough samples are available.
 - In-app progress should be mirrored to supported system surfaces through Live Activities where available.

@@ -45,7 +45,7 @@ Next implementation pass should isolate the media conversion core before importi
 - Codec path: the app automatically uses hardware where supported and falls back to software when needed; the UI only displays the actual path.
 - Sources: Files and Photos
 - Photos output: save as a new Photos asset
-- Flow: select a video, start encoding immediately, show progress, allow cancellation or reset, then save after rewarded ad completion
+- Flow: select a video, inspect and show video info, start encoding only after the user taps Start, allow cancellation during encoding, then save after rewarded ad completion
 - Rewarded save failure: keep the completed temporary output and let the user retry later without re-encoding
 - Progress: show progress bar, percentage, elapsed time, and estimated time remaining when enough progress samples are available
 - Background status: on iOS/iPadOS 26 or later, let users opt into background encoding; on iOS/iPadOS 18-25, tell users to keep the app open for reliable encoding

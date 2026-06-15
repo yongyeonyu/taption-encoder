@@ -2,6 +2,7 @@ import SwiftUI
 
 struct EncodingProgressView: View {
     var state: HomeScreenState
+    var onStart: () -> Void
     var onCancel: () -> Void
 
     var body: some View {
@@ -38,15 +39,30 @@ struct EncodingProgressView: View {
                     .foregroundStyle(.secondary)
                 }
 
-                Button {
-                    onCancel()
-                } label: {
-                    Label("Cancel", systemImage: "xmark.circle")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .disabled(!state.canCancel)
+                actionButton
             }
+        }
+    }
+
+    @ViewBuilder
+    private var actionButton: some View {
+        if state.canStartEncoding {
+            Button {
+                onStart()
+            } label: {
+                Label("Start", systemImage: "play.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+        } else {
+            Button {
+                onCancel()
+            } label: {
+                Label("Cancel", systemImage: "xmark.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(!state.canCancel)
         }
     }
 
