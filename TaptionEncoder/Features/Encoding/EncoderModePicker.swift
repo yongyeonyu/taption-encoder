@@ -10,11 +10,13 @@ struct EncoderPathInfoView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
 
                 Text(detail)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.9)
             }
         } icon: {
             Image(systemName: systemImage)

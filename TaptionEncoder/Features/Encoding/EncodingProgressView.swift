@@ -11,10 +11,12 @@ struct EncodingProgressView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(state.title)
                             .font(.headline)
+                            .lineLimit(1)
                         Text(state.detail)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.9)
                     }
                     Spacer(minLength: 12)
                     if let progress = state.progress {

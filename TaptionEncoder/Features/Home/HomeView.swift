@@ -10,76 +10,76 @@ struct HomeView: View {
     }
 
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 16) {
-                    bannerPlaceholder
-                    header
+        GeometryReader { geometry in
+            let isCompact = geometry.size.height < 760
 
-                    SourceActionBar(
-                        canSelectSource: viewModel.state.canSelectSource,
-                        canReset: viewModel.state.canReset,
-                        onFiles: { isFileImporterPresented = true },
-                        onPhotos: { viewModel.startPhotosFlow() },
+            VStack(spacing: isCompact ? 10 : 14) {
+                bannerPlaceholder
+                header(isCompact: isCompact)
+
+                SourceActionBar(
+                    canSelectSource: viewModel.state.canSelectSource,
+                    canReset: viewModel.state.canReset,
+                    onFiles: { isFileImporterPresented = true },
+                    onPhotos: { viewModel.startPhotosFlow() },
+                    onReset: { viewModel.reset() }
+                )
+
+                EncoderPathInfoView(
+                    title: viewModel.encoderPathTitle,
+                    detail: viewModel.encoderPathDetail,
+                    systemImage: viewModel.encoderPathSystemImage
+                )
+
+                OutputSummaryView(
+                    outputSummary: viewModel.outputSummary,
+                    backgroundSummary: viewModel.backgroundSummary
+                )
+
+                if let pendingJob = viewModel.state.pendingSaveJob {
+                    PendingSaveRecoveryView(
+                        job: pendingJob,
+                        onRetry: { viewModel.retryPendingSave() },
                         onReset: { viewModel.reset() }
                     )
-
-                    EncoderPathInfoView(
-                        title: viewModel.encoderPathTitle,
-                        detail: viewModel.encoderPathDetail,
-                        systemImage: viewModel.encoderPathSystemImage
-                    )
-
-                    OutputSummaryView(
-                        outputSummary: viewModel.outputSummary,
-                        backgroundSummary: viewModel.backgroundSummary
-                    )
-
-                    if let pendingJob = viewModel.state.pendingSaveJob {
-                        PendingSaveRecoveryView(
-                            job: pendingJob,
-                            onRetry: { viewModel.retryPendingSave() },
-                            onReset: { viewModel.reset() }
-                        )
-                    }
-
-                    EncodingProgressView(
-                        state: viewModel.state,
-                        onCancel: { viewModel.cancel() }
-                    )
-
-                    if viewModel.state.completedTemporaryOutput != nil {
-                        Button {
-                            viewModel.saveCompletedTemporaryOutput()
-                        } label: {
-                            Label("Watch Ad & Save", systemImage: "play.rectangle")
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 44)
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
                 }
-                .padding(20)
-                .frame(maxWidth: 430)
-                .frame(maxWidth: .infinity)
+
+                EncodingProgressView(
+                    state: viewModel.state,
+                    onCancel: { viewModel.cancel() }
+                )
+
+                if viewModel.state.completedTemporaryOutput != nil {
+                    Button {
+                        viewModel.saveCompletedTemporaryOutput()
+                    } label: {
+                        Label("Watch Ad & Save", systemImage: "play.rectangle")
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
             }
-            .navigationTitle("Taption Encoder")
-            .fileImporter(
-                isPresented: $isFileImporterPresented,
-                allowedContentTypes: [.movie, .mpeg4Movie, .quickTimeMovie],
-                allowsMultipleSelection: false
-            ) { result in
-                switch result {
-                case .success(let urls):
-                    if let url = urls.first {
-                        viewModel.startFilesFlow(url: url)
-                    }
-                case .failure(let error):
-                    viewModel.fail(message: error.localizedDescription)
+            .padding(.horizontal, isCompact ? 16 : 20)
+            .padding(.vertical, isCompact ? 10 : 16)
+            .frame(maxWidth: 430)
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+            .clipped()
+        }
+        .fileImporter(
+            isPresented: $isFileImporterPresented,
+            allowedContentTypes: [.movie, .mpeg4Movie, .quickTimeMovie],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first {
+                    viewModel.startFilesFlow(url: url)
                 }
+            case .failure(let error):
+                viewModel.fail(message: error.localizedDescription)
             }
         }
-        .navigationViewStyle(.stack)
         .task {
             await viewModel.restorePendingSavesIfNeeded()
         }
@@ -98,20 +98,17 @@ struct HomeView: View {
             .accessibilityLabel("Ad banner placeholder")
     }
 
-    private var header: some View {
-        VStack(spacing: 8) {
+    private func header(isCompact: Bool) -> some View {
+        VStack(spacing: isCompact ? 4 : 6) {
             Image(systemName: "film.stack")
-                .font(.system(size: 48, weight: .semibold))
+                .font(.system(size: isCompact ? 34 : 42, weight: .semibold))
                 .foregroundStyle(.tint)
 
-            Text(viewModel.appName)
-                .font(.largeTitle.bold())
-                .multilineTextAlignment(.center)
-
             Text(viewModel.subtitle)
-                .font(.title3.weight(.semibold))
+                .font((isCompact ? Font.headline : Font.title3).weight(.semibold))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .lineLimit(1)
         }
         .frame(maxWidth: .infinity)
     }

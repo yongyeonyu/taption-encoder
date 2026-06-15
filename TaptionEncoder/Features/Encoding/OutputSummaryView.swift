@@ -14,13 +14,15 @@ struct OutputSummaryView: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.trailing)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.85)
             }
 
             Label(backgroundSummary, systemImage: "clock")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(2)
+                .minimumScaleFactor(0.9)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
