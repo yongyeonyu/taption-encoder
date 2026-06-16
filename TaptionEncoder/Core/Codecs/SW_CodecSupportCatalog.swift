@@ -56,6 +56,11 @@ enum SW_CodecSupportCatalog {
         .pngVideo,
         .r10k,
         .v210,
+        .microsoftRLE,
+        .quickTimeGraphics,
+        .v308,
+        .v408,
+        .yuv4,
         .rawVideo
     ]
 
@@ -385,6 +390,46 @@ enum SW_CodecSupportCatalog {
             audioCodec: .pcm,
             container: .mov,
             sourceFamily: "10-bit 4:2:2 capture and broadcast intermediate",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "msrle_mov_pcm",
+            videoCodec: .microsoftRLE,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "Legacy Microsoft RLE screen and animation capture",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "smc_mov_pcm",
+            videoCodec: .quickTimeGraphics,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "Legacy QuickTime Graphics animation",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "v308_mov_pcm",
+            videoCodec: .v308,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "Uncompressed packed 4:4:4 QuickTime video",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "v408_mov_pcm",
+            videoCodec: .v408,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "Uncompressed packed 4:4:4:4 QuickTime video",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "yuv4_mov_pcm",
+            videoCodec: .yuv4,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "Uncompressed packed 4:2:0 QuickTime video",
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(

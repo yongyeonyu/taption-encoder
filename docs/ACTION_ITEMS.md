@@ -107,7 +107,7 @@ Status date: 2026-06-16
 - [x] Expand generated video fixture coverage across every declared readable container, including M4V, MPEG-TS, MXF, FLV, 3G2, ASF, and raw elementary streams.
 - [x] Expand generated video fixture coverage for representative container/raw aliases including DivX, M2TS/TP/TRP/TOD, DAT/MOD/VOB, QT, F4V, OGM, DVR-MS, NUT, RoQ, RealMedia, AV1 OBU, H.263, rawvideo Y4M, M1V, and M2V.
 - [x] Add repeatable SW/HW H.265 transcode fixture gate with objective audio signal verification.
-- [x] Re-run the expanded 64-fixture video smoke set through both SW_HEVC and HW_HEVC, with 128/128 H.265 conversion attempts passing and 114 audio-signal checks passing.
+- [x] Re-run the expanded 69-fixture video smoke set through both SW_HEVC and HW_HEVC, with 138/138 H.265 conversion attempts passing and 124 audio-signal checks passing.
 - [x] Add fixture evidence verifier that requires every generated sample to pass both SW_HEVC and HW_HEVC with H.265 output and preserved audio signal.
 - [x] Add app-scheme Xcode tests that parse the generated video fixture manifest and compare it against `SW_CodecSupportCatalog.fixtureTargets`.
 - [x] Add app-scheme Xcode tests that parse the fixture transcode evidence TSV and fail when SW/HW H.265 output or audio signal proof is missing.

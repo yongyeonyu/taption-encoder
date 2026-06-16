@@ -345,7 +345,7 @@ enum SW_FFmpegCodecCommandPlanner {
             arguments += ["-level", "3"]
         case .dnxhd:
             arguments += ["-profile:v", "dnxhr_lb"]
-        case .huffYUV, .utVideo, .magicYUV, .cineForm, .pngVideo, .r10k, .v210, .rawVideo:
+        case .huffYUV, .utVideo, .magicYUV, .cineForm, .pngVideo, .r10k, .v210, .microsoftRLE, .quickTimeGraphics, .v308, .v408, .yuv4, .rawVideo:
             break
         default:
             arguments += ["-q:v", "2"]
@@ -370,6 +370,14 @@ enum SW_FFmpegCodecCommandPlanner {
             return ["-pix_fmt", "gbrp10le"]
         case .v210:
             return ["-pix_fmt", "yuv422p10le"]
+        case .microsoftRLE, .quickTimeGraphics:
+            return ["-pix_fmt", "rgb24"]
+        case .v308:
+            return ["-pix_fmt", "yuv444p"]
+        case .v408:
+            return ["-pix_fmt", "yuva444p"]
+        case .yuv4:
+            return ["-pix_fmt", "yuv420p"]
         default:
             break
         }
@@ -551,6 +559,11 @@ enum SW_FFmpegCodecCommandPlanner {
         .pngVideo: "png",
         .r10k: "r10k",
         .v210: "v210",
+        .microsoftRLE: "msrle",
+        .quickTimeGraphics: "smc",
+        .v308: "v308",
+        .v408: "v408",
+        .yuv4: "yuv4",
         .rawVideo: "rawvideo"
     ]
 

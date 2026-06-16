@@ -345,6 +345,31 @@ generate_av_fixture \
   -c:a pcm_s16le -ar 48000 -ac 2
 
 generate_av_fixture \
+  "msrle_mov_pcm" "mov" "msrle" "pcm_s16le" \
+  -c:v msrle -pix_fmt rgb24 \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "smc_mov_pcm" "mov" "smc" "pcm_s16le" \
+  -c:v smc -pix_fmt rgb24 \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "v308_mov_pcm" "mov" "v308" "pcm_s16le" \
+  -c:v v308 -pix_fmt yuv444p \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "v408_mov_pcm" "mov" "v408" "pcm_s16le" \
+  -c:v v408 -pix_fmt yuva444p \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "yuv4_mov_pcm" "mov" "yuv4" "pcm_s16le" \
+  -c:v yuv4 -pix_fmt yuv420p \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
   "mpeg1_mpg_mp2" "mpg" "mpeg1video" "mp2" \
   -vf scale=352:288 -r 25 -c:v mpeg1video -b:v 1400k -pix_fmt yuv420p \
   -c:a mp2 -b:a 128k

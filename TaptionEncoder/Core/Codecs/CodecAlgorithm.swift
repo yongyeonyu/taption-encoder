@@ -187,6 +187,11 @@ enum TaptionCodecRegistry {
         .pngVideo,
         .r10k,
         .v210,
+        .microsoftRLE,
+        .quickTimeGraphics,
+        .v308,
+        .v408,
+        .yuv4,
         .rawVideo
     ]
 

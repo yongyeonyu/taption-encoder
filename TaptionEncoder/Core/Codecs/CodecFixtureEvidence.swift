@@ -1547,6 +1547,16 @@ enum TaptionCodecFixtureEvidence {
             return .r10k
         case "v210":
             return .v210
+        case "msrle":
+            return .microsoftRLE
+        case "smc":
+            return .quickTimeGraphics
+        case "v308":
+            return .v308
+        case "v408":
+            return .v408
+        case "yuv4":
+            return .yuv4
         case "dvvideo":
             return .dv
         case "libtheora":

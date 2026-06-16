@@ -20,16 +20,16 @@ Scripts/transcode_fixtures_to_hevc.sh \
 
 | Metric | Count |
 | --- | ---: |
-| Input fixtures | 64 |
-| SW_HEVC attempts | 64 |
-| HW_HEVC attempts | 64 |
-| Total attempts | 128 |
-| Passed | 128 |
+| Input fixtures | 69 |
+| SW_HEVC attempts | 69 |
+| HW_HEVC attempts | 69 |
+| Total attempts | 138 |
+| Passed | 138 |
 | Skipped | 0 |
 | Failed | 0 |
-| Audio signal checks passed | 114 |
+| Audio signal checks passed | 124 |
 | No-source-audio attempts | 14 |
-| Output peak range | -20.6 dB to -17.3 dB |
+| Output peak range | -21.1 dB to -17.6 dB |
 
 ## Audio-Focused Smoke Summary
 
@@ -66,7 +66,7 @@ The skipped generation targets are xHE-AAC, AMR-NB, and AMR-WB because the local
 - ProRes in MOV with PCM and ALAC
 - FFV1 in MKV with FLAC
 - HuffYUV, FFVHuff, Ut Video, and MagicYUV in AVI with PCM
-- GoPro CineForm, DNxHD/DNxHR, PNG video, R10k, and V210 in MOV with PCM
+- GoPro CineForm, DNxHD/DNxHR, PNG video, R10k, V210, Microsoft RLE, QuickTime Graphics, V308, V408, and YUV4 in MOV with PCM
 - MPEG-1 and MPEG-2 program streams with MP2, including `.dat`, `.mod`, and `.vob`
 - MPEG-2 in MXF with PCM
 - MPEG-4 Part 2 in AVI and `.divx` with MP3

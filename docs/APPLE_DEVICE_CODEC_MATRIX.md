@@ -113,11 +113,11 @@ Current output:
 - Base generic + Apple family profiles: 19.
 - Static model identifier rows: 93.
 - Total simulation profiles after adding model identifiers: 112.
-- Source codecs: 38.
-- Output codecs: 38.
-- Routes per profile: 1,444.
-- Total route rows: 161,728.
-- Output file rows including header: 161,729.
+- Source codecs: 43.
+- Output codecs: 43.
+- Routes per profile: 1,849.
+- Total route rows: 207,088.
+- Output file rows including header: 207,089.
 
 Static model coverage report:
 

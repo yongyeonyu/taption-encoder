@@ -42,6 +42,11 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
     case pngVideo
     case r10k
     case v210
+    case microsoftRLE
+    case quickTimeGraphics
+    case v308
+    case v408
+    case yuv4
     case rawVideo
     case unknown
 
@@ -121,6 +126,16 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
             return "AJA Kona 10-bit RGB"
         case .v210:
             return "V210 10-bit 4:2:2"
+        case .microsoftRLE:
+            return "Microsoft RLE"
+        case .quickTimeGraphics:
+            return "QuickTime Graphics"
+        case .v308:
+            return "V308 4:4:4"
+        case .v408:
+            return "V408 4:4:4:4"
+        case .yuv4:
+            return "YUV4 4:2:0"
         case .rawVideo:
             return "Raw Video"
         case .unknown:
@@ -164,6 +179,16 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
             return "R10k"
         case .v210:
             return "V210"
+        case .microsoftRLE:
+            return "MS RLE"
+        case .quickTimeGraphics:
+            return "SMC"
+        case .v308:
+            return "V308"
+        case .v408:
+            return "V408"
+        case .yuv4:
+            return "YUV4"
         case .rawVideo:
             return "Raw"
         case .unknown:
