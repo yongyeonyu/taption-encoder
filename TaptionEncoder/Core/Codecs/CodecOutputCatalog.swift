@@ -73,6 +73,45 @@ struct TaptionOutputReadinessCatalogReport: Codable, Equatable {
     }
 }
 
+struct TaptionAudioOutputReadinessCatalogItem: Codable, Equatable, Identifiable {
+    var audioCodec: TaptionAudioCodec
+    var container: TaptionVideoContainer
+    var state: TaptionOutputImplementationState
+    var note: String?
+
+    var id: String {
+        "\(audioCodec.rawValue)-\(container.rawValue)"
+    }
+}
+
+struct TaptionAudioOutputReadinessCatalogReport: Codable, Equatable {
+    var audioCodecCount: Int
+    var containerCount: Int
+    var outputSelectionCount: Int
+    var implementedOutputSelectionCount: Int
+    var commandPlanReadyOutputSelectionCount: Int
+    var plannedOutputSelectionCount: Int
+    var unsupportedOutputSelectionCount: Int
+    var defaultOutputCodec: TaptionAudioCodec
+    var defaultOutputContainer: TaptionVideoContainer
+    var defaultOutputState: TaptionOutputImplementationState
+    var items: [TaptionAudioOutputReadinessCatalogItem]
+
+    var stateCountsAreConsistent: Bool {
+        outputSelectionCount == implementedOutputSelectionCount
+            + commandPlanReadyOutputSelectionCount
+            + plannedOutputSelectionCount
+            + unsupportedOutputSelectionCount
+    }
+
+    var outputSelectionCoverageIsPassing: Bool {
+        outputSelectionCount == audioCodecCount * containerCount
+            && stateCountsAreConsistent
+            && defaultOutputState == .implemented
+            && unsupportedOutputSelectionCount == 0
+    }
+}
+
 enum TaptionCodecOutputCatalog {
     static var selectableVideoCodecs: [TaptionVideoCodec] {
         TaptionCodecRegistry.universalOutputCodecs
@@ -196,5 +235,90 @@ enum TaptionCodecOutputCatalog {
             return .commandPlanReady
         }
         return .planned
+    }
+}
+
+enum TaptionAudioCodecOutputCatalog {
+    static var selectableAudioCodecs: [TaptionAudioCodec] {
+        TaptionAudioCodecRoutePlanner.universalAudioCodecs
+    }
+
+    static var selectableContainers: [TaptionVideoContainer] {
+        TaptionCodecOutputCatalog.selectableContainers
+    }
+
+    static func implementationState(
+        audioCodec: TaptionAudioCodec,
+        container: TaptionVideoContainer
+    ) -> TaptionOutputImplementationState {
+        guard selectableAudioCodecs.contains(audioCodec),
+              selectableContainers.contains(container) else {
+            return .unsupported
+        }
+
+        if audioCodec == TaptionAudioCodecRoutePlanner.defaultOutputCodec,
+           container == .mp4 {
+            return .implemented
+        }
+
+        if SW_FFmpegCodecCommandPlanner.audioEncoderName(for: audioCodec) != nil,
+           SW_SoftwareCodecBackendRegistry.ffmpegFamilyCandidate.canWriteContainer(container) {
+            return .commandPlanReady
+        }
+
+        return .planned
+    }
+
+    static func makeReadinessReport() -> TaptionAudioOutputReadinessCatalogReport {
+        let items = selectableAudioCodecs.flatMap { audioCodec in
+            selectableContainers.map { container in
+                let state = implementationState(
+                    audioCodec: audioCodec,
+                    container: container
+                )
+                return TaptionAudioOutputReadinessCatalogItem(
+                    audioCodec: audioCodec,
+                    container: container,
+                    state: state,
+                    note: implementationNote(
+                        audioCodec: audioCodec,
+                        container: container
+                    )
+                )
+            }
+        }
+
+        return TaptionAudioOutputReadinessCatalogReport(
+            audioCodecCount: selectableAudioCodecs.count,
+            containerCount: selectableContainers.count,
+            outputSelectionCount: items.count,
+            implementedOutputSelectionCount: items.filter { $0.state == .implemented }.count,
+            commandPlanReadyOutputSelectionCount: items.filter { $0.state == .commandPlanReady }.count,
+            plannedOutputSelectionCount: items.filter { $0.state == .planned }.count,
+            unsupportedOutputSelectionCount: items.filter { $0.state == .unsupported }.count,
+            defaultOutputCodec: TaptionAudioCodecRoutePlanner.defaultOutputCodec,
+            defaultOutputContainer: .mp4,
+            defaultOutputState: implementationState(
+                audioCodec: TaptionAudioCodecRoutePlanner.defaultOutputCodec,
+                container: .mp4
+            ),
+            items: items
+        )
+    }
+
+    static func implementationNote(
+        audioCodec: TaptionAudioCodec,
+        container: TaptionVideoContainer
+    ) -> String? {
+        switch implementationState(audioCodec: audioCodec, container: container) {
+        case .implemented:
+            return nil
+        case .commandPlanReady:
+            return "\(audioCodec.displayName) / \(container.defaultFileExtension.uppercased()) audio output has a software command plan and waits for the broad codec backend."
+        case .planned:
+            return "\(audioCodec.displayName) / \(container.defaultFileExtension.uppercased()) audio output is planned for the universal codec update."
+        case .unsupported:
+            return "\(audioCodec.displayName) / \(container.defaultFileExtension.uppercased()) audio output is not in the current codec roadmap."
+        }
     }
 }

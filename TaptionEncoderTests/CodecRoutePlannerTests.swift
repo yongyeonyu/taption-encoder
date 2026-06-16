@@ -1057,6 +1057,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(TaptionOutputSelection(videoCodec: .hevc, container: .mp4).isImplementedNow)
         XCTAssertFalse(TaptionOutputSelection(videoCodec: .hevc, container: .mov).isImplementedNow)
         XCTAssertFalse(TaptionOutputSelection(videoCodec: .h264, container: .mp4).isImplementedNow)
+        XCTAssertFalse(TaptionOutputSelection(videoCodec: .hevc, audioCodec: .opus, container: .mp4).isImplementedNow)
     }
 
     func testOutputCatalogSeparatesImplementedCommandPlanReadyPlannedAndUnsupportedOutputs() {
@@ -1110,6 +1111,43 @@ final class CodecRoutePlannerTests: XCTestCase {
         }
         let plannedItem = report.items.first {
             $0.videoCodec == .proResRaw && $0.container == .mkv
+        }
+
+        XCTAssertEqual(currentBuildItem?.state, .implemented)
+        XCTAssertNil(currentBuildItem?.note)
+        XCTAssertEqual(commandPlanItem?.state, .commandPlanReady)
+        XCTAssertTrue(commandPlanItem?.note?.contains("software command plan") == true)
+        XCTAssertEqual(plannedItem?.state, .planned)
+        XCTAssertTrue(plannedItem?.note?.contains("universal codec update") == true)
+    }
+
+    func testAudioOutputReadinessCatalogReportSummarizesSelectorMatrix() {
+        let report = TaptionAudioCodecOutputCatalog.makeReadinessReport()
+        let expectedOutputSelectionCount = TaptionAudioCodecOutputCatalog.selectableAudioCodecs.count
+            * TaptionAudioCodecOutputCatalog.selectableContainers.count
+
+        XCTAssertEqual(report.audioCodecCount, TaptionAudioCodecOutputCatalog.selectableAudioCodecs.count)
+        XCTAssertEqual(report.containerCount, TaptionAudioCodecOutputCatalog.selectableContainers.count)
+        XCTAssertEqual(report.outputSelectionCount, expectedOutputSelectionCount)
+        XCTAssertEqual(report.items.count, expectedOutputSelectionCount)
+        XCTAssertTrue(report.stateCountsAreConsistent)
+        XCTAssertTrue(report.outputSelectionCoverageIsPassing)
+        XCTAssertEqual(report.defaultOutputCodec, .aac)
+        XCTAssertEqual(report.defaultOutputContainer, .mp4)
+        XCTAssertEqual(report.defaultOutputState, .implemented)
+        XCTAssertEqual(report.implementedOutputSelectionCount, 1)
+        XCTAssertGreaterThan(report.commandPlanReadyOutputSelectionCount, 0)
+        XCTAssertGreaterThan(report.plannedOutputSelectionCount, 0)
+        XCTAssertEqual(report.unsupportedOutputSelectionCount, 0)
+
+        let currentBuildItem = report.items.first {
+            $0.audioCodec == .aac && $0.container == .mp4
+        }
+        let commandPlanItem = report.items.first {
+            $0.audioCodec == .opus && $0.container == .mkv
+        }
+        let plannedItem = report.items.first {
+            $0.audioCodec == .xheAAC && $0.container == .mp4
         }
 
         XCTAssertEqual(currentBuildItem?.state, .implemented)
@@ -1183,6 +1221,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.outputPolicy.videoCodec, outputPolicy.videoCodec)
+        XCTAssertEqual(plan.outputPolicy.audioCodec, outputPolicy.audioCodec)
         XCTAssertEqual(plan.outputPolicy.container, outputPolicy.container)
         XCTAssertEqual(plan.outputPolicy.profile, outputPolicy.profile)
         XCTAssertEqual(plan.outputPolicy.qualityPolicy, outputPolicy.qualityPolicy)
@@ -1200,6 +1239,48 @@ final class CodecRoutePlannerTests: XCTestCase {
             try SW_FFmpegCodecCommandPlanner.makeSingleAssetCommandPlan(plan: plan),
             plan.videoCommandPlan
         )
+    }
+
+    func testSingleAssetPlanUsesSelectedAudioOutputCodec() throws {
+        let asset = TaptionVideoAsset(
+            displayName: "vp9-opus.webm",
+            location: TaptionVideoAssetLocation(kind: .file),
+            container: .webm,
+            duration: 2,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .vp9,
+                naturalSize: TaptionPixelSize(width: 1920, height: 1080),
+                displaySize: TaptionPixelSize(width: 1920, height: 1080),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 30)
+            ),
+            audioTracks: [
+                TaptionAudioTrackInfo(
+                    codec: .opus,
+                    channelCount: 2,
+                    sampleRate: 48_000,
+                    estimatedBitrate: 192_000
+                )
+            ]
+        )
+        let outputPolicy = TaptionVideoOutputPolicy(
+            videoCodec: .av1,
+            audioCodec: .flac,
+            container: .mkv
+        )
+
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: asset,
+            sourceURL: URL(fileURLWithPath: "/tmp/vp9-opus.webm"),
+            temporaryOutputURL: URL(fileURLWithPath: "/tmp/vp9-opus_taption.mkv"),
+            outputPolicy: outputPolicy
+        )
+
+        XCTAssertEqual(plan.outputPolicy.audioCodec, .flac)
+        XCTAssertEqual(plan.audioPlan?.route, TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .flac))
+        XCTAssertEqual(plan.audioPlan?.options.outputCodec, .flac)
+        XCTAssertEqual(plan.audioPlan?.options.outputContainer, .mkv)
+        XCTAssertTrue(plan.audioPlan?.commandPlan?.arguments.contains("flac") == true)
+        XCTAssertTrue(plan.videoCommandPlan?.arguments.contains("flac") == true)
     }
 
     func testSingleAssetPlanCarriesSourcePreservingAudioTranscodePlan() {
@@ -1499,6 +1580,12 @@ final class CodecRoutePlannerTests: XCTestCase {
             trackCount: 2,
             outputContainer: .mp4
         )
+        let selectedSoftware = LoadedAudioPathInfo.make(
+            firstAudioTrack: TaptionAudioTrackInfo(codec: .opus),
+            trackCount: 1,
+            outputCodec: .flac,
+            outputContainer: .mkv
+        )
         let unsupported = LoadedAudioPathInfo.make(
             firstAudioTrack: TaptionAudioTrackInfo(codec: .unknown),
             trackCount: 1,
@@ -1520,6 +1607,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(software.outputSummary, "AAC")
         XCTAssertTrue(software.detail.contains("Opus to AAC"))
         XCTAssertTrue(software.detail.contains("first of 2 audio tracks"))
+
+        XCTAssertEqual(selectedSoftware.title, "Audio SW")
+        XCTAssertEqual(selectedSoftware.outputSummary, "FLAC")
+        XCTAssertTrue(selectedSoftware.detail.contains("Opus to FLAC"))
 
         XCTAssertEqual(unsupported.title, "Audio Unsupported")
         XCTAssertEqual(unsupported.outputSummary, "AAC")
@@ -1555,18 +1646,18 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         XCTAssertEqual(implemented.title, "Path SW")
-        XCTAssertEqual(implemented.outputSummary, "H.265 / MP4")
+        XCTAssertEqual(implemented.outputSummary, "H.265 + AAC / MP4")
         XCTAssertTrue(implemented.isRouteEncodable, "\(implemented)")
         XCTAssertTrue(implemented.detail.contains("software fallback"), implemented.detail)
 
         XCTAssertEqual(planned.title, "Path SW Plan Ready")
-        XCTAssertEqual(planned.outputSummary, "AV1 / MKV")
+        XCTAssertEqual(planned.outputSummary, "AV1 + AAC / MKV")
         XCTAssertFalse(planned.isRouteEncodable)
         XCTAssertTrue(planned.detail.contains("FFmpeg-family backend command can be planned"))
         XCTAssertTrue(planned.detail.contains("AV1 / MKV output has a software command plan"))
 
         XCTAssertEqual(blocked.title, "Path SW Blocked")
-        XCTAssertEqual(blocked.outputSummary, "Apple ProRes RAW / MKV")
+        XCTAssertEqual(blocked.outputSummary, "Apple ProRes RAW + AAC / MKV")
         XCTAssertFalse(blocked.isRouteEncodable)
         XCTAssertTrue(blocked.detail.contains("Apple ProRes RAW has no selected software video encoder"))
     }
@@ -2282,10 +2373,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(decoded.universalCodecCompletionAudit?.universalPlanningIsLocked == true)
         XCTAssertEqual(decoded.outputReadinessCatalog?.defaultOutputState, .implemented)
         XCTAssertTrue(decoded.outputReadinessCatalog?.outputSelectionCoverageIsPassing == true)
+        XCTAssertEqual(decoded.audioOutputReadinessCatalog?.defaultOutputState, .implemented)
+        XCTAssertTrue(decoded.audioOutputReadinessCatalog?.outputSelectionCoverageIsPassing == true)
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"routeSimulationSummary\"") == true)
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"staticMatrixReconciliation\"") == true)
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"universalCodecCompletionAudit\"") == true)
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"outputReadinessCatalog\"") == true)
+        XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"audioOutputReadinessCatalog\"") == true)
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"videoCapabilities\"") == true)
     }
 
@@ -2320,6 +2414,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(loadedSnapshots.first?.universalCodecCompletionAudit?.contractName, "All-to-All Universal Codec Mesh")
         XCTAssertEqual(loadedSnapshots.first?.outputReadinessCatalog?.defaultOutputCodec, .hevc)
         XCTAssertTrue(loadedSnapshots.first?.outputReadinessCatalog?.outputSelectionCoverageIsPassing == true)
+        XCTAssertEqual(loadedSnapshots.first?.audioOutputReadinessCatalog?.defaultOutputCodec, .aac)
+        XCTAssertTrue(loadedSnapshots.first?.audioOutputReadinessCatalog?.outputSelectionCoverageIsPassing == true)
     }
 
     func testAudioFixtureCoverageTracksPendingCodecs() {

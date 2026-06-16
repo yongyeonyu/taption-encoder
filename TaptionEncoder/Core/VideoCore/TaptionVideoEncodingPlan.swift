@@ -54,6 +54,7 @@ struct TaptionAdvancedOutputOptions: Codable, Equatable {
 
 struct TaptionVideoOutputPolicy: Codable, Equatable {
     var videoCodec: TaptionVideoCodec
+    var audioCodec: TaptionAudioCodec
     var container: TaptionVideoContainer
     var profile: TaptionHEVCProfile
     var qualityPolicy: TaptionQualityPolicy
@@ -61,12 +62,14 @@ struct TaptionVideoOutputPolicy: Codable, Equatable {
 
     init(
         videoCodec: TaptionVideoCodec = .hevc,
+        audioCodec: TaptionAudioCodec = TaptionAudioCodecRoutePlanner.defaultOutputCodec,
         container: TaptionVideoContainer = .mp4,
         profile: TaptionHEVCProfile = .automatic,
         qualityPolicy: TaptionQualityPolicy = .preserveSourceVisuals,
         advancedOptions: TaptionAdvancedOutputOptions = .preserveSource
     ) {
         self.videoCodec = videoCodec
+        self.audioCodec = audioCodec
         self.container = container
         self.profile = profile
         self.qualityPolicy = qualityPolicy
@@ -373,6 +376,7 @@ enum TaptionEncodingPlanner {
             asset: asset,
             sourceURL: sourceURL,
             outputURL: temporaryOutputURL,
+            outputCodec: resolvedOutputPolicy.audioCodec,
             outputContainer: resolvedOutputPolicy.container
         )
         let videoCommandPlan = makeVideoCommandPlanIfAvailable(

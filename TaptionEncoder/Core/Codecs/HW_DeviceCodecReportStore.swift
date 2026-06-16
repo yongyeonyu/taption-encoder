@@ -1,7 +1,7 @@
 import Foundation
 
 struct HW_DeviceCodecReportSnapshot: Codable, Equatable, Identifiable {
-    static let currentSchemaVersion = 4
+    static let currentSchemaVersion = 5
 
     var id: String
     var schemaVersion: Int
@@ -11,6 +11,7 @@ struct HW_DeviceCodecReportSnapshot: Codable, Equatable, Identifiable {
     var staticMatrixReconciliation: HW_DeviceCodecReportReconciliation?
     var universalCodecCompletionAudit: TaptionUniversalCodecCompletionAuditReport?
     var outputReadinessCatalog: TaptionOutputReadinessCatalogReport?
+    var audioOutputReadinessCatalog: TaptionAudioOutputReadinessCatalogReport?
 
     init(
         id: String? = nil,
@@ -20,7 +21,8 @@ struct HW_DeviceCodecReportSnapshot: Codable, Equatable, Identifiable {
         routeSimulationSummary: HW_CodecRouteSimulationSummary,
         staticMatrixReconciliation: HW_DeviceCodecReportReconciliation? = nil,
         universalCodecCompletionAudit: TaptionUniversalCodecCompletionAuditReport? = nil,
-        outputReadinessCatalog: TaptionOutputReadinessCatalogReport? = nil
+        outputReadinessCatalog: TaptionOutputReadinessCatalogReport? = nil,
+        audioOutputReadinessCatalog: TaptionAudioOutputReadinessCatalogReport? = nil
     ) {
         self.id = id ?? Self.makeID(
             modelIdentifier: report.modelIdentifier,
@@ -33,6 +35,7 @@ struct HW_DeviceCodecReportSnapshot: Codable, Equatable, Identifiable {
         self.staticMatrixReconciliation = staticMatrixReconciliation
         self.universalCodecCompletionAudit = universalCodecCompletionAudit
         self.outputReadinessCatalog = outputReadinessCatalog
+        self.audioOutputReadinessCatalog = audioOutputReadinessCatalog
     }
 
     private static func makeID(
@@ -209,7 +212,8 @@ enum HW_DeviceCodecReportStore {
             routeSimulationSummary: routeSimulationSummary,
             staticMatrixReconciliation: HW_DeviceCodecReportReconciler.reconcile(report: report),
             universalCodecCompletionAudit: TaptionUniversalCodecCompletionAuditor.makeReport(),
-            outputReadinessCatalog: TaptionCodecOutputCatalog.makeReadinessReport()
+            outputReadinessCatalog: TaptionCodecOutputCatalog.makeReadinessReport(),
+            audioOutputReadinessCatalog: TaptionAudioCodecOutputCatalog.makeReadinessReport()
         )
     }
 

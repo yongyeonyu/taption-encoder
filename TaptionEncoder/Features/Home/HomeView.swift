@@ -298,8 +298,8 @@ struct HomeView: View {
     private func outputSelector(metrics: HomeLayoutMetrics) -> some View {
         HStack(spacing: 8 * metrics.contentScale) {
             outputMenu(
-                title: "Output",
-                value: "\(viewModel.selectedOutput.videoCodec.shortDisplayName) - \(viewModel.selectedOutputStatusText)",
+                title: "Video",
+                value: "\(viewModel.selectedOutput.videoCodec.shortDisplayName) - \(viewModel.selectedVideoOutputStatusText)",
                 systemImage: "arrow.triangle.2.circlepath",
                 isEnabled: viewModel.canChangeOutputSelection,
                 metrics: metrics
@@ -318,8 +318,28 @@ struct HomeView: View {
             }
 
             outputMenu(
+                title: "Audio",
+                value: "\(viewModel.selectedOutput.audioCodec.displayName) - \(viewModel.selectedAudioOutputStatusText)",
+                systemImage: "waveform",
+                isEnabled: viewModel.canChangeOutputSelection,
+                metrics: metrics
+            ) {
+                ForEach(viewModel.outputAudioCodecOptions, id: \.self) { codec in
+                    Button {
+                        viewModel.selectOutputAudioCodec(codec)
+                    } label: {
+                        if codec == viewModel.selectedOutput.audioCodec {
+                            Label(viewModel.outputAudioCodecMenuTitle(codec), systemImage: "checkmark")
+                        } else {
+                            Text(viewModel.outputAudioCodecMenuTitle(codec))
+                        }
+                    }
+                }
+            }
+
+            outputMenu(
                 title: "Container",
-                value: "\(viewModel.selectedOutput.container.defaultFileExtension.uppercased()) - \(viewModel.selectedOutputStatusText)",
+                value: "\(viewModel.selectedOutput.container.defaultFileExtension.uppercased())",
                 systemImage: "shippingbox",
                 isEnabled: viewModel.canChangeOutputSelection,
                 metrics: metrics
@@ -356,12 +376,12 @@ struct HomeView: View {
                 Image(systemName: systemImage)
                     .font(.system(size: 14 * metrics.contentScale, weight: .semibold))
                 Text(title)
-                    .font(metrics.buttonFont.weight(.semibold))
+                    .font((metrics.contentScale < 0.9 ? Font.caption : metrics.buttonFont).weight(.semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                 Spacer(minLength: 4)
                 Text(value)
-                    .font((metrics.contentScale < 0.9 ? Font.caption2 : Font.caption).weight(.semibold))
+                    .font(Font.caption2.weight(.semibold))
                     .foregroundStyle(TaptionTheme.mutedText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)

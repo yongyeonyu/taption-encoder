@@ -84,6 +84,7 @@ struct TaptionVideoCore {
         let storageRequirement = try await services.storageChecker.storageRequirement(for: plan)
         let canRunInThisBuild = routeSelection.isEncodableNow
             && outputPolicy.videoCodec == .hevc
+            && outputPolicy.audioCodec == TaptionAudioCodecRoutePlanner.defaultOutputCodec
             && outputPolicy.container == .mp4
         guard !canRunInThisBuild || storageRequirement.hasEnoughSpace else {
             throw TaptionVideoCoreError.insufficientStorage(

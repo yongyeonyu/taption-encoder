@@ -236,6 +236,7 @@ private struct DeviceInfoSheetContentView: View {
     private let routeSimulationSummary = HW_CodecRouteSimulator.summary()
     private let codecCompletionAudit = TaptionUniversalCodecCompletionAuditor.makeReport()
     private let outputReadinessCatalog = TaptionCodecOutputCatalog.makeReadinessReport()
+    private let audioOutputReadinessCatalog = TaptionAudioCodecOutputCatalog.makeReadinessReport()
     private let modelCoverageReport = HW_AppleDeviceCodecModelMatrix.coverageReport()
 
     var body: some View {
@@ -297,6 +298,19 @@ private struct DeviceInfoSheetContentView: View {
                         ("Planned", "\(outputReadinessCatalog.plannedOutputSelectionCount) waiting for codec/backend decisions"),
                         ("Blocked", "\(outputReadinessCatalog.unsupportedOutputSelectionCount) unsupported selections"),
                         ("Default", "\(outputReadinessCatalog.defaultOutputCodec.shortDisplayName) / \(outputReadinessCatalog.defaultOutputContainer.defaultFileExtension.uppercased()) is \(outputReadinessCatalog.defaultOutputState.shortDisplayName)")
+                    ]
+                )
+
+                SheetInfoCard(
+                    title: "Audio Output Readiness",
+                    rows: [
+                        ("Catalog", "\(audioOutputReadinessCatalog.audioCodecCount) codecs · \(audioOutputReadinessCatalog.containerCount) containers"),
+                        ("Selections", "\(audioOutputReadinessCatalog.outputSelectionCount) audio codec/container pairs"),
+                        ("Now", "\(audioOutputReadinessCatalog.implementedOutputSelectionCount) executable in this build"),
+                        ("Plan Ready", "\(audioOutputReadinessCatalog.commandPlanReadyOutputSelectionCount) command-plan ready"),
+                        ("Planned", "\(audioOutputReadinessCatalog.plannedOutputSelectionCount) waiting for codec/backend decisions"),
+                        ("Blocked", "\(audioOutputReadinessCatalog.unsupportedOutputSelectionCount) unsupported selections"),
+                        ("Default", "\(audioOutputReadinessCatalog.defaultOutputCodec.displayName) / \(audioOutputReadinessCatalog.defaultOutputContainer.defaultFileExtension.uppercased()) is \(audioOutputReadinessCatalog.defaultOutputState.shortDisplayName)")
                     ]
                 )
 

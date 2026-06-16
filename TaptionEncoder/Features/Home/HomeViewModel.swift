@@ -59,12 +59,24 @@ final class HomeViewModel: ObservableObject {
         TaptionOutputSelection.videoCodecOptions
     }
 
+    var outputAudioCodecOptions: [TaptionAudioCodec] {
+        TaptionOutputSelection.audioCodecOptions
+    }
+
     var outputContainerOptions: [TaptionVideoContainer] {
         TaptionOutputSelection.containerOptions
     }
 
     var selectedOutputStatusText: String {
         selectedOutput.implementationState.shortDisplayName
+    }
+
+    var selectedVideoOutputStatusText: String {
+        selectedOutput.videoImplementationState.shortDisplayName
+    }
+
+    var selectedAudioOutputStatusText: String {
+        selectedOutput.audioImplementationState.shortDisplayName
     }
 
     var canChangeOutputSelection: Bool {
@@ -135,6 +147,31 @@ final class HomeViewModel: ObservableObject {
         refreshPreparedSourceAfterOutputChange()
     }
 
+    func selectOutputAudioCodec(_ codec: TaptionAudioCodec) {
+        guard canChangeOutputSelection else {
+            AppLogger.warning(
+                "Output audio codec change ignored while flow is busy",
+                category: .ui,
+                metadata: ["codec": codec.rawValue]
+            )
+            return
+        }
+        guard selectedOutput.audioCodec != codec else {
+            return
+        }
+
+        selectedOutput.audioCodec = codec
+        AppLogger.info(
+            "Output audio codec selected",
+            category: .ui,
+            metadata: [
+                "codec": codec.rawValue,
+                "state": selectedOutput.audioImplementationState.rawValue
+            ]
+        )
+        refreshPreparedSourceAfterOutputChange()
+    }
+
     func selectOutputContainer(_ container: TaptionVideoContainer) {
         guard canChangeOutputSelection else {
             AppLogger.warning(
@@ -164,6 +201,10 @@ final class HomeViewModel: ObservableObject {
         "\(codec.displayName) - \(outputCodecStatusText(codec))"
     }
 
+    func outputAudioCodecMenuTitle(_ codec: TaptionAudioCodec) -> String {
+        "\(codec.displayName) - \(outputAudioCodecStatusText(codec))"
+    }
+
     func outputContainerMenuTitle(_ container: TaptionVideoContainer) -> String {
         "\(container.defaultFileExtension.uppercased()) - \(outputContainerStatusText(container))"
     }
@@ -175,11 +216,26 @@ final class HomeViewModel: ObservableObject {
         ).shortDisplayName
     }
 
+    private func outputAudioCodecStatusText(_ codec: TaptionAudioCodec) -> String {
+        TaptionAudioCodecOutputCatalog.implementationState(
+            audioCodec: codec,
+            container: selectedOutput.container
+        ).shortDisplayName
+    }
+
     private func outputContainerStatusText(_ container: TaptionVideoContainer) -> String {
-        TaptionCodecOutputCatalog.implementationState(
+        let videoState = TaptionCodecOutputCatalog.implementationState(
             videoCodec: selectedOutput.videoCodec,
             container: container
-        ).shortDisplayName
+        )
+        let audioState = TaptionAudioCodecOutputCatalog.implementationState(
+            audioCodec: selectedOutput.audioCodec,
+            container: container
+        )
+        if videoState == audioState {
+            return videoState.shortDisplayName
+        }
+        return "\(videoState.shortDisplayName) / \(audioState.shortDisplayName)"
     }
 
     var pendingSaveRecoveryJob: PendingSaveJob? {
@@ -2176,6 +2232,7 @@ final class HomeViewModel: ObservableObject {
         let audioPath = LoadedAudioPathInfo.make(
             firstAudioTrack: audioTrack,
             trackCount: asset.audioTracks.count,
+            outputCodec: selectedOutput.audioCodec,
             outputContainer: selectedOutput.container
         )
         return LoadedVideoInfo(

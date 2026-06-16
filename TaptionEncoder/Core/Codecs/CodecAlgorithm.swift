@@ -88,11 +88,13 @@ struct TaptionCodecTranscodeOptions: Codable, Equatable {
 
     static func preservingSource(
         outputCodec: TaptionVideoCodec = .hevc,
+        outputAudioCodec: TaptionAudioCodec = TaptionAudioCodecRoutePlanner.defaultOutputCodec,
         container: TaptionVideoContainer = .mp4
     ) -> TaptionCodecTranscodeOptions {
         TaptionCodecTranscodeOptions(
             outputPolicy: TaptionVideoOutputPolicy(
                 videoCodec: outputCodec,
+                audioCodec: outputAudioCodec,
                 container: container,
                 qualityPolicy: .preserveSourceVisuals,
                 advancedOptions: .preserveSource

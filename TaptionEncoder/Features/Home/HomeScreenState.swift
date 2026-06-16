@@ -74,6 +74,7 @@ struct LoadedAudioPathInfo: Equatable {
     static func make(
         firstAudioTrack: TaptionAudioTrackInfo?,
         trackCount: Int,
+        outputCodec requestedOutputCodec: TaptionAudioCodec? = nil,
         outputContainer: TaptionVideoContainer
     ) -> LoadedAudioPathInfo {
         guard let firstAudioTrack else {
@@ -86,6 +87,7 @@ struct LoadedAudioPathInfo: Equatable {
 
         let outputCodec = outputCodec(
             for: firstAudioTrack.codec,
+            requestedOutputCodec: requestedOutputCodec,
             outputContainer: outputContainer
         )
         let route = TaptionAudioCodecRoute(
@@ -116,8 +118,12 @@ struct LoadedAudioPathInfo: Equatable {
 
     private static func outputCodec(
         for sourceCodec: TaptionAudioCodec,
+        requestedOutputCodec: TaptionAudioCodec?,
         outputContainer: TaptionVideoContainer
     ) -> TaptionAudioCodec {
+        if let requestedOutputCodec {
+            return requestedOutputCodec
+        }
         if HW_AudioCodecCapabilityCatalog.canCopyWithoutTranscode(
             codec: sourceCodec,
             into: outputContainer
@@ -164,23 +170,27 @@ struct LoadedAudioPathInfo: Equatable {
 
 struct TaptionOutputSelection: Identifiable, Equatable {
     var videoCodec: TaptionVideoCodec
+    var audioCodec: TaptionAudioCodec
     var container: TaptionVideoContainer
 
     init(
         videoCodec: TaptionVideoCodec = .hevc,
+        audioCodec: TaptionAudioCodec = TaptionAudioCodecRoutePlanner.defaultOutputCodec,
         container: TaptionVideoContainer = .mp4
     ) {
         self.videoCodec = videoCodec
+        self.audioCodec = audioCodec
         self.container = container
     }
 
     var id: String {
-        "\(videoCodec.rawValue)-\(container.rawValue)"
+        "\(videoCodec.rawValue)-\(audioCodec.rawValue)-\(container.rawValue)"
     }
 
     var outputPolicy: TaptionVideoOutputPolicy {
         TaptionVideoOutputPolicy(
             videoCodec: videoCodec,
+            audioCodec: audioCodec,
             container: container,
             profile: .automatic,
             qualityPolicy: .preserveSourceVisuals,
@@ -189,7 +199,7 @@ struct TaptionOutputSelection: Identifiable, Equatable {
     }
 
     var summary: String {
-        "\(videoCodec.shortDisplayName) / \(container.defaultFileExtension.uppercased())"
+        "\(videoCodec.shortDisplayName) + \(audioCodec.displayName) / \(container.defaultFileExtension.uppercased())"
     }
 
     var implementationNote: String? {
@@ -200,8 +210,22 @@ struct TaptionOutputSelection: Identifiable, Equatable {
     }
 
     var implementationState: TaptionOutputImplementationState {
+        combinedImplementationState(
+            videoState: videoImplementationState,
+            audioState: audioImplementationState
+        )
+    }
+
+    var videoImplementationState: TaptionOutputImplementationState {
         TaptionCodecOutputCatalog.implementationState(
             videoCodec: videoCodec,
+            container: container
+        )
+    }
+
+    var audioImplementationState: TaptionOutputImplementationState {
+        TaptionAudioCodecOutputCatalog.implementationState(
+            audioCodec: audioCodec,
             container: container
         )
     }
@@ -216,8 +240,28 @@ struct TaptionOutputSelection: Identifiable, Equatable {
         TaptionCodecOutputCatalog.selectableVideoCodecs
     }
 
+    static var audioCodecOptions: [TaptionAudioCodec] {
+        TaptionAudioCodecOutputCatalog.selectableAudioCodecs
+    }
+
     static var containerOptions: [TaptionVideoContainer] {
         TaptionCodecOutputCatalog.selectableContainers
+    }
+
+    private func combinedImplementationState(
+        videoState: TaptionOutputImplementationState,
+        audioState: TaptionOutputImplementationState
+    ) -> TaptionOutputImplementationState {
+        if videoState == .unsupported || audioState == .unsupported {
+            return .unsupported
+        }
+        if videoState == .planned || audioState == .planned {
+            return .planned
+        }
+        if videoState == .commandPlanReady || audioState == .commandPlanReady {
+            return .commandPlanReady
+        }
+        return .implemented
     }
 }
 
