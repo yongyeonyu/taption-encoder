@@ -56,39 +56,17 @@ final class HomeViewModel: ObservableObject {
     }
 
     var selectedOutputDetailTitle: String {
-        currentReview == nil ? "Selected Output" : "Selected Route"
+        "Selected Codec"
     }
 
-    var selectedOutputDetailStatusText: String {
-        currentReview?.videoInfo.codecPathTitle ?? selectedOutput.statusTitle
+    var selectedVideoCodecText: String {
+        let mode = currentReview?.videoInfo.codecPathBadge ?? "Auto"
+        return "Video Codec [\(mode)]: \(selectedOutput.videoCodec.displayName)"
     }
 
-    var selectedOutputDetailSummary: String {
-        currentReview?.videoInfo.outputSummary ?? selectedOutput.summary
-    }
-
-    var selectedOutputDetailText: String {
-        guard let currentReview else {
-            return selectedOutput.detailText
-        }
-
-        var parts = [currentReview.videoInfo.readinessDetailText]
-        if currentReview.videoInfo.audioPathDetail != "Audio route has not been inspected yet." {
-            parts.append(currentReview.videoInfo.audioPathDetail)
-        }
-        return parts.joined(separator: " ")
-    }
-
-    var selectedOutputRouteBadges: [String] {
-        guard let currentReview else {
-            return []
-        }
-
-        var badges = ["Video \(currentReview.videoInfo.codecPathBadge)"]
-        if currentReview.videoInfo.audioPathBadge != "None" {
-            badges.append("Audio \(currentReview.videoInfo.audioPathBadge)")
-        }
-        return badges
+    var selectedAudioCodecText: String {
+        let mode = currentReview?.videoInfo.audioPathBadge ?? "Auto"
+        return "Audio Codec [\(mode)]: \(selectedOutput.audioCodec.displayName)"
     }
 
     var outputCodecOptions: [TaptionVideoCodec] {

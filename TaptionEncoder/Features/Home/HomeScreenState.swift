@@ -901,18 +901,12 @@ enum HomeScreenState: Equatable {
         case .cancelling:
             return "Stopping the current job."
         case .waitingForReward(let output):
-            if let finalOutputURL = output.finalOutputURL {
-                return "\(output.sourceName) finished encoding. Watch a rewarded ad to save \(finalOutputURL.lastPathComponent)."
-            }
-            return "\(output.sourceName) finished encoding. Watch a rewarded ad to save."
+            return "Save Path: \((output.finalOutputURL ?? output.temporaryOutputURL).path)"
         case .pendingSave(let job):
             if let message = job.saveGateMessage {
                 return message
             }
-            if job.state.requiresRewardedAd {
-                return "\(job.sourceName) can be saved after one rewarded ad."
-            }
-            return "\(job.sourceName) is authorized. Save it without another ad."
+            return "Save Path: \((job.state.finalOutputURL ?? job.state.temporaryOutputURL).path)"
         case .saving(let job):
             if job.state.requiresRewardedAd {
                 return "Saving \(job.sourceName)."

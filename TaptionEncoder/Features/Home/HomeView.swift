@@ -55,22 +55,10 @@ struct HomeView: View {
 
                     OutputSummaryView(
                         title: viewModel.selectedOutputDetailTitle,
-                        statusText: viewModel.selectedOutputDetailStatusText,
-                        outputSummary: viewModel.selectedOutputDetailSummary,
-                        detailText: viewModel.selectedOutputDetailText,
-                        routeBadges: viewModel.selectedOutputRouteBadges,
+                        videoCodecText: viewModel.selectedVideoCodecText,
+                        audioCodecText: viewModel.selectedAudioCodecText,
                         contentScale: metrics.contentScale
                     )
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Detected Files")
-                            .font(metrics.contentScale < 0.9 ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.92))
-                        Text("Imported files are inspected automatically and show their video and audio route results here.")
-                            .font(metrics.contentScale < 0.9 ? .caption2 : .caption)
-                            .foregroundStyle(TaptionTheme.mutedText)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     LoadedFilesPanelView(
                         files: viewModel.fileCardSnapshots,
