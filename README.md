@@ -155,9 +155,11 @@ Output remains H.265 first. Future releases should expand input coverage, then o
 - MPEG-1 Video
 - MPEG-2 Video
 - MPEG-4 Part 2
-- H.263
-- Motion JPEG
-- QuickTime Animation, Cinepak, Sorenson Video, DV/DVCPro
+- H.263 / H.261
+- Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG
+- QuickTime Animation, Cinepak, Sorenson Video, RPZA, DV/DVCPro
+- Flash Video, Flash Screen Video, Microsoft MPEG-4 V2/V3, Microsoft Video 1
+- ASUS V1/V2, ZMBV, CLJR, Snow, RealVideo
 - Windows Media / VC-1 where software support and licensing allow it
 - Other practical user video codecs supported by the selected software codec backend
 - App binary size may increase if broad input support requires bundled software codec components.

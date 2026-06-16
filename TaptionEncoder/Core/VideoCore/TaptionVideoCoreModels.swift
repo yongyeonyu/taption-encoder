@@ -18,14 +18,23 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
     case mpeg1
     case mpeg4Visual
     case h263
+    case h261
+    case flashVideo
+    case microsoftMPEG4V2
+    case microsoftMPEG4V3
     case motionJPEG
     case jpeg
+    case jpeg2000
+    case jpegLS
+    case losslessJPEG
     case jpegXL
     case animation
     case cinepak
     case sorensonVideo
     case sorensonVideo3
+    case quickTimeVideo
     case theora
+    case realVideo1
     case realVideo
     case roqVideo
     case dv
@@ -33,6 +42,14 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
     case dvcProHD
     case vc1
     case wmv
+    case microsoftVideo1
+    case asusV1
+    case asusV2
+    case flashScreenVideo
+    case flashScreenVideo2
+    case zmbv
+    case cljr
+    case snow
     case ffv1
     case huffYUV
     case utVideo
@@ -42,6 +59,9 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
     case pngVideo
     case r10k
     case v210
+    case r210
+    case v410
+    case y41p
     case microsoftRLE
     case quickTimeGraphics
     case v308
@@ -78,10 +98,24 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
             return "MPEG-4 Visual"
         case .h263:
             return "H.263"
+        case .h261:
+            return "H.261"
+        case .flashVideo:
+            return "Flash Video"
+        case .microsoftMPEG4V2:
+            return "Microsoft MPEG-4 V2"
+        case .microsoftMPEG4V3:
+            return "Microsoft MPEG-4 V3"
         case .motionJPEG:
             return "Motion JPEG"
         case .jpeg:
             return "JPEG"
+        case .jpeg2000:
+            return "JPEG 2000"
+        case .jpegLS:
+            return "JPEG-LS"
+        case .losslessJPEG:
+            return "Lossless JPEG"
         case .jpegXL:
             return "JPEG XL"
         case .animation:
@@ -92,8 +126,12 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
             return "Sorenson Video"
         case .sorensonVideo3:
             return "Sorenson Video 3"
+        case .quickTimeVideo:
+            return "QuickTime Video"
         case .theora:
             return "Theora"
+        case .realVideo1:
+            return "RealVideo 1.0"
         case .realVideo:
             return "RealVideo"
         case .roqVideo:
@@ -108,6 +146,22 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
             return "VC-1"
         case .wmv:
             return "Windows Media Video"
+        case .microsoftVideo1:
+            return "Microsoft Video 1"
+        case .asusV1:
+            return "ASUS V1"
+        case .asusV2:
+            return "ASUS V2"
+        case .flashScreenVideo:
+            return "Flash Screen Video"
+        case .flashScreenVideo2:
+            return "Flash Screen Video 2"
+        case .zmbv:
+            return "Zip Motion Blocks Video"
+        case .cljr:
+            return "Cirrus Logic AccuPak"
+        case .snow:
+            return "Snow"
         case .ffv1:
             return "FFV1"
         case .huffYUV:
@@ -126,6 +180,12 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
             return "AJA Kona 10-bit RGB"
         case .v210:
             return "V210 10-bit 4:2:2"
+        case .r210:
+            return "R210 10-bit RGB"
+        case .v410:
+            return "V410 10-bit 4:4:4"
+        case .y41p:
+            return "Y41P 4:1:1"
         case .microsoftRLE:
             return "Microsoft RLE"
         case .quickTimeGraphics:
@@ -155,14 +215,44 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
             return "H.264"
         case .mpeg4Visual:
             return "MPEG-4"
+        case .flashVideo:
+            return "FLV1"
+        case .microsoftMPEG4V2:
+            return "MS MPEG4v2"
+        case .microsoftMPEG4V3:
+            return "MS MPEG4v3"
         case .motionJPEG:
             return "MJPEG"
+        case .jpeg2000:
+            return "JPEG 2000"
+        case .jpegLS:
+            return "JPEG-LS"
+        case .losslessJPEG:
+            return "LJPEG"
         case .sorensonVideo:
             return "Sorenson"
         case .sorensonVideo3:
             return "Sorenson 3"
+        case .quickTimeVideo:
+            return "RPZA"
+        case .realVideo1:
+            return "RV10"
         case .roqVideo:
             return "RoQ"
+        case .microsoftVideo1:
+            return "MS Video 1"
+        case .asusV1:
+            return "ASV1"
+        case .asusV2:
+            return "ASV2"
+        case .flashScreenVideo:
+            return "FlashSV"
+        case .flashScreenVideo2:
+            return "FlashSV2"
+        case .zmbv:
+            return "ZMBV"
+        case .cljr:
+            return "CLJR"
         case .huffYUV:
             return "HuffYUV"
         case .utVideo:
@@ -179,6 +269,12 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
             return "R10k"
         case .v210:
             return "V210"
+        case .r210:
+            return "R210"
+        case .v410:
+            return "V410"
+        case .y41p:
+            return "Y41P"
         case .microsoftRLE:
             return "MS RLE"
         case .quickTimeGraphics:

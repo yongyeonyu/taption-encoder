@@ -345,6 +345,21 @@ generate_av_fixture \
   -c:a pcm_s16le -ar 48000 -ac 2
 
 generate_av_fixture \
+  "r210_mov_pcm" "mov" "r210" "pcm_s16le" \
+  -vf scale=160:120 -c:v r210 -pix_fmt gbrp10le \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "v410_mov_pcm" "mov" "v410" "pcm_s16le" \
+  -vf scale=160:120 -c:v v410 -pix_fmt yuv444p10le \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "y41p_avi_pcm" "avi" "y41p" "pcm_s16le" \
+  -vf scale=160:120 -c:v y41p -pix_fmt yuv411p \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
   "msrle_mov_pcm" "mov" "msrle" "pcm_s16le" \
   -c:v msrle -pix_fmt rgb24 \
   -c:a pcm_s16le -ar 48000 -ac 2
@@ -410,9 +425,34 @@ generate_av_fixture \
   -c:a libmp3lame -b:a 128k -f avi
 
 generate_av_fixture \
+  "msmpeg4v2_avi_mp3" "avi" "msmpeg4v2" "libmp3lame" \
+  -c:v msmpeg4v2 -b:v 800k -pix_fmt yuv420p \
+  -c:a libmp3lame -b:a 96k
+
+generate_av_fixture \
+  "msmpeg4v3_avi_mp3" "avi" "msmpeg4" "libmp3lame" \
+  -c:v msmpeg4 -b:v 800k -pix_fmt yuv420p \
+  -c:a libmp3lame -b:a 96k
+
+generate_av_fixture \
   "h264_flv_x264_aac" "flv" "libx264" "aac" \
   -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p \
   -c:a aac -b:a 128k -f flv
+
+generate_av_fixture \
+  "flv1_flv_mp3" "flv" "flv" "libmp3lame" \
+  -c:v flv -b:v 600k -pix_fmt yuv420p \
+  -c:a libmp3lame -b:a 96k -f flv
+
+generate_av_fixture \
+  "flashsv_flv_mp3" "flv" "flashsv" "libmp3lame" \
+  -vf scale=160:120 -c:v flashsv -pix_fmt bgr24 \
+  -c:a libmp3lame -b:a 96k -f flv
+
+generate_av_fixture \
+  "flashsv2_flv_mp3" "flv" "flashsv2" "libmp3lame" \
+  -vf scale=160:120 -c:v flashsv2 -pix_fmt bgr24 \
+  -c:a libmp3lame -b:a 96k -f flv
 
 generate_av_fixture \
   "h264_f4v_x264_aac" "f4v" "libx264" "aac" \
@@ -430,8 +470,28 @@ generate_av_fixture \
   -c:a aac -b:a 96k
 
 generate_av_fixture \
+  "h261_avi_pcm" "avi" "h261" "pcm_s16le" \
+  -vf scale=352:288 -r 15 -c:v h261 -b:v 500k -pix_fmt yuv420p \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
   "mjpeg_avi_pcm" "avi" "mjpeg" "pcm_s16le" \
   -c:v mjpeg -q:v 5 -pix_fmt yuvj420p \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "jpeg2000_mov_pcm" "mov" "jpeg2000" "pcm_s16le" \
+  -vf scale=160:120 -c:v jpeg2000 -pix_fmt rgb24 \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "jpegls_mov_pcm" "mov" "jpegls" "pcm_s16le" \
+  -vf scale=160:120 -c:v jpegls -pix_fmt rgb24 \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "ljpeg_avi_pcm" "avi" "ljpeg" "pcm_s16le" \
+  -vf scale=160:120 -c:v ljpeg -pix_fmt yuvj420p \
   -c:a pcm_s16le -ar 48000 -ac 2
 
 generate_av_fixture \
@@ -442,6 +502,16 @@ generate_av_fixture \
 generate_av_fixture \
   "cinepak_mov_pcm" "mov" "cinepak" "pcm_s16le" \
   -vf scale=160:92 -c:v cinepak -q:v 6 \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "sorenson_video_mov_sample" "mov" "svq1" "pcm_s16le" \
+  -vf scale=160:120 -c:v svq1 -pix_fmt yuv410p \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "rpza_mov_pcm" "mov" "rpza" "pcm_s16le" \
+  -vf scale=160:120 -c:v rpza -pix_fmt rgb555be \
   -c:a pcm_s16le -ar 48000 -ac 2
 
 generate_av_fixture \
@@ -458,6 +528,36 @@ generate_av_fixture \
   "wmv2_dvrms_wmav2" "dvr-ms" "wmv2" "wmav2" \
   -c:v wmv2 -b:v 1200k \
   -c:a wmav2 -b:a 128k -f asf
+
+generate_av_fixture \
+  "msvideo1_avi_pcm" "avi" "msvideo1" "pcm_s16le" \
+  -vf scale=160:120 -c:v msvideo1 -pix_fmt rgb555le \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "asv1_avi_mp3" "avi" "asv1" "libmp3lame" \
+  -c:v asv1 -b:v 800k -pix_fmt yuv420p \
+  -c:a libmp3lame -b:a 96k
+
+generate_av_fixture \
+  "asv2_avi_mp3" "avi" "asv2" "libmp3lame" \
+  -c:v asv2 -b:v 800k -pix_fmt yuv420p \
+  -c:a libmp3lame -b:a 96k
+
+generate_av_fixture \
+  "zmbv_avi_pcm" "avi" "zmbv" "pcm_s16le" \
+  -vf scale=160:120 -c:v zmbv -pix_fmt rgb24 \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "cljr_avi_pcm" "avi" "cljr" "pcm_s16le" \
+  -vf scale=160:120 -c:v cljr -pix_fmt yuv411p \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "snow_mkv_flac" "mkv" "snow" "flac" \
+  -c:v snow -q:v 5 -pix_fmt yuv420p \
+  -c:a flac -ar 48000 -ac 2
 
 generate_av_fixture \
   "h264_raw_elementary" "h264" "libx264" "none" \
@@ -492,6 +592,11 @@ generate_av_fixture \
 generate_av_fixture \
   "realvideo_rm_rv20_ac3" "rm" "rv20" "ac3" \
   -vf scale=320:240 -r 15 -c:v rv20 -b:v 600k \
+  -c:a ac3 -b:a 96k -f rm
+
+generate_av_fixture \
+  "rv10_rm_ac3" "rm" "rv10" "ac3" \
+  -vf scale=352:288 -r 15 -c:v rv10 -b:v 500k \
   -c:a ac3 -b:a 96k -f rm
 
 generate_av_fixture \

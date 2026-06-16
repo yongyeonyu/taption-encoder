@@ -42,29 +42,9 @@ struct TaptionDeviceCodecCapabilityReport: Codable, Equatable {
 enum HW_CodecCapabilityProbe {
     static let defaultProbeSize = TaptionPixelSize(width: 1920, height: 1080)
 
-    static let probedVideoCodecs: [TaptionVideoCodec] = [
-        .h264,
-        .hevc,
-        .hevcWithAlpha,
-        .dolbyVisionHEVC,
-        .av1,
-        .proRes,
-        .proResRaw,
-        .vp9,
-        .mpeg4Visual,
-        .mpeg2,
-        .mpeg1,
-        .h263,
-        .jpeg,
-        .jpegXL,
-        .animation,
-        .cinepak,
-        .sorensonVideo,
-        .sorensonVideo3,
-        .dv,
-        .dvcPro,
-        .dvcProHD
-    ]
+    static var probedVideoCodecs: [TaptionVideoCodec] {
+        TaptionCodecRegistry.universalSourceCodecs
+    }
 
     static var probedAudioCodecs: [TaptionAudioCodec] {
         TaptionAudioCodecRoutePlanner.universalAudioCodecs
@@ -214,7 +194,7 @@ enum HW_CodecCapabilityProbe {
             return kCMVideoCodecType_DVCPro50NTSC
         case .dvcProHD:
             return kCMVideoCodecType_DVCPROHD720p60
-        case .vp8, .theora, .realVideo, .roqVideo, .vc1, .wmv, .ffv1, .huffYUV, .utVideo, .magicYUV, .cineForm, .dnxhd, .pngVideo, .r10k, .v210, .microsoftRLE, .quickTimeGraphics, .v308, .v408, .yuv4, .rawVideo, .unknown:
+        case .vp8, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .quickTimeVideo, .theora, .realVideo1, .realVideo, .roqVideo, .vc1, .wmv, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV, .utVideo, .magicYUV, .cineForm, .dnxhd, .pngVideo, .r10k, .v210, .r210, .v410, .y41p, .microsoftRLE, .quickTimeGraphics, .v308, .v408, .yuv4, .rawVideo, .unknown:
             return nil
         }
     }

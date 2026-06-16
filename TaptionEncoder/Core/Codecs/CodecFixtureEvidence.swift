@@ -1521,14 +1521,48 @@ enum TaptionCodecFixtureEvidence {
             return .mpeg4Visual
         case "h263":
             return .h263
+        case "h261":
+            return .h261
+        case "flv":
+            return .flashVideo
+        case "msmpeg4v2":
+            return .microsoftMPEG4V2
+        case "msmpeg4":
+            return .microsoftMPEG4V3
         case "mjpeg":
             return .motionJPEG
+        case "jpeg2000":
+            return .jpeg2000
+        case "jpegls":
+            return .jpegLS
+        case "ljpeg":
+            return .losslessJPEG
         case "qtrle":
             return .animation
         case "cinepak":
             return .cinepak
+        case "svq1":
+            return .sorensonVideo
+        case "rpza":
+            return .quickTimeVideo
         case "wmv2":
             return .wmv
+        case "msvideo1":
+            return .microsoftVideo1
+        case "asv1":
+            return .asusV1
+        case "asv2":
+            return .asusV2
+        case "flashsv":
+            return .flashScreenVideo
+        case "flashsv2":
+            return .flashScreenVideo2
+        case "zmbv":
+            return .zmbv
+        case "cljr":
+            return .cljr
+        case "snow":
+            return .snow
         case "ffv1":
             return .ffv1
         case "huffyuv", "ffvhuff":
@@ -1547,6 +1581,12 @@ enum TaptionCodecFixtureEvidence {
             return .r10k
         case "v210":
             return .v210
+        case "r210":
+            return .r210
+        case "v410":
+            return .v410
+        case "y41p":
+            return .y41p
         case "msrle":
             return .microsoftRLE
         case "smc":
@@ -1563,6 +1603,8 @@ enum TaptionCodecFixtureEvidence {
             return .theora
         case "rv20":
             return .realVideo
+        case "rv10":
+            return .realVideo1
         case "roqvideo":
             return .roqVideo
         case "rawvideo":

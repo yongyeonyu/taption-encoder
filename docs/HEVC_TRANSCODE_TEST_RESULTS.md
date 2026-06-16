@@ -20,14 +20,14 @@ Scripts/transcode_fixtures_to_hevc.sh \
 
 | Metric | Count |
 | --- | ---: |
-| Input fixtures | 69 |
-| SW_HEVC attempts | 69 |
-| HW_HEVC attempts | 69 |
-| Total attempts | 138 |
-| Passed | 138 |
+| Input fixtures | 90 |
+| SW_HEVC attempts | 90 |
+| HW_HEVC attempts | 90 |
+| Total attempts | 180 |
+| Passed | 180 |
 | Skipped | 0 |
 | Failed | 0 |
-| Audio signal checks passed | 124 |
+| Audio signal checks passed | 166 |
 | No-source-audio attempts | 14 |
 | Output peak range | -21.1 dB to -17.6 dB |
 
@@ -66,16 +66,21 @@ The skipped generation targets are xHE-AAC, AMR-NB, and AMR-WB because the local
 - ProRes in MOV with PCM and ALAC
 - FFV1 in MKV with FLAC
 - HuffYUV, FFVHuff, Ut Video, and MagicYUV in AVI with PCM
-- GoPro CineForm, DNxHD/DNxHR, PNG video, R10k, V210, Microsoft RLE, QuickTime Graphics, V308, V408, and YUV4 in MOV with PCM
+- GoPro CineForm, DNxHD/DNxHR, PNG video, R10k, V210, R210, V410, Y41P, Microsoft RLE, QuickTime Graphics, V308, V408, and YUV4 with PCM
 - MPEG-1 and MPEG-2 program streams with MP2, including `.dat`, `.mod`, and `.vob`
 - MPEG-2 in MXF with PCM
 - MPEG-4 Part 2 in AVI and `.divx` with MP3
+- Microsoft MPEG-4 V2/V3 and Microsoft Video 1 in AVI
+- Flash Video, Flash Screen Video, and Flash Screen Video 2 in FLV
 - H.263 in 3GP and 3G2 with AAC
+- H.261 in AVI with PCM
 - Motion JPEG in AVI with PCM
-- QuickTime Animation and Cinepak in MOV with PCM
+- JPEG 2000, JPEG-LS, and Lossless JPEG generated fixture variants
+- QuickTime Animation, Cinepak, Sorenson Video 1, and RPZA in MOV with PCM
 - VP8/Vorbis in `.ogm`
+- ASUS V1/V2, ZMBV, CLJR, and Snow legacy/archive video
 - WMV2 in WMV/ASF/`.dvr-ms` with WMA2
-- RealVideo in RealMedia `.rm` with AC3
+- RealVideo 1.0 and RealVideo 2.0 in RealMedia `.rm` with AC3
 - RoQ game-cinematic video
 - Raw AV1 OBU, H.263, rawvideo `.y4m`, MPEG-1 `.m1v`, and MPEG-2 `.m2v`
 - DV with PCM

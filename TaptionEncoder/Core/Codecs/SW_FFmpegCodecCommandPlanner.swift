@@ -345,7 +345,7 @@ enum SW_FFmpegCodecCommandPlanner {
             arguments += ["-level", "3"]
         case .dnxhd:
             arguments += ["-profile:v", "dnxhr_lb"]
-        case .huffYUV, .utVideo, .magicYUV, .cineForm, .pngVideo, .r10k, .v210, .microsoftRLE, .quickTimeGraphics, .v308, .v408, .yuv4, .rawVideo:
+        case .huffYUV, .utVideo, .magicYUV, .cineForm, .pngVideo, .r10k, .v210, .r210, .v410, .y41p, .microsoftRLE, .quickTimeGraphics, .v308, .v408, .yuv4, .microsoftVideo1, .quickTimeVideo, .jpeg2000, .jpegLS, .losslessJPEG, .zmbv, .cljr, .rawVideo:
             break
         default:
             arguments += ["-q:v", "2"]
@@ -370,8 +370,24 @@ enum SW_FFmpegCodecCommandPlanner {
             return ["-pix_fmt", "gbrp10le"]
         case .v210:
             return ["-pix_fmt", "yuv422p10le"]
+        case .r210:
+            return ["-pix_fmt", "gbrp10le"]
+        case .v410:
+            return ["-pix_fmt", "yuv444p10le"]
+        case .y41p, .cljr:
+            return ["-pix_fmt", "yuv411p"]
         case .microsoftRLE, .quickTimeGraphics:
             return ["-pix_fmt", "rgb24"]
+        case .microsoftVideo1:
+            return ["-pix_fmt", "rgb555le"]
+        case .quickTimeVideo:
+            return ["-pix_fmt", "rgb555be"]
+        case .sorensonVideo:
+            return ["-pix_fmt", "yuv410p"]
+        case .flashScreenVideo, .flashScreenVideo2, .zmbv, .jpeg2000, .jpegLS:
+            return ["-pix_fmt", "rgb24"]
+        case .losslessJPEG:
+            return ["-pix_fmt", "yuvj420p"]
         case .v308:
             return ["-pix_fmt", "yuv444p"]
         case .v408:
@@ -540,16 +556,34 @@ enum SW_FFmpegCodecCommandPlanner {
         .mpeg1: "mpeg1video",
         .mpeg4Visual: "mpeg4",
         .h263: "h263",
+        .h261: "h261",
+        .flashVideo: "flv",
+        .microsoftMPEG4V2: "msmpeg4v2",
+        .microsoftMPEG4V3: "msmpeg4",
         .motionJPEG: "mjpeg",
         .jpeg: "mjpeg",
+        .jpeg2000: "jpeg2000",
+        .jpegLS: "jpegls",
+        .losslessJPEG: "ljpeg",
         .animation: "qtrle",
         .cinepak: "cinepak",
+        .sorensonVideo: "svq1",
+        .quickTimeVideo: "rpza",
+        .realVideo1: "rv10",
         .realVideo: "rv20",
         .roqVideo: "roqvideo",
         .dv: "dvvideo",
         .dvcPro: "dvvideo",
         .dvcProHD: "dvvideo",
         .wmv: "wmv2",
+        .microsoftVideo1: "msvideo1",
+        .asusV1: "asv1",
+        .asusV2: "asv2",
+        .flashScreenVideo: "flashsv",
+        .flashScreenVideo2: "flashsv2",
+        .zmbv: "zmbv",
+        .cljr: "cljr",
+        .snow: "snow",
         .ffv1: "ffv1",
         .huffYUV: "huffyuv",
         .utVideo: "utvideo",
@@ -559,6 +593,9 @@ enum SW_FFmpegCodecCommandPlanner {
         .pngVideo: "png",
         .r10k: "r10k",
         .v210: "v210",
+        .r210: "r210",
+        .v410: "v410",
+        .y41p: "y41p",
         .microsoftRLE: "msrle",
         .quickTimeGraphics: "smc",
         .v308: "v308",

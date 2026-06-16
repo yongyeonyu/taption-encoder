@@ -167,7 +167,6 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(summary.implementedFixtureVideoCodecCount, requiredVideoFixtureCodecs.count)
         XCTAssertTrue(Set(summary.implementedVideoCodecs).isSuperset(of: requiredVideoFixtureCodecs))
         XCTAssertTrue(summary.conditionalVideoCodecs.contains(.theora))
-        XCTAssertTrue(summary.conditionalVideoCodecs.contains(.sorensonVideo))
         XCTAssertTrue(summary.realWorldSampleRequiredVideoCodecs.contains(.vc1))
         XCTAssertTrue(summary.realWorldSampleRequiredVideoCodecs.contains(.dolbyVisionHEVC))
         XCTAssertTrue(summary.realWorldSampleRequiredVideoCodecs.contains(.proResRaw))
@@ -178,6 +177,14 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         XCTAssertTrue(summary.plannedVideoCodecs.contains(.dvcPro))
         XCTAssertTrue(summary.plannedVideoCodecs.contains(.dvcProHD))
         XCTAssertTrue(summary.implementedVideoCodecs.contains(.rawVideo))
+        XCTAssertTrue(summary.implementedVideoCodecs.contains(.sorensonVideo))
+        XCTAssertTrue(summary.implementedVideoCodecs.contains(.flashVideo))
+        XCTAssertTrue(summary.implementedVideoCodecs.contains(.microsoftMPEG4V2))
+        XCTAssertTrue(summary.implementedVideoCodecs.contains(.microsoftMPEG4V3))
+        XCTAssertTrue(summary.implementedVideoCodecs.contains(.realVideo1))
+        XCTAssertTrue(summary.implementedVideoCodecs.contains(.quickTimeVideo))
+        XCTAssertTrue(summary.implementedVideoCodecs.contains(.jpeg2000))
+        XCTAssertTrue(summary.implementedVideoCodecs.contains(.jpegLS))
     }
 
     func testSmokeLatestTranscodeResultsProveSWAndHWH265WithAudioSignal() throws {
@@ -199,7 +206,7 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         )
 
         XCTAssertTrue(summary.isPassing, summary.failures.joined(separator: "\n"))
-        XCTAssertGreaterThanOrEqual(summary.fixtureCount, 69)
+        XCTAssertGreaterThanOrEqual(summary.fixtureCount, 90)
         XCTAssertEqual(summary.verifiedTranscodeCount, summary.fixtureCount * 2)
         XCTAssertEqual(
             summary.verifiedAudioSignalCount + summary.noSourceAudioAttemptCount,
@@ -220,7 +227,7 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         let manifestText = try String(contentsOf: manifestURL, encoding: .utf8)
         let rows = try TaptionCodecFixtureEvidence.parseVideoFixtureManifestTSV(manifestText)
 
-        XCTAssertGreaterThanOrEqual(rows.count, 69)
+        XCTAssertGreaterThanOrEqual(rows.count, 90)
 
         for row in rows {
             let sourceURL = fixtureDirectoryURL.appendingPathComponent(row.file)
@@ -276,7 +283,7 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         let outputCodecs = SW_FFmpegCodecCommandPlanner.plannableVideoOutputCodecs
         let sourceCodecs = Set(rows.map(\.videoCodec))
 
-        XCTAssertGreaterThanOrEqual(rows.count, 69)
+        XCTAssertGreaterThanOrEqual(rows.count, 90)
         XCTAssertTrue(outputCodecs.contains(.av1))
         XCTAssertTrue(outputCodecs.contains(.h264))
         XCTAssertTrue(outputCodecs.contains(.hevc))
@@ -291,11 +298,22 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         XCTAssertTrue(outputCodecs.contains(.pngVideo))
         XCTAssertTrue(outputCodecs.contains(.r10k))
         XCTAssertTrue(outputCodecs.contains(.v210))
+        XCTAssertTrue(outputCodecs.contains(.r210))
+        XCTAssertTrue(outputCodecs.contains(.v410))
+        XCTAssertTrue(outputCodecs.contains(.y41p))
         XCTAssertTrue(outputCodecs.contains(.microsoftRLE))
         XCTAssertTrue(outputCodecs.contains(.quickTimeGraphics))
         XCTAssertTrue(outputCodecs.contains(.v308))
         XCTAssertTrue(outputCodecs.contains(.v408))
         XCTAssertTrue(outputCodecs.contains(.yuv4))
+        XCTAssertTrue(outputCodecs.contains(.flashVideo))
+        XCTAssertTrue(outputCodecs.contains(.microsoftMPEG4V2))
+        XCTAssertTrue(outputCodecs.contains(.microsoftMPEG4V3))
+        XCTAssertTrue(outputCodecs.contains(.quickTimeVideo))
+        XCTAssertTrue(outputCodecs.contains(.realVideo1))
+        XCTAssertTrue(outputCodecs.contains(.jpeg2000))
+        XCTAssertTrue(outputCodecs.contains(.jpegLS))
+        XCTAssertTrue(outputCodecs.contains(.losslessJPEG))
         XCTAssertTrue(outputCodecs.contains(.rawVideo))
 
         var plannedRoutes = Set<TaptionCodecRoute>()

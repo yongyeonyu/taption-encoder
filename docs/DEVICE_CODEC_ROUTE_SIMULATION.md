@@ -115,14 +115,14 @@ Result:
 - Generated `codec_route_matrix.tsv`.
 - Base generic + Apple family profiles: 19.
 - Total simulation profiles after adding model identifiers: 112.
-- Source codecs: 43.
-- Output codecs: 43.
-- Routes per profile: 1,849.
-- Total route rows: 207,088.
-- Output file rows including header: 207,089.
+- Source codecs: 63.
+- Output codecs: 63.
+- Routes per profile: 3,969.
+- Total route rows: 444,528.
+- Output file rows including header: 444,529.
 - Current-build encodable rows: 366.
-- Current-build path split: 284 `HW`, 77 `HW/SW`, 5 `SW`, and 206,722 `Planned`.
-- Universal source/output route coverage: 1,849/1,849 pairs per profile, no unsupported route-map gaps.
+- Current-build path split: 284 `HW`, 77 `HW/SW`, 5 `SW`, and 444,162 `Planned`.
+- Universal source/output route coverage: 3,969/3,969 pairs per profile, no unsupported route-map gaps.
 - Planned all-to-all routes still prefer hardware decode and hardware encode backends per codec side when a simulation profile exposes that capability.
 - `AV1 -> H.265` selected:
   - `SW` for `software_only`.

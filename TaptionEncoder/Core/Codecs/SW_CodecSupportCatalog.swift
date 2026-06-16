@@ -33,13 +33,22 @@ enum SW_CodecSupportCatalog {
         .mpeg2,
         .mpeg1,
         .h263,
+        .h261,
+        .flashVideo,
+        .microsoftMPEG4V2,
+        .microsoftMPEG4V3,
         .motionJPEG,
         .jpeg,
+        .jpeg2000,
+        .jpegLS,
+        .losslessJPEG,
         .jpegXL,
         .animation,
         .cinepak,
         .sorensonVideo,
         .sorensonVideo3,
+        .quickTimeVideo,
+        .realVideo1,
         .realVideo,
         .roqVideo,
         .dv,
@@ -47,6 +56,14 @@ enum SW_CodecSupportCatalog {
         .dvcProHD,
         .vc1,
         .wmv,
+        .microsoftVideo1,
+        .asusV1,
+        .asusV2,
+        .flashScreenVideo,
+        .flashScreenVideo2,
+        .zmbv,
+        .cljr,
+        .snow,
         .ffv1,
         .huffYUV,
         .utVideo,
@@ -56,6 +73,9 @@ enum SW_CodecSupportCatalog {
         .pngVideo,
         .r10k,
         .v210,
+        .r210,
+        .v410,
+        .y41p,
         .microsoftRLE,
         .quickTimeGraphics,
         .v308,
@@ -393,6 +413,30 @@ enum SW_CodecSupportCatalog {
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
+            name: "r210_mov_pcm",
+            videoCodec: .r210,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "10-bit RGB QuickTime capture intermediate",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "v410_mov_pcm",
+            videoCodec: .v410,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "10-bit 4:4:4 QuickTime capture intermediate",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "y41p_avi_pcm",
+            videoCodec: .y41p,
+            audioCodec: .pcm,
+            container: .avi,
+            sourceFamily: "Packed 4:1:1 AVI capture intermediate",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
             name: "msrle_mov_pcm",
             videoCodec: .microsoftRLE,
             audioCodec: .pcm,
@@ -505,11 +549,51 @@ enum SW_CodecSupportCatalog {
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
+            name: "msmpeg4v2_avi_mp3",
+            videoCodec: .microsoftMPEG4V2,
+            audioCodec: .mp3,
+            container: .avi,
+            sourceFamily: "Legacy Microsoft MPEG-4 V2 AVI",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "msmpeg4v3_avi_mp3",
+            videoCodec: .microsoftMPEG4V3,
+            audioCodec: .mp3,
+            container: .avi,
+            sourceFamily: "Legacy Microsoft MPEG-4 V3 AVI",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
             name: "h264_flv_x264_aac",
             videoCodec: .h264,
             audioCodec: .aac,
             container: .flv,
             sourceFamily: "Legacy Flash video",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "flv1_flv_mp3",
+            videoCodec: .flashVideo,
+            audioCodec: .mp3,
+            container: .flv,
+            sourceFamily: "Legacy Flash Video / Sorenson Spark",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "flashsv_flv_mp3",
+            videoCodec: .flashScreenVideo,
+            audioCodec: .mp3,
+            container: .flv,
+            sourceFamily: "Legacy Flash Screen Video capture",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "flashsv2_flv_mp3",
+            videoCodec: .flashScreenVideo2,
+            audioCodec: .mp3,
+            container: .flv,
+            sourceFamily: "Legacy Flash Screen Video 2 capture",
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
@@ -537,11 +621,43 @@ enum SW_CodecSupportCatalog {
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
+            name: "h261_avi_pcm",
+            videoCodec: .h261,
+            audioCodec: .pcm,
+            container: .avi,
+            sourceFamily: "Legacy H.261 conferencing video",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
             name: "mjpeg_avi_pcm",
             videoCodec: .motionJPEG,
             audioCodec: .pcm,
             container: .avi,
             sourceFamily: "Legacy camera Motion JPEG",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "jpeg2000_mov_pcm",
+            videoCodec: .jpeg2000,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "JPEG 2000 QuickTime and archive video",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "jpegls_mov_pcm",
+            videoCodec: .jpegLS,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "JPEG-LS lossless archive video",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "ljpeg_avi_pcm",
+            videoCodec: .losslessJPEG,
+            audioCodec: .pcm,
+            container: .avi,
+            sourceFamily: "Lossless JPEG AVI archive video",
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
@@ -582,7 +698,15 @@ enum SW_CodecSupportCatalog {
             audioCodec: .pcm,
             container: .mov,
             sourceFamily: "Legacy QuickTime Sorenson Video",
-            generationStatus: .conditionalOnLocalFFmpeg
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "rpza_mov_pcm",
+            videoCodec: .quickTimeVideo,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "Legacy QuickTime RPZA video",
+            generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
             name: "sorenson_video3_mov_sample",
@@ -614,6 +738,54 @@ enum SW_CodecSupportCatalog {
             audioCodec: .wma,
             container: .asf,
             sourceFamily: "DVR-MS Windows Media alias",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "msvideo1_avi_pcm",
+            videoCodec: .microsoftVideo1,
+            audioCodec: .pcm,
+            container: .avi,
+            sourceFamily: "Legacy Microsoft Video 1 AVI",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "asv1_avi_mp3",
+            videoCodec: .asusV1,
+            audioCodec: .mp3,
+            container: .avi,
+            sourceFamily: "Legacy ASUS V1 AVI",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "asv2_avi_mp3",
+            videoCodec: .asusV2,
+            audioCodec: .mp3,
+            container: .avi,
+            sourceFamily: "Legacy ASUS V2 AVI",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "zmbv_avi_pcm",
+            videoCodec: .zmbv,
+            audioCodec: .pcm,
+            container: .avi,
+            sourceFamily: "DOSBox and screen-capture archive video",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "cljr_avi_pcm",
+            videoCodec: .cljr,
+            audioCodec: .pcm,
+            container: .avi,
+            sourceFamily: "Legacy Cirrus Logic AccuPak AVI",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "snow_mkv_flac",
+            videoCodec: .snow,
+            audioCodec: .flac,
+            container: .mkv,
+            sourceFamily: "Experimental FFmpeg Snow archive video",
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
@@ -710,6 +882,14 @@ enum SW_CodecSupportCatalog {
             audioCodec: .ac3,
             container: .realMedia,
             sourceFamily: "Legacy RealMedia video",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "rv10_rm_ac3",
+            videoCodec: .realVideo1,
+            audioCodec: .ac3,
+            container: .realMedia,
+            sourceFamily: "Legacy RealVideo 1.0 media",
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
