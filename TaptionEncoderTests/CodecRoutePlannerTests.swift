@@ -1527,10 +1527,11 @@ final class CodecRoutePlannerTests: XCTestCase {
     func testUnsupportedSourceCodecErrorSeparatesCurrentBuildFromUniversalRoadmap() {
         let message = TaptionVideoCoreError.unsupportedSourceCodec(.h264).localizedDescription
 
-        XCTAssertTrue(message.contains("AV1 to H.265 / MP4 now"))
+        XCTAssertTrue(message.contains("AV1 with HW/SW fallback"))
+        XCTAssertTrue(message.contains("H.264, H.265, or ProRes"))
         XCTAssertTrue(message.contains("H.264 / AVC"))
         XCTAssertTrue(message.contains("universal codec roadmap"))
-        XCTAssertTrue(message.contains("not executable in this build yet"))
+        XCTAssertTrue(message.contains("not executable on the selected device/output path yet"))
     }
 
     func testAudioCodecRoutesCoverEveryPlannedSourceToAAC() {
@@ -1709,6 +1710,48 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(blocked.outputSummary, "Apple ProRes RAW + AAC / MKV")
         XCTAssertFalse(blocked.isRouteEncodable)
         XCTAssertTrue(blocked.detail.contains("Apple ProRes RAW has no selected software video encoder"))
+    }
+
+    func testLoadedVideoPathInfoMarksAppleNativeHEVCHardwareRoutesReady() {
+        for sourceCodec in TaptionCodecRegistry.appleNativeHEVCHardwareSourceCodecs {
+            let routeSelection = selectRoute(
+                sourceCodec: sourceCodec,
+                outputCodec: .hevc,
+                profile: appleProfile("apple_ipad_m3_m4_av1_prores")
+            )
+            let info = LoadedVideoPathInfo.make(
+                sourceCodec: sourceCodec,
+                routeSelection: routeSelection,
+                outputSelection: TaptionOutputSelection(videoCodec: .hevc, container: .mp4)
+            )
+
+            XCTAssertEqual(routeSelection.support, .implemented, sourceCodec.rawValue)
+            XCTAssertEqual(routeSelection.executionKind, .hardware, sourceCodec.rawValue)
+            XCTAssertTrue(routeSelection.isEncodableNow, sourceCodec.rawValue)
+            XCTAssertEqual(info.title, "Path HW", sourceCodec.rawValue)
+            XCTAssertEqual(info.outputSummary, "H.265 + AAC / MP4", sourceCodec.rawValue)
+            XCTAssertTrue(info.isRouteEncodable, "\(sourceCodec.rawValue) should be ready in the home queue card.")
+        }
+    }
+
+    func testLoadedVideoPathInfoKeepsAppleNativeHEVCRouteDisabledWithoutRequiredHardware() {
+        let routeSelection = selectRoute(
+            sourceCodec: .proRes,
+            outputCodec: .hevc,
+            profile: .h264HEVCHardware
+        )
+        let info = LoadedVideoPathInfo.make(
+            sourceCodec: .proRes,
+            routeSelection: routeSelection,
+            outputSelection: TaptionOutputSelection(videoCodec: .hevc, container: .mp4)
+        )
+
+        XCTAssertEqual(routeSelection.support, .planned)
+        XCTAssertEqual(routeSelection.executionKind, .planned)
+        XCTAssertFalse(routeSelection.isEncodableNow)
+        XCTAssertEqual(info.title, "Path Planned")
+        XCTAssertFalse(info.isRouteEncodable)
+        XCTAssertTrue(info.detail.contains("planned"), info.detail)
     }
 
     func testLoadedVideoInfoReadinessStatusTextDistinguishesPlannedStates() {

@@ -81,8 +81,8 @@ private struct HelpSheetContentView: View {
                 SheetInfoCard(
                     title: "Current Build",
                     rows: [
-                        ("MVP", "AV1 to H.265 is the first app route."),
-                        ("Next", "Broader input to H.265, then selectable output codecs.")
+                        ("Now", "H.265 output supports AV1 with HW/SW fallback plus Apple-native H.264, H.265, and ProRes hardware routes."),
+                        ("Next", "Broader software fallback, then selectable all-to-all output codecs.")
                     ]
                 )
             }

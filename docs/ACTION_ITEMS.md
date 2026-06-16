@@ -346,7 +346,7 @@ Status date: 2026-06-16
 - [ ] Create final app icon.
 - [ ] Create launch screen if the default generated launch screen is not sufficient.
 - [ ] Prepare App Store screenshots for iPhone and iPad portrait.
-- [ ] Prepare app description emphasizing free ad-supported AV1 to H.265 conversion.
+- [ ] Prepare app description emphasizing free ad-supported H.265 conversion, starting with AV1 plus Apple-native HW routes.
 - [ ] Prepare review notes explaining ad-supported save flow.
 - [ ] Publish privacy policy.
 - [ ] Publish support URL.
