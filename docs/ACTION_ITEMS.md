@@ -354,8 +354,10 @@ Status date: 2026-06-16
 - [ ] Confirm age rating.
 - [ ] Confirm export compliance / encryption answers.
 - [ ] Confirm category: Video.
-- [ ] Archive release build.
-- [ ] TestFlight upload.
+- [x] Archive release build.
+- [x] TestFlight upload.
+- [x] Create internal TestFlight group and attach build 00.01.00 (5).
+- [x] Add account owner/admin as internal tester for build 00.01.00 (5).
 - [ ] TestFlight smoke test.
 - [ ] Submit for App Review.
 
