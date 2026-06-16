@@ -35,6 +35,7 @@ xcrun swiftc \
   "$ROOT_DIR/TaptionEncoder/Core/VideoCore/TaptionVideoCoreModels.swift" \
   "$ROOT_DIR/TaptionEncoder/Core/VideoCore/TaptionVideoEncodingPlan.swift" \
   "$ROOT_DIR/TaptionEncoder/Core/Codecs/CodecAlgorithm.swift" \
+  "$ROOT_DIR/TaptionEncoder/Core/Codecs/CodecOutputCatalog.swift" \
   "$ROOT_DIR/TaptionEncoder/Core/Codecs/SW_CodecSupportCatalog.swift" \
   "$ROOT_DIR/TaptionEncoder/Core/Codecs/SW_UniversalCodecTranscodeAlgorithm.swift" \
   "$ROOT_DIR/TaptionEncoder/Core/Codecs/Audio/AudioCodecAlgorithm.swift" \
@@ -44,6 +45,7 @@ xcrun swiftc \
   "$ROOT_DIR/TaptionEncoder/Core/Codecs/Audio/AudioCodecRoutePlanner.swift" \
   "$ROOT_DIR/TaptionEncoder/Core/Codecs/SW_SoftwareCodecBackendRegistry.swift" \
   "$ROOT_DIR/TaptionEncoder/Core/Codecs/SW_FFmpegCodecCommandPlanner.swift" \
+  "$ROOT_DIR/TaptionEncoder/Core/Codecs/CodecFixtureEvidence.swift" \
   "$ROOT_DIR/TaptionEncoder/Core/Codecs/SW_FFmpegCommandExecutor.swift" \
   "$ROOT_DIR/TaptionEncoder/Core/Codecs/HW_CodecCapabilityProbe.swift" \
   "$ROOT_DIR/TaptionEncoder/Core/Codecs/HW_AppleDeviceCodecProfiles.swift" \

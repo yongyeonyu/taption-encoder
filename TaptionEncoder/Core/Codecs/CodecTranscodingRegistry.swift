@@ -15,6 +15,17 @@ struct TaptionCodecTranscodingAlgorithmEntry: @unchecked Sendable {
             try await algorithm.transcode(request: request, progress: progress)
         }
     }
+
+    init(
+        descriptor: TaptionCodecAlgorithmDescriptor,
+        transcode: @escaping @Sendable (
+            _ request: TaptionCodecTranscodeRequest,
+            _ progress: @escaping (TaptionEncodingProgress) -> Void
+        ) async throws -> TaptionCodecTranscodeOutput
+    ) {
+        self.descriptor = descriptor
+        self.transcode = transcode
+    }
 }
 
 enum TaptionCodecTranscodingRegistryError: LocalizedError, Equatable {
@@ -50,7 +61,14 @@ struct TaptionCodecTranscodingRegistry: @unchecked Sendable {
         algorithms: [
             TaptionCodecTranscodingAlgorithmEntry(HW_AV1HEVCCodecAlgorithm.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_AV1HEVCTranscoder.self)
-        ],
+        ] + HW_AppleHEVCCodecAlgorithm.nativeDescriptors.map { descriptor in
+            TaptionCodecTranscodingAlgorithmEntry(
+                descriptor: descriptor,
+                transcode: { request, progress in
+                    try await HW_AppleHEVCCodecAlgorithm.transcode(request: request, progress: progress)
+                }
+            )
+        },
         plannedDescriptors: SW_UniversalCodecTranscodeAlgorithm.plannedDescriptors
     )
 

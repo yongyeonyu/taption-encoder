@@ -509,7 +509,7 @@ enum TaptionVideoCodecExecutionReadinessReporter {
             )
         }
 
-        if selection.support == .implemented {
+        if selection.support == .implemented && selection.isEncodableNow {
             return item(
                 route: route,
                 outputContainer: outputContainer,

@@ -212,11 +212,44 @@ enum TaptionCodecRegistry {
         TaptionCodecRoute(sourceCodec: .h264, outputCodec: .h264)
     ]
 
-    static let implementedRoutes: Set<TaptionCodecRoute> = [
+    static let softwareImplementedRoutes: Set<TaptionCodecRoute> = [
         TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc)
     ]
 
-    static let implementedAlgorithmDescriptors: [TaptionCodecAlgorithmDescriptor] = [
+    static let appleNativeHEVCHardwareSourceCodecs: [TaptionVideoCodec] = [
+        .h264,
+        .hevc,
+        .proRes
+    ]
+
+    static var appleNativeHEVCHardwareRoutes: Set<TaptionCodecRoute> {
+        Set(appleNativeHEVCHardwareSourceCodecs.map {
+            TaptionCodecRoute(sourceCodec: $0, outputCodec: .hevc)
+        })
+    }
+
+    static var appleNativeHEVCHardwareAlgorithmDescriptors: [TaptionCodecAlgorithmDescriptor] {
+        appleNativeHEVCHardwareSourceCodecs.map { sourceCodec in
+            TaptionCodecAlgorithmDescriptor(
+                sourceCodec: sourceCodec,
+                outputCodec: .hevc,
+                mode: .hardware,
+                backend: .appleVideoToolbox,
+                displayName: "\(sourceCodec.shortDisplayName) to H.265 Hardware"
+            )
+        }
+    }
+
+    static var hardwareImplementedRoutes: Set<TaptionCodecRoute> {
+        softwareImplementedRoutes.union(appleNativeHEVCHardwareRoutes)
+    }
+
+    static var implementedRoutes: Set<TaptionCodecRoute> {
+        softwareImplementedRoutes.union(hardwareImplementedRoutes)
+    }
+
+    static var implementedAlgorithmDescriptors: [TaptionCodecAlgorithmDescriptor] {
+        [
         TaptionCodecAlgorithmDescriptor(
             sourceCodec: .av1,
             outputCodec: .hevc,
@@ -231,7 +264,8 @@ enum TaptionCodecRegistry {
             backend: .softwareAV1Decoder,
             displayName: "AV1 to H.265 Software"
         )
-    ]
+        ] + appleNativeHEVCHardwareAlgorithmDescriptors
+    }
 
     static var plannedUniversalRoutes: Set<TaptionCodecRoute> {
         universalRoutePairs
@@ -255,6 +289,15 @@ enum TaptionCodecRegistry {
         for route: TaptionCodecRoute
     ) -> [TaptionCodecAlgorithmDescriptor] {
         implementedAlgorithmDescriptors.filter { $0.route == route }
+    }
+
+    static func routeHasImplementedAlgorithm(
+        _ route: TaptionCodecRoute,
+        mode: TaptionEncoderMode
+    ) -> Bool {
+        implementedAlgorithmDescriptors.contains {
+            $0.route == route && $0.mode == mode
+        }
     }
 }
 

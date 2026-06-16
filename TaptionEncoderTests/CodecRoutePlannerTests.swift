@@ -164,8 +164,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(report.audioMeshIsFullyPlanned)
         XCTAssertEqual(report.expectedVideoRouteCount, expectedVideoRoutes)
         XCTAssertEqual(report.plannedVideoRouteCount, expectedVideoRoutes)
-        XCTAssertEqual(report.executableVideoRouteCount, TaptionCodecRegistry.implementedRoutes.count)
-        XCTAssertEqual(report.plannedButNotExecutableVideoRouteCount, expectedVideoRoutes - TaptionCodecRegistry.implementedRoutes.count)
+        XCTAssertEqual(report.executableVideoRouteCount, TaptionCodecRegistry.softwareImplementedRoutes.count)
+        XCTAssertEqual(report.plannedButNotExecutableVideoRouteCount, expectedVideoRoutes - TaptionCodecRegistry.softwareImplementedRoutes.count)
         XCTAssertEqual(report.sameCodecVideoRouteCount, TaptionCodecRegistry.universalSourceCodecs.count)
         XCTAssertEqual(report.exampleVideoRoutes, TaptionCodecRegistry.universalContractExampleRoutes)
         XCTAssertTrue(report.missingVideoRoutes.isEmpty)
@@ -177,7 +177,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(report.missingAudioReverseRoutes.isEmpty)
         XCTAssertEqual(report.softwareVideoOutputPlannableCodecCount, SW_FFmpegCodecCommandPlanner.plannableVideoOutputCodecs.count)
         XCTAssertEqual(report.softwareAudioOutputPlannableCodecCount, SW_FFmpegCodecCommandPlanner.plannableAudioOutputCodecs.count)
-        XCTAssertEqual(report.videoRunnableInCurrentBuildRouteCount, TaptionCodecRegistry.implementedRoutes.count)
+        XCTAssertEqual(report.videoRunnableInCurrentBuildRouteCount, TaptionCodecRegistry.softwareImplementedRoutes.count)
         XCTAssertEqual(
             report.videoRunnableInCurrentBuildRouteCount
                 + report.videoCommandPlanOnlyRouteCount
@@ -231,7 +231,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             TaptionAudioCodecRoutePlanner.universalAudioCodecs.count
                 * TaptionAudioCodecRoutePlanner.universalAudioCodecs.count
         )
-        XCTAssertEqual(report.videoCurrentBuildRunnableRouteCount, TaptionCodecRegistry.implementedRoutes.count)
+        XCTAssertEqual(report.videoCurrentBuildRunnableRouteCount, TaptionCodecRegistry.softwareImplementedRoutes.count)
         XCTAssertGreaterThan(report.videoPendingRuntimeRouteCount, 0)
         XCTAssertGreaterThan(report.audioPendingRuntimeRouteCount, 0)
         XCTAssertGreaterThan(report.videoCommandPlanOnlyRouteCount, 0)
@@ -411,7 +411,15 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(summary.outputCodecCount, TaptionCodecRegistry.universalOutputCodecs.count)
         XCTAssertEqual(summary.routeCountPerProfile, expectedRouteCount)
         XCTAssertEqual(summary.rowCount, expectedProfileCount * expectedRouteCount)
-        XCTAssertEqual(summary.implementedRowCount, expectedProfileCount * TaptionCodecRegistry.implementedRoutes.count)
+        XCTAssertEqual(summary.implementedRowCount, rows.filter(\.isEncodableNow).count)
+        XCTAssertGreaterThanOrEqual(
+            summary.implementedRowCount,
+            expectedProfileCount * TaptionCodecRegistry.softwareImplementedRoutes.count
+        )
+        XCTAssertLessThan(
+            summary.implementedRowCount,
+            expectedProfileCount * TaptionCodecRegistry.implementedRoutes.count
+        )
         XCTAssertEqual(summary.plannedRowCount, summary.rowCount - summary.implementedRowCount)
         XCTAssertEqual(summary.unsupportedRowCount, 0)
         XCTAssertEqual(summary.hardwareDecodePreferenceViolationCount, 0)
@@ -435,7 +443,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(simulatedProfileNames.contains("iPad16,3"))
     }
 
-    func testImplementedRoutesNeverReportPlannedOrUnsupportedExecution() {
+    func testImplementedRoutesRespectDeviceHardwareAvailability() {
         for profile in TaptionCodecHardwareSupportProfile.simulationProfiles {
             for route in TaptionCodecRegistry.implementedRoutes {
                 let selection = selectRoute(
@@ -443,23 +451,44 @@ final class CodecRoutePlannerTests: XCTestCase {
                     outputCodec: route.outputCodec,
                     profile: profile
                 )
+                let hasSoftwareFallback = TaptionCodecRegistry.routeHasImplementedAlgorithm(
+                    route,
+                    mode: .software
+                )
+                let hasHardwarePath = TaptionCodecRegistry.routeHasImplementedAlgorithm(
+                    route,
+                    mode: .hardware
+                )
+                    && profile.canHardwareDecode(route.sourceCodec)
+                    && profile.canHardwareEncode(route.outputCodec)
 
-                XCTAssertEqual(selection.support, .implemented, profile.name)
-                XCTAssertTrue(selection.isEncodableNow, profile.name)
-                XCTAssertNotEqual(selection.executionKind, .planned, profile.name)
+                if hasSoftwareFallback || hasHardwarePath {
+                    XCTAssertEqual(selection.support, .implemented, "\(profile.name) \(route.displayName)")
+                    XCTAssertTrue(selection.isEncodableNow, "\(profile.name) \(route.displayName)")
+                    XCTAssertNotEqual(selection.executionKind, .planned, "\(profile.name) \(route.displayName)")
+                } else {
+                    XCTAssertEqual(selection.support, .planned, "\(profile.name) \(route.displayName)")
+                    XCTAssertFalse(selection.isEncodableNow, "\(profile.name) \(route.displayName)")
+                    XCTAssertEqual(selection.executionKind, .planned, "\(profile.name) \(route.displayName)")
+                }
                 XCTAssertNotEqual(selection.executionKind, .unsupported, profile.name)
             }
         }
     }
 
-    func testImplementedRoutesExposeHardwareAndSoftwareAlgorithmDescriptors() {
+    func testImplementedRoutesExposeExpectedAlgorithmDescriptors() {
         for route in TaptionCodecRegistry.implementedRoutes {
             let descriptors = TaptionCodecRegistry.implementedAlgorithmDescriptors(for: route)
             let modes = Set(descriptors.map(\.mode))
 
-            XCTAssertTrue(modes.contains(.hardware), "\(route.displayName) is missing a HW algorithm")
-            XCTAssertTrue(modes.contains(.software), "\(route.displayName) is missing a SW algorithm")
+            XCTAssertFalse(descriptors.isEmpty, "\(route.displayName) is missing algorithm descriptors")
             XCTAssertTrue(descriptors.allSatisfy { $0.route == route })
+            if TaptionCodecRegistry.hardwareImplementedRoutes.contains(route) {
+                XCTAssertTrue(modes.contains(.hardware), "\(route.displayName) is missing a HW algorithm")
+            }
+            if TaptionCodecRegistry.softwareImplementedRoutes.contains(route) {
+                XCTAssertTrue(modes.contains(.software), "\(route.displayName) is missing a SW algorithm")
+            }
         }
     }
 
@@ -467,10 +496,15 @@ final class CodecRoutePlannerTests: XCTestCase {
         let route = TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc)
         let descriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: route)
         let modes = Set(descriptors.map(\.mode))
+        let h264Route = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .hevc)
+        let h264Descriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: h264Route)
 
         XCTAssertEqual(descriptors.count, 2)
         XCTAssertTrue(modes.contains(.hardware))
         XCTAssertTrue(modes.contains(.software))
+        XCTAssertEqual(h264Descriptors.count, 1)
+        XCTAssertEqual(h264Descriptors.first?.mode, .hardware)
+        XCTAssertEqual(h264Descriptors.first?.backend, .appleVideoToolbox)
     }
 
     func testLiveTranscodingRegistryPrefersHardwareForHardwareExecution() {
@@ -1984,8 +2018,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(report.routeCount, expectedRouteCount)
         XCTAssertTrue(report.allRoutesHaveExecutionPath)
         XCTAssertFalse(report.allRoutesRunnableInCurrentBuild)
-        XCTAssertEqual(report.runnableInCurrentBuildRouteCount, TaptionCodecRegistry.implementedRoutes.count)
-        XCTAssertEqual(report.implementedRouteCount, TaptionCodecRegistry.implementedRoutes.count)
+        XCTAssertEqual(report.runnableInCurrentBuildRouteCount, TaptionCodecRegistry.softwareImplementedRoutes.count)
+        XCTAssertEqual(report.implementedRouteCount, TaptionCodecRegistry.softwareImplementedRoutes.count)
         XCTAssertGreaterThan(report.commandPlanOnlyRouteCount, 0)
         XCTAssertGreaterThan(report.blockedMissingSoftwareEncoderRouteCount, 0)
         XCTAssertEqual(

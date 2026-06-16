@@ -152,7 +152,7 @@ Apple device-family simulation is tracked in `docs/APPLE_DEVICE_CODEC_MATRIX.md`
 
 ## Current Implementation State
 
-- Implemented route: AV1 to H.265 using HW first, SW fallback.
+- Implemented routes: AV1 to H.265 using HW first with SW fallback, plus Apple-native HW-only `H.264 -> H.265`, `H.265 -> H.265`, and `ProRes -> H.265` on profiles that can hardware-decode the source and hardware-encode H.265.
 - Implemented catalog: universal route model, function-style codec request/options/output API, expanded codec/container/audio enums, HW probe file, Apple device-family HW profile catalog, SW fixture catalog file, app-side route planner, and capability-profile route simulation.
 - Implemented audio route planner: default all-planned-audio-to-AAC route selection with copy/native/SW/planned states and fixture coverage status.
 - Implemented algorithm files: `HW_AV1HEVCCodecAlgorithm.swift` and `SW_AV1HEVCCodecAlgorithm.swift` expose `TaptionCodecTranscodeRequest -> TaptionCodecTranscodeOutput` entry points. The app software fallback path now uses the shared request API.

@@ -902,7 +902,15 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         XCTAssertTrue(summary.isPassing, summary.failures.joined(separator: "\n"))
         XCTAssertEqual(summary.profileCount, expectedProfileCount)
         XCTAssertEqual(summary.rowCount, expectedProfileCount * expectedRouteCount)
-        XCTAssertEqual(summary.implementedRowCount, expectedProfileCount * TaptionCodecRegistry.implementedRoutes.count)
+        XCTAssertEqual(summary.implementedRowCount, rows.filter(\.encodableNow).count)
+        XCTAssertGreaterThanOrEqual(
+            summary.implementedRowCount,
+            expectedProfileCount * TaptionCodecRegistry.softwareImplementedRoutes.count
+        )
+        XCTAssertLessThan(
+            summary.implementedRowCount,
+            expectedProfileCount * TaptionCodecRegistry.implementedRoutes.count
+        )
         XCTAssertEqual(summary.plannedRowCount, summary.rowCount - summary.implementedRowCount)
     }
 

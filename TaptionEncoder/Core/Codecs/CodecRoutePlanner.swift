@@ -34,7 +34,10 @@ struct TaptionCodecRouteSelection: Codable, Equatable {
     var reason: String
 
     var isEncodableNow: Bool {
-        support == .implemented && executionKind != .unsupported
+        support == .implemented
+            && (executionKind == .hardware
+                || executionKind == .mixed
+                || executionKind == .software)
     }
 
     var displayTitle: String {
@@ -198,30 +201,49 @@ enum TaptionCodecRoutePlanner {
     ) -> TaptionCodecRouteSelection {
         let hardwareDecode = hardwareSupport.canHardwareDecode(route.sourceCodec)
         let hardwareEncode = hardwareSupport.canHardwareEncode(route.outputCodec)
+        let hasHardwareAlgorithm = TaptionCodecRegistry.routeHasImplementedAlgorithm(
+            route,
+            mode: .hardware
+        )
+        let hasSoftwareAlgorithm = TaptionCodecRegistry.routeHasImplementedAlgorithm(
+            route,
+            mode: .software
+        )
 
         switch requestedMode {
-        case .hardware where hardwareDecode && hardwareEncode:
+        case .hardware where hasHardwareAlgorithm && hardwareDecode && hardwareEncode:
             return hardwareSelection(route: route, requestedMode: requestedMode)
         case .hardware:
             return mixedOrSoftwareSelection(
                 route: route,
                 requestedMode: requestedMode,
-                hardwareEncode: hardwareEncode
+                hardwareEncode: hardwareEncode,
+                hasSoftwareAlgorithm: hasSoftwareAlgorithm,
+                hardwareSupport: hardwareSupport
             )
         case .software:
+            guard hasSoftwareAlgorithm else {
+                return implementedRouteWaitingForSoftwareSelection(
+                    route: route,
+                    requestedMode: requestedMode,
+                    hardwareSupport: hardwareSupport
+                )
+            }
             return softwareSelection(
                 route: route,
                 requestedMode: requestedMode,
                 reason: "Software path was requested and will preserve source visual quality where possible."
             )
         case .automatic:
-            if hardwareDecode && hardwareEncode {
+            if hasHardwareAlgorithm && hardwareDecode && hardwareEncode {
                 return hardwareSelection(route: route, requestedMode: requestedMode)
             }
             return mixedOrSoftwareSelection(
                 route: route,
                 requestedMode: requestedMode,
-                hardwareEncode: hardwareEncode
+                hardwareEncode: hardwareEncode,
+                hasSoftwareAlgorithm: hasSoftwareAlgorithm,
+                hardwareSupport: hardwareSupport
             )
         }
     }
@@ -245,8 +267,18 @@ enum TaptionCodecRoutePlanner {
     private static func mixedOrSoftwareSelection(
         route: TaptionCodecRoute,
         requestedMode: TaptionEncoderMode,
-        hardwareEncode: Bool
+        hardwareEncode: Bool,
+        hasSoftwareAlgorithm: Bool,
+        hardwareSupport: TaptionCodecHardwareSupportProfile
     ) -> TaptionCodecRouteSelection {
+        guard hasSoftwareAlgorithm else {
+            return implementedRouteWaitingForSoftwareSelection(
+                route: route,
+                requestedMode: requestedMode,
+                hardwareSupport: hardwareSupport
+            )
+        }
+
         if hardwareEncode {
             return TaptionCodecRouteSelection(
                 route: route,
@@ -264,6 +296,23 @@ enum TaptionCodecRoutePlanner {
             route: route,
             requestedMode: requestedMode,
             reason: "Hardware codec support is unavailable, so the software fallback will be used."
+        )
+    }
+
+    private static func implementedRouteWaitingForSoftwareSelection(
+        route: TaptionCodecRoute,
+        requestedMode: TaptionEncoderMode,
+        hardwareSupport: TaptionCodecHardwareSupportProfile
+    ) -> TaptionCodecRouteSelection {
+        TaptionCodecRouteSelection(
+            route: route,
+            requestedMode: requestedMode,
+            selectedMode: .automatic,
+            decodeBackend: plannedDecodeBackend(for: route.sourceCodec, hardwareSupport: hardwareSupport),
+            encodeBackend: plannedEncodeBackend(for: route.outputCodec, hardwareSupport: hardwareSupport),
+            executionKind: .planned,
+            support: .planned,
+            reason: "This route is implemented for hardware-capable devices. Software fallback is planned for devices without the required hardware path."
         )
     }
 

@@ -148,6 +148,7 @@ Status date: 2026-06-16
 - [x] Add `TaptionCodecMeshCoverageReport` so app-core tests can audit video/audio all-to-all route counts, missing reverse routes, executable route counts, command-planner gaps, and broad software backend license-review status from one source.
 - [x] Add unit-test and route-simulator guards that every implemented or planned route prefers HW decode/encode backends per codec side when the simulated device profile supports them.
 - [x] Add app-side codec route planner that prioritizes HW, falls back to SW/mixed paths, and reports the planned path per imported file.
+- [x] Register first Apple-native H.265 HW routes for H.264, H.265, and ProRes input, while keeping software fallback as planned work on devices without the required hardware path.
 - [x] Add codec route simulation script and profile report for HW/SW priority checks.
 - [x] Add app-scheme Xcode tests that parse route matrix TSV evidence for profile coverage, route coverage, and HW decode/encode preference.
 - [x] Add Xcode unit test target for codec route planner HW/SW priority checks.
@@ -164,7 +165,7 @@ Status date: 2026-06-16
 - [x] Show runtime HW decode/encode codec support in Device Info.
 - [x] Show Apple-native audio decode/encode and MP4/MOV copy compatibility in Device Info.
 - [x] Add capability-profile simulation for HW-first route selection.
-- [x] Add all-to-all output codec/container selector UI that shows planned routes while only `AV1 -> H.265 / MP4` remains executable.
+- [x] Add all-to-all output codec/container selector UI that shows planned routes while current execution remains limited to H.265 output: AV1 via HW/SW fallback, plus H.264/H.265/ProRes on hardware-capable profiles.
 - [x] Add core output readiness catalog so UI and route planning share the same `Now`, `Plan Ready`, `Planned`, and `Blocked` output status.
 - [x] Include output selector readiness counts and item details in Device Info and saved device codec snapshots.
 - [x] Name the final route contract `All-to-All Universal Codec Mesh` and expose representative `H.264 -> AV1`, `AV1 -> H.264`, and same-codec re-encode routes from core.

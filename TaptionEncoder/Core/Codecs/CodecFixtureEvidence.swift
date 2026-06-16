@@ -1035,16 +1035,18 @@ enum TaptionCodecFixtureEvidence {
                row.encodeBackend != .appleVideoToolbox {
                 failures.append("\(row.profile) \(row.route.displayName) did not prefer hardware encode.")
             }
-            if row.support == .implemented {
+            if row.encodableNow {
                 if !implementedRoutes.contains(row.route) {
                     failures.append("\(row.profile) \(row.route.displayName) is implemented in evidence but not in registry.")
                 }
-                if !row.encodableNow {
-                    failures.append("\(row.profile) \(row.route.displayName) is implemented but not encodable.")
+                if row.support != .implemented {
+                    failures.append("\(row.profile) \(row.route.displayName) is encodable but not marked implemented.")
                 }
                 if ![.hardware, .mixed, .software].contains(row.path) {
                     failures.append("\(row.profile) \(row.route.displayName) has invalid implemented path \(row.path.rawValue).")
                 }
+            } else if row.support == .implemented {
+                failures.append("\(row.profile) \(row.route.displayName) is implemented but not encodable.")
             }
         }
 
@@ -1056,9 +1058,23 @@ enum TaptionCodecFixtureEvidence {
             }
         }
 
-        let implementedRowCount = rows.filter { $0.support == .implemented }.count
+        let implementedRowCount = rows.filter(\.encodableNow).count
         let plannedRowCount = rows.filter { $0.support == .planned }.count
-        let expectedImplementedRowCount = expectedProfiles.count * implementedRoutes.count
+        let profileByName = Dictionary(
+            uniqueKeysWithValues: TaptionCodecHardwareSupportProfile.simulationProfiles.map { ($0.name, $0) }
+        )
+        let expectedImplementedRowCount = expectedProfiles.reduce(0) { count, profileName in
+            guard let profile = profileByName[profileName] else {
+                return count
+            }
+            return count + expectedRoutes.filter { route in
+                TaptionCodecRoutePlanner.selectRoute(
+                    for: routeMatrixVideoAsset(sourceCodec: route.sourceCodec),
+                    outputCodec: route.outputCodec,
+                    hardwareSupport: profile
+                ).isEncodableNow
+            }.count
+        }
         if implementedRowCount != expectedImplementedRowCount {
             failures.append("Route matrix expected \(expectedImplementedRowCount) implemented rows, got \(implementedRowCount).")
         }
@@ -1069,6 +1085,24 @@ enum TaptionCodecFixtureEvidence {
             implementedRowCount: implementedRowCount,
             plannedRowCount: plannedRowCount,
             failures: failures
+        )
+    }
+
+    private static func routeMatrixVideoAsset(sourceCodec: TaptionVideoCodec) -> TaptionVideoAsset {
+        TaptionVideoAsset(
+            displayName: "\(sourceCodec.rawValue).mp4",
+            location: TaptionVideoAssetLocation(kind: .file),
+            container: .mp4,
+            duration: 1,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: sourceCodec,
+                naturalSize: TaptionPixelSize(width: 1920, height: 1080),
+                displaySize: TaptionPixelSize(width: 1920, height: 1080),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 30)
+            ),
+            audioTracks: [
+                TaptionAudioTrackInfo(codec: .aac, channelCount: 2, sampleRate: 48_000)
+            ]
         )
     }
 

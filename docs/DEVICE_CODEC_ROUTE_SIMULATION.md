@@ -55,13 +55,14 @@ Current tests cover:
 - The latest route matrix TSV evidence covers every simulation profile and every planned route, and keeps hardware decode/encode preference when available.
 - Apple device-family profiles select the expected `SW`, `HW/SW`, or `HW` path for `AV1 -> H.265`.
 - Apple runtime model identifiers such as `iPhone16,1`, `iPhone17,3`, `iPad7,11`, and `iPad16,3` map to the expected family profile and route path.
-- Implemented routes never report `Planned` or `Unsupported` execution.
+- Implemented routes only report current-build execution when the selected simulation profile has the required HW/SW path. Hardware-only implemented routes fall back to planned software-fallback state on devices without the required hardware path.
 
 ## What It Verifies
 
 The script verifies:
 
 - `AV1 -> H.265` is implemented and encodable.
+- Apple-native `H.264 -> H.265`, `H.265 -> H.265`, and `ProRes -> H.265` hardware routes are implemented only for profiles that can hardware-decode the source and hardware-encode H.265.
 - Automatic route selection chooses `HW` when source hardware decode and output hardware encode are both present.
 - Automatic route selection chooses `HW/SW` when source decode needs software but output hardware encode exists.
 - Automatic route selection chooses `SW` when hardware encode is unavailable.
@@ -109,11 +110,13 @@ Scripts/simulate_codec_route_planner.sh Samples/CodecFixtures/transcode_reports/
 Result:
 
 - Generated `codec_route_matrix.tsv`.
-- Base generic + Apple family profiles: 16.
-- Total simulation profiles after adding model identifiers: 104.
+- Base generic + Apple family profiles: 17.
+- Total simulation profiles after adding model identifiers: 112.
 - Routes per profile: 729.
-- Total route rows: 75,816.
-- Output file rows including header: 75,817.
+- Total route rows: 81,648.
+- Output file rows including header: 81,649.
+- Current-build encodable rows: 366.
+- Current-build path split: 284 `HW`, 77 `HW/SW`, 5 `SW`, and 81,282 `Planned`.
 - Universal source/output route coverage: 729/729 pairs per profile, no unsupported route-map gaps.
 - Planned all-to-all routes still prefer hardware decode and hardware encode backends per codec side when a simulation profile exposes that capability.
 - `AV1 -> H.265` selected:
@@ -125,10 +128,14 @@ Result:
   - `HW/SW` for Apple HEVC-only classes without AV1 hardware decode.
   - `HW` for `av1_decode_hevc_encode_hw`.
   - `HW` for Apple AV1-decode classes.
+- Apple-native H.265 hardware route coverage:
+  - `H.264 -> H.265`: 107/112 profiles encodable now.
+  - `H.265 -> H.265`: 107/112 profiles encodable now.
+  - `ProRes -> H.265`: 40/112 profiles encodable now.
 
 ## Remaining Work
 
 - Continue reconciling the seeded per-model Apple device identifier matrix against real-device reports.
 - Capture real-device `HW_CodecCapabilityProbe` reports from representative iPhone and iPad generations.
-- Extend implemented routes beyond `AV1 -> H.265`.
+- Add software fallbacks for the new Apple-native H.265 hardware routes and continue expanding executable routes beyond H.265 output.
 - Keep the current output codec/container selectors connected to route readiness while planned outputs stay disabled until bundled implementations exist.

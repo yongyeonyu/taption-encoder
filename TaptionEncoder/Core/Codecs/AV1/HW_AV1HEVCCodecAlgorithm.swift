@@ -3,18 +3,18 @@ import CoreMedia
 import Foundation
 import VideoToolbox
 
-enum HW_AV1HEVCCodecAlgorithm: TaptionStaticCodecTranscodingAlgorithm {
-    static let descriptor = TaptionCodecAlgorithmDescriptor(
-        sourceCodec: .av1,
-        outputCodec: .hevc,
-        mode: .hardware,
-        backend: .appleVideoToolbox,
-        displayName: "AV1 to H.265 Hardware"
-    )
-
+enum HW_AppleHEVCCodecAlgorithm {
     struct Selection {
         var mode: TaptionEncoderMode
         var backend: TaptionEncodingBackend
+    }
+
+    static var nativeSourceCodecs: [TaptionVideoCodec] {
+        TaptionCodecRegistry.appleNativeHEVCHardwareSourceCodecs
+    }
+
+    static var nativeDescriptors: [TaptionCodecAlgorithmDescriptor] {
+        TaptionCodecRegistry.appleNativeHEVCHardwareAlgorithmDescriptors
     }
 
     static func selectedMode(for requestedMode: TaptionEncoderMode) -> Selection {
@@ -25,6 +25,22 @@ enum HW_AV1HEVCCodecAlgorithm: TaptionStaticCodecTranscodingAlgorithm {
         switch requestedMode {
         case .automatic, .hardware, .software:
             return Selection(mode: .software, backend: .appleAVAssetExport)
+        }
+    }
+
+    static var hasHardwareHEVCEncoder: Bool {
+        var encoderList: CFArray?
+        guard VTCopyVideoEncoderList(nil, &encoderList) == noErr,
+              let encoders = encoderList as? [[CFString: Any]] else {
+            return false
+        }
+
+        return encoders.contains { encoder in
+            guard let codecNumber = encoder[kVTVideoEncoderList_CodecType] as? NSNumber,
+                  UInt32(truncating: codecNumber) == kCMVideoCodecType_HEVC else {
+                return false
+            }
+            return (encoder[kVTVideoEncoderList_IsHardwareAccelerated] as? Bool) == true
         }
     }
 
@@ -46,6 +62,7 @@ enum HW_AV1HEVCCodecAlgorithm: TaptionStaticCodecTranscodingAlgorithm {
         request: TaptionCodecTranscodeRequest,
         progress: @escaping (TaptionEncodingProgress) -> Void
     ) async throws -> TaptionCodecTranscodeOutput {
+        try validate(request: request)
         let startedAt = Date()
         let asset = AVURLAsset(url: request.sourceURL)
         let presetName = try selectHEVCPreset(for: asset)
@@ -119,19 +136,20 @@ enum HW_AV1HEVCCodecAlgorithm: TaptionStaticCodecTranscodingAlgorithm {
         )
     }
 
-    private static var hasHardwareHEVCEncoder: Bool {
-        var encoderList: CFArray?
-        guard VTCopyVideoEncoderList(nil, &encoderList) == noErr,
-              let encoders = encoderList as? [[CFString: Any]] else {
-            return false
+    private static func validate(request: TaptionCodecTranscodeRequest) throws {
+        guard request.route.outputCodec == .hevc,
+              request.options.outputPolicy.videoCodec == .hevc else {
+            throw TaptionCodecTranscodingRegistryError.requestRouteMismatch(
+                expected: request.route,
+                actual: TaptionCodecRoute(
+                    sourceCodec: request.route.sourceCodec,
+                    outputCodec: request.options.outputPolicy.videoCodec
+                )
+            )
         }
-
-        return encoders.contains { encoder in
-            guard let codecNumber = encoder[kVTVideoEncoderList_CodecType] as? NSNumber,
-                  UInt32(truncating: codecNumber) == kCMVideoCodecType_HEVC else {
-                return false
-            }
-            return (encoder[kVTVideoEncoderList_IsHardwareAccelerated] as? Bool) == true
+        guard request.route.sourceCodec == .av1
+                || nativeSourceCodecs.contains(request.route.sourceCodec) else {
+            throw TaptionCodecTranscodingRegistryError.routeNotImplemented(request.route)
         }
     }
 
@@ -176,6 +194,36 @@ enum HW_AV1HEVCCodecAlgorithm: TaptionStaticCodecTranscodingAlgorithm {
             return .mp4
         }
         return supportedFileTypes.first ?? .mov
+    }
+}
+
+enum HW_AV1HEVCCodecAlgorithm: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .av1,
+        outputCodec: .hevc,
+        mode: .hardware,
+        backend: .appleVideoToolbox,
+        displayName: "AV1 to H.265 Hardware"
+    )
+
+    typealias Selection = HW_AppleHEVCCodecAlgorithm.Selection
+
+    static func selectedMode(for requestedMode: TaptionEncoderMode) -> Selection {
+        HW_AppleHEVCCodecAlgorithm.selectedMode(for: requestedMode)
+    }
+
+    static func selectHEVCPreset(for asset: AVAsset) throws -> String {
+        try HW_AppleHEVCCodecAlgorithm.selectHEVCPreset(for: asset)
+    }
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try await HW_AppleHEVCCodecAlgorithm.transcode(
+            request: request,
+            progress: progress
+        )
     }
 }
 

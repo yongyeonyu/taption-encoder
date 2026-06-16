@@ -717,8 +717,8 @@ enum HW_CodecRouteSimulator {
         let sourceCodecs = Set(rows.map(\.sourceCodec))
         let outputCodecs = Set(rows.map(\.outputCodec))
         let routeCountPerProfile = sourceCodecs.count * outputCodecs.count
-        let implementedRows = rows.filter { $0.support == .implemented }
-        let plannedRows = rows.filter { $0.support == .planned }
+        let implementedRows = rows.filter(\.isEncodableNow)
+        let plannedRows = rows.filter { $0.executionKind == .planned }
         let unsupportedRows = rows.filter { $0.support == .unsupported }
         let hardwareDecodeViolations = rows.filter {
             $0.support != .unsupported
@@ -769,7 +769,7 @@ enum HW_CodecRouteSimulator {
             failures.append("Simulation expected \(summary.profileCount * expectedRouteCount) rows, got \(summary.rowCount).")
         }
 
-        for row in rows where row.support == .implemented {
+        for row in rows where row.support == .implemented && row.isEncodableNow {
             if ![.hardware, .mixed, .software].contains(row.executionKind) {
                 failures.append("\(row.profile) \(row.route.displayName) selected invalid implemented path \(row.executionKind.rawValue).")
             }
@@ -779,6 +779,10 @@ enum HW_CodecRouteSimulator {
                row.executionKind != .hardware {
                 failures.append("\(row.profile) \(row.route.displayName) should prefer hardware.")
             }
+        }
+
+        for row in rows where row.support == .implemented && !row.isEncodableNow {
+            failures.append("\(row.profile) \(row.route.displayName) is implemented but not encodable in the simulated profile.")
         }
 
         for row in rows where row.support != .unsupported {
