@@ -177,8 +177,12 @@ Output remains H.265 first. Future releases should expand input coverage, then o
 - DV (`.dv`)
 - Ogg/Ogv (`.ogg`, `.ogv`)
 - FLV/F4V (`.flv`, `.f4v`)
+- NUT (`.nut`)
+- RealMedia (`.rm`, `.rmvb`)
+- RoQ (`.roq`)
 - 3GP/3G2 (`.3gp`, `.3g2`)
 - ASF/WMV (`.asf`, `.wmv`)
+- Raw elementary and diagnostic streams (`.h264`, `.h265`, `.hevc`, `.ivf`, `.obu`, `.y4m`, `.av1`, `.h263`, `.m1v`, `.m2v`, `.vc1`)
 
 ### Future Encoding Options
 

@@ -69,19 +69,19 @@ The audio smoke set currently validates AAC, PCM variants, A-law, mu-law, ALAC, 
 
 ## Current Fixture Targets
 
-The required smoke manifest currently covers 45 generated video fixtures before optional, planned, and real-sample-only targets. These samples represent the first broad all-to-H.265 proof set and the seed catalog for the later all-to-all codec matrix. `TaptionCodecFixtureEvidence.verifyVideoFixtureCatalogCoverage()` now checks that every `TaptionCodecRegistry.universalSourceCodecs` entry is tracked by the fixture catalog as implemented, conditional, real-world-sample-required, or planned, so universal codec additions cannot silently skip sample planning. `verifyVideoContainerFixtureCoverage()` does the same for every non-unknown `TaptionVideoContainer`, every broad readable container, and every declared extension alias such as `.mov`, `.qt`, `.mp4`, `.avi`, `.divx`, `.lrf`, `.ts`, `.m2t`, `.tp`, `.trp`, `.tod`, `.mpg`, `.mpe`, `.vob`, `.mod`, `.dat`, `.ogm`, `.dvr-ms`, `.3gpp`, `.3gpp2`, `.dif`, `.264`, `.265`, `.m1v`, `.m2v`, and `.vc1`. App-core tests also assert that the iOS document picker UTType list, folder scanner extension policy, and `Info.plist` imported video type declarations cover every core container extension, so file/folder open support cannot drift from the codec planner. App-core tests also build FFmpeg-family command plans from every generated source fixture to every currently plannable output video codec, including AV1, H.264, H.265, VP8, VP9, ProRes, MPEG, DV, WMV, JPEG/MJPEG-style, and raw-video outputs. `verifyVideoFixtureAllToAllCommandPlanCoverage()` summarizes the expected job count, planned job count, expected route count, planned route count, duplicate job IDs, and missing routes for that all-to-all command-plan surface.
+The required smoke manifest currently covers 54 generated video fixtures before optional, planned, and real-sample-only targets. These samples represent the first broad all-to-H.265 proof set and the seed catalog for the later all-to-all codec matrix. `TaptionCodecFixtureEvidence.verifyVideoFixtureCatalogCoverage()` now checks that every `TaptionCodecRegistry.universalSourceCodecs` entry is tracked by the fixture catalog as implemented, conditional, real-world-sample-required, or planned, so universal codec additions cannot silently skip sample planning. `verifyVideoContainerFixtureCoverage()` does the same for every non-unknown `TaptionVideoContainer`, every broad readable container, and every declared extension alias such as `.mov`, `.qt`, `.mp4`, `.avi`, `.divx`, `.lrf`, `.ts`, `.m2ts`, `.m2t`, `.tp`, `.trp`, `.tod`, `.mpg`, `.mpe`, `.vob`, `.mod`, `.dat`, `.nut`, `.roq`, `.rm`, `.rmvb`, `.ogm`, `.dvr-ms`, `.3gpp`, `.3gpp2`, `.dif`, `.264`, `.265`, `.m1v`, `.m2v`, and `.vc1`. App-core tests also assert that the iOS document picker UTType list, folder scanner extension policy, and `Info.plist` imported video type declarations cover every core container extension, so file/folder open support cannot drift from the codec planner. App-core tests also build FFmpeg-family command plans from every generated source fixture to every currently plannable output video codec, including AV1, H.264, H.265, VP8, VP9, ProRes, MPEG, DV, WMV, RealVideo, RoQ, JPEG/MJPEG-style, and raw-video outputs. `verifyVideoFixtureAllToAllCommandPlanCoverage()` summarizes the expected job count, planned job count, expected route count, planned route count, duplicate job IDs, and missing routes for that all-to-all command-plan surface.
 
 - AV1 in MP4 and WebM
 - AV1 in MKV
 - H.264 software and VideoToolbox
 - H.264 with AAC, PCM, FLAC, Vorbis, AC3, EAC3
-- H.264 in M4V, MPEG-TS aliases (`.ts`, `.tp`, `.trp`, `.tod`), FLV, and raw elementary stream form
+- H.264 in M4V, QuickTime `.qt`, MPEG-TS aliases (`.ts`, `.m2ts`, `.tp`, `.trp`, `.tod`), FLV/`.f4v`, NUT, and raw elementary stream form
 - DJI-style `.lrf` H.264/AAC proxy container smoke sample
 - H.265 software and VideoToolbox
 - H.265 with AAC and ALAC
 - VP9 and VP8
 - ProRes with PCM and ALAC
-- MPEG-1 and MPEG-2 program streams plus `.mod`
+- MPEG-1 and MPEG-2 program streams plus `.dat`, `.mod`, and `.vob`
 - MPEG-2 in MXF
 - MPEG-4 Part 2 in AVI and `.divx`
 - H.263 in 3GP and 3G2
@@ -90,7 +90,9 @@ The required smoke manifest currently covers 45 generated video fixtures before 
 - Cinepak
 - VP8/Vorbis in `.ogm`
 - WMV2/WMA2 in WMV, ASF, and `.dvr-ms`
-- Raw AV1 OBU, H.263, MPEG-1 `.m1v`, and MPEG-2 `.m2v`
+- RealVideo in RealMedia `.rm`
+- RoQ game-cinematic video
+- Raw AV1 OBU, H.263, rawvideo `.y4m`, MPEG-1 `.m1v`, and MPEG-2 `.m2v`
 - DV
 - Theora when the local FFmpeg build supports it
 - VC-1 raw elementary streams when a real-world sample or alternate generator is available; the local smoke generation evidence must keep the skipped `vc1_raw_elementary` row and explain the missing encoder path until that happens
@@ -99,7 +101,7 @@ The required smoke manifest currently covers 45 generated video fixtures before 
 
 These codecs are part of the universal source/output contract but do not yet have a required generated smoke fixture:
 
-- Planned generator work: H.265 with Alpha, JPEG frame-sequence import, JPEG XL frame-sequence import, DVCPro, DVCPro HD, raw video elementary streams
+- Planned generator work: H.265 with Alpha, JPEG frame-sequence import, JPEG XL frame-sequence import, DVCPro, and DVCPro HD
 - Conditional local FFmpeg work: Theora, Sorenson Video
 - Real-world or alternate-generator samples required: Dolby Vision HEVC, ProRes RAW, Sorenson Video 3, VC-1, DJI `.lrf` camera proxy samples
 

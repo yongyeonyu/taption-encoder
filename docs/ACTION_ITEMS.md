@@ -101,13 +101,13 @@ Status date: 2026-06-16
 - [x] Add `SW_FFmpegCodecCommandPlanner` so function-style video/audio codec requests can produce explicit FFmpeg-family command plans before the broad backend is bundled.
 - [x] Add Xcode tests that every plannable FFmpeg-family video/audio output codec can generate command plans from every planned source codec, while unsupported output codecs fail explicitly.
 - [x] Add shared video-container extension inference and command-plan tests for every declared readable input container and writable output container.
-- [x] Add representative legacy/raw import alias inference and command-plan tests for DivX, TP/TRP/TOD, MOD, OGM, DVR-MS, AV1 elementary, H.263, MPEG elementary, and VC-1 files.
+- [x] Add representative legacy/raw import alias inference and command-plan tests for DivX, TP/TRP/TOD, MOD, OGM, DVR-MS, NUT, RoQ, RealMedia, AV1 elementary, H.263, MPEG elementary, and VC-1 files.
 - [x] Add codec/container/audio research matrix for Apple-native, software, generated fixture, and real-world sample targets.
 - [x] Add generated fixture script coverage for expanded video and audio codec families.
 - [x] Expand generated video fixture coverage across every declared readable container, including M4V, MPEG-TS, MXF, FLV, 3G2, ASF, and raw elementary streams.
-- [x] Expand generated video fixture coverage for representative container/raw aliases including DivX, TP/TRP/TOD, MOD, OGM, DVR-MS, AV1 OBU, H.263, M1V, and M2V.
+- [x] Expand generated video fixture coverage for representative container/raw aliases including DivX, M2TS/TP/TRP/TOD, DAT/MOD/VOB, QT, F4V, OGM, DVR-MS, NUT, RoQ, RealMedia, AV1 OBU, H.263, rawvideo Y4M, M1V, and M2V.
 - [x] Add repeatable SW/HW H.265 transcode fixture gate with objective audio signal verification.
-- [x] Re-run the expanded 45-fixture video smoke set through both SW_HEVC and HW_HEVC, with 90/90 H.265 conversion attempts passing and 80 audio-signal checks passing.
+- [x] Re-run the expanded 54-fixture video smoke set through both SW_HEVC and HW_HEVC, with 108/108 H.265 conversion attempts passing and 94 audio-signal checks passing.
 - [x] Add fixture evidence verifier that requires every generated sample to pass both SW_HEVC and HW_HEVC with H.265 output and preserved audio signal.
 - [x] Add app-scheme Xcode tests that parse the generated video fixture manifest and compare it against `SW_CodecSupportCatalog.fixtureTargets`.
 - [x] Add app-scheme Xcode tests that parse the fixture transcode evidence TSV and fail when SW/HW H.265 output or audio signal proof is missing.
@@ -185,7 +185,7 @@ Status date: 2026-06-16
 - [ ] Add thermal, battery, memory, and estimated runtime warnings for older devices.
 - [x] Add mixed decode/encode path reporting.
 - [x] Add broad input model/inspection mapping for H.264, H.265, AV1, VP9, VP8, MPEG-1/2/4, H.263, ProRes, DV, and legacy QuickTime families.
-- [x] Add broad container inspection for MP4, MOV, M4V, WebM, MKV, AVI/DivX, TS/MTS/M2TS/TP/TRP/TOD, MPEG-PS/VOB/MOD, MXF, LRF, DV, Ogg/Ogv/OGM, FLV/F4V, 3GP/3G2, ASF/WMV/DVR-MS, and raw elementary streams.
+- [x] Add broad container inspection for MP4, MOV, M4V, WebM, MKV, AVI/DivX, TS/MTS/M2TS/TP/TRP/TOD, MPEG-PS/VOB/MOD, MXF, LRF, DV, Ogg/Ogv/OGM, FLV/F4V, NUT, RealMedia, RoQ, 3GP/3G2, ASF/WMV/DVR-MS, and raw elementary streams.
 - [x] Migrate the SW/HW H.265 media fixture transcode gate into app-side fixture evidence tests.
 - [x] Migrate objective sound signal verification into app-side fixture evidence tests, not only host-side scripts.
 - [ ] Implement app-side audio transcode execution for every planned audio route, not only route selection.

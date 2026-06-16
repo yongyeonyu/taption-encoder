@@ -517,6 +517,8 @@ enum SW_FFmpegCodecCommandPlanner {
         .jpeg: "mjpeg",
         .animation: "qtrle",
         .cinepak: "cinepak",
+        .realVideo: "rv20",
+        .roqVideo: "roqvideo",
         .dv: "dvvideo",
         .dvcPro: "dvvideo",
         .dvcProHD: "dvvideo",

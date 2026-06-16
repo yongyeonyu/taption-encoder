@@ -40,6 +40,8 @@ enum SW_CodecSupportCatalog {
         .cinepak,
         .sorensonVideo,
         .sorensonVideo3,
+        .realVideo,
+        .roqVideo,
         .dv,
         .dvcPro,
         .dvcProHD,
@@ -193,6 +195,14 @@ enum SW_CodecSupportCatalog {
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
+            name: "h264_m2ts_x264_aac",
+            videoCodec: .h264,
+            audioCodec: .aac,
+            container: .mpegTransportStream,
+            sourceFamily: "Blu-ray and camera M2TS transport stream alias",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
             name: "dji_style_lrf_h264_aac",
             videoCodec: .h264,
             audioCodec: .aac,
@@ -222,6 +232,14 @@ enum SW_CodecSupportCatalog {
             audioCodec: .alac,
             container: .mov,
             sourceFamily: "QuickTime H.265 with Apple Lossless",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "h264_qt_x264_pcm",
+            videoCodec: .h264,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "QuickTime .qt alias",
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
@@ -289,6 +307,14 @@ enum SW_CodecSupportCatalog {
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
+            name: "mpeg1_dat_mp2",
+            videoCodec: .mpeg1,
+            audioCodec: .mp2,
+            container: .mpegProgramStream,
+            sourceFamily: "VCD-style DAT program stream alias",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
             name: "mpeg2_mpg_mp2",
             videoCodec: .mpeg2,
             audioCodec: .mp2,
@@ -302,6 +328,14 @@ enum SW_CodecSupportCatalog {
             audioCodec: .mp2,
             container: .mpegProgramStream,
             sourceFamily: "JVC-style MOD program stream alias",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "mpeg2_vob_mp2",
+            videoCodec: .mpeg2,
+            audioCodec: .mp2,
+            container: .mpegProgramStream,
+            sourceFamily: "DVD VOB program stream alias",
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
@@ -334,6 +368,14 @@ enum SW_CodecSupportCatalog {
             audioCodec: .aac,
             container: .flv,
             sourceFamily: "Legacy Flash video",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "h264_f4v_x264_aac",
+            videoCodec: .h264,
+            audioCodec: .aac,
+            container: .flv,
+            sourceFamily: "Flash video .f4v alias",
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
@@ -521,6 +563,22 @@ enum SW_CodecSupportCatalog {
             generationStatus: .conditionalOnLocalFFmpeg
         ),
         TaptionSoftwareFixtureTarget(
+            name: "realvideo_rm_rv20_ac3",
+            videoCodec: .realVideo,
+            audioCodec: .ac3,
+            container: .realMedia,
+            sourceFamily: "Legacy RealMedia video",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "roq_video_game",
+            videoCodec: .roqVideo,
+            audioCodec: .unknown,
+            container: .roq,
+            sourceFamily: "Legacy game cinematic",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
             name: "dji_lrf_camera_sample",
             videoCodec: .h264,
             audioCodec: .aac,
@@ -534,7 +592,15 @@ enum SW_CodecSupportCatalog {
             audioCodec: .unknown,
             container: .rawElementaryStream,
             sourceFamily: "Uncompressed raw video frame streams",
-            generationStatus: .planned
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "h264_nut_x264_pcm",
+            videoCodec: .h264,
+            audioCodec: .pcm,
+            container: .nut,
+            sourceFamily: "FFmpeg NUT container archive",
+            generationStatus: .implemented
         )
     ]
 

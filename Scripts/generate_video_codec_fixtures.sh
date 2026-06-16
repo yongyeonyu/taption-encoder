@@ -245,6 +245,11 @@ generate_av_fixture \
   -c:a aac -b:a 128k -f mpegts
 
 generate_av_fixture \
+  "h264_m2ts_x264_aac" "m2ts" "libx264" "aac" \
+  -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p \
+  -c:a aac -b:a 128k -f mpegts
+
+generate_av_fixture \
   "dji_style_lrf_h264_aac" "lrf" "libx264" "aac" \
   -c:v libx264 -preset veryfast -crf 24 -pix_fmt yuv420p \
   -c:a aac -b:a 96k -f mp4 -movflags +faststart
@@ -263,6 +268,11 @@ generate_av_fixture \
   "hevc_mov_x265_alac" "mov" "libx265" "alac" \
   -c:v libx265 -preset ultrafast -x265-params log-level=error -crf 28 -pix_fmt yuv420p \
   -c:a alac -ar 48000 -ac 2
+
+generate_av_fixture \
+  "h264_qt_x264_pcm" "qt" "libx264" "pcm_s16le" \
+  -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p \
+  -c:a pcm_s16le -ar 48000 -ac 2 -f mov
 
 generate_av_fixture \
   "vp9_webm_vpx_opus" "webm" "libvpx-vp9" "libopus" \
@@ -290,12 +300,22 @@ generate_av_fixture \
   -c:a mp2 -b:a 128k
 
 generate_av_fixture \
+  "mpeg1_dat_mp2" "dat" "mpeg1video" "mp2" \
+  -vf scale=352:288 -r 25 -c:v mpeg1video -b:v 1150k -pix_fmt yuv420p \
+  -c:a mp2 -b:a 224k -f vcd
+
+generate_av_fixture \
   "mpeg2_mpg_mp2" "mpg" "mpeg2video" "mp2" \
   -vf scale=352:288 -r 25 -c:v mpeg2video -b:v 1800k -pix_fmt yuv420p \
   -c:a mp2 -b:a 128k
 
 generate_av_fixture \
   "mpeg2_mod_mp2" "mod" "mpeg2video" "mp2" \
+  -vf scale=352:288 -r 25 -c:v mpeg2video -b:v 1800k -pix_fmt yuv420p \
+  -c:a mp2 -b:a 128k -f vob
+
+generate_av_fixture \
+  "mpeg2_vob_mp2" "vob" "mpeg2video" "mp2" \
   -vf scale=352:288 -r 25 -c:v mpeg2video -b:v 1800k -pix_fmt yuv420p \
   -c:a mp2 -b:a 128k -f vob
 
@@ -316,6 +336,11 @@ generate_av_fixture \
 
 generate_av_fixture \
   "h264_flv_x264_aac" "flv" "libx264" "aac" \
+  -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p \
+  -c:a aac -b:a 128k -f flv
+
+generate_av_fixture \
+  "h264_f4v_x264_aac" "f4v" "libx264" "aac" \
   -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p \
   -c:a aac -b:a 128k -f flv
 
@@ -388,6 +413,26 @@ generate_av_fixture \
   "vp8_ogm_vorbis" "ogm" "libvpx" "vorbis" \
   -c:v libvpx -deadline good -cpu-used 4 -b:v 1000k -pix_fmt yuv420p \
   -c:a vorbis -strict -2 -ac 2 -f ogg
+
+generate_av_fixture \
+  "realvideo_rm_rv20_ac3" "rm" "rv20" "ac3" \
+  -vf scale=320:240 -r 15 -c:v rv20 -b:v 600k \
+  -c:a ac3 -b:a 96k -f rm
+
+generate_av_fixture \
+  "roq_video_game" "roq" "roqvideo" "none" \
+  -vf scale=320:240 -r 15 -c:v roqvideo \
+  -an -f roq
+
+generate_av_fixture \
+  "rawvideo_yuv_elementary" "y4m" "rawvideo" "none" \
+  -c:v rawvideo -pix_fmt yuv420p \
+  -an -f yuv4mpegpipe
+
+generate_av_fixture \
+  "h264_nut_x264_pcm" "nut" "libx264" "pcm_s16le" \
+  -c:v libx264 -preset veryfast -crf 23 -pix_fmt yuv420p \
+  -c:a pcm_s16le -ar 48000 -ac 2 -f nut
 
 append_generation_result \
   "vc1_raw_elementary" \

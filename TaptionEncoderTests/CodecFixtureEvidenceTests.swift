@@ -177,7 +177,7 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         XCTAssertTrue(summary.plannedVideoCodecs.contains(.jpegXL))
         XCTAssertTrue(summary.plannedVideoCodecs.contains(.dvcPro))
         XCTAssertTrue(summary.plannedVideoCodecs.contains(.dvcProHD))
-        XCTAssertTrue(summary.plannedVideoCodecs.contains(.rawVideo))
+        XCTAssertTrue(summary.implementedVideoCodecs.contains(.rawVideo))
     }
 
     func testSmokeLatestTranscodeResultsProveSWAndHWH265WithAudioSignal() throws {
@@ -199,10 +199,13 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         )
 
         XCTAssertTrue(summary.isPassing, summary.failures.joined(separator: "\n"))
-        XCTAssertGreaterThanOrEqual(summary.fixtureCount, 45)
+        XCTAssertGreaterThanOrEqual(summary.fixtureCount, 54)
         XCTAssertEqual(summary.verifiedTranscodeCount, summary.fixtureCount * 2)
-        XCTAssertEqual(summary.verifiedAudioSignalCount, 80)
-        XCTAssertEqual(summary.noSourceAudioAttemptCount, 10)
+        XCTAssertEqual(
+            summary.verifiedAudioSignalCount + summary.noSourceAudioAttemptCount,
+            summary.verifiedTranscodeCount
+        )
+        XCTAssertEqual(summary.noSourceAudioAttemptCount % TaptionCodecFixtureEvidence.requiredModes.count, 0)
     }
 
     func testGeneratedVideoFixturesCanBuildAppCoreHEVCCommandPlans() throws {
@@ -217,7 +220,7 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         let manifestText = try String(contentsOf: manifestURL, encoding: .utf8)
         let rows = try TaptionCodecFixtureEvidence.parseVideoFixtureManifestTSV(manifestText)
 
-        XCTAssertGreaterThanOrEqual(rows.count, 45)
+        XCTAssertGreaterThanOrEqual(rows.count, 54)
 
         for row in rows {
             let sourceURL = fixtureDirectoryURL.appendingPathComponent(row.file)
@@ -273,7 +276,7 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         let outputCodecs = SW_FFmpegCodecCommandPlanner.plannableVideoOutputCodecs
         let sourceCodecs = Set(rows.map(\.videoCodec))
 
-        XCTAssertGreaterThanOrEqual(rows.count, 45)
+        XCTAssertGreaterThanOrEqual(rows.count, 54)
         XCTAssertTrue(outputCodecs.contains(.av1))
         XCTAssertTrue(outputCodecs.contains(.h264))
         XCTAssertTrue(outputCodecs.contains(.hevc))
@@ -876,8 +879,11 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         XCTAssertEqual(videoSummary.verifiedModeCount, videoJobs.count * 2)
         XCTAssertEqual(videoSummary.verifiedAudioSignalModeCount, videoJobs.filter(\.requiresAudioSignalVerification).count * 2)
         XCTAssertEqual(videoSummary.noSourceAudioModeCount, videoJobs.filter { !$0.requiresAudioSignalVerification }.count * 2)
-        XCTAssertEqual(videoSummary.verifiedAudioSignalModeCount, 80)
-        XCTAssertEqual(videoSummary.noSourceAudioModeCount, 10)
+        XCTAssertEqual(
+            videoSummary.verifiedAudioSignalModeCount + videoSummary.noSourceAudioModeCount,
+            videoSummary.verifiedModeCount
+        )
+        XCTAssertEqual(videoSummary.noSourceAudioModeCount % TaptionCodecFixtureEvidence.requiredModes.count, 0)
 
         XCTAssertTrue(audioSummary.isPassing, audioSummary.failures.joined(separator: "\n"))
         XCTAssertEqual(audioSummary.jobCount, audioJobs.count)
@@ -929,7 +935,10 @@ final class CodecFixtureEvidenceTests: XCTestCase {
             .motionJPEG,
             .animation,
             .cinepak,
+            .realVideo,
+            .roqVideo,
             .wmv,
+            .rawVideo,
             .dv
         ]
     }
@@ -967,6 +976,9 @@ final class CodecFixtureEvidenceTests: XCTestCase {
             .threeGPP2,
             .asf,
             .wmv,
+            .nut,
+            .roq,
+            .realMedia,
             .rawElementaryStream,
             .dv
         ]

@@ -26,6 +26,8 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
     case sorensonVideo
     case sorensonVideo3
     case theora
+    case realVideo
+    case roqVideo
     case dv
     case dvcPro
     case dvcProHD
@@ -78,6 +80,10 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
             return "Sorenson Video 3"
         case .theora:
             return "Theora"
+        case .realVideo:
+            return "RealVideo"
+        case .roqVideo:
+            return "RoQ Video"
         case .dv:
             return "DV"
         case .dvcPro:
@@ -113,6 +119,8 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
             return "Sorenson"
         case .sorensonVideo3:
             return "Sorenson 3"
+        case .roqVideo:
+            return "RoQ"
         case .rawVideo:
             return "Raw"
         case .unknown:
@@ -212,6 +220,9 @@ enum TaptionVideoContainer: String, Codable, Equatable, CaseIterable {
     case threeGPP2
     case asf
     case wmv
+    case nut
+    case roq
+    case realMedia
     case rawElementaryStream
     case unknown
 
@@ -251,6 +262,12 @@ enum TaptionVideoContainer: String, Codable, Equatable, CaseIterable {
             return "asf"
         case .wmv:
             return "wmv"
+        case .nut:
+            return "nut"
+        case .roq:
+            return "roq"
+        case .realMedia:
+            return "rm"
         case .rawElementaryStream:
             return "h265"
         case .unknown:
@@ -294,6 +311,12 @@ enum TaptionVideoContainer: String, Codable, Equatable, CaseIterable {
             return ["asf", "dvr-ms"]
         case .wmv:
             return ["wmv"]
+        case .nut:
+            return ["nut"]
+        case .roq:
+            return ["roq"]
+        case .realMedia:
+            return ["rm", "rmvb"]
         case .rawElementaryStream:
             return ["h264", "h265", "hevc", "264", "265", "ivf", "obu", "y4m", "av1", "h263", "m1v", "m2v", "vc1"]
         case .unknown:

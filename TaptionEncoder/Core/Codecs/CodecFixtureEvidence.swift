@@ -1533,6 +1533,12 @@ enum TaptionCodecFixtureEvidence {
             return .dv
         case "libtheora":
             return .theora
+        case "rv20":
+            return .realVideo
+        case "roqvideo":
+            return .roqVideo
+        case "rawvideo":
+            return .rawVideo
         default:
             return nil
         }

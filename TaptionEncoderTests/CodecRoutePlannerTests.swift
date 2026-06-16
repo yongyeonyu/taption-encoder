@@ -867,6 +867,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "3g2"), .threeGPP2)
         XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "3gpp2"), .threeGPP2)
         XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "dvr-ms"), .asf)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "nut"), .nut)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "roq"), .roq)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "rm"), .realMedia)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "rmvb"), .realMedia)
         XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "av1"), .rawElementaryStream)
         XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "hevc"), .rawElementaryStream)
         XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "264"), .rawElementaryStream)
@@ -894,6 +898,10 @@ final class CodecRoutePlannerTests: XCTestCase {
             ("3gpp", .threeGP),
             ("3gpp2", .threeGPP2),
             ("dvr-ms", .asf),
+            ("nut", .nut),
+            ("roq", .roq),
+            ("rm", .realMedia),
+            ("rmvb", .realMedia),
             ("264", .rawElementaryStream),
             ("265", .rawElementaryStream),
             ("av1", .rawElementaryStream),

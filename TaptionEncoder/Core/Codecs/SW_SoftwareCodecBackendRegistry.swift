@@ -367,6 +367,9 @@ enum SW_SoftwareCodecBackendRegistry {
             .threeGPP2,
             .asf,
             .wmv,
+            .nut,
+            .roq,
+            .realMedia,
             .rawElementaryStream
         ]
     }

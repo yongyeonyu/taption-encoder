@@ -20,15 +20,15 @@ Scripts/transcode_fixtures_to_hevc.sh \
 
 | Metric | Count |
 | --- | ---: |
-| Input fixtures | 45 |
-| SW_HEVC attempts | 45 |
-| HW_HEVC attempts | 45 |
-| Total attempts | 90 |
-| Passed | 90 |
+| Input fixtures | 54 |
+| SW_HEVC attempts | 54 |
+| HW_HEVC attempts | 54 |
+| Total attempts | 108 |
+| Passed | 108 |
 | Skipped | 0 |
 | Failed | 0 |
-| Audio signal checks passed | 80 |
-| No-source-audio attempts | 10 |
+| Audio signal checks passed | 94 |
+| No-source-audio attempts | 14 |
 | Output peak range | -20.6 dB to -17.3 dB |
 
 ## Audio-Focused Smoke Summary
@@ -60,11 +60,11 @@ The skipped generation targets are xHE-AAC, AMR-NB, and AMR-WB because the local
 - AV1 in MP4, WebM, and MKV with Opus audio
 - H.264 in MP4, MOV, MKV, and DJI-style `.lrf`
 - H.264 with AAC, PCM, FLAC, Vorbis, AC3, and EAC3
-- H.264 in M4V, MPEG-TS aliases (`.ts`, `.tp`, `.trp`, `.tod`), FLV, and raw elementary stream form
+- H.264 in M4V, QuickTime `.qt`, MPEG-TS aliases (`.ts`, `.m2ts`, `.tp`, `.trp`, `.tod`), FLV/`.f4v`, NUT, and raw elementary stream form
 - HEVC in MP4 and MOV with AAC and ALAC
 - VP9 and VP8 in WebM with Opus
 - ProRes in MOV with PCM and ALAC
-- MPEG-1 and MPEG-2 program streams with MP2, including `.mod`
+- MPEG-1 and MPEG-2 program streams with MP2, including `.dat`, `.mod`, and `.vob`
 - MPEG-2 in MXF with PCM
 - MPEG-4 Part 2 in AVI and `.divx` with MP3
 - H.263 in 3GP and 3G2 with AAC
@@ -72,7 +72,9 @@ The skipped generation targets are xHE-AAC, AMR-NB, and AMR-WB because the local
 - QuickTime Animation and Cinepak in MOV with PCM
 - VP8/Vorbis in `.ogm`
 - WMV2 in WMV/ASF/`.dvr-ms` with WMA2
-- Raw AV1 OBU, H.263, MPEG-1 `.m1v`, and MPEG-2 `.m2v`
+- RealVideo in RealMedia `.rm` with AC3
+- RoQ game-cinematic video
+- Raw AV1 OBU, H.263, rawvideo `.y4m`, MPEG-1 `.m1v`, and MPEG-2 `.m2v`
 - DV with PCM
 
 VC-1 raw elementary streams remain tracked as a real-world or alternate-generator target because the current local FFmpeg build can mux VC-1 but does not provide a VC-1 encoder.

@@ -171,6 +171,8 @@ enum TaptionCodecRegistry {
         .sorensonVideo,
         .sorensonVideo3,
         .theora,
+        .realVideo,
+        .roqVideo,
         .dv,
         .dvcPro,
         .dvcProHD,

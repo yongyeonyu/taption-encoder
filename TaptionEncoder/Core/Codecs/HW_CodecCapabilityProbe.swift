@@ -214,7 +214,7 @@ enum HW_CodecCapabilityProbe {
             return kCMVideoCodecType_DVCPro50NTSC
         case .dvcProHD:
             return kCMVideoCodecType_DVCPROHD720p60
-        case .vp8, .theora, .vc1, .wmv, .rawVideo, .unknown:
+        case .vp8, .theora, .realVideo, .roqVideo, .vc1, .wmv, .rawVideo, .unknown:
             return nil
         }
     }
