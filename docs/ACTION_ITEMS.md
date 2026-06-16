@@ -94,6 +94,7 @@ Status date: 2026-06-16
 - [x] Connect the current AV1 software fallback path to the function-style codec request API.
 - [x] Add tests that require implemented routes to expose both HW and SW algorithm descriptors.
 - [x] Route live AV1-to-H.265 execution through a codec registry/dispatcher so HW and SW algorithms can be added without hardcoding service branches.
+- [x] Split the reusable Apple-native H.265 hardware algorithm into `HW_AppleHEVCCodecAlgorithm.swift`, leaving `HW_AV1HEVCCodecAlgorithm.swift` as the AV1-specific wrapper for future Taption migration.
 - [x] Add broad SW backend capability registry for future all-to-all video/audio decode, encode, and container read/write coverage.
 - [x] Add `TaptionSoftwareCodecBackendReadinessReport` so the broad bundled SW backend cannot be treated as executable until license review, App Store policy review, binary-size budget, iOS packaging, open-source notice generation, fixture regression proof, audio-signal proof, and old-device performance proof are closed.
 - [x] Add planned `SW_UniversalCodecTranscodeAlgorithm` descriptors for every non-implemented universal route, with an explicit not-bundled execution error until the broad software backend ships.

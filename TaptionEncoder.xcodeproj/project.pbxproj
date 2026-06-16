@@ -71,6 +71,7 @@
 		7A2B3C4D5E6F701000000018 /* SW_FFmpegCodecCommandPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000118 /* SW_FFmpegCodecCommandPlanner.swift */; };
 		7A2B3C4D5E6F701000000019 /* HW_DeviceCodecReportStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000119 /* HW_DeviceCodecReportStore.swift */; };
 		7A2B3C4D5E6F701000000020 /* SW_FFmpegCommandExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000120 /* SW_FFmpegCommandExecutor.swift */; };
+		7A2B3C4D5E6F701000000021 /* HW_AppleHEVCCodecAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000121 /* HW_AppleHEVCCodecAlgorithm.swift */; };
 		8A2B3C4D5E6F701000000001 /* CodecRoutePlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000101 /* CodecRoutePlannerTests.swift */; };
 		8A2B3C4D5E6F701000000002 /* CodecFixtureEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000102 /* CodecFixtureEvidenceTests.swift */; };
 		9A2B3C4D5E6F701000000001 /* OpenSourceNotices in Resources */ = {isa = PBXBuildFile; fileRef = 9A2B3C4D5E6F701000000101 /* OpenSourceNotices */; };
@@ -153,6 +154,7 @@
 		7A2B3C4D5E6F701000000118 /* SW_FFmpegCodecCommandPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SW_FFmpegCodecCommandPlanner.swift; sourceTree = "<group>"; };
 		7A2B3C4D5E6F701000000119 /* HW_DeviceCodecReportStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HW_DeviceCodecReportStore.swift; sourceTree = "<group>"; };
 		7A2B3C4D5E6F701000000120 /* SW_FFmpegCommandExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SW_FFmpegCommandExecutor.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000121 /* HW_AppleHEVCCodecAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HW_AppleHEVCCodecAlgorithm.swift; sourceTree = "<group>"; };
 		8A2B3C4D5E6F701000000100 /* TaptionEncoderTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TaptionEncoderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8A2B3C4D5E6F701000000101 /* CodecRoutePlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecRoutePlannerTests.swift; sourceTree = "<group>"; };
 		8A2B3C4D5E6F701000000102 /* CodecFixtureEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecFixtureEvidenceTests.swift; sourceTree = "<group>"; };
@@ -235,6 +237,7 @@
 				7A2B3C4D5E6F701000000113 /* CodecFixtureEvidence.swift */,
 				7A2B3C4D5E6F701000000104 /* HW_CodecCapabilityProbe.swift */,
 				7A2B3C4D5E6F701000000107 /* HW_AppleDeviceCodecProfiles.swift */,
+				7A2B3C4D5E6F701000000121 /* HW_AppleHEVCCodecAlgorithm.swift */,
 				7A2B3C4D5E6F701000000119 /* HW_DeviceCodecReportStore.swift */,
 				7A2B3C4D5E6F701000000105 /* SW_CodecSupportCatalog.swift */,
 				7A2B3C4D5E6F701000000112 /* SW_SoftwareCodecBackendRegistry.swift */,
@@ -610,6 +613,7 @@
 				7A2B3C4D5E6F701000000002 /* HW_AV1HEVCCodecAlgorithm.swift in Sources */,
 				7A2B3C4D5E6F701000000003 /* SW_AV1HEVCCodecAlgorithm.swift in Sources */,
 				7A2B3C4D5E6F701000000004 /* HW_CodecCapabilityProbe.swift in Sources */,
+				7A2B3C4D5E6F701000000021 /* HW_AppleHEVCCodecAlgorithm.swift in Sources */,
 				7A2B3C4D5E6F701000000007 /* HW_AppleDeviceCodecProfiles.swift in Sources */,
 				7A2B3C4D5E6F701000000019 /* HW_DeviceCodecReportStore.swift in Sources */,
 				7A2B3C4D5E6F701000000005 /* SW_CodecSupportCatalog.swift in Sources */,
