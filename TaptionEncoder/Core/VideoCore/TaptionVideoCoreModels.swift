@@ -7,14 +7,31 @@ enum TaptionVideoCoreVersion {
 enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
     case av1
     case hevc
+    case hevcWithAlpha
+    case dolbyVisionHEVC
     case h264
     case proRes
+    case proResRaw
     case vp9
     case vp8
     case mpeg2
+    case mpeg1
     case mpeg4Visual
+    case h263
+    case motionJPEG
+    case jpeg
+    case jpegXL
+    case animation
+    case cinepak
+    case sorensonVideo
+    case sorensonVideo3
     case theora
     case dv
+    case dvcPro
+    case dvcProHD
+    case vc1
+    case wmv
+    case rawVideo
     case unknown
 
     var displayName: String {
@@ -23,50 +40,179 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
             return "AV1"
         case .hevc:
             return "H.265 / HEVC"
+        case .hevcWithAlpha:
+            return "H.265 / HEVC with Alpha"
+        case .dolbyVisionHEVC:
+            return "Dolby Vision HEVC"
         case .h264:
             return "H.264 / AVC"
         case .proRes:
             return "Apple ProRes"
+        case .proResRaw:
+            return "Apple ProRes RAW"
         case .vp9:
             return "VP9"
         case .vp8:
             return "VP8"
         case .mpeg2:
             return "MPEG-2"
+        case .mpeg1:
+            return "MPEG-1"
         case .mpeg4Visual:
             return "MPEG-4 Visual"
+        case .h263:
+            return "H.263"
+        case .motionJPEG:
+            return "Motion JPEG"
+        case .jpeg:
+            return "JPEG"
+        case .jpegXL:
+            return "JPEG XL"
+        case .animation:
+            return "Apple Animation"
+        case .cinepak:
+            return "Cinepak"
+        case .sorensonVideo:
+            return "Sorenson Video"
+        case .sorensonVideo3:
+            return "Sorenson Video 3"
         case .theora:
             return "Theora"
         case .dv:
             return "DV"
+        case .dvcPro:
+            return "DVCPro"
+        case .dvcProHD:
+            return "DVCPro HD"
+        case .vc1:
+            return "VC-1"
+        case .wmv:
+            return "Windows Media Video"
+        case .rawVideo:
+            return "Raw Video"
         case .unknown:
             return "Unknown"
+        }
+    }
+
+    var shortDisplayName: String {
+        switch self {
+        case .hevc:
+            return "H.265"
+        case .hevcWithAlpha:
+            return "H.265 Alpha"
+        case .dolbyVisionHEVC:
+            return "Dolby HEVC"
+        case .h264:
+            return "H.264"
+        case .mpeg4Visual:
+            return "MPEG-4"
+        case .motionJPEG:
+            return "MJPEG"
+        case .sorensonVideo:
+            return "Sorenson"
+        case .sorensonVideo3:
+            return "Sorenson 3"
+        case .rawVideo:
+            return "Raw"
+        case .unknown:
+            return "Unknown"
+        default:
+            return displayName
         }
     }
 }
 
 enum TaptionAudioCodec: String, Codable, Equatable, CaseIterable {
     case aac
+    case xheAAC
     case pcm
     case alac
     case opus
     case mp3
+    case mp2
     case ac3
     case eac3
+    case dts
+    case trueHD
     case flac
     case vorbis
+    case amr
+    case ilbc
+    case wavPack
+    case wma
+    case adpcm
+    case aLaw
+    case muLaw
     case unknown
+
+    var displayName: String {
+        switch self {
+        case .aac:
+            return "AAC"
+        case .xheAAC:
+            return "xHE-AAC"
+        case .pcm:
+            return "PCM"
+        case .alac:
+            return "Apple Lossless"
+        case .opus:
+            return "Opus"
+        case .mp3:
+            return "MP3"
+        case .mp2:
+            return "MP2"
+        case .ac3:
+            return "Dolby Digital"
+        case .eac3:
+            return "Dolby Digital Plus"
+        case .dts:
+            return "DTS"
+        case .trueHD:
+            return "Dolby TrueHD"
+        case .flac:
+            return "FLAC"
+        case .vorbis:
+            return "Vorbis"
+        case .amr:
+            return "AMR"
+        case .ilbc:
+            return "iLBC"
+        case .wavPack:
+            return "WavPack"
+        case .wma:
+            return "Windows Media Audio"
+        case .adpcm:
+            return "ADPCM"
+        case .aLaw:
+            return "A-law PCM"
+        case .muLaw:
+            return "mu-law PCM"
+        case .unknown:
+            return "Unknown"
+        }
+    }
 }
 
 enum TaptionVideoContainer: String, Codable, Equatable, CaseIterable {
     case mp4
     case mov
+    case m4v
     case mkv
     case avi
     case webm
     case mxf
     case mpegTransportStream
     case mpegProgramStream
+    case lrf
+    case dv
+    case ogg
+    case flv
+    case threeGP
+    case threeGPP2
+    case asf
+    case wmv
+    case rawElementaryStream
     case unknown
 
     var defaultFileExtension: String {
@@ -75,6 +221,8 @@ enum TaptionVideoContainer: String, Codable, Equatable, CaseIterable {
             return "mp4"
         case .mov:
             return "mov"
+        case .m4v:
+            return "m4v"
         case .mkv:
             return "mkv"
         case .avi:
@@ -87,9 +235,86 @@ enum TaptionVideoContainer: String, Codable, Equatable, CaseIterable {
             return "ts"
         case .mpegProgramStream:
             return "mpg"
+        case .lrf:
+            return "lrf"
+        case .dv:
+            return "dv"
+        case .ogg:
+            return "ogv"
+        case .flv:
+            return "flv"
+        case .threeGP:
+            return "3gp"
+        case .threeGPP2:
+            return "3g2"
+        case .asf:
+            return "asf"
+        case .wmv:
+            return "wmv"
+        case .rawElementaryStream:
+            return "h265"
         case .unknown:
             return "mp4"
         }
+    }
+
+    var supportedFileExtensions: [String] {
+        switch self {
+        case .mp4:
+            return ["mp4"]
+        case .mov:
+            return ["mov", "qt"]
+        case .m4v:
+            return ["m4v"]
+        case .mkv:
+            return ["mkv"]
+        case .avi:
+            return ["avi", "divx"]
+        case .webm:
+            return ["webm"]
+        case .mxf:
+            return ["mxf"]
+        case .mpegTransportStream:
+            return ["ts", "mts", "m2ts", "m2t", "tp", "trp", "tod"]
+        case .mpegProgramStream:
+            return ["mpg", "mpeg", "mpe", "vob", "mod", "dat"]
+        case .lrf:
+            return ["lrf"]
+        case .dv:
+            return ["dv", "dif"]
+        case .ogg:
+            return ["ogg", "ogv", "ogm"]
+        case .flv:
+            return ["flv", "f4v"]
+        case .threeGP:
+            return ["3gp", "3gpp"]
+        case .threeGPP2:
+            return ["3g2", "3gpp2"]
+        case .asf:
+            return ["asf", "dvr-ms"]
+        case .wmv:
+            return ["wmv"]
+        case .rawElementaryStream:
+            return ["h264", "h265", "hevc", "264", "265", "ivf", "obu", "y4m", "av1", "h263", "m1v", "m2v", "vc1"]
+        case .unknown:
+            return []
+        }
+    }
+
+    static func inferred(from url: URL) -> TaptionVideoContainer {
+        inferred(fromFileExtension: url.pathExtension)
+    }
+
+    static func inferred(fromFileExtension fileExtension: String) -> TaptionVideoContainer {
+        let normalizedExtension = fileExtension
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            .lowercased()
+        guard !normalizedExtension.isEmpty else {
+            return .unknown
+        }
+        return allCases.first {
+            $0.supportedFileExtensions.contains(normalizedExtension)
+        } ?? .unknown
     }
 }
 

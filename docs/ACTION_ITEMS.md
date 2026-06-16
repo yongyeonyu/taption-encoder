@@ -1,10 +1,10 @@
 # Taption Encoder Release Action Items
 
-Status date: 2026-06-15
+Status date: 2026-06-16
 
 ## Current State
 
-- Product path is AV1 to H.265 first, All to H.265 final.
+- Product path is AV1 to H.265 first, broad inputs to H.265 next, universal codec-to-codec conversion final.
 - Project shell exists.
 - App is configured for iPhone and iPad.
 - Minimum OS is iOS/iPadOS 18.0 for the current SwiftVLC software fallback binary.
@@ -13,11 +13,12 @@ Status date: 2026-06-15
 - Detailed development plan exists in `docs/DEVELOPMENT_PLAN.md`.
 - Detailed phase-by-phase implementation guide exists in `docs/DETAILED_DEVELOPMENT_PLAN.md`.
 - Phase 0 foundation is implemented: app environment, feature flags, Home feature shell, protocol boundaries, and Xcode project grouping exist.
-- Phase 1 fake UX/state machine is implemented: Files and Photos can drive fake inspecting, storage checking, encoding progress, cancellation, rewarded-save waiting, pending-save recovery, and completed states.
-- Phase 2 first real encoder slice is partially implemented: Files import now uses AVFoundation media inspection, AV1-only validation, video-info review before Start, AVFoundation H.265 export, automatic software AV1 decode fallback, real export/fallback progress, codec-path reporting, security-scoped file access, storage checks, cancellation cleanup, and `_taption.mp4` final save after the rewarded-save gate.
+- Phase 1 UX/state machine is implemented: File, folder, and Photos sources can drive inspecting, storage checking, encoding progress, cancellation, rewarded-save waiting, pending-save recovery, and completed states.
+- Phase 2 first real encoder slice is partially implemented: File, folder, and selected Photos import now use AVFoundation media inspection, AV1-only validation, video-info review before Start, AVFoundation H.265 export, automatic software AV1 decode fallback, real export/fallback progress, codec-path reporting, security-scoped file/folder access, broad folder extension discovery, folder sequential processing, Photos output save, storage checks, cancellation cleanup, and `_taption.mp4` final save after the rewarded-save gate.
 - Development is planned as 9 execution phases, with version 1.0 launching after Phase 3 and final product completion after Phase 8.
-- Main screen is componentized with banner, title, Files, Photos, Reset, automatic codec-path info, video-info review, H.265 output summary, status, progress, ETA, Start, Cancel, pending-save, and save completion surfaces.
-- AdMob is not integrated.
+- Main screen is componentized with top/bottom banners, File, Folder, Photos, Reset, output codec/container selector, automatic codec-path info, video-info review, folder queue summary, output summary, status, progress, ETA, Start, Cancel, pending-save, and save completion surfaces.
+- Main screen now has a top-left menu with Help, Open Source Notices, and Device Info sheets.
+- AdMob app and production ad units are created and integrated for top/bottom banner, rewarded save, app-open, start interstitial, and session-end interstitial placements; Debug builds use Google's iOS test ad unit IDs.
 - App Store release assets and metadata are not ready.
 - The project is in Git and pushed to `https://github.com/yongyeonyu/taption-encoder`.
 
@@ -28,7 +29,8 @@ Status date: 2026-06-15
 
 ## Confirmed Product Policies
 
-- [x] Product path is AV1 to H.265 first, All to H.265 final.
+- [x] Product path is AV1 to H.265 first, broad inputs to H.265 next, universal codec-to-codec conversion final.
+- [x] Final codec direction is a symmetric all-to-all mesh: every supported universal input codec is also treated as a possible universal output codec unless deliberately excluded.
 - [x] MVP output container is `.mp4` with H.265 video.
 - [x] Default quality prioritizes source-like visual quality over smallest file size.
 - [x] iOS/iPadOS 26 or later can offer user-selectable background encoding.
@@ -47,18 +49,20 @@ Status date: 2026-06-15
 - [x] Broad input support may increase app binary size if App Store and licensing constraints are satisfied.
 - [x] Software codec stack may evaluate FFmpeg-family technology and should pull broad support as far as App Store, licensing, and binary-size limits allow.
 - [x] FCPXML DTD/version should use the latest stable official version available at implementation time.
-- [x] Advanced output "format" means H.265 container choice only, such as `.mp4` and `.mov`, not future non-H.265 output codecs.
+- [x] MVP advanced output "format" means H.265 container choice only, such as `.mp4` and `.mov`.
+- [x] Long-term advanced output includes selectable output codecs for all-to-all conversion.
+- [x] H.265 remains the recommended default output, not a permanent architecture ceiling.
 - [x] Production AdMob IDs, privacy policy, support URL, and `app-ads.txt` will be added to the existing account/site setup.
 
 ## P0 Release Blockers
 
 - [x] Apply iOS/iPadOS 18.0 deployment target for the current SwiftVLC software fallback binary.
-- [x] Build Phase 0 main UI: banner area, title, Files, Photos, Reset, automatic codec-path info, H.265 output summary, status/progress/cancel area.
+- [x] Build Phase 0 main UI: top/bottom banner areas, title, File, Folder, Photos, Reset, automatic codec-path info, H.265 output summary, status/progress/cancel area.
 - [x] Create app module structure from `docs/APP_ARCHITECTURE.md`.
 - [x] Create `AppEnvironment` and protocol shells for encoder, media inspection, storage, ads, background, and project files.
 - [x] Implement AV1 media inspection by codec metadata.
 - [x] Port or rewrite the narrow AV1 to H.265 conversion core.
-- [ ] Implement source-preserving defaults for resolution, frame rate, orientation, color metadata, HDR/SDR mode, audio timing, and visual quality.
+- [ ] Implement end-to-end source-preserving execution for resolution, frame rate, orientation, color metadata, HDR/SDR mode, audio timing, and visual quality across every HW/SW path.
 - [x] Implement hardware-first encoder path through AVFoundation/VideoToolbox reporting.
 - [x] Implement software encoder path or a clear software fallback policy.
 - [x] Implement codec capability detection that can report hardware, software, or mixed codec path.
@@ -71,8 +75,10 @@ Status date: 2026-06-15
 - [x] Implement temporary output first, then final save after reward.
 - [ ] Persist completed temporary outputs when rewarded save cannot finish.
 - [ ] Restore pending save jobs on app launch so the user can retry saving without re-encoding.
-- [x] Implement Files source import with security-scoped access.
-- [ ] Implement Photos source import and new Photos asset save.
+- [x] Implement File source import with security-scoped access.
+- [x] Implement Folder source import with security-scoped access.
+- [x] Implement sequential folder encoding for supported video files.
+- [x] Implement Photos source import and new Photos asset save.
 - [x] Implement storage checks before encoding and before final save.
 - [ ] Implement Live Activity progress for active encoding.
 - [ ] Implement user-selectable iOS 26+ continued background processing for user-started encoding.
@@ -81,23 +87,117 @@ Status date: 2026-06-15
 
 ## P1 Final Product Architecture
 
-- [ ] Add software codec abstraction for broad input decode and fallback H.265 encode.
+- [x] Add core `HW_` and `SW_` codec catalog/probe files for future portable Taption integration.
+- [x] Add function-style codec transcode API contract using `TaptionCodecTranscodeRequest`, options, progress, and output.
+- [x] Add `TaptionSourcePreservingOutputPolicyResolver` so generic encoding plans fill empty advanced options from the inspected source track before dispatching HW/SW codec algorithms.
+- [x] Add source-preserving SW command-plan arguments for scale, frame rate, bitrate, 10-bit pixel format, color primaries, transfer function, color matrix, and rotation metadata.
+- [x] Connect the current AV1 software fallback path to the function-style codec request API.
+- [x] Add tests that require implemented routes to expose both HW and SW algorithm descriptors.
+- [x] Route live AV1-to-H.265 execution through a codec registry/dispatcher so HW and SW algorithms can be added without hardcoding service branches.
+- [x] Add broad SW backend capability registry for future all-to-all video/audio decode, encode, and container read/write coverage.
+- [x] Add `TaptionSoftwareCodecBackendReadinessReport` so the broad bundled SW backend cannot be treated as executable until license review, App Store policy review, binary-size budget, iOS packaging, open-source notice generation, fixture regression proof, audio-signal proof, and old-device performance proof are closed.
+- [x] Add planned `SW_UniversalCodecTranscodeAlgorithm` descriptors for every non-implemented universal route, with an explicit not-bundled execution error until the broad software backend ships.
+- [x] Add `SW_FFmpegCodecCommandPlanner` so function-style video/audio codec requests can produce explicit FFmpeg-family command plans before the broad backend is bundled.
+- [x] Add Xcode tests that every plannable FFmpeg-family video/audio output codec can generate command plans from every planned source codec, while unsupported output codecs fail explicitly.
+- [x] Add shared video-container extension inference and command-plan tests for every declared readable input container and writable output container.
+- [x] Add representative legacy/raw import alias inference and command-plan tests for DivX, TP/TRP/TOD, MOD, OGM, DVR-MS, AV1 elementary, H.263, MPEG elementary, and VC-1 files.
+- [x] Add codec/container/audio research matrix for Apple-native, software, generated fixture, and real-world sample targets.
+- [x] Add generated fixture script coverage for expanded video and audio codec families.
+- [x] Expand generated video fixture coverage across every declared readable container, including M4V, MPEG-TS, MXF, FLV, 3G2, ASF, and raw elementary streams.
+- [x] Expand generated video fixture coverage for representative container/raw aliases including DivX, TP/TRP/TOD, MOD, OGM, DVR-MS, AV1 OBU, H.263, M1V, and M2V.
+- [x] Add repeatable SW/HW H.265 transcode fixture gate with objective audio signal verification.
+- [x] Re-run the expanded 45-fixture video smoke set through both SW_HEVC and HW_HEVC, with 90/90 H.265 conversion attempts passing and 80 audio-signal checks passing.
+- [x] Add fixture evidence verifier that requires every generated sample to pass both SW_HEVC and HW_HEVC with H.265 output and preserved audio signal.
+- [x] Add app-scheme Xcode tests that parse the generated video fixture manifest and compare it against `SW_CodecSupportCatalog.fixtureTargets`.
+- [x] Add app-scheme Xcode tests that parse the fixture transcode evidence TSV and fail when SW/HW H.265 output or audio signal proof is missing.
+- [x] Add app-scheme Xcode tests that build source-preserving H.265/MP4 command plans from every generated video fixture manifest row.
+- [x] Add audio-focused fixture generation and SW/HW H.265 transcode gate with objective audio signal verification.
+- [x] Add app-scheme Xcode tests that parse audio fixture generation evidence, proving generated codecs and tracking pending xHE-AAC, AMR-NB, and AMR-WB attempts.
+- [x] Add app-scheme Xcode tests that build AAC/MP4 app-core audio route plans and FFmpeg-family software fallback command plans from every generated audio fixture row.
+- [x] Add app-core audio route planner for copy, native transcode, software decode to AAC, and planned audio routes.
+- [x] Add tests that every planned source audio codec routes to default AAC output for MP4/H.265.
+- [x] Add function-style audio codec request/output contract and planned `SW_UniversalAudioCodecTranscodeAlgorithm` descriptors for every universal audio source/output pair.
+- [x] Add source-preserving audio option resolution for sample rate, channel count, and source bitrate, then emit `-ar`, `-ac`, and `-b:a` in software audio command plans.
+- [x] Populate inspected audio sample rate and channel count from AVFoundation format descriptions so source-preserving audio options use real file metadata.
+- [x] Attach first-track audio route, source-preserving audio options, readiness state, and FFmpeg-family command-plan evidence to single-asset encoding plans.
+- [x] Add gated FFmpeg-family video command execution wrapper with fake-runner tests so planned video routes can execute directly from function-style codec requests after broad-backend gates close.
+- [x] Add gated FFmpeg-family audio command execution wrapper with fake-runner tests so planned audio routes can use the same future broad-backend execution boundary as video.
+- [x] Attach planned video FFmpeg-family command plans to single-asset encoding plans when the selected all-to-all output route has a software encoder.
+- [x] Add single-asset FFmpeg-family A/V command planning so video all-to-all routes can carry audio copy/transcode decisions and source-preserving audio arguments.
+- [x] Add gated FFmpeg-family command executor boundary with fake-runner tests so broad SW codec execution cannot run until all readiness gates close.
+- [x] Connect prepared video command plans to the app encoder service through `SW_FFmpegVideoCodecTranscodeExecutor` so a ready broad SW backend can execute planned all-to-all routes through the same function-style codec request contract.
+- [x] Add app-core fixture execution jobs that convert generated video/audio fixture rows into gated FFmpeg-family executor inputs.
+- [x] Run generated AAC/MP4 audio fixture execution jobs through `SW_FFmpegAudioCodecTranscodeExecutor` from function-style audio requests when broad SW backend gates are satisfied.
+- [x] Add app-scheme tests that match app-core fixture execution jobs against the latest SW/HW H.265 output and audio-signal evidence rows.
+- [x] Add app-scheme tests that build generated video/audio fixture command plans to every currently plannable all-to-all output codec.
+- [x] Add video fixture catalog coverage reporting so every universal source codec is tracked as generated, conditional, real-world-sample-required, or planned.
+- [x] Enforce video fixture generation evidence so implemented targets pass generation and optional VC-1/Theora attempts keep concrete blocking reasons.
+- [x] Add video container fixture coverage reporting so every declared non-unknown container and extension alias is tracked by the sample plan.
+- [x] Align iOS file picker UTTypes, folder scanning, and `Info.plist` imported video extensions with the core container alias list, including legacy and raw stream aliases.
+- [x] Add audio fixture catalog coverage reporting so every universal audio codec is tracked as generated or explicitly pending.
+- [x] Enforce pending audio fixture evidence rows so xHE-AAC, AMR-NB, and AMR-WB keep concrete generator attempts and blocking reasons until generated samples are available.
+- [x] Add Apple `afconvert` alternate generation attempts for pending xHE-AAC, AMR-NB, and AMR-WB audio fixtures so evidence records both FFmpeg and system-encoder blockers.
+- [x] Add app-core video execution readiness reporting that separates current-build implemented routes, FFmpeg-family command-plan routes, and missing software video encoder gaps.
+- [x] Add app-core audio execution readiness reporting that separates current-build native/copy routes, FFmpeg-family command-plan routes, and missing software audio encoder gaps.
+- [x] Add `HW_AudioCodecAlgorithmCatalog` and `TaptionAudioCodecDescriptorRegistry` so audio routes expose preferred HW/SW descriptors before full audio execution lands.
+- [x] Add universal codec completion audit reporting so all-to-all planning, required bidirectional examples, command-plan gaps, and runtime gaps are visible as one core gate.
+- [ ] Implement the bundled software codec backend for broad input decode and fallback H.265 encode.
+- [x] Expand codec routing model from broad input to H.265 into all-to-all routes, including H.264 to AV1 and AV1 to H.264.
+- [x] Add unit-test and route-simulator guards that every planned source/output codec pair is covered by the universal route matrix, including reverse routes for every supported pair.
+- [x] Add a unit-test guard that universal source and output codec catalogs stay symmetric for the all-to-all product contract.
+- [x] Add `TaptionCodecMeshCoverageReport` so app-core tests can audit video/audio all-to-all route counts, missing reverse routes, executable route counts, command-planner gaps, and broad software backend license-review status from one source.
+- [x] Add unit-test and route-simulator guards that every implemented or planned route prefers HW decode/encode backends per codec side when the simulated device profile supports them.
+- [x] Add app-side codec route planner that prioritizes HW, falls back to SW/mixed paths, and reports the planned path per imported file.
+- [x] Add codec route simulation script and profile report for HW/SW priority checks.
+- [x] Add app-scheme Xcode tests that parse route matrix TSV evidence for profile coverage, route coverage, and HW decode/encode preference.
+- [x] Add Xcode unit test target for codec route planner HW/SW priority checks.
+- [x] Add Apple device-family HW codec profiles for A10/A12/A13/A14/A15/A16/A17 Pro/A18/M-series simulation.
+- [x] Add Apple device-family tests that verify `AV1 -> H.265` selects `SW`, `HW/SW`, or `HW` by profile.
 - [ ] Complete license review for any bundled software codec stack.
 - [ ] Evaluate FFmpeg-family software codec options for App Store, licensing, binary-size, and performance constraints.
-- [ ] Add legacy-device capability matrix.
+- [x] Add runtime hardware codec probe foundation for the future Device Info menu.
+- [x] Add top-left menu with Help, Open Source Notices, and Device Info.
+- [x] Split Open Source Notices into shipped components, local development tooling, and broad codec backend candidate status so planning-only codec stacks are not presented as shipped app binaries.
+- [x] Move Open Source Notices data into `TaptionOpenSourceNoticeCatalog` so shipped components, development tooling, and planning-only broad codec candidates share one core source with tests.
+- [x] Add Open Source Notice readiness checks so bundled codec backends cannot pass release notices without final license text resource paths.
+- [x] Bundle current shipped Open Source Notice license text resources and add app-scheme tests that fail when required notice files are missing or empty.
+- [x] Show runtime HW decode/encode codec support in Device Info.
+- [x] Show Apple-native audio decode/encode and MP4/MOV copy compatibility in Device Info.
+- [x] Add capability-profile simulation for HW-first route selection.
+- [x] Add all-to-all output codec/container selector UI that shows planned routes while only `AV1 -> H.265 / MP4` remains executable.
+- [x] Add core output readiness catalog so UI and route planning share the same `Now`, `Plan Ready`, `Planned`, and `Blocked` output status.
+- [x] Include output selector readiness counts and item details in Device Info and saved device codec snapshots.
+- [x] Name the final route contract `All-to-All Universal Codec Mesh` and expose representative `H.264 -> AV1`, `AV1 -> H.264`, and same-codec re-encode routes from core.
+- [x] Surface video route readiness details in file-card codec path text and Device Info mesh readiness summaries.
+- [x] Show audio Copy/HW/SW/Unsupported route details in loaded file cards alongside the video codec path.
+- [x] Show all-to-all video card route states as HW/SW, SW Plan Ready, or SW Blocked so planned universal routes are not confused with runnable launch routes.
+- [x] Add tests that selected output policy is preserved by the generic single-asset encoding plan.
+- [x] Add Device Info save action and `HW_DeviceCodecReportStore` so real-device codec probe reports can be captured as JSON snapshots.
+- [x] Include the universal codec completion audit in Device Info and saved device codec snapshots.
+- [x] Add seeded Apple model-identifier codec matrix and expand route simulation evidence from family profiles to runtime model profiles.
+- [x] Add static-matrix reconciliation to saved device codec reports so real-device probe snapshots expose missing and unexpected HW codec assumptions.
+- [x] Add device codec report archive summarizer so multiple real-device probe snapshots can be audited for unknown and divergent HW codec assumptions.
+- [x] Refresh the static Apple model matrix for current iPhone 17, iPhone Air, and iPhone 17e rows and expose a model coverage report.
+- [ ] Replace Apple device-family profiles with a complete per-model identifier matrix.
+- [ ] Capture real-device hardware codec reports across representative iPhone/iPad generations.
 - [ ] Add thermal, battery, memory, and estimated runtime warnings for older devices.
-- [ ] Add mixed decode/encode path reporting.
-- [ ] Add broad input inspection for H.264, H.265, VP9, VP8, MPEG-2, ProRes, and unknown codecs.
-- [ ] Add broad container inspection for MP4, MOV, M4V, WebM, MKV, AVI, TS/MTS/M2TS, and MXF.
+- [x] Add mixed decode/encode path reporting.
+- [x] Add broad input model/inspection mapping for H.264, H.265, AV1, VP9, VP8, MPEG-1/2/4, H.263, ProRes, DV, and legacy QuickTime families.
+- [x] Add broad container inspection for MP4, MOV, M4V, WebM, MKV, AVI/DivX, TS/MTS/M2TS/TP/TRP/TOD, MPEG-PS/VOB/MOD, MXF, LRF, DV, Ogg/Ogv/OGM, FLV/F4V, 3GP/3G2, ASF/WMV/DVR-MS, and raw elementary streams.
+- [x] Migrate the SW/HW H.265 media fixture transcode gate into app-side fixture evidence tests.
+- [x] Migrate objective sound signal verification into app-side fixture evidence tests, not only host-side scripts.
+- [ ] Implement app-side audio transcode execution for every planned audio route, not only route selection.
+- [ ] Collect or generate xHE-AAC, AMR-NB, and AMR-WB samples through App Store-safe paths.
 - [ ] Add fallback behavior for unsupported inputs with clear English copy.
 
 ## Phase 1 UX State Machine
 
 - [x] Add enum-based Home screen states for idle, importing, inspecting, storage checking, encoding, cancelling, waiting for reward, pending save, saving, completed, failed, and cancelled.
 - [x] Add fake Files flow from file import to encoding progress.
-- [x] Add fake Photos flow placeholder.
+- [x] Add real Folder flow from folder import to sequential encoding progress.
+- [x] Add real Photos picker flow.
 - [x] Add automatic codec-path info display; HW/SW is not a user-selectable mode.
-- [x] Add H.265 / MP4 output summary.
+- [x] Add output codec/container selector and output summary.
 - [x] Add progress percentage, elapsed time, and estimated remaining time.
 - [x] Add fake cancellation flow.
 - [x] Add rewarded-save waiting surface.
@@ -144,21 +244,23 @@ Status date: 2026-06-15
 
 ## P0 AdMob And Privacy
 
-- [ ] Add Google Mobile Ads SDK.
+- [x] Add Google Mobile Ads SDK.
 - [ ] Add Google User Messaging Platform SDK if serving regions that require consent.
-- [ ] Add `GADApplicationIdentifier` to generated Info.plist settings.
-- [ ] Add required SKAdNetwork identifiers.
-- [ ] Add app-open ad provider.
-- [ ] Add anchored adaptive banner provider.
+- [x] Add `GADApplicationIdentifier` to Info.plist.
+- [x] Add required SKAdNetwork identifiers.
+- [x] Add app-open ad provider.
+- [x] Add top banner provider.
+- [x] Add bottom banner provider.
 - [ ] Add native ad provider for idle/completed states.
-- [ ] Add interstitial provider for natural pauses.
-- [ ] Add rewarded ad gate for `Watch Ad to Save`.
-- [ ] Use Google test ad units in Debug builds.
-- [ ] Prevent production ad unit IDs in Debug builds.
+- [x] Add interstitial provider for natural pauses.
+- [x] Add interstitial provider before user-started encoding sessions.
+- [x] Add rewarded ad gate for `Watch Ad to Save`.
+- [x] Use Google test ad units in Debug builds.
+- [x] Prevent production ad unit IDs in Debug builds.
 - [ ] Add privacy options entry point when required.
 - [ ] Add inappropriate-ad reporting path if required by App Review.
 - [ ] Add App Store privacy nutrition label answers for ads, analytics, diagnostics, and any tracking.
-- [ ] Keep initial ad requests non-personalized.
+- [x] Keep initial ad requests non-personalized.
 - [ ] Add ATT purpose string only if personalized ads or cross-app tracking are introduced later.
 - [ ] Add consent flow before requesting ads where required for non-personalized or regional consent.
 - [ ] Add remote-configurable ad placement switches and frequency caps.
@@ -166,11 +268,13 @@ Status date: 2026-06-15
 ## Recommended Ad Placement Plan
 
 - [ ] App open ad on cold launch or foreground return when no encoding is active.
-- [ ] Persistent top anchored adaptive banner on main and job status screens.
+- [x] Persistent top and bottom banner placements on the main screen.
 - [ ] Native ad in idle state below output summary.
 - [ ] Native ad in completed state below saved output confirmation.
-- [ ] Interstitial after completed save before returning to idle.
-- [ ] Interstitial after cancelled/failed job acknowledgement, with frequency cap.
+- [x] Interstitial before a user-started encoding session.
+- [x] Interstitial after completed save before returning to idle.
+- [x] Interstitial after cancelled/failed job acknowledgement.
+- [ ] Add frequency caps for start and session-end interstitials.
 - [ ] Rewarded ad before final save for every completed encoding job.
 - [ ] No full-screen ad during active encoding, picker presentation, or cancellation.
 - [ ] No banner/native ad directly adjacent to primary buttons.
@@ -183,7 +287,7 @@ Status date: 2026-06-15
 - [ ] Add unit tests for rewarded-save gating.
 - [ ] Add unit tests for pending temporary output restoration after rewarded ad failure.
 - [ ] Add unit tests for ad placement eligibility and frequency caps.
-- [ ] Add unit tests for source-preserving output policy.
+- [x] Add unit tests for source-preserving output policy.
 - [ ] Add unit tests for ETA smoothing.
 - [ ] Add unit tests for background capability selection.
 - [ ] Add unit tests for codec capability selection.
@@ -233,7 +337,7 @@ Status date: 2026-06-15
 - [ ] Verify generated FCPXML validates against the selected FCPXML DTD/version.
 - [ ] Verify user-selected normalization with differing frame rate, color, and audio samples.
 - [ ] Verify automatic close-enough normalization with near-identical source values.
-- [ ] Verify AdMob test ads on device before production IDs.
+- [ ] Verify AdMob load on device after new production ad units become available.
 
 ## P1 App Store Release Prep
 

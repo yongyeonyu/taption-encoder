@@ -10,18 +10,23 @@ struct StatusBanner<Actions: View>: View {
         VStack(alignment: .leading, spacing: 10) {
             Label(title, systemImage: systemImage)
                 .font(.headline)
+                .foregroundStyle(Color.white.opacity(0.92))
 
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(TaptionTheme.mutedText)
                 .fixedSize(horizontal: false, vertical: true)
 
             actions()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color.accentColor.opacity(0.10))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(TaptionTheme.surface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(TaptionTheme.border, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 

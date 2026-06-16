@@ -12,6 +12,7 @@ struct AppEnvironment {
     var adGate: AdGate
     var bannerAdProvider: BannerAdProviding
     var rewardedAdProvider: RewardedAdProviding
+    var sessionEndAdProvider: SessionEndAdProviding
     var backgroundCoordinator: BackgroundEncodingCoordinating
     var projectDocumentStore: ProjectDocumentStoring
 
@@ -27,6 +28,7 @@ struct AppEnvironment {
         adGate: AdGate,
         bannerAdProvider: BannerAdProviding,
         rewardedAdProvider: RewardedAdProviding,
+        sessionEndAdProvider: SessionEndAdProviding,
         backgroundCoordinator: BackgroundEncodingCoordinating,
         projectDocumentStore: ProjectDocumentStoring
     ) {
@@ -41,14 +43,16 @@ struct AppEnvironment {
         self.adGate = adGate
         self.bannerAdProvider = bannerAdProvider
         self.rewardedAdProvider = rewardedAdProvider
+        self.sessionEndAdProvider = sessionEndAdProvider
         self.backgroundCoordinator = backgroundCoordinator
         self.projectDocumentStore = projectDocumentStore
     }
 
     static var phase0: AppEnvironment {
         let configuration = AppConfiguration()
-        let pendingSaveStore = FakePendingSaveStore.shared
-        let adGate = FakeAdGate()
+        let pendingSaveStore = FilePendingSaveStore.shared
+        let adMobConfiguration = AdMobRuntimeConfiguration.current()
+        let adGate = AdMobRewardedSaveAdGate(configuration: adMobConfiguration)
         return AppEnvironment(
             configuration: configuration,
             featureFlags: .phase0,
@@ -59,8 +63,9 @@ struct AppEnvironment {
             outputResolver: DefaultOutputResolver(namingPolicy: TaptionOutputNamingPolicy(suffix: configuration.outputSuffix)),
             pendingSaveStore: pendingSaveStore,
             adGate: adGate,
-            bannerAdProvider: FakeBannerAdProvider(),
-            rewardedAdProvider: FakeRewardedAdProvider(),
+            bannerAdProvider: AdMobBannerAdProvider(configuration: adMobConfiguration),
+            rewardedAdProvider: AdMobRewardedAdProvider(),
+            sessionEndAdProvider: AdMobSessionEndAdProvider(configuration: adMobConfiguration),
             backgroundCoordinator: FakeBackgroundEncodingCoordinator(),
             projectDocumentStore: FakeProjectFileStore()
         )

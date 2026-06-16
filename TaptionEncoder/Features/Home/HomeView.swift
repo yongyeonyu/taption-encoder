@@ -1,9 +1,13 @@
 import SwiftUI
-import UniformTypeIdentifiers
+import PhotosUI
 
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
     @State private var isFileImporterPresented = false
+    @State private var isFolderImporterPresented = false
+    @State private var isPhotosPickerPresented = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var activeMenuSheet: HomeMenuSheet?
 
     init(environment: AppEnvironment = .phase0) {
         _viewModel = StateObject(wrappedValue: HomeViewModel(environment: environment))
@@ -11,78 +15,223 @@ struct HomeView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let isCompact = geometry.size.height < 760
+            let metrics = HomeLayoutMetrics(size: geometry.size)
 
-            VStack(spacing: isCompact ? 10 : 14) {
-                bannerPlaceholder
-                header(isCompact: isCompact)
+            ZStack {
+                TaptionTheme.appBackground
+                    .ignoresSafeArea()
 
-                SourceActionBar(
-                    canSelectSource: viewModel.state.canSelectSource,
-                    canReset: viewModel.state.canReset,
-                    onFiles: { isFileImporterPresented = true },
-                    onPhotos: { viewModel.startPhotosFlow() },
-                    onReset: { viewModel.reset() }
-                )
-
-                EncoderPathInfoView(
-                    title: viewModel.encoderPathTitle,
-                    detail: viewModel.encoderPathDetail,
-                    systemImage: viewModel.encoderPathSystemImage
-                )
-
-                if let videoInfo = viewModel.state.videoInfo {
-                    VideoInfoSummaryView(info: videoInfo)
-                } else {
-                    OutputSummaryView(
-                        outputSummary: viewModel.outputSummary,
-                        backgroundSummary: viewModel.backgroundSummary
+                VStack(spacing: metrics.verticalSpacing) {
+                    AdMobBannerSlotView(
+                        adUnitID: viewModel.bannerAdUnitID,
+                        displayScale: metrics.bannerScale
                     )
-                }
+                    header(metrics: metrics)
 
-                if let pendingJob = viewModel.state.pendingSaveJob {
-                    PendingSaveRecoveryView(
-                        job: pendingJob,
-                        onRetry: { viewModel.retryPendingSave() },
-                        onReset: { viewModel.reset() }
+                    SourceActionBar(
+                        canSelectSource: viewModel.state.canSelectSource,
+                        canReset: viewModel.state.canReset,
+                        onFiles: {
+                            AppLogger.info("File button tapped", category: .ui)
+                            isFileImporterPresented = true
+                        },
+                        onFolder: {
+                            AppLogger.info("Folder button tapped", category: .ui)
+                            isFolderImporterPresented = true
+                        },
+                        onPhotos: {
+                            AppLogger.info("Photos button tapped", category: .ui)
+                            isPhotosPickerPresented = true
+                        },
+                        onReset: {
+                            AppLogger.info("Reset button tapped", category: .ui)
+                            viewModel.reset()
+                        },
+                        controlHeight: metrics.controlHeight,
+                        buttonFont: metrics.buttonFont
                     )
-                }
 
-                EncodingProgressView(
-                    state: viewModel.state,
-                    onStart: { viewModel.startPreparedEncoding() },
-                    onCancel: { viewModel.cancel() }
-                )
+                    outputSelector(metrics: metrics)
 
-                if viewModel.state.completedTemporaryOutput != nil {
-                    Button {
-                        viewModel.saveCompletedTemporaryOutput()
-                    } label: {
-                        Label("Watch Ad & Save", systemImage: "play.rectangle")
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 44)
+                    LoadedFilesPanelView(
+                        files: viewModel.fileCardSnapshots,
+                        contentScale: metrics.contentScale,
+                        panelHeight: metrics.filePanelHeight,
+                        onSelect: { viewModel.selectFileCard(id: $0) }
+                    )
+
+                    if let pendingJob = viewModel.pendingSaveRecoveryJob {
+                        PendingSaveRecoveryView(
+                            job: pendingJob,
+                            onRetry: { viewModel.retryPendingSave() },
+                            onReset: { viewModel.reset() }
+                        )
                     }
-                    .buttonStyle(.borderedProminent)
+
+                    EncodingProgressView(
+                        state: viewModel.state,
+                        controlHeight: metrics.controlHeight,
+                        contentScale: metrics.contentScale,
+                        onStart: { viewModel.startPreparedEncoding() },
+                        onCancel: { viewModel.cancel() }
+                    )
+
+                    if viewModel.state.completedTemporaryOutput != nil {
+                        Button {
+                            AppLogger.info("Watch Ad & Save button tapped", category: .ui)
+                            viewModel.saveCompletedTemporaryOutput()
+                        } label: {
+                            Label("Watch Ad & Save", systemImage: "play.rectangle")
+                                .font(metrics.buttonFont)
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: metrics.controlHeight)
+                        }
+                        .buttonStyle(.plain)
+                        .background(TaptionTheme.accent)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .stroke(TaptionTheme.accent.opacity(0.65), lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+
+                    Spacer(minLength: 0)
+
+                    AdMobBannerSlotView(
+                        adUnitID: viewModel.bannerAdUnitID,
+                        displayScale: metrics.bannerScale
+                    )
                 }
+                .padding(.horizontal, metrics.horizontalPadding)
+                .padding(.vertical, metrics.verticalPadding)
+                .frame(width: metrics.canvasWidth, height: metrics.canvasHeight, alignment: .top)
+                .background(TaptionTheme.appBackground)
+                .clipped()
             }
-            .padding(.horizontal, isCompact ? 16 : 20)
-            .padding(.vertical, isCompact ? 10 : 16)
-            .frame(maxWidth: 430)
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
-            .clipped()
+        }
+        .sheet(isPresented: $isFileImporterPresented) {
+            VideoDocumentPicker(
+                contentTypes: ImportableVideoTypes.all,
+                allowsMultipleSelection: true,
+                onPick: { urls in
+                    AppLogger.info(
+                        "Document picker returned files",
+                        category: .fileImport,
+                        metadata: [
+                            "count": "\(urls.count)",
+                            "names": urls.map(\.lastPathComponent).joined(separator: "|")
+                        ]
+                    )
+                    isFileImporterPresented = false
+                    viewModel.startFilesFlow(urls: urls)
+                },
+                onCancel: {
+                    AppLogger.info("Document picker cancelled", category: .fileImport)
+                    isFileImporterPresented = false
+                }
+            )
+            .ignoresSafeArea()
+        }
+        .sheet(item: $activeMenuSheet) { sheet in
+            HomeMenuSheetView(sheet: sheet)
+        }
+        .confirmationDialog(
+            "File already exists",
+            isPresented: Binding(
+                get: { viewModel.saveConflictPrompt != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.dismissSaveConflictPrompt()
+                    }
+                }
+            ),
+            presenting: viewModel.saveConflictPrompt
+        ) { _ in
+            Button("Overwrite", role: .destructive) {
+                viewModel.overwriteExistingPendingSave()
+            }
+            Button("Save As") {
+                viewModel.savePendingOutputAsNewFile()
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.dismissSaveConflictPrompt()
+            }
+        } message: { prompt in
+            Text(prompt.message)
         }
         .fileImporter(
-            isPresented: $isFileImporterPresented,
-            allowedContentTypes: [.movie, .mpeg4Movie, .quickTimeMovie],
+            isPresented: $isFolderImporterPresented,
+            allowedContentTypes: [.folder],
             allowsMultipleSelection: false
         ) { result in
             switch result {
             case .success(let urls):
+                AppLogger.info(
+                    "Folder picker returned folders",
+                    category: .folderImport,
+                    metadata: [
+                        "count": "\(urls.count)",
+                        "names": urls.map(\.lastPathComponent).joined(separator: "|")
+                    ]
+                )
                 if let url = urls.first {
-                    viewModel.startFilesFlow(url: url)
+                    viewModel.startFolderFlow(url: url)
                 }
             case .failure(let error):
+                AppLogger.error(
+                    "Folder picker failed",
+                    category: .folderImport,
+                    metadata: ["error": error.localizedDescription]
+                )
                 viewModel.fail(message: error.localizedDescription)
+            }
+        }
+        .photosPicker(
+            isPresented: $isPhotosPickerPresented,
+            selection: $selectedPhotoItem,
+            matching: .videos,
+            preferredItemEncoding: .current
+        )
+        .onChange(of: selectedPhotoItem) { _, newItem in
+            guard let newItem else {
+                return
+            }
+
+            Task {
+                do {
+                    guard let importedVideo = try await newItem.loadTransferable(type: ImportedPhotoVideo.self) else {
+                        await MainActor.run {
+                            AppLogger.error("Photos picker returned no transferable video", category: .photosImport)
+                            viewModel.fail(message: "The selected Photos video could not be imported.")
+                        }
+                        return
+                    }
+
+                    await MainActor.run {
+                        AppLogger.info(
+                            "Photos video imported",
+                            category: .photosImport,
+                            metadata: ["name": importedVideo.displayName]
+                        )
+                        viewModel.startPhotosFlow(
+                            url: importedVideo.url,
+                            displayName: importedVideo.displayName
+                        )
+                        selectedPhotoItem = nil
+                    }
+                } catch {
+                    await MainActor.run {
+                        AppLogger.error(
+                            "Photos picker import failed",
+                            category: .photosImport,
+                            metadata: ["error": error.localizedDescription]
+                        )
+                        viewModel.fail(message: error.localizedDescription)
+                        selectedPhotoItem = nil
+                    }
+                }
             }
         }
         .task {
@@ -90,84 +239,146 @@ struct HomeView: View {
         }
     }
 
-    private var bannerPlaceholder: some View {
-        Text("Ad banner")
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity)
-            .frame(height: 50)
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color.secondary.opacity(0.35), lineWidth: 1)
-            )
-            .accessibilityLabel("Ad banner placeholder")
+    private func header(metrics: HomeLayoutMetrics) -> some View {
+        HStack(spacing: 10 * metrics.contentScale) {
+            Menu {
+                Button {
+                    activeMenuSheet = .help
+                } label: {
+                    Label("Help", systemImage: "questionmark.circle")
+                }
+
+                Button {
+                    activeMenuSheet = .openSource
+                } label: {
+                    Label("Open Source Notices", systemImage: "curlybraces")
+                }
+
+                Button {
+                    activeMenuSheet = .deviceInfo
+                } label: {
+                    Label("Device Info", systemImage: "iphone")
+                }
+            } label: {
+                Image(systemName: "line.3.horizontal")
+                    .font(.system(size: metrics.headerIconSize, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .frame(width: 34 * metrics.contentScale, height: 34 * metrics.contentScale)
+                    .background(TaptionTheme.elevatedSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(TaptionTheme.border, lineWidth: 1)
+                    )
+            }
+            .accessibilityLabel("Menu")
+
+            HStack(spacing: 10 * metrics.contentScale) {
+                Image(systemName: "film.stack")
+                    .font(.system(size: metrics.headerIconSize, weight: .semibold))
+                    .foregroundStyle(TaptionTheme.accent)
+                    .frame(width: 34 * metrics.contentScale, height: 34 * metrics.contentScale)
+                    .background(TaptionTheme.selectedSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                Text(viewModel.subtitle)
+                    .font(metrics.headerFont.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.72))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+
+            Color.clear
+                .frame(width: 34 * metrics.contentScale, height: 34 * metrics.contentScale)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    private func header(isCompact: Bool) -> some View {
-        VStack(spacing: isCompact ? 4 : 6) {
-            Image(systemName: "film.stack")
-                .font(.system(size: isCompact ? 34 : 42, weight: .semibold))
-                .foregroundStyle(.tint)
+    private func outputSelector(metrics: HomeLayoutMetrics) -> some View {
+        HStack(spacing: 8 * metrics.contentScale) {
+            outputMenu(
+                title: "Output",
+                value: "\(viewModel.selectedOutput.videoCodec.shortDisplayName) - \(viewModel.selectedOutputStatusText)",
+                systemImage: "arrow.triangle.2.circlepath",
+                isEnabled: viewModel.canChangeOutputSelection,
+                metrics: metrics
+            ) {
+                ForEach(viewModel.outputCodecOptions, id: \.self) { codec in
+                    Button {
+                        viewModel.selectOutputCodec(codec)
+                    } label: {
+                        if codec == viewModel.selectedOutput.videoCodec {
+                            Label(viewModel.outputCodecMenuTitle(codec), systemImage: "checkmark")
+                        } else {
+                            Text(viewModel.outputCodecMenuTitle(codec))
+                        }
+                    }
+                }
+            }
 
-            Text(viewModel.subtitle)
-                .font((isCompact ? Font.headline : Font.title3).weight(.semibold))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(1)
+            outputMenu(
+                title: "Container",
+                value: "\(viewModel.selectedOutput.container.defaultFileExtension.uppercased()) - \(viewModel.selectedOutputStatusText)",
+                systemImage: "shippingbox",
+                isEnabled: viewModel.canChangeOutputSelection,
+                metrics: metrics
+            ) {
+                ForEach(viewModel.outputContainerOptions, id: \.self) { container in
+                    Button {
+                        viewModel.selectOutputContainer(container)
+                    } label: {
+                        let label = viewModel.outputContainerMenuTitle(container)
+                        if container == viewModel.selectedOutput.container {
+                            Label(label, systemImage: "checkmark")
+                        } else {
+                            Text(label)
+                        }
+                    }
+                }
+            }
         }
         .frame(maxWidth: .infinity)
     }
-}
 
-private struct VideoInfoSummaryView: View {
-    var info: LoadedVideoInfo
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(info.fileName, systemImage: "doc.richtext")
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-
-            HStack(spacing: 8) {
-                infoPill(title: "Input", value: info.inputSummary)
-                infoPill(title: "Size", value: info.resolution)
+    private func outputMenu<Content: View>(
+        title: String,
+        value: String,
+        systemImage: String,
+        isEnabled: Bool,
+        metrics: HomeLayoutMetrics,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        Menu {
+            content()
+        } label: {
+            HStack(spacing: 7 * metrics.contentScale) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 14 * metrics.contentScale, weight: .semibold))
+                Text(title)
+                    .font(metrics.buttonFont.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Spacer(minLength: 4)
+                Text(value)
+                    .font((metrics.contentScale < 0.9 ? Font.caption2 : Font.caption).weight(.semibold))
+                    .foregroundStyle(TaptionTheme.mutedText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
             }
-
-            HStack(spacing: 8) {
-                infoPill(title: "FPS", value: info.frameRate)
-                infoPill(title: "Time", value: info.duration)
-            }
-
-            HStack(spacing: 8) {
-                infoPill(title: "Audio", value: info.audio)
-                infoPill(title: "File", value: info.fileSize)
-            }
-
-            Label(info.outputName, systemImage: "arrow.down.doc")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            .foregroundStyle(isEnabled ? Color.white.opacity(0.9) : TaptionTheme.disabledText)
+            .padding(.horizontal, 10 * metrics.contentScale)
+            .frame(maxWidth: .infinity)
+            .frame(height: metrics.controlHeight)
+            .background(TaptionTheme.elevatedSurface)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(isEnabled ? TaptionTheme.border : Color.white.opacity(0.06), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .opacity(isEnabled ? 1 : 0.48)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Color.secondary.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .accessibilityElement(children: .combine)
-    }
-
-    private func infoPill(title: String, value: String) -> some View {
-        HStack(spacing: 4) {
-            Text(title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .disabled(!isEnabled)
     }
 }
 

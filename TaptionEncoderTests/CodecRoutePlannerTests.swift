@@ -1,0 +1,3033 @@
+import AudioToolbox
+import CoreMedia
+import XCTest
+@testable import Taption_Encoder
+
+final class CodecRoutePlannerTests: XCTestCase {
+    func testAV1ToHEVCUsesSoftwareWhenNoHardwareIsAvailable() {
+        let selection = selectAV1ToHEVC(profile: .softwareOnly)
+
+        XCTAssertEqual(selection.support, .implemented)
+        XCTAssertTrue(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .software)
+        XCTAssertEqual(selection.selectedMode, .software)
+        XCTAssertEqual(selection.decodeBackend, .softwareAV1Decoder)
+        XCTAssertEqual(selection.encodeBackend, .customSoftware)
+    }
+
+    func testAV1ToHEVCUsesMixedPathWhenOnlyHEVCEncodeHardwareExists() {
+        let selection = selectAV1ToHEVC(profile: .h264HEVCHardware)
+
+        XCTAssertEqual(selection.support, .implemented)
+        XCTAssertTrue(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .mixed)
+        XCTAssertEqual(selection.selectedMode, .software)
+        XCTAssertEqual(selection.decodeBackend, .softwareAV1Decoder)
+        XCTAssertEqual(selection.encodeBackend, .appleVideoToolbox)
+    }
+
+    func testAV1ToHEVCUsesHardwareWhenDecodeAndEncodeHardwareExist() {
+        let selection = selectAV1ToHEVC(profile: .av1DecodeHEVCEncodeHardware)
+
+        XCTAssertEqual(selection.support, .implemented)
+        XCTAssertTrue(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .hardware)
+        XCTAssertEqual(selection.selectedMode, .hardware)
+        XCTAssertEqual(selection.decodeBackend, .appleAVAssetExport)
+        XCTAssertEqual(selection.encodeBackend, .appleVideoToolbox)
+    }
+
+    func testPlannedUniversalRoutesRemainVisibleButNotEncodable() {
+        let h264ToAV1 = selectRoute(
+            sourceCodec: .h264,
+            outputCodec: .av1,
+            profile: .h264HEVCHardware
+        )
+        let av1ToH264 = selectRoute(
+            sourceCodec: .av1,
+            outputCodec: .h264,
+            profile: .av1DecodeHEVCEncodeHardware
+        )
+
+        XCTAssertEqual(h264ToAV1.support, .planned)
+        XCTAssertEqual(h264ToAV1.executionKind, .planned)
+        XCTAssertFalse(h264ToAV1.isEncodableNow)
+        XCTAssertEqual(h264ToAV1.decodeBackend, .appleAVAssetExport)
+        XCTAssertEqual(h264ToAV1.encodeBackend, .ffmpegFamily)
+
+        XCTAssertEqual(av1ToH264.support, .planned)
+        XCTAssertEqual(av1ToH264.executionKind, .planned)
+        XCTAssertFalse(av1ToH264.isEncodableNow)
+        XCTAssertEqual(av1ToH264.decodeBackend, .appleAVAssetExport)
+        XCTAssertEqual(av1ToH264.encodeBackend, .appleVideoToolbox)
+    }
+
+    func testAllToAllRoutePlanningPrefersHardwareBackendsPerCodecSide() {
+        for profile in TaptionCodecHardwareSupportProfile.simulationProfiles {
+            for sourceCodec in TaptionCodecRegistry.universalSourceCodecs {
+                for outputCodec in TaptionCodecRegistry.universalOutputCodecs {
+                    let selection = selectRoute(
+                        sourceCodec: sourceCodec,
+                        outputCodec: outputCodec,
+                        profile: profile
+                    )
+
+                    XCTAssertNotEqual(selection.support, .unsupported, "\(profile.name) \(sourceCodec.rawValue) -> \(outputCodec.rawValue)")
+
+                    if profile.canHardwareDecode(sourceCodec) {
+                        XCTAssertEqual(
+                            selection.decodeBackend,
+                            .appleAVAssetExport,
+                            "\(profile.name) should prefer HW decode for \(sourceCodec.rawValue) -> \(outputCodec.rawValue)"
+                        )
+                    }
+
+                    if profile.canHardwareEncode(outputCodec) {
+                        XCTAssertEqual(
+                            selection.encodeBackend,
+                            .appleVideoToolbox,
+                            "\(profile.name) should prefer HW encode for \(sourceCodec.rawValue) -> \(outputCodec.rawValue)"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    func testUniversalCodecMatrixCoversEverySourceAndOutputPair() {
+        let expectedRouteCount = TaptionCodecRegistry.universalSourceCodecs.count
+            * TaptionCodecRegistry.universalOutputCodecs.count
+
+        XCTAssertEqual(TaptionCodecRegistry.plannedUniversalRoutes.count, expectedRouteCount)
+
+        for sourceCodec in TaptionCodecRegistry.universalSourceCodecs {
+            for outputCodec in TaptionCodecRegistry.universalOutputCodecs {
+                let route = TaptionCodecRoute(
+                    sourceCodec: sourceCodec,
+                    outputCodec: outputCodec
+                )
+                XCTAssertNotEqual(
+                    TaptionCodecRegistry.support(for: route),
+                    .unsupported,
+                    "\(sourceCodec.rawValue) -> \(outputCodec.rawValue)"
+                )
+            }
+        }
+    }
+
+    func testUniversalSourceAndOutputCodecCatalogsStaySymmetric() {
+        XCTAssertEqual(
+            TaptionCodecRegistry.universalSourceCodecs,
+            TaptionCodecRegistry.universalOutputCodecs,
+            "Universal source and output catalog order should stay aligned so UI selectors and route-matrix reports cannot drift."
+        )
+        XCTAssertEqual(
+            Set(TaptionCodecRegistry.universalSourceCodecs),
+            Set(TaptionCodecRegistry.universalOutputCodecs),
+            "Universal conversion is an all-to-all codec mesh. A codec added as input must also be considered as output unless it is intentionally removed from the universal contract."
+        )
+    }
+
+    func testUniversalCodecContractKeepsRepresentativeAllToAllRoutes() {
+        let examples = Set(TaptionCodecRegistry.universalContractExampleRoutes)
+
+        XCTAssertEqual(TaptionCodecRegistry.universalProductContractName, "All-to-All Universal Codec Mesh")
+        XCTAssertEqual(
+            TaptionCodecRegistry.universalRoutePairCount,
+            TaptionCodecRegistry.universalSourceCodecs.count * TaptionCodecRegistry.universalOutputCodecs.count
+        )
+        XCTAssertEqual(TaptionCodecRegistry.universalRoutePairs.count, TaptionCodecRegistry.universalRoutePairCount)
+
+        let h264ToAV1 = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1)
+        let av1ToH264 = TaptionCodecRoute(sourceCodec: .av1, outputCodec: .h264)
+        let sameCodecReencode = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .h264)
+
+        XCTAssertTrue(examples.contains(h264ToAV1))
+        XCTAssertTrue(examples.contains(av1ToH264))
+        XCTAssertTrue(examples.contains(sameCodecReencode))
+        XCTAssertTrue(TaptionCodecRegistry.routeIsInUniversalContract(h264ToAV1))
+        XCTAssertTrue(TaptionCodecRegistry.routeIsInUniversalContract(av1ToH264))
+        XCTAssertTrue(TaptionCodecRegistry.routeIsInUniversalContract(sameCodecReencode))
+        XCTAssertTrue(sameCodecReencode.isSameCodecReencode)
+    }
+
+    func testCodecMeshCoverageReportSummarizesUniversalPlanningState() {
+        let report = TaptionCodecMeshCoverageReporter.makeReport()
+        let expectedVideoRoutes = TaptionCodecRegistry.universalSourceCodecs.count
+            * TaptionCodecRegistry.universalOutputCodecs.count
+        let expectedAudioRoutes = TaptionAudioCodecRoutePlanner.universalAudioCodecs.count
+            * TaptionAudioCodecRoutePlanner.universalAudioCodecs.count
+
+        XCTAssertEqual(report.contractName, TaptionCodecRegistry.universalProductContractName)
+        XCTAssertTrue(report.planningCoverageIsPassing)
+        XCTAssertTrue(report.videoMeshIsFullyPlanned)
+        XCTAssertTrue(report.audioMeshIsFullyPlanned)
+        XCTAssertEqual(report.expectedVideoRouteCount, expectedVideoRoutes)
+        XCTAssertEqual(report.plannedVideoRouteCount, expectedVideoRoutes)
+        XCTAssertEqual(report.executableVideoRouteCount, TaptionCodecRegistry.implementedRoutes.count)
+        XCTAssertEqual(report.plannedButNotExecutableVideoRouteCount, expectedVideoRoutes - TaptionCodecRegistry.implementedRoutes.count)
+        XCTAssertEqual(report.sameCodecVideoRouteCount, TaptionCodecRegistry.universalSourceCodecs.count)
+        XCTAssertEqual(report.exampleVideoRoutes, TaptionCodecRegistry.universalContractExampleRoutes)
+        XCTAssertTrue(report.missingVideoRoutes.isEmpty)
+        XCTAssertTrue(report.missingVideoReverseRoutes.isEmpty)
+        XCTAssertEqual(report.expectedAudioRouteCount, expectedAudioRoutes)
+        XCTAssertEqual(report.plannedAudioRouteCount, expectedAudioRoutes)
+        XCTAssertEqual(report.sameCodecAudioRouteCount, TaptionAudioCodecRoutePlanner.universalAudioCodecs.count)
+        XCTAssertTrue(report.missingAudioRoutes.isEmpty)
+        XCTAssertTrue(report.missingAudioReverseRoutes.isEmpty)
+        XCTAssertEqual(report.softwareVideoOutputPlannableCodecCount, SW_FFmpegCodecCommandPlanner.plannableVideoOutputCodecs.count)
+        XCTAssertEqual(report.softwareAudioOutputPlannableCodecCount, SW_FFmpegCodecCommandPlanner.plannableAudioOutputCodecs.count)
+        XCTAssertEqual(report.videoRunnableInCurrentBuildRouteCount, TaptionCodecRegistry.implementedRoutes.count)
+        XCTAssertEqual(
+            report.videoRunnableInCurrentBuildRouteCount
+                + report.videoCommandPlanOnlyRouteCount
+                + report.videoBlockedMissingSoftwareEncoderRouteCount,
+            expectedVideoRoutes
+        )
+        XCTAssertEqual(
+            Set(report.videoBlockedOutputCodecs),
+            Set(SW_FFmpegCodecCommandPlanner.commandUnsupportedVideoOutputCodecs)
+        )
+        XCTAssertEqual(report.hardwareAudioDescriptorCount, HW_AudioCodecAlgorithmCatalog.descriptors().count)
+        XCTAssertEqual(report.softwareAudioDescriptorCount, SW_UniversalAudioCodecTranscodeAlgorithm.plannedDescriptors.count)
+        XCTAssertEqual(
+            report.audioRunnableInCurrentBuildRouteCount
+                + report.audioCommandPlanOnlyRouteCount
+                + report.audioBlockedMissingSoftwareEncoderRouteCount,
+            expectedAudioRoutes
+        )
+        XCTAssertEqual(
+            Set(report.audioBlockedOutputCodecs),
+            Set(SW_FFmpegCodecCommandPlanner.commandUnsupportedAudioOutputCodecs)
+        )
+        XCTAssertGreaterThan(report.audioRunnableInCurrentBuildRouteCount, 0)
+        XCTAssertGreaterThan(report.audioCommandPlanOnlyRouteCount, 0)
+        XCTAssertGreaterThan(report.audioBlockedMissingSoftwareEncoderRouteCount, 0)
+        XCTAssertTrue(report.softwareVideoOutputUnsupportedCodecs.contains(.proResRaw))
+        XCTAssertTrue(report.softwareAudioOutputUnsupportedCodecs.contains(.xheAAC))
+        XCTAssertTrue(report.broadSoftwareBackendRequiresLicenseReview)
+    }
+
+    func testUniversalCodecCompletionAuditLocksAllToAllFinalGoal() {
+        let report = TaptionUniversalCodecCompletionAuditor.makeReport()
+        let h264ToAV1 = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1)
+        let av1ToH264 = TaptionCodecRoute(sourceCodec: .av1, outputCodec: .h264)
+        let sameCodecReencode = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .h264)
+
+        XCTAssertEqual(report.contractName, "All-to-All Universal Codec Mesh")
+        XCTAssertEqual(report.stage, .allToAllPlanningLocked)
+        XCTAssertTrue(report.universalPlanningIsLocked)
+        XCTAssertFalse(report.universalCommandPlanningIsComplete)
+        XCTAssertFalse(report.universalExecutionIsComplete)
+        XCTAssertTrue(report.requiredBidirectionalVideoRoutes.contains(h264ToAV1))
+        XCTAssertTrue(report.requiredBidirectionalVideoRoutes.contains(av1ToH264))
+        XCTAssertTrue(report.requiredBidirectionalVideoRoutes.contains(sameCodecReencode))
+        XCTAssertTrue(report.missingRequiredBidirectionalVideoRoutes.isEmpty)
+        XCTAssertEqual(report.videoRouteCount, TaptionCodecRegistry.universalRoutePairCount)
+        XCTAssertEqual(
+            report.audioRouteCount,
+            TaptionAudioCodecRoutePlanner.universalAudioCodecs.count
+                * TaptionAudioCodecRoutePlanner.universalAudioCodecs.count
+        )
+        XCTAssertEqual(report.videoCurrentBuildRunnableRouteCount, TaptionCodecRegistry.implementedRoutes.count)
+        XCTAssertGreaterThan(report.videoPendingRuntimeRouteCount, 0)
+        XCTAssertGreaterThan(report.audioPendingRuntimeRouteCount, 0)
+        XCTAssertGreaterThan(report.videoCommandPlanOnlyRouteCount, 0)
+        XCTAssertGreaterThan(report.audioCommandPlanOnlyRouteCount, 0)
+        XCTAssertGreaterThan(report.videoBlockedMissingSoftwareEncoderRouteCount, 0)
+        XCTAssertGreaterThan(report.audioBlockedMissingSoftwareEncoderRouteCount, 0)
+        XCTAssertEqual(
+            Set(report.videoBlockedOutputCodecs),
+            Set(SW_FFmpegCodecCommandPlanner.commandUnsupportedVideoOutputCodecs)
+        )
+        XCTAssertEqual(
+            Set(report.audioBlockedOutputCodecs),
+            Set(SW_FFmpegCodecCommandPlanner.commandUnsupportedAudioOutputCodecs)
+        )
+        XCTAssertFalse(report.broadSoftwareBackendBundled)
+        XCTAssertFalse(report.broadSoftwareBackendExecutable)
+        XCTAssertGreaterThan(report.broadSoftwareBackendOpenGateCount, 0)
+        XCTAssertTrue(report.broadSoftwareBackendRequiresLicenseReview)
+    }
+
+    func testUniversalCodecMatrixKeepsReverseRoutesForEveryPair() {
+        for sourceCodec in TaptionCodecRegistry.universalSourceCodecs {
+            for outputCodec in TaptionCodecRegistry.universalOutputCodecs where sourceCodec != outputCodec {
+                let forwardRoute = TaptionCodecRoute(
+                    sourceCodec: sourceCodec,
+                    outputCodec: outputCodec
+                )
+                let reverseRoute = TaptionCodecRoute(
+                    sourceCodec: outputCodec,
+                    outputCodec: sourceCodec
+                )
+
+                XCTAssertTrue(
+                    TaptionCodecRegistry.plannedUniversalRoutes.contains(forwardRoute),
+                    "Missing forward route \(sourceCodec.rawValue) -> \(outputCodec.rawValue)"
+                )
+                XCTAssertTrue(
+                    TaptionCodecRegistry.plannedUniversalRoutes.contains(reverseRoute),
+                    "Missing reverse route \(outputCodec.rawValue) -> \(sourceCodec.rawValue)"
+                )
+                XCTAssertNotEqual(
+                    TaptionCodecRegistry.support(for: forwardRoute),
+                    .unsupported,
+                    "Forward route became unsupported: \(sourceCodec.rawValue) -> \(outputCodec.rawValue)"
+                )
+                XCTAssertNotEqual(
+                    TaptionCodecRegistry.support(for: reverseRoute),
+                    .unsupported,
+                    "Reverse route became unsupported: \(outputCodec.rawValue) -> \(sourceCodec.rawValue)"
+                )
+            }
+        }
+    }
+
+    func testAppleDeviceProfilesSelectExpectedAV1ToHEVCPath() {
+        XCTAssertEqual(
+            selectAV1ToHEVC(profile: appleProfile("apple_ipados18_legacy_a10_h264")).executionKind,
+            .software
+        )
+        XCTAssertEqual(
+            selectAV1ToHEVC(profile: appleProfile("apple_a15_a16_h264_hevc")).executionKind,
+            .mixed
+        )
+        XCTAssertEqual(
+            selectAV1ToHEVC(profile: appleProfile("apple_a17pro_av1_decode")).executionKind,
+            .hardware
+        )
+        XCTAssertEqual(
+            selectAV1ToHEVC(profile: appleProfile("apple_ipad_m3_m4_av1_prores")).executionKind,
+            .hardware
+        )
+    }
+
+    func testAppleDeviceModelMatrixMapsRuntimeIdentifiersToProfiles() {
+        let models = HW_AppleDeviceCodecModelMatrix.all
+        let identifiers = models.map(\.modelIdentifier)
+        let coverage = HW_AppleDeviceCodecModelMatrix.coverageReport(models: models)
+
+        XCTAssertEqual(models.count, 93)
+        XCTAssertEqual(coverage.modelCount, 93)
+        XCTAssertEqual(coverage.iPhoneModelCount, 35)
+        XCTAssertEqual(coverage.iPadModelCount, 58)
+        XCTAssertEqual(coverage.av1HardwareDecodeModelCount, 22)
+        XCTAssertEqual(coverage.hevcHardwareEncodeModelCount, 91)
+        XCTAssertEqual(coverage.h264OnlyModelCount, 2)
+        XCTAssertEqual(coverage.proResHardwareEncodeModelCount, 32)
+        XCTAssertEqual(coverage.identifierFamilyCounts["iPhone18"], 5)
+        XCTAssertEqual(coverage.profileCounts["apple_a19_av1_decode"], 2)
+        XCTAssertEqual(coverage.profileCounts["apple_a19pro_av1_decode"], 1)
+        XCTAssertEqual(coverage.profileCounts["apple_a19pro_av1_decode_prores_raw"], 2)
+        XCTAssertTrue(coverage.isPassing)
+        XCTAssertEqual(Set(identifiers).count, identifiers.count)
+        XCTAssertTrue(HW_AppleDeviceCodecModelMatrix.missingProfileIDs.isEmpty)
+        XCTAssertEqual(
+            HW_AppleDeviceCodecModelMatrix.model(identifier: "iPhone16,1")?.profileID,
+            "apple_a17pro_av1_decode"
+        )
+        XCTAssertEqual(
+            HW_AppleDeviceCodecModelMatrix.model(identifier: "iPad7,11")?.profileID,
+            "apple_ipados18_legacy_a10_h264"
+        )
+        XCTAssertEqual(
+            HW_AppleDeviceCodecModelMatrix.model(identifier: "iPad16,3")?.profileID,
+            "apple_ipad_m3_m4_av1_prores"
+        )
+        XCTAssertEqual(
+            HW_AppleDeviceCodecModelMatrix.model(identifier: "iPhone18,1")?.profileID,
+            "apple_a19pro_av1_decode_prores_raw"
+        )
+        XCTAssertEqual(
+            HW_AppleDeviceCodecModelMatrix.model(identifier: "iPhone18,3")?.profileID,
+            "apple_a19_av1_decode"
+        )
+        XCTAssertEqual(
+            HW_AppleDeviceCodecModelMatrix.model(identifier: "iPhone18,4")?.profileID,
+            "apple_a19pro_av1_decode"
+        )
+    }
+
+    func testAppleDeviceModelMatrixSelectsExpectedAV1ToHEVCPath() {
+        XCTAssertEqual(
+            selectAV1ToHEVC(profile: appleModelProfile("iPad7,11")).executionKind,
+            .software
+        )
+        XCTAssertEqual(
+            selectAV1ToHEVC(profile: appleModelProfile("iPhone15,4")).executionKind,
+            .mixed
+        )
+        XCTAssertEqual(
+            selectAV1ToHEVC(profile: appleModelProfile("iPhone16,1")).executionKind,
+            .hardware
+        )
+        XCTAssertEqual(
+            selectAV1ToHEVC(profile: appleModelProfile("iPhone17,3")).executionKind,
+            .hardware
+        )
+        XCTAssertEqual(
+            selectAV1ToHEVC(profile: appleModelProfile("iPhone18,1")).executionKind,
+            .hardware
+        )
+        XCTAssertEqual(
+            selectAV1ToHEVC(profile: appleModelProfile("iPhone18,3")).executionKind,
+            .hardware
+        )
+        XCTAssertEqual(
+            selectAV1ToHEVC(profile: appleModelProfile("iPhone18,4")).executionKind,
+            .hardware
+        )
+        XCTAssertEqual(
+            selectAV1ToHEVC(profile: appleModelProfile("iPad16,3")).executionKind,
+            .hardware
+        )
+    }
+
+    func testAppleDeviceRouteSimulatorCoversEveryProfileAndUniversalRoute() {
+        let rows = HW_CodecRouteSimulator.rows()
+        let summary = HW_CodecRouteSimulator.summary(rows: rows)
+        let expectedProfileCount = TaptionCodecHardwareSupportProfile.simulationProfiles.count
+        let expectedRouteCount = TaptionCodecRegistry.universalSourceCodecs.count
+            * TaptionCodecRegistry.universalOutputCodecs.count
+
+        XCTAssertEqual(summary.profileCount, expectedProfileCount)
+        XCTAssertEqual(summary.sourceCodecCount, TaptionCodecRegistry.universalSourceCodecs.count)
+        XCTAssertEqual(summary.outputCodecCount, TaptionCodecRegistry.universalOutputCodecs.count)
+        XCTAssertEqual(summary.routeCountPerProfile, expectedRouteCount)
+        XCTAssertEqual(summary.rowCount, expectedProfileCount * expectedRouteCount)
+        XCTAssertEqual(summary.implementedRowCount, expectedProfileCount * TaptionCodecRegistry.implementedRoutes.count)
+        XCTAssertEqual(summary.plannedRowCount, summary.rowCount - summary.implementedRowCount)
+        XCTAssertEqual(summary.unsupportedRowCount, 0)
+        XCTAssertEqual(summary.hardwareDecodePreferenceViolationCount, 0)
+        XCTAssertEqual(summary.hardwareEncodePreferenceViolationCount, 0)
+        XCTAssertTrue(summary.isPassing)
+        XCTAssertTrue(summary.av1ToHEVCPathSummary.contains("HW"))
+        XCTAssertTrue(summary.av1ToHEVCPathSummary.contains("HW/SW"))
+        XCTAssertTrue(summary.av1ToHEVCPathSummary.contains("SW"))
+        XCTAssertTrue(HW_CodecRouteSimulator.validationFailures(rows: rows).isEmpty)
+    }
+
+    func testAppleDeviceRouteSimulatorIncludesModelIdentifierProfiles() {
+        let simulatedProfileNames = Set(TaptionCodecHardwareSupportProfile.simulationProfiles.map(\.name))
+        let modelProfileNames = Set(HW_AppleDeviceCodecModelMatrix.routeSimulationProfiles.map(\.name))
+
+        XCTAssertEqual(modelProfileNames.count, HW_AppleDeviceCodecModelMatrix.all.count)
+        XCTAssertTrue(modelProfileNames.isSubset(of: simulatedProfileNames))
+        XCTAssertTrue(simulatedProfileNames.contains("iPhone16,1"))
+        XCTAssertTrue(simulatedProfileNames.contains("iPhone18,1"))
+        XCTAssertTrue(simulatedProfileNames.contains("iPhone18,5"))
+        XCTAssertTrue(simulatedProfileNames.contains("iPad16,3"))
+    }
+
+    func testImplementedRoutesNeverReportPlannedOrUnsupportedExecution() {
+        for profile in TaptionCodecHardwareSupportProfile.simulationProfiles {
+            for route in TaptionCodecRegistry.implementedRoutes {
+                let selection = selectRoute(
+                    sourceCodec: route.sourceCodec,
+                    outputCodec: route.outputCodec,
+                    profile: profile
+                )
+
+                XCTAssertEqual(selection.support, .implemented, profile.name)
+                XCTAssertTrue(selection.isEncodableNow, profile.name)
+                XCTAssertNotEqual(selection.executionKind, .planned, profile.name)
+                XCTAssertNotEqual(selection.executionKind, .unsupported, profile.name)
+            }
+        }
+    }
+
+    func testImplementedRoutesExposeHardwareAndSoftwareAlgorithmDescriptors() {
+        for route in TaptionCodecRegistry.implementedRoutes {
+            let descriptors = TaptionCodecRegistry.implementedAlgorithmDescriptors(for: route)
+            let modes = Set(descriptors.map(\.mode))
+
+            XCTAssertTrue(modes.contains(.hardware), "\(route.displayName) is missing a HW algorithm")
+            XCTAssertTrue(modes.contains(.software), "\(route.displayName) is missing a SW algorithm")
+            XCTAssertTrue(descriptors.allSatisfy { $0.route == route })
+        }
+    }
+
+    func testLiveTranscodingRegistryExposesImplementedAlgorithms() {
+        let route = TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc)
+        let descriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: route)
+        let modes = Set(descriptors.map(\.mode))
+
+        XCTAssertEqual(descriptors.count, 2)
+        XCTAssertTrue(modes.contains(.hardware))
+        XCTAssertTrue(modes.contains(.software))
+    }
+
+    func testLiveTranscodingRegistryPrefersHardwareForHardwareExecution() {
+        let route = TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc)
+        let descriptor = TaptionCodecTranscodingRegistry.live.preferredDescriptor(
+            for: route,
+            executionKind: .hardware
+        )
+
+        XCTAssertEqual(descriptor?.mode, .hardware)
+        XCTAssertEqual(descriptor?.backend, .appleVideoToolbox)
+    }
+
+    func testLiveTranscodingRegistryPrefersSoftwareForMixedExecution() {
+        let route = TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc)
+        let descriptor = TaptionCodecTranscodingRegistry.live.preferredDescriptor(
+            for: route,
+            executionKind: .mixed
+        )
+
+        XCTAssertEqual(descriptor?.mode, .software)
+        XCTAssertEqual(descriptor?.backend, .softwareAV1Decoder)
+    }
+
+    func testUniversalSoftwareAlgorithmCatalogCoversEveryNonImplementedRoute() {
+        let descriptors = SW_UniversalCodecTranscodeAlgorithm.plannedDescriptors
+        let descriptorRoutes = Set(descriptors.map(\.route))
+        let expectedRoutes = TaptionCodecRegistry.plannedUniversalRoutes
+            .subtracting(TaptionCodecRegistry.implementedRoutes)
+
+        XCTAssertEqual(descriptorRoutes, expectedRoutes)
+        XCTAssertTrue(descriptors.allSatisfy { $0.mode == .software })
+        XCTAssertTrue(descriptors.allSatisfy { $0.backend == .ffmpegFamily })
+    }
+
+    func testLiveRegistryKeepsPlannedSoftwareDescriptorsSeparateFromExecutableAlgorithms() {
+        let plannedRoute = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1)
+
+        XCTAssertTrue(TaptionCodecTranscodingRegistry.live.descriptors(for: plannedRoute).isEmpty)
+        XCTAssertEqual(
+            TaptionCodecTranscodingRegistry.live.plannedDescriptors(for: plannedRoute).first?.backend,
+            .ffmpegFamily
+        )
+        XCTAssertEqual(
+            TaptionCodecTranscodingRegistry.live.allDescriptors(for: plannedRoute).first?.route,
+            plannedRoute
+        )
+    }
+
+    func testUniversalSoftwareAlgorithmReportsBundledBackendMissingUntilImplementationLands() async {
+        let route = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1)
+        let request = TaptionCodecTranscodeRequest(
+            sourceURL: URL(fileURLWithPath: "/tmp/input.mp4"),
+            outputURL: URL(fileURLWithPath: "/tmp/output.mkv"),
+            route: route,
+            options: .preservingSource(outputCodec: .av1, container: .mkv)
+        )
+
+        do {
+            _ = try await SW_UniversalCodecTranscodeAlgorithm.transcode(
+                request: request,
+                progress: { _ in }
+            )
+            XCTFail("Universal software transcode should stay unavailable until the broad backend is bundled.")
+        } catch let error as TaptionUniversalSoftwareCodecError {
+            XCTAssertEqual(error, .backendNotBundled(.ffmpegFamily, route))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testFFmpegVideoCodecTranscodeExecutorBlocksUntilReadinessGatesClose() async throws {
+        let route = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1)
+        let request = TaptionCodecTranscodeRequest(
+            sourceURL: URL(fileURLWithPath: "/tmp/input.mp4"),
+            outputURL: URL(fileURLWithPath: "/tmp/output.mkv"),
+            route: route,
+            options: .preservingSource(outputCodec: .av1, container: .mkv)
+        )
+        let videoExecutor = SW_FFmpegVideoCodecTranscodeExecutor(
+            executor: SW_FFmpegCommandExecutor(
+                readinessReport: SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport(),
+                runner: FakeFFmpegCommandRunner { _ in
+                    XCTFail("Runner should not execute while broad software backend gates are open.")
+                    return SW_FFmpegCommandRunResult(exitCode: 0)
+                }
+            )
+        )
+
+        do {
+            _ = try await videoExecutor.transcode(request: request, progress: { _ in })
+            XCTFail("Video executor should block until the broad software backend is executable.")
+        } catch let error as SW_FFmpegCommandExecutionError {
+            guard case .backendNotExecutable(let openGates) = error else {
+                XCTFail("Unexpected execution error: \(error)")
+                return
+            }
+            XCTAssertEqual(Set(openGates), Set(TaptionSoftwareCodecBackendReadinessGate.allCases))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testFFmpegVideoCodecTranscodeExecutorRunsThroughInjectedRunnerWhenReady() async throws {
+        let outputURL = temporaryTestURL(fileName: "h264-to-av1.mkv")
+        try? FileManager.default.removeItem(at: outputURL)
+        let route = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1)
+        let request = TaptionCodecTranscodeRequest(
+            sourceURL: URL(fileURLWithPath: "/tmp/input.mp4"),
+            outputURL: outputURL,
+            route: route,
+            options: .preservingSource(outputCodec: .av1, container: .mkv)
+        )
+        let videoExecutor = SW_FFmpegVideoCodecTranscodeExecutor(
+            executor: SW_FFmpegCommandExecutor(
+                readinessReport: readyBroadSoftwareBackendReport(),
+                runner: FakeFFmpegCommandRunner { commandPlan in
+                    XCTAssertEqual(commandPlan.routeSummary, route.displayName)
+                    XCTAssertTrue(commandPlan.arguments.contains("libsvtav1"))
+                    try FileManager.default.createDirectory(
+                        at: commandPlan.outputURL.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                    try Data("fake video output".utf8).write(to: commandPlan.outputURL)
+                    return SW_FFmpegCommandRunResult(exitCode: 0, stdout: "video encoded", stderr: "frame=8")
+                }
+            )
+        )
+        var progressStages: [TaptionEncodingStage] = []
+
+        let output = try await videoExecutor.transcode(request: request) { progress in
+            progressStages.append(progress.stage)
+        }
+
+        XCTAssertEqual(output.outputURL, outputURL)
+        XCTAssertEqual(output.route, route)
+        XCTAssertEqual(output.usedMode, .software)
+        XCTAssertEqual(output.usedBackend, .ffmpegFamily)
+        XCTAssertEqual(output.outputVideoCodec, .av1)
+        XCTAssertEqual(output.outputAudioTrackCount, 1)
+        XCTAssertEqual(progressStages, [.preparing, .encoding, .completed])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+
+        try? FileManager.default.removeItem(at: outputURL)
+    }
+
+    func testUniversalVideoCommandPlanBuildsAllToAllReverseRoutes() throws {
+        let h264ToAV1 = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1)
+        let av1ToH264 = TaptionCodecRoute(sourceCodec: .av1, outputCodec: .h264)
+        let h264ToAV1Plan = try SW_FFmpegCodecCommandPlanner.makeVideoCommandPlan(
+            request: TaptionCodecTranscodeRequest(
+                sourceURL: URL(fileURLWithPath: "/tmp/h264.mp4"),
+                outputURL: URL(fileURLWithPath: "/tmp/av1.mkv"),
+                route: h264ToAV1,
+                options: .preservingSource(outputCodec: .av1, container: .mkv)
+            )
+        )
+        let av1ToH264Plan = try SW_FFmpegCodecCommandPlanner.makeVideoCommandPlan(
+            request: TaptionCodecTranscodeRequest(
+                sourceURL: URL(fileURLWithPath: "/tmp/av1.webm"),
+                outputURL: URL(fileURLWithPath: "/tmp/h264.mp4"),
+                route: av1ToH264,
+                options: .preservingSource(outputCodec: .h264, container: .mp4)
+            )
+        )
+
+        XCTAssertEqual(h264ToAV1Plan.backend, .ffmpegFamily)
+        XCTAssertEqual(h264ToAV1Plan.routeSummary, h264ToAV1.displayName)
+        XCTAssertTrue(h264ToAV1Plan.arguments.contains("libsvtav1"))
+        XCTAssertTrue(h264ToAV1Plan.arguments.contains("/tmp/av1.mkv"))
+
+        XCTAssertEqual(av1ToH264Plan.routeSummary, av1ToH264.displayName)
+        XCTAssertTrue(av1ToH264Plan.arguments.contains("libx264"))
+        XCTAssertTrue(av1ToH264Plan.arguments.contains("+faststart"))
+    }
+
+    func testUniversalVideoCommandPlanAppliesAdvancedOutputOptions() throws {
+        let route = TaptionCodecRoute(sourceCodec: .vp9, outputCodec: .h264)
+        let outputPolicy = TaptionVideoOutputPolicy(
+            videoCodec: .h264,
+            container: .mp4,
+            profile: .automatic,
+            qualityPolicy: .preserveSourceVisuals,
+            advancedOptions: TaptionAdvancedOutputOptions(
+                resizeTo: TaptionPixelSize(width: 1280, height: 720),
+                frameRate: TaptionRationalFrameRate(numerator: 30000, denominator: 1001),
+                targetBitrate: 8_000_000,
+                color: TaptionColorDescription(
+                    primaries: .bt2020,
+                    transfer: .hlg,
+                    matrix: .bt2020NonConstantLuminance,
+                    bitDepth: 10,
+                    isHDR: true
+                ),
+                rotationDegrees: 90
+            )
+        )
+        let plan = try SW_FFmpegCodecCommandPlanner.makeVideoCommandPlan(
+            request: TaptionCodecTranscodeRequest(
+                sourceURL: URL(fileURLWithPath: "/tmp/vp9.webm"),
+                outputURL: URL(fileURLWithPath: "/tmp/h264.mp4"),
+                route: route,
+                options: TaptionCodecTranscodeOptions(outputPolicy: outputPolicy)
+            )
+        )
+
+        XCTAssertTrue(plan.arguments.contains("scale=1280:720"))
+        XCTAssertTrue(plan.arguments.contains("30000/1001"))
+        XCTAssertTrue(plan.arguments.contains("8000000"))
+        XCTAssertTrue(plan.arguments.contains("libx264"))
+        XCTAssertTrue(plan.arguments.contains("yuv420p10le"))
+        XCTAssertTrue(plan.arguments.contains("bt2020"))
+        XCTAssertTrue(plan.arguments.contains("arib-std-b67"))
+        XCTAssertTrue(plan.arguments.contains("bt2020nc"))
+        XCTAssertTrue(plan.arguments.contains("rotate=90"))
+    }
+
+    func testUniversalVideoCommandPlannerTracksEveryOutputCodecAsPlannableOrGap() {
+        let represented = Set(SW_FFmpegCodecCommandPlanner.plannableVideoOutputCodecs)
+            .union(SW_FFmpegCodecCommandPlanner.commandUnsupportedVideoOutputCodecs)
+
+        XCTAssertEqual(represented, Set(TaptionCodecRegistry.universalOutputCodecs))
+        XCTAssertTrue(SW_FFmpegCodecCommandPlanner.plannableVideoOutputCodecs.contains(.av1))
+        XCTAssertTrue(SW_FFmpegCodecCommandPlanner.plannableVideoOutputCodecs.contains(.h264))
+        XCTAssertTrue(SW_FFmpegCodecCommandPlanner.commandUnsupportedVideoOutputCodecs.contains(.proResRaw))
+        XCTAssertTrue(SW_FFmpegCodecCommandPlanner.commandUnsupportedVideoOutputCodecs.contains(.jpegXL))
+    }
+
+    func testUniversalVideoCommandPlannerBuildsEveryPlannableSourceOutputPair() throws {
+        for sourceCodec in TaptionCodecRegistry.universalSourceCodecs {
+            for outputCodec in SW_FFmpegCodecCommandPlanner.plannableVideoOutputCodecs {
+                let route = TaptionCodecRoute(sourceCodec: sourceCodec, outputCodec: outputCodec)
+                let request = TaptionCodecTranscodeRequest(
+                    sourceURL: URL(fileURLWithPath: "/tmp/input-\(sourceCodec.rawValue).mkv"),
+                    outputURL: URL(fileURLWithPath: "/tmp/output-\(outputCodec.rawValue).mkv"),
+                    route: route,
+                    options: .preservingSource(outputCodec: outputCodec, container: .mkv)
+                )
+
+                let plan = try SW_FFmpegCodecCommandPlanner.makeVideoCommandPlan(request: request)
+
+                XCTAssertEqual(plan.backend, .ffmpegFamily, route.displayName)
+                XCTAssertEqual(plan.routeSummary, route.displayName, route.displayName)
+                XCTAssertTrue(plan.arguments.contains("-c:v"), route.displayName)
+                XCTAssertEqual(
+                    plan.arguments.last,
+                    "/tmp/output-\(outputCodec.rawValue).mkv",
+                    route.displayName
+                )
+            }
+        }
+    }
+
+    func testUniversalVideoCommandPlannerAcceptsEveryReadableInputContainer() throws {
+        let route = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1)
+
+        for inputContainer in SW_SoftwareCodecBackendRegistry.ffmpegFamilyCandidate.readableContainers.sorted(by: containerSort) {
+            let request = TaptionCodecTranscodeRequest(
+                sourceURL: URL(fileURLWithPath: "/tmp/input.\(inputContainer.defaultFileExtension)"),
+                outputURL: URL(fileURLWithPath: "/tmp/output.mkv"),
+                route: route,
+                options: .preservingSource(outputCodec: .av1, container: .mkv)
+            )
+
+            let plan = try SW_FFmpegCodecCommandPlanner.makeVideoCommandPlan(request: request)
+
+            XCTAssertEqual(plan.sourceURL.pathExtension, inputContainer.defaultFileExtension, inputContainer.rawValue)
+            XCTAssertEqual(plan.routeSummary, route.displayName, inputContainer.rawValue)
+        }
+    }
+
+    func testUniversalVideoCommandPlannerAcceptsEveryWritableOutputContainer() throws {
+        let route = TaptionCodecRoute(sourceCodec: .vp9, outputCodec: .h264)
+
+        for outputContainer in SW_SoftwareCodecBackendRegistry.ffmpegFamilyCandidate.writableContainers.sorted(by: containerSort) {
+            let request = TaptionCodecTranscodeRequest(
+                sourceURL: URL(fileURLWithPath: "/tmp/input.webm"),
+                outputURL: URL(fileURLWithPath: "/tmp/output.\(outputContainer.defaultFileExtension)"),
+                route: route,
+                options: .preservingSource(outputCodec: .h264, container: outputContainer)
+            )
+
+            let plan = try SW_FFmpegCodecCommandPlanner.makeVideoCommandPlan(request: request)
+
+            XCTAssertEqual(
+                plan.arguments.last,
+                "/tmp/output.\(outputContainer.defaultFileExtension)",
+                outputContainer.rawValue
+            )
+        }
+    }
+
+    func testUniversalAudioCommandPlannerAcceptsEveryReadableInputContainer() throws {
+        let route = TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .flac)
+
+        for inputContainer in SW_SoftwareCodecBackendRegistry.ffmpegFamilyCandidate.readableContainers.sorted(by: containerSort) {
+            let request = TaptionAudioCodecTranscodeRequest(
+                sourceURL: URL(fileURLWithPath: "/tmp/audio.\(inputContainer.defaultFileExtension)"),
+                outputURL: URL(fileURLWithPath: "/tmp/audio-output.mkv"),
+                route: route,
+                options: .preservingSource(outputCodec: .flac, outputContainer: .mkv)
+            )
+
+            let plan = try SW_FFmpegCodecCommandPlanner.makeAudioCommandPlan(request: request)
+
+            XCTAssertEqual(plan.sourceURL.pathExtension, inputContainer.defaultFileExtension, inputContainer.rawValue)
+            XCTAssertEqual(plan.routeSummary, route.displayName, inputContainer.rawValue)
+        }
+    }
+
+    func testUniversalCommandPlannerRejectsUnknownInputContainer() {
+        let videoRoute = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1)
+        let videoRequest = TaptionCodecTranscodeRequest(
+            sourceURL: URL(fileURLWithPath: "/tmp/input.notmedia"),
+            outputURL: URL(fileURLWithPath: "/tmp/output.mkv"),
+            route: videoRoute,
+            options: .preservingSource(outputCodec: .av1, container: .mkv)
+        )
+        let audioRoute = TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .flac)
+        let audioRequest = TaptionAudioCodecTranscodeRequest(
+            sourceURL: URL(fileURLWithPath: "/tmp/audio.notmedia"),
+            outputURL: URL(fileURLWithPath: "/tmp/audio-output.mkv"),
+            route: audioRoute,
+            options: .preservingSource(outputCodec: .flac, outputContainer: .mkv)
+        )
+
+        XCTAssertThrowsError(try SW_FFmpegCodecCommandPlanner.makeVideoCommandPlan(request: videoRequest)) { error in
+            XCTAssertEqual(
+                error as? SW_FFmpegCodecCommandPlannerError,
+                .inputContainerUnavailable(.unknown)
+            )
+        }
+        XCTAssertThrowsError(try SW_FFmpegCodecCommandPlanner.makeAudioCommandPlan(request: audioRequest)) { error in
+            XCTAssertEqual(
+                error as? SW_FFmpegCodecCommandPlannerError,
+                .inputContainerUnavailable(.unknown)
+            )
+        }
+    }
+
+    func testVideoContainerInferenceCoversLegacyAndRawAliases() {
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "qt"), .mov)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "mts"), .mpegTransportStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "m2ts"), .mpegTransportStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "m2t"), .mpegTransportStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "tp"), .mpegTransportStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "trp"), .mpegTransportStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "tod"), .mpegTransportStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "mpe"), .mpegProgramStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "vob"), .mpegProgramStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "mod"), .mpegProgramStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "dat"), .mpegProgramStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "divx"), .avi)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "lrf"), .lrf)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "dif"), .dv)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "ogv"), .ogg)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "ogm"), .ogg)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "f4v"), .flv)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "3gpp"), .threeGP)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "3g2"), .threeGPP2)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "3gpp2"), .threeGPP2)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "dvr-ms"), .asf)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "av1"), .rawElementaryStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "hevc"), .rawElementaryStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "264"), .rawElementaryStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "265"), .rawElementaryStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "h263"), .rawElementaryStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "m1v"), .rawElementaryStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "m2v"), .rawElementaryStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "vc1"), .rawElementaryStream)
+        XCTAssertEqual(TaptionVideoContainer.inferred(fromFileExtension: "notmedia"), .unknown)
+    }
+
+    func testUniversalVideoCommandPlannerAcceptsRepresentativeReadableAliases() throws {
+        let route = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1)
+        let aliases: [(fileExtension: String, container: TaptionVideoContainer)] = [
+            ("divx", .avi),
+            ("m2t", .mpegTransportStream),
+            ("tp", .mpegTransportStream),
+            ("trp", .mpegTransportStream),
+            ("tod", .mpegTransportStream),
+            ("mpe", .mpegProgramStream),
+            ("mod", .mpegProgramStream),
+            ("dat", .mpegProgramStream),
+            ("dif", .dv),
+            ("ogm", .ogg),
+            ("3gpp", .threeGP),
+            ("3gpp2", .threeGPP2),
+            ("dvr-ms", .asf),
+            ("264", .rawElementaryStream),
+            ("265", .rawElementaryStream),
+            ("av1", .rawElementaryStream),
+            ("h263", .rawElementaryStream),
+            ("m1v", .rawElementaryStream),
+            ("m2v", .rawElementaryStream),
+            ("vc1", .rawElementaryStream)
+        ]
+
+        for alias in aliases {
+            let request = TaptionCodecTranscodeRequest(
+                sourceURL: URL(fileURLWithPath: "/tmp/input.\(alias.fileExtension)"),
+                outputURL: URL(fileURLWithPath: "/tmp/output.mkv"),
+                route: route,
+                options: .preservingSource(outputCodec: .av1, container: .mkv)
+            )
+
+            let plan = try SW_FFmpegCodecCommandPlanner.makeVideoCommandPlan(request: request)
+
+            XCTAssertEqual(
+                TaptionVideoContainer.inferred(fromFileExtension: alias.fileExtension),
+                alias.container,
+                alias.fileExtension
+            )
+            XCTAssertEqual(plan.sourceURL.pathExtension, alias.fileExtension, alias.fileExtension)
+            XCTAssertEqual(plan.routeSummary, route.displayName, alias.fileExtension)
+        }
+    }
+
+    func testImportableVideoTypesAndInfoPlistCoverEveryCoreContainerExtension() throws {
+        let coreExtensions = Set(
+            TaptionVideoContainer.allCases
+                .flatMap(\.supportedFileExtensions)
+        )
+        let pickerExtensions = Set(ImportableVideoTypes.fileExtensions)
+
+        XCTAssertEqual(pickerExtensions, coreExtensions)
+        XCTAssertEqual(SupportedVideoFileExtensions.fileExtensionSet, coreExtensions)
+
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let plistURL = rootURL
+            .appendingPathComponent("TaptionEncoder/Info.plist")
+        let plistData = try Data(contentsOf: plistURL)
+        let plist = try XCTUnwrap(
+            PropertyListSerialization.propertyList(
+                from: plistData,
+                options: [],
+                format: nil
+            ) as? [String: Any]
+        )
+        let declarations = try XCTUnwrap(
+            plist["UTImportedTypeDeclarations"] as? [[String: Any]]
+        )
+        let plistExtensions = Set(
+            declarations.flatMap { declaration -> [String] in
+                guard let tagSpecification = declaration["UTTypeTagSpecification"] as? [String: Any],
+                      let fileExtensions = tagSpecification["public.filename-extension"] as? [String] else {
+                    return []
+                }
+                return fileExtensions
+            }
+        )
+
+        XCTAssertTrue(
+            plistExtensions.isSuperset(of: coreExtensions),
+            "Missing Info.plist video extensions: \(coreExtensions.subtracting(plistExtensions).sorted().joined(separator: ", "))"
+        )
+        XCTAssertTrue(SupportedVideoFileExtensions.contains(".m2t"))
+        XCTAssertTrue(SupportedVideoFileExtensions.contains("DAT"))
+        XCTAssertTrue(SupportedVideoFileExtensions.contains("dif"))
+        XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("lrf"))
+        XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("dvr-ms"))
+        XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("vc1"))
+    }
+
+    func testUniversalVideoCommandPlannerRejectsEveryUnsupportedOutputCodec() {
+        for sourceCodec in TaptionCodecRegistry.universalSourceCodecs {
+            for outputCodec in SW_FFmpegCodecCommandPlanner.commandUnsupportedVideoOutputCodecs {
+                let route = TaptionCodecRoute(sourceCodec: sourceCodec, outputCodec: outputCodec)
+                let request = TaptionCodecTranscodeRequest(
+                    sourceURL: URL(fileURLWithPath: "/tmp/input-\(sourceCodec.rawValue).mkv"),
+                    outputURL: URL(fileURLWithPath: "/tmp/output-\(outputCodec.rawValue).mkv"),
+                    route: route,
+                    options: .preservingSource(outputCodec: outputCodec, container: .mkv)
+                )
+
+                XCTAssertThrowsError(try SW_FFmpegCodecCommandPlanner.makeVideoCommandPlan(request: request), route.displayName) { error in
+                    XCTAssertEqual(
+                        error as? SW_FFmpegCodecCommandPlannerError,
+                        .videoEncoderUnavailable(outputCodec),
+                        route.displayName
+                    )
+                }
+            }
+        }
+    }
+
+    func testUniversalVideoCommandPlannerReportsEncoderGaps() {
+        let route = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .proResRaw)
+        let request = TaptionCodecTranscodeRequest(
+            sourceURL: URL(fileURLWithPath: "/tmp/input.mp4"),
+            outputURL: URL(fileURLWithPath: "/tmp/output.mov"),
+            route: route,
+            options: .preservingSource(outputCodec: .proResRaw, container: .mov)
+        )
+
+        XCTAssertThrowsError(try SW_FFmpegCodecCommandPlanner.makeVideoCommandPlan(request: request)) { error in
+            XCTAssertEqual(
+                error as? SW_FFmpegCodecCommandPlannerError,
+                .videoEncoderUnavailable(.proResRaw)
+            )
+        }
+    }
+
+    func testCodecTranscodeRequestDefaultsPreserveSourceQuality() {
+        let request = TaptionCodecTranscodeRequest(
+            sourceURL: URL(fileURLWithPath: "/tmp/input.mp4"),
+            outputURL: URL(fileURLWithPath: "/tmp/output.mp4"),
+            route: TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc)
+        )
+
+        XCTAssertEqual(request.options.outputPolicy.videoCodec, .hevc)
+        XCTAssertEqual(request.options.outputPolicy.container, .mp4)
+        XCTAssertEqual(request.options.outputPolicy.qualityPolicy, .preserveSourceVisuals)
+        XCTAssertEqual(request.options.outputPolicy.advancedOptions, .preserveSource)
+        XCTAssertTrue(request.options.preserveSourceVisualQuality)
+        XCTAssertTrue(request.options.preserveAudioWhenPossible)
+    }
+
+    func testSourcePreservingOutputResolverFillsEmptyOptionsFromSourceTrack() {
+        let sourceColor = TaptionColorDescription(
+            primaries: .bt2020,
+            transfer: .hlg,
+            matrix: .bt2020NonConstantLuminance,
+            bitDepth: 10,
+            isHDR: true
+        )
+        let track = TaptionVideoTrackInfo(
+            codec: .av1,
+            naturalSize: TaptionPixelSize(width: 3840, height: 2160),
+            displaySize: TaptionPixelSize(width: 2160, height: 3840),
+            nominalFrameRate: TaptionRationalFrameRate(numerator: 60000, denominator: 1001),
+            estimatedBitrate: 82_000_000,
+            color: sourceColor,
+            rotationDegrees: 90
+        )
+        let asset = TaptionVideoAsset(
+            displayName: "hdr-portrait-av1.mp4",
+            location: TaptionVideoAssetLocation(kind: .file),
+            container: .mp4,
+            videoTrack: track
+        )
+
+        let policy = TaptionSourcePreservingOutputPolicyResolver.resolvedPolicy(
+            for: asset,
+            requestedPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4)
+        )
+
+        XCTAssertEqual(policy.videoCodec, .hevc)
+        XCTAssertEqual(policy.container, .mp4)
+        XCTAssertEqual(policy.qualityPolicy, .preserveSourceVisuals)
+        XCTAssertEqual(policy.advancedOptions.resizeTo, track.displaySize)
+        XCTAssertEqual(policy.advancedOptions.frameRate, track.nominalFrameRate)
+        XCTAssertEqual(policy.advancedOptions.targetBitrate, track.estimatedBitrate)
+        XCTAssertEqual(policy.advancedOptions.color, sourceColor)
+        XCTAssertEqual(policy.advancedOptions.rotationDegrees, 90)
+    }
+
+    func testSourcePreservingOutputResolverKeepsExplicitAdvancedOptions() {
+        let track = TaptionVideoTrackInfo(
+            codec: .av1,
+            naturalSize: TaptionPixelSize(width: 3840, height: 2160),
+            displaySize: TaptionPixelSize(width: 3840, height: 2160),
+            nominalFrameRate: TaptionRationalFrameRate(numerator: 60),
+            estimatedBitrate: 82_000_000,
+            color: TaptionColorDescription(primaries: .bt2020, transfer: .pq, matrix: .bt2020NonConstantLuminance, bitDepth: 10, isHDR: true),
+            rotationDegrees: 0
+        )
+        let explicitOptions = TaptionAdvancedOutputOptions(
+            resizeTo: TaptionPixelSize(width: 1280, height: 720),
+            frameRate: TaptionRationalFrameRate(numerator: 24),
+            targetBitrate: 6_000_000,
+            color: TaptionColorDescription(primaries: .bt709, transfer: .bt709, matrix: .bt709, bitDepth: 8, isHDR: false),
+            rotationDegrees: 180
+        )
+        let asset = TaptionVideoAsset(
+            displayName: "custom-output.mp4",
+            location: TaptionVideoAssetLocation(kind: .file),
+            container: .mp4,
+            videoTrack: track
+        )
+        let requestedPolicy = TaptionVideoOutputPolicy(
+            videoCodec: .h264,
+            container: .mkv,
+            qualityPolicy: .preserveSourceVisuals,
+            advancedOptions: explicitOptions
+        )
+
+        let policy = TaptionSourcePreservingOutputPolicyResolver.resolvedPolicy(
+            for: asset,
+            requestedPolicy: requestedPolicy
+        )
+
+        XCTAssertEqual(policy.advancedOptions, explicitOptions)
+    }
+
+    func testOutputSelectionOnlyMarksCurrentImplementedOutputAsRunnable() {
+        XCTAssertTrue(TaptionOutputSelection(videoCodec: .hevc, container: .mp4).isImplementedNow)
+        XCTAssertFalse(TaptionOutputSelection(videoCodec: .hevc, container: .mov).isImplementedNow)
+        XCTAssertFalse(TaptionOutputSelection(videoCodec: .h264, container: .mp4).isImplementedNow)
+    }
+
+    func testOutputCatalogSeparatesImplementedCommandPlanReadyPlannedAndUnsupportedOutputs() {
+        XCTAssertEqual(
+            TaptionCodecOutputCatalog.implementationState(videoCodec: .hevc, container: .mp4),
+            .implemented
+        )
+        XCTAssertEqual(
+            TaptionCodecOutputCatalog.implementationState(videoCodec: .h264, container: .mp4),
+            .commandPlanReady
+        )
+        XCTAssertEqual(
+            TaptionCodecOutputCatalog.implementationState(videoCodec: .hevc, container: .mov),
+            .commandPlanReady
+        )
+        XCTAssertEqual(
+            TaptionCodecOutputCatalog.implementationState(videoCodec: .proResRaw, container: .mkv),
+            .planned
+        )
+        XCTAssertEqual(
+            TaptionCodecOutputCatalog.implementationState(videoCodec: .unknown, container: .mp4),
+            .unsupported
+        )
+    }
+
+    func testOutputReadinessCatalogReportSummarizesSelectorMatrix() {
+        let report = TaptionCodecOutputCatalog.makeReadinessReport()
+        let expectedOutputSelectionCount = TaptionCodecOutputCatalog.selectableVideoCodecs.count
+            * TaptionCodecOutputCatalog.selectableContainers.count
+
+        XCTAssertEqual(report.videoCodecCount, TaptionCodecOutputCatalog.selectableVideoCodecs.count)
+        XCTAssertEqual(report.containerCount, TaptionCodecOutputCatalog.selectableContainers.count)
+        XCTAssertEqual(report.outputSelectionCount, expectedOutputSelectionCount)
+        XCTAssertEqual(report.items.count, expectedOutputSelectionCount)
+        XCTAssertTrue(report.stateCountsAreConsistent)
+        XCTAssertTrue(report.outputSelectionCoverageIsPassing)
+        XCTAssertEqual(report.defaultOutputCodec, .hevc)
+        XCTAssertEqual(report.defaultOutputContainer, .mp4)
+        XCTAssertEqual(report.defaultOutputState, .implemented)
+        XCTAssertEqual(report.firstReleaseOutputCodecs, TaptionCodecRegistry.firstReleaseOutputCodecs)
+        XCTAssertEqual(report.implementedOutputSelectionCount, 1)
+        XCTAssertGreaterThan(report.commandPlanReadyOutputSelectionCount, 0)
+        XCTAssertGreaterThan(report.plannedOutputSelectionCount, 0)
+        XCTAssertEqual(report.unsupportedOutputSelectionCount, 0)
+
+        let currentBuildItem = report.items.first {
+            $0.videoCodec == .hevc && $0.container == .mp4
+        }
+        let commandPlanItem = report.items.first {
+            $0.videoCodec == .h264 && $0.container == .mp4
+        }
+        let plannedItem = report.items.first {
+            $0.videoCodec == .proResRaw && $0.container == .mkv
+        }
+
+        XCTAssertEqual(currentBuildItem?.state, .implemented)
+        XCTAssertNil(currentBuildItem?.note)
+        XCTAssertEqual(commandPlanItem?.state, .commandPlanReady)
+        XCTAssertTrue(commandPlanItem?.note?.contains("software command plan") == true)
+        XCTAssertEqual(plannedItem?.state, .planned)
+        XCTAssertTrue(plannedItem?.note?.contains("universal codec update") == true)
+    }
+
+    func testOutputCatalogCombinesRouteAndContainerReadiness() {
+        XCTAssertEqual(
+            TaptionCodecOutputCatalog.routeImplementationState(
+                sourceCodec: .av1,
+                outputCodec: .hevc,
+                container: .mp4
+            ),
+            .implemented
+        )
+        XCTAssertEqual(
+            TaptionCodecOutputCatalog.routeImplementationState(
+                sourceCodec: .av1,
+                outputCodec: .hevc,
+                container: .mov
+            ),
+            .commandPlanReady
+        )
+        XCTAssertEqual(
+            TaptionCodecOutputCatalog.routeImplementationState(
+                sourceCodec: .h264,
+                outputCodec: .av1,
+                container: .mkv
+            ),
+            .commandPlanReady
+        )
+        XCTAssertEqual(
+            TaptionCodecOutputCatalog.routeImplementationState(
+                sourceCodec: .av1,
+                outputCodec: .h264,
+                container: .mp4
+            ),
+            .commandPlanReady
+        )
+        XCTAssertEqual(
+            TaptionCodecOutputCatalog.routeImplementationState(
+                sourceCodec: .unknown,
+                outputCodec: .hevc,
+                container: .mp4
+            ),
+            .unsupported
+        )
+    }
+
+    func testGenericSingleAssetPlanKeepsSelectedOutputPolicy() throws {
+        let asset = makeAsset(sourceCodec: .av1)
+        let sourceURL = URL(fileURLWithPath: "/tmp/input.mp4")
+        let temporaryURL = URL(fileURLWithPath: "/tmp/output.avi")
+        let outputPolicy = TaptionVideoOutputPolicy(
+            videoCodec: .h264,
+            container: .avi,
+            profile: .automatic,
+            qualityPolicy: .preserveSourceVisuals,
+            advancedOptions: .preserveSource
+        )
+
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: asset,
+            sourceURL: sourceURL,
+            temporaryOutputURL: temporaryURL,
+            outputPolicy: outputPolicy
+        )
+
+        XCTAssertEqual(plan.outputPolicy.videoCodec, outputPolicy.videoCodec)
+        XCTAssertEqual(plan.outputPolicy.container, outputPolicy.container)
+        XCTAssertEqual(plan.outputPolicy.profile, outputPolicy.profile)
+        XCTAssertEqual(plan.outputPolicy.qualityPolicy, outputPolicy.qualityPolicy)
+        XCTAssertEqual(plan.outputPolicy.advancedOptions.resizeTo, TaptionPixelSize(width: 1920, height: 1080))
+        XCTAssertEqual(plan.outputPolicy.advancedOptions.frameRate, TaptionRationalFrameRate(numerator: 30))
+        XCTAssertEqual(plan.outputPolicy.advancedOptions.color, TaptionColorDescription())
+        XCTAssertEqual(plan.outputPolicy.advancedOptions.rotationDegrees, 0)
+        XCTAssertEqual(plan.codecRoute, TaptionCodecRoute(sourceCodec: .av1, outputCodec: .h264))
+        XCTAssertEqual(plan.codecExecutionKind, .planned)
+        XCTAssertEqual(plan.finalOutputURL?.path, "/tmp/input_taption.avi")
+        XCTAssertEqual(plan.encoderSelection.requestedMode, .automatic)
+        XCTAssertEqual(plan.videoCommandPlan?.routeSummary, "AV1 to H.264 / AVC")
+        XCTAssertTrue(plan.videoCommandPlan?.arguments.contains("libx264") == true)
+        XCTAssertEqual(
+            try SW_FFmpegCodecCommandPlanner.makeSingleAssetCommandPlan(plan: plan),
+            plan.videoCommandPlan
+        )
+    }
+
+    func testSingleAssetPlanCarriesSourcePreservingAudioTranscodePlan() {
+        let asset = TaptionVideoAsset(
+            displayName: "vp9-opus.webm",
+            location: TaptionVideoAssetLocation(kind: .file),
+            container: .webm,
+            duration: 2,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .vp9,
+                naturalSize: TaptionPixelSize(width: 1920, height: 1080),
+                displaySize: TaptionPixelSize(width: 1920, height: 1080),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 30)
+            ),
+            audioTracks: [
+                TaptionAudioTrackInfo(
+                    codec: .opus,
+                    channelCount: 6,
+                    sampleRate: 48_000,
+                    estimatedBitrate: 512_000
+                )
+            ]
+        )
+
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: asset,
+            sourceURL: URL(fileURLWithPath: "/tmp/vp9-opus.webm"),
+            temporaryOutputURL: URL(fileURLWithPath: "/tmp/vp9-opus_taption.mp4"),
+            outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4)
+        )
+
+        let audioPlan = plan.audioPlan
+        XCTAssertEqual(audioPlan?.trackIndex, 0)
+        XCTAssertEqual(audioPlan?.route, TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .aac))
+        XCTAssertEqual(audioPlan?.routeSelection.support, .softwareTranscode)
+        XCTAssertEqual(audioPlan?.shortDisplayName, "SW")
+        XCTAssertEqual(audioPlan?.readiness.readiness, .commandPlanOnly)
+        XCTAssertFalse(audioPlan?.isRunnableInCurrentBuild ?? true)
+        XCTAssertEqual(audioPlan?.options.sampleRate, 48_000)
+        XCTAssertEqual(audioPlan?.options.channelCount, 6)
+        XCTAssertEqual(audioPlan?.options.targetBitrate, 512_000)
+        XCTAssertTrue(audioPlan?.commandPlan?.arguments.contains("aac") == true)
+        XCTAssertTrue(audioPlan?.commandPlan?.arguments.contains("48000") == true)
+        XCTAssertTrue(audioPlan?.commandPlan?.arguments.contains("6") == true)
+        XCTAssertTrue(audioPlan?.commandPlan?.arguments.contains("512000") == true)
+    }
+
+    func testSingleAssetSoftwareCommandPlanUsesAudioPlanPreservingOptions() throws {
+        let asset = TaptionVideoAsset(
+            displayName: "vp9-opus.webm",
+            location: TaptionVideoAssetLocation(kind: .file),
+            container: .webm,
+            duration: 2,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .vp9,
+                naturalSize: TaptionPixelSize(width: 1920, height: 1080),
+                displaySize: TaptionPixelSize(width: 1920, height: 1080),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 30)
+            ),
+            audioTracks: [
+                TaptionAudioTrackInfo(
+                    codec: .opus,
+                    channelCount: 6,
+                    sampleRate: 48_000,
+                    estimatedBitrate: 512_000
+                )
+            ]
+        )
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: asset,
+            sourceURL: URL(fileURLWithPath: "/tmp/vp9-opus.webm"),
+            temporaryOutputURL: URL(fileURLWithPath: "/tmp/vp9-opus_taption.mp4"),
+            outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4)
+        )
+
+        let commandPlan = try SW_FFmpegCodecCommandPlanner.makeSingleAssetCommandPlan(plan: plan)
+
+        XCTAssertEqual(commandPlan, plan.videoCommandPlan)
+        XCTAssertEqual(commandPlan.routeSummary, "VP9 to H.265 / HEVC")
+        XCTAssertTrue(commandPlan.arguments.contains("-map"))
+        XCTAssertTrue(commandPlan.arguments.contains("0:a?"))
+        XCTAssertTrue(commandPlan.arguments.contains("libx265"))
+        XCTAssertTrue(commandPlan.arguments.contains("-c:a"))
+        XCTAssertTrue(commandPlan.arguments.contains("aac"))
+        XCTAssertTrue(commandPlan.arguments.contains("-ar"))
+        XCTAssertTrue(commandPlan.arguments.contains("48000"))
+        XCTAssertTrue(commandPlan.arguments.contains("-ac"))
+        XCTAssertTrue(commandPlan.arguments.contains("6"))
+        XCTAssertTrue(commandPlan.arguments.contains("-b:a"))
+        XCTAssertTrue(commandPlan.arguments.contains("512000"))
+        XCTAssertFalse(commandPlan.arguments.contains("-an"))
+    }
+
+    func testSingleAssetPlanOmitsVideoCommandPlanWhenOutputEncoderIsMissing() {
+        let asset = makeAsset(sourceCodec: .h264)
+
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: asset,
+            sourceURL: URL(fileURLWithPath: "/tmp/h264.mp4"),
+            temporaryOutputURL: URL(fileURLWithPath: "/tmp/h264-proresraw.mov"),
+            outputPolicy: TaptionVideoOutputPolicy(videoCodec: .proResRaw, container: .mov)
+        )
+
+        XCTAssertEqual(plan.codecRoute, TaptionCodecRoute(sourceCodec: .h264, outputCodec: .proResRaw))
+        XCTAssertEqual(plan.codecExecutionKind, .planned)
+        XCTAssertNil(plan.videoCommandPlan)
+    }
+
+    func testSingleAssetPlanCarriesAudioCopyPlanWhenContainerAllowsIt() {
+        let asset = makeAsset(sourceCodec: .h264)
+
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: asset,
+            sourceURL: URL(fileURLWithPath: "/tmp/h264-aac.mp4"),
+            temporaryOutputURL: URL(fileURLWithPath: "/tmp/h264-aac_taption.mp4"),
+            outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4)
+        )
+
+        XCTAssertEqual(plan.audioPlan?.route, TaptionAudioCodecRoute(sourceCodec: .aac, outputCodec: .aac))
+        XCTAssertEqual(plan.audioPlan?.routeSelection.support, .copy)
+        XCTAssertEqual(plan.audioPlan?.readiness.readiness, .copyInCurrentBuild)
+        XCTAssertTrue(plan.audioPlan?.shouldCopy == true)
+        XCTAssertTrue(plan.audioPlan?.isRunnableInCurrentBuild == true)
+        XCTAssertTrue(plan.audioPlan?.commandPlan?.arguments.contains("copy") == true)
+    }
+
+    func testSingleAssetPlanOmitsAudioPlanWhenSourceHasNoAudio() {
+        let asset = TaptionVideoAsset(
+            displayName: "silent-av1.mp4",
+            location: TaptionVideoAssetLocation(kind: .file),
+            container: .mp4,
+            duration: 1,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .av1,
+                naturalSize: TaptionPixelSize(width: 1920, height: 1080),
+                displaySize: TaptionPixelSize(width: 1920, height: 1080),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 30)
+            ),
+            audioTracks: []
+        )
+
+        let plan = TaptionEncodingPlanner.makeSingleAssetHEVCPlan(
+            asset: asset,
+            sourceURL: URL(fileURLWithPath: "/tmp/silent-av1.mp4"),
+            temporaryOutputURL: URL(fileURLWithPath: "/tmp/silent-av1_taption.mp4")
+        )
+
+        XCTAssertNil(plan.audioPlan)
+    }
+
+    func testSingleAssetSoftwareCommandPlanDisablesAudioWhenSourceHasNoAudio() throws {
+        let asset = TaptionVideoAsset(
+            displayName: "silent-vp9.webm",
+            location: TaptionVideoAssetLocation(kind: .file),
+            container: .webm,
+            duration: 1,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .vp9,
+                naturalSize: TaptionPixelSize(width: 1920, height: 1080),
+                displaySize: TaptionPixelSize(width: 1920, height: 1080),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 30)
+            ),
+            audioTracks: []
+        )
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: asset,
+            sourceURL: URL(fileURLWithPath: "/tmp/silent-vp9.webm"),
+            temporaryOutputURL: URL(fileURLWithPath: "/tmp/silent-vp9_taption.mp4"),
+            outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4)
+        )
+
+        let commandPlan = try SW_FFmpegCodecCommandPlanner.makeSingleAssetCommandPlan(plan: plan)
+
+        XCTAssertTrue(commandPlan.arguments.contains("-an"))
+        XCTAssertFalse(commandPlan.arguments.contains("0:a?"))
+        XCTAssertNil(plan.audioPlan)
+    }
+
+    func testEncodingStateDetailUsesSelectedOutputSummary() {
+        let progress = EncodingProgressSnapshot(
+            stage: .encoding,
+            fractionCompleted: 0.4,
+            elapsedTime: 3,
+            estimatedRemainingTime: 4,
+            backendLabel: "Path SW",
+            outputSummary: "H.264 / AVI"
+        )
+
+        let detail = HomeScreenState.encoding(progress).detail
+
+        XCTAssertEqual(detail, "Path SW is converting the source to H.264 / AVI.")
+        XCTAssertFalse(detail.contains("H.265"))
+    }
+
+    func testUnsupportedSourceCodecErrorSeparatesCurrentBuildFromUniversalRoadmap() {
+        let message = TaptionVideoCoreError.unsupportedSourceCodec(.h264).localizedDescription
+
+        XCTAssertTrue(message.contains("AV1 to H.265 / MP4 now"))
+        XCTAssertTrue(message.contains("H.264 / AVC"))
+        XCTAssertTrue(message.contains("universal codec roadmap"))
+        XCTAssertTrue(message.contains("not executable in this build yet"))
+    }
+
+    func testAudioCodecRoutesCoverEveryPlannedSourceToAAC() {
+        for sourceCodec in TaptionAudioCodecRoutePlanner.universalAudioCodecs {
+            let selection = TaptionAudioCodecRoutePlanner.selectRoute(
+                sourceCodec: sourceCodec,
+                outputCodec: .aac,
+                outputContainer: .mp4
+            )
+
+            XCTAssertNotEqual(selection.support, .unsupported, sourceCodec.rawValue)
+            XCTAssertTrue(selection.isSupportedNow, sourceCodec.rawValue)
+        }
+    }
+
+    func testUniversalAudioCodecMatrixCoversEverySourceAndOutputPair() {
+        let expectedRouteCount = TaptionAudioCodecRoutePlanner.universalAudioCodecs.count
+            * TaptionAudioCodecRoutePlanner.universalAudioCodecs.count
+
+        XCTAssertEqual(TaptionAudioCodecRoutePlanner.plannedUniversalRoutes.count, expectedRouteCount)
+
+        for sourceCodec in TaptionAudioCodecRoutePlanner.universalAudioCodecs {
+            for outputCodec in TaptionAudioCodecRoutePlanner.universalAudioCodecs {
+                let selection = TaptionAudioCodecRoutePlanner.selectRoute(
+                    sourceCodec: sourceCodec,
+                    outputCodec: outputCodec,
+                    outputContainer: .mkv
+                )
+                XCTAssertNotEqual(
+                    selection.support,
+                    .unsupported,
+                    "\(sourceCodec.rawValue) -> \(outputCodec.rawValue)"
+                )
+            }
+        }
+    }
+
+    func testUniversalAudioSoftwareAlgorithmCatalogCoversEveryPlannedRoute() {
+        let descriptors = SW_UniversalAudioCodecTranscodeAlgorithm.plannedDescriptors
+        let descriptorRoutes = Set(descriptors.map(\.route))
+
+        XCTAssertEqual(descriptorRoutes, TaptionAudioCodecRoutePlanner.plannedUniversalRoutes)
+        XCTAssertTrue(descriptors.allSatisfy { $0.mode == .software })
+        XCTAssertTrue(descriptors.allSatisfy { $0.backend == .ffmpegFamily })
+    }
+
+    func testAudioDescriptorRegistrySeparatesHardwareSoftwareAndBlockedRoutes() {
+        let registry = TaptionAudioCodecDescriptorRegistry.live
+        let copyRoute = TaptionAudioCodecRoute(sourceCodec: .aac, outputCodec: .aac)
+        let nativeRoute = TaptionAudioCodecRoute(sourceCodec: .aac, outputCodec: .pcm)
+        let softwareRoute = TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .flac)
+        let blockedRoute = TaptionAudioCodecRoute(sourceCodec: .aac, outputCodec: .xheAAC)
+
+        XCTAssertTrue(registry.hardwareDescriptors.allSatisfy { $0.mode == .hardware })
+        XCTAssertTrue(registry.hardwareDescriptors.allSatisfy { $0.backend == .appleAVAssetExport })
+        XCTAssertTrue(registry.softwareDescriptors.allSatisfy { $0.mode == .software })
+        XCTAssertTrue(registry.softwareDescriptors.allSatisfy { $0.backend == .ffmpegFamily })
+
+        let copyDescriptor = registry.preferredDescriptor(for: copyRoute)
+        XCTAssertEqual(copyDescriptor?.mode, .hardware)
+        XCTAssertEqual(copyDescriptor?.backend, .appleAVAssetExport)
+        XCTAssertEqual(copyDescriptor?.displayName, "AAC Copy")
+
+        let nativeDescriptor = registry.preferredDescriptor(for: nativeRoute)
+        XCTAssertEqual(nativeDescriptor?.mode, .hardware)
+        XCTAssertEqual(nativeDescriptor?.backend, .appleAVAssetExport)
+        XCTAssertTrue(nativeDescriptor?.displayName.contains("Apple Native") == true)
+
+        let softwareDescriptor = registry.preferredDescriptor(for: softwareRoute)
+        XCTAssertEqual(softwareDescriptor?.mode, .software)
+        XCTAssertEqual(softwareDescriptor?.backend, .ffmpegFamily)
+
+        XCTAssertNil(registry.preferredDescriptor(for: blockedRoute))
+        XCTAssertTrue(registry.descriptors(for: copyRoute).contains { $0.mode == .hardware })
+        XCTAssertTrue(registry.descriptors(for: copyRoute).contains { $0.mode == .software })
+    }
+
+    func testLoadedAudioPathInfoSummarizesFileCardAudioRoutes() {
+        let noAudio = LoadedAudioPathInfo.make(
+            firstAudioTrack: nil,
+            trackCount: 0,
+            outputContainer: .mp4
+        )
+        let copy = LoadedAudioPathInfo.make(
+            firstAudioTrack: TaptionAudioTrackInfo(codec: .aac),
+            trackCount: 1,
+            outputContainer: .mp4
+        )
+        let native = LoadedAudioPathInfo.make(
+            firstAudioTrack: TaptionAudioTrackInfo(codec: .xheAAC),
+            trackCount: 1,
+            outputContainer: .mp4
+        )
+        let software = LoadedAudioPathInfo.make(
+            firstAudioTrack: TaptionAudioTrackInfo(codec: .opus),
+            trackCount: 2,
+            outputContainer: .mp4
+        )
+        let unsupported = LoadedAudioPathInfo.make(
+            firstAudioTrack: TaptionAudioTrackInfo(codec: .unknown),
+            trackCount: 1,
+            outputContainer: .mp4
+        )
+
+        XCTAssertEqual(noAudio.title, "No Audio")
+        XCTAssertEqual(noAudio.outputSummary, "None")
+
+        XCTAssertEqual(copy.title, "Audio Copy")
+        XCTAssertEqual(copy.outputSummary, "AAC")
+        XCTAssertTrue(copy.detail.contains("AAC to AAC"))
+
+        XCTAssertEqual(native.title, "Audio HW")
+        XCTAssertEqual(native.outputSummary, "AAC")
+        XCTAssertTrue(native.detail.contains("xHE-AAC to AAC"))
+
+        XCTAssertEqual(software.title, "Audio SW")
+        XCTAssertEqual(software.outputSummary, "AAC")
+        XCTAssertTrue(software.detail.contains("Opus to AAC"))
+        XCTAssertTrue(software.detail.contains("first of 2 audio tracks"))
+
+        XCTAssertEqual(unsupported.title, "Audio Unsupported")
+        XCTAssertEqual(unsupported.outputSummary, "AAC")
+    }
+
+    func testLoadedVideoPathInfoSummarizesCurrentPlannedAndBlockedRoutes() {
+        let implemented = LoadedVideoPathInfo.make(
+            sourceCodec: .av1,
+            routeSelection: selectRoute(
+                sourceCodec: .av1,
+                outputCodec: .hevc,
+                profile: .softwareOnly
+            ),
+            outputSelection: TaptionOutputSelection(videoCodec: .hevc, container: .mp4)
+        )
+        let planned = LoadedVideoPathInfo.make(
+            sourceCodec: .h264,
+            routeSelection: selectRoute(
+                sourceCodec: .h264,
+                outputCodec: .av1,
+                profile: .h264HEVCHardware
+            ),
+            outputSelection: TaptionOutputSelection(videoCodec: .av1, container: .mkv)
+        )
+        let blocked = LoadedVideoPathInfo.make(
+            sourceCodec: .h264,
+            routeSelection: selectRoute(
+                sourceCodec: .h264,
+                outputCodec: .proResRaw,
+                profile: .h264HEVCHardware
+            ),
+            outputSelection: TaptionOutputSelection(videoCodec: .proResRaw, container: .mkv)
+        )
+
+        XCTAssertEqual(implemented.title, "Path SW")
+        XCTAssertEqual(implemented.outputSummary, "H.265 / MP4")
+        XCTAssertTrue(implemented.isRouteEncodable, "\(implemented)")
+        XCTAssertTrue(implemented.detail.contains("software fallback"), implemented.detail)
+
+        XCTAssertEqual(planned.title, "Path SW Plan Ready")
+        XCTAssertEqual(planned.outputSummary, "AV1 / MKV")
+        XCTAssertFalse(planned.isRouteEncodable)
+        XCTAssertTrue(planned.detail.contains("FFmpeg-family backend command can be planned"))
+        XCTAssertTrue(planned.detail.contains("AV1 / MKV output has a software command plan"))
+
+        XCTAssertEqual(blocked.title, "Path SW Blocked")
+        XCTAssertEqual(blocked.outputSummary, "Apple ProRes RAW / MKV")
+        XCTAssertFalse(blocked.isRouteEncodable)
+        XCTAssertTrue(blocked.detail.contains("Apple ProRes RAW has no selected software video encoder"))
+    }
+
+    func testLoadedVideoInfoReadinessStatusTextDistinguishesPlannedStates() {
+        var info = LoadedVideoInfo(
+            fileName: "sample.mp4",
+            inputSummary: "H.264 / MP4",
+            resolution: "1920x1080",
+            frameRate: "30 fps",
+            duration: "00:01",
+            audio: "AAC",
+            fileSize: "1 MB",
+            codecPathTitle: "Path SW Plan Ready",
+            codecPathDetail: "Command plan only.",
+            outputSummary: "AV1 / MKV",
+            outputName: "sample_taption.mkv",
+            isRouteEncodable: false
+        )
+
+        XCTAssertEqual(info.readinessStatusText, "Plan Ready")
+
+        info.codecPathTitle = "Path SW Blocked"
+        XCTAssertEqual(info.readinessStatusText, "Blocked")
+
+        info.codecPathTitle = "Path Unsupported"
+        XCTAssertEqual(info.readinessStatusText, "Unsupported")
+
+        info.isRouteEncodable = true
+        XCTAssertEqual(info.readinessStatusText, "Ready")
+    }
+
+    func testUniversalAudioTranscodeRequestDefaultsPreserveSourceQuality() {
+        let request = TaptionAudioCodecTranscodeRequest(
+            sourceURL: URL(fileURLWithPath: "/tmp/input.mkv"),
+            outputURL: URL(fileURLWithPath: "/tmp/output.mkv"),
+            route: TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .flac),
+            options: .preservingSource(outputCodec: .flac, outputContainer: .mkv)
+        )
+
+        XCTAssertEqual(request.options.outputCodec, .flac)
+        XCTAssertEqual(request.options.outputContainer, .mkv)
+        XCTAssertTrue(request.options.preserveSourceQuality)
+        XCTAssertTrue(request.options.preserveSampleRate)
+        XCTAssertTrue(request.options.preserveChannelLayout)
+        XCTAssertNil(request.options.targetBitrate)
+        XCTAssertNil(request.options.sampleRate)
+        XCTAssertNil(request.options.channelCount)
+    }
+
+    func testSourcePreservingAudioOptionsResolverFillsTrackDefaults() {
+        let sourceTrack = TaptionAudioTrackInfo(
+            codec: .opus,
+            channelCount: 6,
+            sampleRate: 48_000,
+            estimatedBitrate: 512_000
+        )
+        let options = TaptionSourcePreservingAudioOptionsResolver.resolvedOptions(
+            for: sourceTrack,
+            requestedOptions: .preservingSource(outputCodec: .aac, outputContainer: .mp4)
+        )
+
+        XCTAssertEqual(options.sampleRate, 48_000)
+        XCTAssertEqual(options.channelCount, 6)
+        XCTAssertEqual(options.targetBitrate, 512_000)
+    }
+
+    func testSourcePreservingAudioOptionsResolverKeepsExplicitOverrides() {
+        let sourceTrack = TaptionAudioTrackInfo(
+            codec: .opus,
+            channelCount: 6,
+            sampleRate: 48_000,
+            estimatedBitrate: 512_000
+        )
+        let explicitOptions = TaptionAudioCodecTranscodeOptions(
+            outputCodec: .aac,
+            outputContainer: .mp4,
+            preserveSourceQuality: true,
+            preserveSampleRate: true,
+            preserveChannelLayout: true,
+            targetBitrate: 192_000,
+            sampleRate: 44_100,
+            channelCount: 2
+        )
+        let options = TaptionSourcePreservingAudioOptionsResolver.resolvedOptions(
+            for: sourceTrack,
+            requestedOptions: explicitOptions
+        )
+
+        XCTAssertEqual(options, explicitOptions)
+    }
+
+    func testAudioFormatDescriptionParserExtractsCodecSampleRateAndChannels() throws {
+        let description = try makeAudioDescription(
+            formatID: kAudioFormatMPEG4AAC,
+            sampleRate: 48_000,
+            channelCount: 6,
+            framesPerPacket: 1024
+        )
+
+        let info = TaptionAudioFormatDescriptionParser.trackInfo(
+            from: [description],
+            estimatedBitrate: 512_000
+        )
+
+        XCTAssertEqual(info.codec, .aac)
+        XCTAssertEqual(info.sampleRate, 48_000)
+        XCTAssertEqual(info.channelCount, 6)
+        XCTAssertEqual(info.estimatedBitrate, 512_000)
+    }
+
+    func testAudioFormatDescriptionParserHandlesLinearPCM() throws {
+        let description = try makeAudioDescription(
+            formatID: kAudioFormatLinearPCM,
+            sampleRate: 44_100,
+            channelCount: 2,
+            formatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
+            bytesPerPacket: 4,
+            framesPerPacket: 1,
+            bytesPerFrame: 4,
+            bitsPerChannel: 16
+        )
+
+        let info = TaptionAudioFormatDescriptionParser.trackInfo(
+            from: [description],
+            estimatedBitrate: nil
+        )
+
+        XCTAssertEqual(info.codec, .pcm)
+        XCTAssertEqual(info.sampleRate, 44_100)
+        XCTAssertEqual(info.channelCount, 2)
+        XCTAssertNil(info.estimatedBitrate)
+    }
+
+    func testAudioFormatDescriptionParserKeepsMissingDescriptionUnknown() {
+        let info = TaptionAudioFormatDescriptionParser.trackInfo(
+            from: [],
+            estimatedBitrate: nil
+        )
+
+        XCTAssertEqual(info.codec, .unknown)
+        XCTAssertNil(info.sampleRate)
+        XCTAssertNil(info.channelCount)
+        XCTAssertNil(info.estimatedBitrate)
+    }
+
+    func testUniversalAudioSoftwareAlgorithmReportsBundledBackendMissingUntilImplementationLands() async {
+        let route = TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .flac)
+        let request = TaptionAudioCodecTranscodeRequest(
+            sourceURL: URL(fileURLWithPath: "/tmp/input.webm"),
+            outputURL: URL(fileURLWithPath: "/tmp/output.mkv"),
+            route: route,
+            options: .preservingSource(outputCodec: .flac, outputContainer: .mkv)
+        )
+
+        do {
+            _ = try await SW_UniversalAudioCodecTranscodeAlgorithm.transcode(
+                request: request,
+                progress: { _ in }
+            )
+            XCTFail("Universal software audio transcode should stay unavailable until the broad backend is bundled.")
+        } catch let error as TaptionUniversalAudioCodecError {
+            XCTAssertEqual(error, .backendNotBundled(.ffmpegFamily, route))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testFFmpegAudioCodecTranscodeExecutorBlocksUntilReadinessGatesClose() async throws {
+        let route = TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .flac)
+        let request = TaptionAudioCodecTranscodeRequest(
+            sourceURL: URL(fileURLWithPath: "/tmp/input.webm"),
+            outputURL: URL(fileURLWithPath: "/tmp/output.mkv"),
+            route: route,
+            options: .preservingSource(outputCodec: .flac, outputContainer: .mkv)
+        )
+        let audioExecutor = SW_FFmpegAudioCodecTranscodeExecutor(
+            executor: SW_FFmpegCommandExecutor(
+                readinessReport: SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport(),
+                runner: FakeFFmpegCommandRunner { _ in
+                    XCTFail("Runner should not execute while broad software backend gates are open.")
+                    return SW_FFmpegCommandRunResult(exitCode: 0)
+                }
+            )
+        )
+
+        do {
+            _ = try await audioExecutor.transcode(request: request, progress: { _ in })
+            XCTFail("Audio executor should block until the broad software backend is executable.")
+        } catch let error as SW_FFmpegCommandExecutionError {
+            guard case .backendNotExecutable(let openGates) = error else {
+                XCTFail("Unexpected execution error: \(error)")
+                return
+            }
+            XCTAssertEqual(Set(openGates), Set(TaptionSoftwareCodecBackendReadinessGate.allCases))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testFFmpegAudioCodecTranscodeExecutorRunsThroughInjectedRunnerWhenReady() async throws {
+        let outputURL = temporaryTestURL(fileName: "opus-to-flac.mkv")
+        try? FileManager.default.removeItem(at: outputURL)
+        let route = TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .flac)
+        let request = TaptionAudioCodecTranscodeRequest(
+            sourceURL: URL(fileURLWithPath: "/tmp/input.webm"),
+            outputURL: outputURL,
+            route: route,
+            options: .preservingSource(outputCodec: .flac, outputContainer: .mkv)
+        )
+        let audioExecutor = SW_FFmpegAudioCodecTranscodeExecutor(
+            executor: SW_FFmpegCommandExecutor(
+                readinessReport: readyBroadSoftwareBackendReport(),
+                runner: FakeFFmpegCommandRunner { commandPlan in
+                    XCTAssertEqual(commandPlan.routeSummary, route.displayName)
+                    XCTAssertTrue(commandPlan.arguments.contains("flac"))
+                    try FileManager.default.createDirectory(
+                        at: commandPlan.outputURL.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                    try Data("fake audio output".utf8).write(to: commandPlan.outputURL)
+                    return SW_FFmpegCommandRunResult(exitCode: 0, stdout: "audio encoded", stderr: "size=1kB")
+                }
+            )
+        )
+        var progressStages: [TaptionEncodingStage] = []
+
+        let output = try await audioExecutor.transcode(request: request) { progress in
+            progressStages.append(progress.stage)
+        }
+
+        XCTAssertEqual(output.outputURL, outputURL)
+        XCTAssertEqual(output.route, route)
+        XCTAssertEqual(output.usedMode, .software)
+        XCTAssertEqual(output.usedBackend, .ffmpegFamily)
+        XCTAssertEqual(output.outputAudioCodec, .flac)
+        XCTAssertEqual(output.outputContainer, .mkv)
+        XCTAssertEqual(progressStages, [.preparing, .encoding, .completed])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+
+        try? FileManager.default.removeItem(at: outputURL)
+    }
+
+    func testUniversalAudioCommandPlanBuildsTranscodeAndCopyRoutes() throws {
+        let opusToFLAC = TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .flac)
+        let opusPlan = try SW_FFmpegCodecCommandPlanner.makeAudioCommandPlan(
+            request: TaptionAudioCodecTranscodeRequest(
+                sourceURL: URL(fileURLWithPath: "/tmp/opus.webm"),
+                outputURL: URL(fileURLWithPath: "/tmp/flac.mkv"),
+                route: opusToFLAC,
+                options: .preservingSource(outputCodec: .flac, outputContainer: .mkv)
+            )
+        )
+        let aacRoute = TaptionAudioCodecRoute(sourceCodec: .aac, outputCodec: .aac)
+        let aacPlan = try SW_FFmpegCodecCommandPlanner.makeAudioCommandPlan(
+            request: TaptionAudioCodecTranscodeRequest(
+                sourceURL: URL(fileURLWithPath: "/tmp/aac.mp4"),
+                outputURL: URL(fileURLWithPath: "/tmp/aac-copy.mp4"),
+                route: aacRoute,
+                options: .preservingSource(outputCodec: .aac, outputContainer: .mp4)
+            )
+        )
+
+        XCTAssertEqual(opusPlan.routeSummary, opusToFLAC.displayName)
+        XCTAssertTrue(opusPlan.arguments.contains("flac"))
+        XCTAssertTrue(opusPlan.arguments.contains("/tmp/flac.mkv"))
+
+        XCTAssertEqual(aacPlan.routeSummary, aacRoute.displayName)
+        XCTAssertTrue(aacPlan.arguments.contains("copy"))
+        XCTAssertTrue(aacPlan.notes.contains("Audio can be copied without transcoding."))
+    }
+
+    func testUniversalAudioCommandPlanAppliesSourcePreservingAudioOptions() throws {
+        let route = TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .aac)
+        let sourceTrack = TaptionAudioTrackInfo(
+            codec: .opus,
+            channelCount: 6,
+            sampleRate: 48_000,
+            estimatedBitrate: 512_000
+        )
+        let options = TaptionSourcePreservingAudioOptionsResolver.resolvedOptions(
+            for: sourceTrack,
+            requestedOptions: .preservingSource(outputCodec: .aac, outputContainer: .mp4)
+        )
+
+        let plan = try SW_FFmpegCodecCommandPlanner.makeAudioCommandPlan(
+            request: TaptionAudioCodecTranscodeRequest(
+                sourceURL: URL(fileURLWithPath: "/tmp/opus.webm"),
+                outputURL: URL(fileURLWithPath: "/tmp/aac.mp4"),
+                route: route,
+                options: options
+            )
+        )
+
+        XCTAssertTrue(plan.arguments.contains("aac"))
+        XCTAssertTrue(plan.arguments.contains("-ar"))
+        XCTAssertTrue(plan.arguments.contains("48000"))
+        XCTAssertTrue(plan.arguments.contains("-ac"))
+        XCTAssertTrue(plan.arguments.contains("6"))
+        XCTAssertTrue(plan.arguments.contains("-b:a"))
+        XCTAssertTrue(plan.arguments.contains("512000"))
+    }
+
+    func testVideoExecutionReadinessReportSeparatesCurrentBuildCommandPlansAndEncoderGaps() {
+        let report = TaptionVideoCodecExecutionReadinessReporter.makeReport(outputContainer: .mkv)
+        let expectedRouteCount = TaptionCodecRegistry.universalSourceCodecs.count
+            * TaptionCodecRegistry.universalOutputCodecs.count
+
+        XCTAssertEqual(report.routeCount, expectedRouteCount)
+        XCTAssertTrue(report.allRoutesHaveExecutionPath)
+        XCTAssertFalse(report.allRoutesRunnableInCurrentBuild)
+        XCTAssertEqual(report.runnableInCurrentBuildRouteCount, TaptionCodecRegistry.implementedRoutes.count)
+        XCTAssertEqual(report.implementedRouteCount, TaptionCodecRegistry.implementedRoutes.count)
+        XCTAssertGreaterThan(report.commandPlanOnlyRouteCount, 0)
+        XCTAssertGreaterThan(report.blockedMissingSoftwareEncoderRouteCount, 0)
+        XCTAssertEqual(
+            Set(report.blockedOutputCodecs),
+            Set(SW_FFmpegCodecCommandPlanner.commandUnsupportedVideoOutputCodecs)
+        )
+
+        let implementedItem = TaptionVideoCodecExecutionReadinessReporter.item(
+            for: TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc),
+            outputContainer: .mkv
+        )
+        XCTAssertEqual(implementedItem.readiness, .implementedInCurrentBuild)
+        XCTAssertTrue(implementedItem.isRunnableInCurrentBuild)
+        XCTAssertTrue(implementedItem.hasCommandPlan)
+
+        let commandOnlyItem = TaptionVideoCodecExecutionReadinessReporter.item(
+            for: TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1),
+            outputContainer: .mkv
+        )
+        XCTAssertEqual(commandOnlyItem.readiness, .commandPlanOnly)
+        XCTAssertFalse(commandOnlyItem.isRunnableInCurrentBuild)
+        XCTAssertTrue(commandOnlyItem.hasCommandPlan)
+        XCTAssertEqual(commandOnlyItem.commandBackend, .ffmpegFamily)
+
+        let blockedItem = TaptionVideoCodecExecutionReadinessReporter.item(
+            for: TaptionCodecRoute(sourceCodec: .h264, outputCodec: .proResRaw),
+            outputContainer: .mkv
+        )
+        XCTAssertEqual(blockedItem.readiness, .blockedMissingSoftwareEncoder)
+        XCTAssertFalse(blockedItem.isRunnableInCurrentBuild)
+        XCTAssertFalse(blockedItem.hasCommandPlan)
+        XCTAssertTrue(blockedItem.blockingReason?.contains("Apple ProRes RAW") == true)
+    }
+
+    func testVideoExecutionReadinessReportPromotesCommandPlansWhenBroadBackendShips() {
+        let item = TaptionVideoCodecExecutionReadinessReporter.item(
+            for: TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1),
+            outputContainer: .mkv,
+            broadSoftwareBackendExecutable: true
+        )
+        let report = TaptionVideoCodecExecutionReadinessReporter.makeReport(
+            outputContainer: .mkv,
+            broadSoftwareBackendExecutable: true
+        )
+
+        XCTAssertEqual(item.readiness, .softwareBackendExecutable)
+        XCTAssertTrue(item.isRunnableInCurrentBuild)
+        XCTAssertTrue(item.hasCommandPlan)
+        XCTAssertEqual(report.commandPlanOnlyRouteCount, 0)
+        XCTAssertGreaterThan(report.softwareBackendExecutableRouteCount, 0)
+        XCTAssertFalse(report.allRoutesRunnableInCurrentBuild)
+        XCTAssertEqual(
+            Set(report.blockedOutputCodecs),
+            Set(SW_FFmpegCodecCommandPlanner.commandUnsupportedVideoOutputCodecs)
+        )
+    }
+
+    func testAudioExecutionReadinessReportSeparatesCurrentBuildCommandPlansAndEncoderGaps() {
+        let report = TaptionAudioCodecExecutionReadinessReporter.makeReport(outputContainer: .mkv)
+        let expectedRouteCount = TaptionAudioCodecRoutePlanner.universalAudioCodecs.count
+            * TaptionAudioCodecRoutePlanner.universalAudioCodecs.count
+
+        XCTAssertEqual(report.routeCount, expectedRouteCount)
+        XCTAssertTrue(report.allRoutesHaveExecutionPath)
+        XCTAssertFalse(report.allRoutesRunnableInCurrentBuild)
+        XCTAssertEqual(
+            Set(report.blockedOutputCodecs),
+            Set(SW_FFmpegCodecCommandPlanner.commandUnsupportedAudioOutputCodecs)
+        )
+
+        let copyItem = TaptionAudioCodecExecutionReadinessReporter.item(
+            for: TaptionAudioCodecRoute(sourceCodec: .aac, outputCodec: .aac),
+            outputContainer: .mkv
+        )
+        XCTAssertEqual(copyItem.readiness, .copyInCurrentBuild)
+        XCTAssertTrue(copyItem.isRunnableInCurrentBuild)
+        XCTAssertTrue(copyItem.hasCommandPlan)
+
+        let nativeItem = TaptionAudioCodecExecutionReadinessReporter.item(
+            for: TaptionAudioCodecRoute(sourceCodec: .aac, outputCodec: .pcm),
+            outputContainer: .mkv
+        )
+        XCTAssertEqual(nativeItem.readiness, .nativeTranscodeInCurrentBuild)
+        XCTAssertTrue(nativeItem.isRunnableInCurrentBuild)
+        XCTAssertFalse(nativeItem.hasCommandPlan)
+
+        let commandOnlyItem = TaptionAudioCodecExecutionReadinessReporter.item(
+            for: TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .flac),
+            outputContainer: .mkv
+        )
+        XCTAssertEqual(commandOnlyItem.readiness, .commandPlanOnly)
+        XCTAssertFalse(commandOnlyItem.isRunnableInCurrentBuild)
+        XCTAssertTrue(commandOnlyItem.hasCommandPlan)
+        XCTAssertEqual(commandOnlyItem.commandBackend, .ffmpegFamily)
+
+        let blockedItem = TaptionAudioCodecExecutionReadinessReporter.item(
+            for: TaptionAudioCodecRoute(sourceCodec: .aac, outputCodec: .xheAAC),
+            outputContainer: .mkv
+        )
+        XCTAssertEqual(blockedItem.readiness, .blockedMissingSoftwareEncoder)
+        XCTAssertFalse(blockedItem.isRunnableInCurrentBuild)
+        XCTAssertFalse(blockedItem.hasCommandPlan)
+        XCTAssertTrue(blockedItem.blockingReason?.contains("xHE-AAC") == true)
+    }
+
+    func testAudioExecutionReadinessReportPromotesCommandPlansWhenBroadBackendShips() {
+        let item = TaptionAudioCodecExecutionReadinessReporter.item(
+            for: TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .flac),
+            outputContainer: .mkv,
+            broadSoftwareBackendExecutable: true
+        )
+        let report = TaptionAudioCodecExecutionReadinessReporter.makeReport(
+            outputContainer: .mkv,
+            broadSoftwareBackendExecutable: true
+        )
+
+        XCTAssertEqual(item.readiness, .softwareBackendExecutable)
+        XCTAssertTrue(item.isRunnableInCurrentBuild)
+        XCTAssertTrue(item.hasCommandPlan)
+        XCTAssertEqual(report.commandPlanOnlyRouteCount, 0)
+        XCTAssertGreaterThan(report.softwareBackendExecutableRouteCount, 0)
+        XCTAssertFalse(report.allRoutesRunnableInCurrentBuild)
+        XCTAssertEqual(
+            Set(report.blockedOutputCodecs),
+            Set(SW_FFmpegCodecCommandPlanner.commandUnsupportedAudioOutputCodecs)
+        )
+    }
+
+    func testUniversalAudioCommandPlannerTracksEveryOutputCodecAsPlannableOrGap() {
+        let represented = Set(SW_FFmpegCodecCommandPlanner.plannableAudioOutputCodecs)
+            .union(SW_FFmpegCodecCommandPlanner.commandUnsupportedAudioOutputCodecs)
+
+        XCTAssertEqual(represented, Set(TaptionAudioCodecRoutePlanner.universalAudioCodecs))
+        XCTAssertTrue(SW_FFmpegCodecCommandPlanner.plannableAudioOutputCodecs.contains(.opus))
+        XCTAssertTrue(SW_FFmpegCodecCommandPlanner.plannableAudioOutputCodecs.contains(.flac))
+        XCTAssertTrue(SW_FFmpegCodecCommandPlanner.commandUnsupportedAudioOutputCodecs.contains(.xheAAC))
+        XCTAssertTrue(SW_FFmpegCodecCommandPlanner.commandUnsupportedAudioOutputCodecs.contains(.amr))
+    }
+
+    func testUniversalAudioCommandPlannerBuildsEveryPlannableSourceOutputPair() throws {
+        for sourceCodec in TaptionAudioCodecRoutePlanner.universalAudioCodecs {
+            for outputCodec in SW_FFmpegCodecCommandPlanner.plannableAudioOutputCodecs {
+                let route = TaptionAudioCodecRoute(sourceCodec: sourceCodec, outputCodec: outputCodec)
+                let request = TaptionAudioCodecTranscodeRequest(
+                    sourceURL: URL(fileURLWithPath: "/tmp/audio-\(sourceCodec.rawValue).mkv"),
+                    outputURL: URL(fileURLWithPath: "/tmp/audio-\(outputCodec.rawValue).mkv"),
+                    route: route,
+                    options: .preservingSource(outputCodec: outputCodec, outputContainer: .mkv)
+                )
+
+                let plan = try SW_FFmpegCodecCommandPlanner.makeAudioCommandPlan(request: request)
+
+                XCTAssertEqual(plan.backend, .ffmpegFamily, route.displayName)
+                XCTAssertEqual(plan.routeSummary, route.displayName, route.displayName)
+                XCTAssertTrue(plan.arguments.contains("-c:a"), route.displayName)
+                XCTAssertEqual(
+                    plan.arguments.last,
+                    "/tmp/audio-\(outputCodec.rawValue).mkv",
+                    route.displayName
+                )
+            }
+        }
+    }
+
+    func testUniversalAudioCommandPlannerRejectsEveryUnsupportedOutputCodec() {
+        for sourceCodec in TaptionAudioCodecRoutePlanner.universalAudioCodecs {
+            for outputCodec in SW_FFmpegCodecCommandPlanner.commandUnsupportedAudioOutputCodecs {
+                let route = TaptionAudioCodecRoute(sourceCodec: sourceCodec, outputCodec: outputCodec)
+                let request = TaptionAudioCodecTranscodeRequest(
+                    sourceURL: URL(fileURLWithPath: "/tmp/audio-\(sourceCodec.rawValue).mkv"),
+                    outputURL: URL(fileURLWithPath: "/tmp/audio-\(outputCodec.rawValue).mkv"),
+                    route: route,
+                    options: .preservingSource(outputCodec: outputCodec, outputContainer: .mkv)
+                )
+
+                if sourceCodec == outputCodec {
+                    let plan = try? SW_FFmpegCodecCommandPlanner.makeAudioCommandPlan(request: request)
+                    XCTAssertNotNil(plan, route.displayName)
+                    XCTAssertTrue(plan?.arguments.contains("copy") == true, route.displayName)
+                    continue
+                }
+
+                XCTAssertThrowsError(try SW_FFmpegCodecCommandPlanner.makeAudioCommandPlan(request: request), route.displayName) { error in
+                    XCTAssertEqual(
+                        error as? SW_FFmpegCodecCommandPlannerError,
+                        .audioEncoderUnavailable(outputCodec),
+                        route.displayName
+                    )
+                }
+            }
+        }
+    }
+
+    func testUniversalAudioCommandPlannerReportsEncoderGaps() {
+        let route = TaptionAudioCodecRoute(sourceCodec: .aac, outputCodec: .xheAAC)
+        let request = TaptionAudioCodecTranscodeRequest(
+            sourceURL: URL(fileURLWithPath: "/tmp/input.mp4"),
+            outputURL: URL(fileURLWithPath: "/tmp/output.mp4"),
+            route: route,
+            options: .preservingSource(outputCodec: .xheAAC, outputContainer: .mp4)
+        )
+
+        XCTAssertThrowsError(try SW_FFmpegCodecCommandPlanner.makeAudioCommandPlan(request: request)) { error in
+            XCTAssertEqual(
+                error as? SW_FFmpegCodecCommandPlannerError,
+                .audioEncoderUnavailable(.xheAAC)
+            )
+        }
+    }
+
+    func testAudioCodecCopyKeepsCompatibleAACInMP4() {
+        let selection = TaptionAudioCodecRoutePlanner.selectRoute(
+            sourceCodec: .aac,
+            outputCodec: .aac,
+            outputContainer: .mp4
+        )
+
+        XCTAssertEqual(selection.support, .copy)
+        XCTAssertTrue(selection.shouldCopy)
+        XCTAssertNil(selection.decodeBackend)
+        XCTAssertNil(selection.encodeBackend)
+    }
+
+    func testAudioCodecSoftwareDecodeFeedsAACForOpus() {
+        let selection = TaptionAudioCodecRoutePlanner.selectRoute(
+            sourceCodec: .opus,
+            outputCodec: .aac,
+            outputContainer: .mp4
+        )
+
+        XCTAssertEqual(selection.support, .softwareTranscode)
+        XCTAssertFalse(selection.shouldCopy)
+        XCTAssertEqual(selection.decodeBackend, .ffmpegFamily)
+        XCTAssertEqual(selection.encodeBackend, .appleAVAssetExport)
+    }
+
+    func testDeviceCodecReportIncludesAudioNativeCapabilities() {
+        let report = HW_CodecCapabilityProbe.makeReport(
+            probeSize: TaptionPixelSize(width: 1280, height: 720),
+            generatedAt: Date(timeIntervalSince1970: 0)
+        )
+        let audioCapabilities = Dictionary(
+            uniqueKeysWithValues: report.audioCapabilities.map { ($0.audioCodec, $0) }
+        )
+
+        XCTAssertEqual(report.audioCapabilities.count, TaptionAudioCodecRoutePlanner.universalAudioCodecs.count)
+        XCTAssertEqual(audioCapabilities[.aac]?.nativeDecodeSupported, true)
+        XCTAssertEqual(audioCapabilities[.aac]?.nativeEncodeSupported, true)
+        XCTAssertEqual(audioCapabilities[.aac]?.mp4CopySupported, true)
+        XCTAssertEqual(audioCapabilities[.opus]?.nativeDecodeSupported, false)
+        XCTAssertEqual(audioCapabilities[.opus]?.nativeEncodeSupported, false)
+        XCTAssertEqual(audioCapabilities[.opus]?.mp4CopySupported, false)
+    }
+
+    func testDeviceCodecReportReconcilesKnownModelWithStaticMatrix() {
+        let expectedDecode: Set<TaptionVideoCodec> = [
+            .h264,
+            .hevc,
+            .hevcWithAlpha,
+            .dolbyVisionHEVC,
+            .av1,
+            .proRes
+        ]
+        let expectedEncode: Set<TaptionVideoCodec> = [
+            .h264,
+            .hevc,
+            .proRes
+        ]
+        let report = syntheticDeviceCodecReport(
+            modelIdentifier: "iPhone16,1",
+            decodeCodecs: expectedDecode,
+            encodeCodecs: expectedEncode
+        )
+
+        let reconciliation = HW_DeviceCodecReportReconciler.reconcile(report: report)
+
+        XCTAssertTrue(reconciliation.isKnownModel)
+        XCTAssertTrue(reconciliation.isConsistentWithStaticMatrix)
+        XCTAssertEqual(reconciliation.matchedMarketingName, "iPhone 15 Pro")
+        XCTAssertEqual(reconciliation.matchedProfileID, "apple_a17pro_av1_decode")
+        XCTAssertEqual(Set(reconciliation.expectedHardwareDecodeCodecs), expectedDecode)
+        XCTAssertEqual(Set(reconciliation.expectedHardwareEncodeCodecs), expectedEncode)
+        XCTAssertTrue(reconciliation.missingExpectedDecodeCodecs.isEmpty)
+        XCTAssertTrue(reconciliation.unexpectedDecodeCodecs.isEmpty)
+    }
+
+    func testDeviceCodecReportReconciliationFlagsUnknownAndDivergentReports() {
+        let unknownReport = syntheticDeviceCodecReport(
+            modelIdentifier: "iPhone99,99",
+            decodeCodecs: [.h264],
+            encodeCodecs: [.h264]
+        )
+        let divergentReport = syntheticDeviceCodecReport(
+            modelIdentifier: "iPad7,11",
+            decodeCodecs: [.h264, .hevc],
+            encodeCodecs: []
+        )
+
+        let unknown = HW_DeviceCodecReportReconciler.reconcile(report: unknownReport)
+        let divergent = HW_DeviceCodecReportReconciler.reconcile(report: divergentReport)
+
+        XCTAssertFalse(unknown.isKnownModel)
+        XCTAssertFalse(unknown.isConsistentWithStaticMatrix)
+        XCTAssertEqual(unknown.statusSummary, "Runtime model is not in the static matrix yet.")
+
+        XCTAssertTrue(divergent.isKnownModel)
+        XCTAssertFalse(divergent.isConsistentWithStaticMatrix)
+        XCTAssertEqual(divergent.matchedProfileID, "apple_ipados18_legacy_a10_h264")
+        XCTAssertEqual(divergent.missingExpectedEncodeCodecs, [.h264])
+        XCTAssertEqual(divergent.unexpectedDecodeCodecs, [.hevc])
+    }
+
+    func testDeviceCodecReportArchiveSummaryFindsUnknownAndDivergentSnapshots() {
+        let matchingSnapshot = HW_DeviceCodecReportSnapshot(
+            id: "matching-known",
+            schemaVersion: 1,
+            createdAt: Date(timeIntervalSince1970: 0),
+            report: syntheticDeviceCodecReport(
+                modelIdentifier: "iPhone16,1",
+                decodeCodecs: [
+                    .h264,
+                    .hevc,
+                    .hevcWithAlpha,
+                    .dolbyVisionHEVC,
+                    .av1,
+                    .proRes
+                ],
+                encodeCodecs: [
+                    .h264,
+                    .hevc,
+                    .proRes
+                ]
+            ),
+            routeSimulationSummary: HW_CodecRouteSimulator.summary(),
+            staticMatrixReconciliation: nil
+        )
+        let unknownSnapshot = HW_DeviceCodecReportSnapshot(
+            id: "unknown-model",
+            schemaVersion: 2,
+            createdAt: Date(timeIntervalSince1970: 1),
+            report: syntheticDeviceCodecReport(
+                modelIdentifier: "iPhone99,99",
+                decodeCodecs: [.h264],
+                encodeCodecs: [.h264]
+            ),
+            routeSimulationSummary: HW_CodecRouteSimulator.summary(),
+            staticMatrixReconciliation: nil
+        )
+        let divergentSnapshot = HW_DeviceCodecReportSnapshot(
+            id: "divergent-known",
+            schemaVersion: 2,
+            createdAt: Date(timeIntervalSince1970: 2),
+            report: syntheticDeviceCodecReport(
+                modelIdentifier: "iPad7,11",
+                decodeCodecs: [.h264, .hevc],
+                encodeCodecs: []
+            ),
+            routeSimulationSummary: HW_CodecRouteSimulator.summary(),
+            staticMatrixReconciliation: nil
+        )
+
+        let summary = HW_DeviceCodecReportArchiveAnalyzer.summarize([
+            unknownSnapshot,
+            matchingSnapshot,
+            divergentSnapshot
+        ])
+
+        XCTAssertEqual(summary.snapshotCount, 3)
+        XCTAssertEqual(summary.knownModelSnapshotCount, 2)
+        XCTAssertEqual(summary.unknownModelIdentifiers, ["iPhone99,99"])
+        XCTAssertEqual(summary.consistentSnapshotIDs, ["matching-known"])
+        XCTAssertEqual(summary.divergentSnapshotIDs, ["divergent-known"])
+        XCTAssertTrue(summary.hasSnapshots)
+        XCTAssertTrue(summary.needsStaticMatrixUpdates)
+        XCTAssertEqual(summary.divergences.count, 1)
+        XCTAssertEqual(summary.divergences.first?.snapshotID, "divergent-known")
+        XCTAssertEqual(summary.divergences.first?.matchedProfileID, "apple_ipados18_legacy_a10_h264")
+        XCTAssertEqual(summary.divergences.first?.missingExpectedEncodeCodecs, [.h264])
+        XCTAssertEqual(summary.divergences.first?.unexpectedDecodeCodecs, [.hevc])
+    }
+
+    func testDeviceCodecReportStoreRoundTripsSnapshotJSON() throws {
+        let report = HW_CodecCapabilityProbe.makeReport(
+            probeSize: TaptionPixelSize(width: 1280, height: 720),
+            generatedAt: Date(timeIntervalSince1970: 0)
+        )
+        let summary = HW_CodecRouteSimulator.summary()
+        let snapshot = HW_DeviceCodecReportStore.makeSnapshot(
+            report: report,
+            routeSimulationSummary: summary,
+            createdAt: Date(timeIntervalSince1970: 0)
+        )
+
+        let data = try HW_DeviceCodecReportStore.encode(snapshot)
+        let decoded = try HW_DeviceCodecReportStore.decode(data)
+
+        XCTAssertEqual(decoded, snapshot)
+        XCTAssertEqual(decoded.schemaVersion, HW_DeviceCodecReportSnapshot.currentSchemaVersion)
+        XCTAssertEqual(decoded.universalCodecCompletionAudit?.stage, .allToAllPlanningLocked)
+        XCTAssertTrue(decoded.universalCodecCompletionAudit?.universalPlanningIsLocked == true)
+        XCTAssertEqual(decoded.outputReadinessCatalog?.defaultOutputState, .implemented)
+        XCTAssertTrue(decoded.outputReadinessCatalog?.outputSelectionCoverageIsPassing == true)
+        XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"routeSimulationSummary\"") == true)
+        XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"staticMatrixReconciliation\"") == true)
+        XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"universalCodecCompletionAudit\"") == true)
+        XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"outputReadinessCatalog\"") == true)
+        XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"videoCapabilities\"") == true)
+    }
+
+    func testDeviceCodecReportStoreSavesAndLoadsSnapshots() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("HWDeviceCodecReportStoreTests-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+
+        let report = HW_CodecCapabilityProbe.makeReport(
+            probeSize: TaptionPixelSize(width: 640, height: 360),
+            generatedAt: Date(timeIntervalSince1970: 1)
+        )
+        let snapshot = HW_DeviceCodecReportStore.makeSnapshot(
+            report: report,
+            routeSimulationSummary: HW_CodecRouteSimulator.summary(),
+            createdAt: Date(timeIntervalSince1970: 1)
+        )
+
+        let fileURL = try HW_DeviceCodecReportStore.save(
+            snapshot: snapshot,
+            to: directoryURL
+        )
+        let loadedSnapshots = try HW_DeviceCodecReportStore.loadSnapshots(
+            from: directoryURL
+        )
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
+        XCTAssertTrue(fileURL.lastPathComponent.hasPrefix("hw-codec-report-"))
+        XCTAssertEqual(loadedSnapshots, [snapshot])
+        XCTAssertEqual(loadedSnapshots.first?.universalCodecCompletionAudit?.contractName, "All-to-All Universal Codec Mesh")
+        XCTAssertEqual(loadedSnapshots.first?.outputReadinessCatalog?.defaultOutputCodec, .hevc)
+        XCTAssertTrue(loadedSnapshots.first?.outputReadinessCatalog?.outputSelectionCoverageIsPassing == true)
+    }
+
+    func testAudioFixtureCoverageTracksPendingCodecs() {
+        XCTAssertEqual(SW_AudioCodecSupportCatalog.fixtureStatus(for: .aac), .generated)
+        XCTAssertEqual(SW_AudioCodecSupportCatalog.fixtureStatus(for: .opus), .generated)
+        XCTAssertEqual(SW_AudioCodecSupportCatalog.fixtureStatus(for: .xheAAC), .pendingRealOrAlternateGenerator)
+        XCTAssertEqual(SW_AudioCodecSupportCatalog.fixtureStatus(for: .amr), .pendingRealOrAlternateGenerator)
+    }
+
+    func testSoftwareBackendRegistryCoversUniversalVideoDecodeAndEncodeTargets() {
+        for codec in TaptionCodecRegistry.universalSourceCodecs {
+            XCTAssertNotNil(
+                SW_SoftwareCodecBackendRegistry.preferredVideoDecodeBackend(for: codec),
+                "Missing SW decode backend for \(codec.rawValue)"
+            )
+        }
+
+        for codec in TaptionCodecRegistry.universalOutputCodecs {
+            XCTAssertNotNil(
+                SW_SoftwareCodecBackendRegistry.preferredVideoEncodeBackend(for: codec),
+                "Missing SW encode backend for \(codec.rawValue)"
+            )
+        }
+    }
+
+    func testSoftwareBackendRegistryCoversUniversalAudioDecodeAndEncodeTargets() {
+        for codec in TaptionAudioCodecRoutePlanner.universalAudioCodecs {
+            XCTAssertEqual(
+                SW_SoftwareCodecBackendRegistry.preferredAudioDecodeBackend(for: codec),
+                .ffmpegFamily
+            )
+            XCTAssertEqual(
+                SW_SoftwareCodecBackendRegistry.preferredAudioEncodeBackend(for: codec),
+                .ffmpegFamily
+            )
+        }
+    }
+
+    func testBroadSoftwareBackendReadinessKeepsCurrentBuildPlanningOnly() {
+        let report = SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport()
+
+        XCTAssertEqual(report.backend, .ffmpegFamily)
+        XCTAssertFalse(report.isBundledInCurrentBuild)
+        XCTAssertFalse(report.isExecutableInCurrentBuild)
+        XCTAssertTrue(report.mustRemainPlanningOnly)
+        XCTAssertFalse(report.canPromoteToExecutableBackend)
+        XCTAssertEqual(
+            Set(report.openGates),
+            Set(TaptionSoftwareCodecBackendReadinessGate.allCases)
+        )
+        XCTAssertEqual(report.videoDecodeCodecCount, TaptionCodecRegistry.universalSourceCodecs.count)
+        XCTAssertEqual(report.videoEncodeCodecCount, TaptionCodecRegistry.universalOutputCodecs.count)
+        XCTAssertEqual(report.audioDecodeCodecCount, TaptionAudioCodecRoutePlanner.universalAudioCodecs.count)
+        XCTAssertEqual(report.audioEncodeCodecCount, TaptionAudioCodecRoutePlanner.universalAudioCodecs.count)
+        XCTAssertEqual(report.plannedVideoRouteCount, TaptionCodecRegistry.plannedUniversalRoutes.count)
+        XCTAssertEqual(report.plannedAudioRouteCount, TaptionAudioCodecRoutePlanner.plannedUniversalRoutes.count)
+        XCTAssertTrue(report.commandUnsupportedVideoOutputCodecs.contains(.proResRaw))
+        XCTAssertTrue(report.commandUnsupportedAudioOutputCodecs.contains(.xheAAC))
+    }
+
+    func testBroadSoftwareBackendReadinessGatesHaveDisplayNames() {
+        let displayNames = TaptionSoftwareCodecBackendReadinessGate.allCases
+            .map(\.displayName)
+
+        XCTAssertEqual(displayNames.count, TaptionSoftwareCodecBackendReadinessGate.allCases.count)
+        XCTAssertTrue(displayNames.allSatisfy { !$0.isEmpty })
+        XCTAssertTrue(displayNames.contains("License review"))
+        XCTAssertTrue(displayNames.contains("Open-source notice generation"))
+        XCTAssertTrue(displayNames.contains("Old-device performance proof"))
+    }
+
+    func testOpenSourceNoticeCatalogSeparatesShippedToolingAndPlanningOnlyCandidates() {
+        let readinessReport = SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport()
+        let shipped = TaptionOpenSourceNoticeCatalog.shippedComponents
+        let tooling = TaptionOpenSourceNoticeCatalog.localDevelopmentTooling
+        let candidates = TaptionOpenSourceNoticeCatalog.planningOnlyCandidates(
+            readinessReport: readinessReport
+        )
+        let allEntries = TaptionOpenSourceNoticeCatalog.allEntries(
+            readinessReport: readinessReport
+        )
+
+        XCTAssertTrue(shipped.allSatisfy(\.isShippedInCurrentBuild))
+        XCTAssertTrue(shipped.allSatisfy(\.requiresFinalLicenseText))
+        XCTAssertTrue(shipped.allSatisfy(\.hasFinalLicenseText))
+        XCTAssertEqual(Set(shipped.map(\.category)), [.shippedComponent])
+        XCTAssertTrue(shipped.contains { $0.relatedBackend == .softwareAV1Decoder })
+
+        XCTAssertTrue(tooling.allSatisfy { !$0.isShippedInCurrentBuild })
+        XCTAssertTrue(tooling.allSatisfy { !$0.requiresFinalLicenseText })
+        XCTAssertTrue(tooling.allSatisfy(\.hasFinalLicenseText))
+        XCTAssertEqual(Set(tooling.map(\.category)), [.localDevelopmentTooling])
+
+        XCTAssertEqual(candidates.count, 1)
+        XCTAssertEqual(candidates.first?.category, .planningOnlyCandidate)
+        XCTAssertEqual(candidates.first?.relatedBackend, .ffmpegFamily)
+        XCTAssertEqual(candidates.first?.isShippedInCurrentBuild, false)
+        XCTAssertEqual(candidates.first?.requiresFinalLicenseText, false)
+        XCTAssertEqual(candidates.first?.hasFinalLicenseText, true)
+        XCTAssertEqual(allEntries.count, shipped.count + tooling.count + candidates.count)
+    }
+
+    func testOpenSourceNoticeReadinessBlocksBundledCandidateWithoutLicenseText() {
+        let currentReport = TaptionOpenSourceNoticeCatalog.readinessReport()
+        let bundledCandidateReport = TaptionOpenSourceNoticeCatalog.readinessReport(
+            readinessReport: SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport(
+                isBundledInCurrentBuild: true,
+                satisfiedGates: Set(TaptionSoftwareCodecBackendReadinessGate.allCases)
+            )
+        )
+
+        XCTAssertTrue(currentReport.isReadyForReleaseNotices)
+        XCTAssertTrue(currentReport.missingFinalLicenseTextEntries.isEmpty)
+
+        XCTAssertFalse(bundledCandidateReport.isReadyForReleaseNotices)
+        XCTAssertEqual(bundledCandidateReport.missingFinalLicenseTextEntries.count, 1)
+        XCTAssertEqual(
+            bundledCandidateReport.missingFinalLicenseTextEntries.first?.id,
+            "ffmpeg-family-broad-codec-backend"
+        )
+        XCTAssertEqual(
+            bundledCandidateReport.missingFinalLicenseTextEntries.first?.relatedBackend,
+            .ffmpegFamily
+        )
+    }
+
+    func testOpenSourceNoticeLicenseTextResourcesAreBundledAndReadable() {
+        let resourceReport = TaptionOpenSourceNoticeCatalog.bundleResourceReport(bundle: .main)
+        let missingIDs = resourceReport.missingResourceEntries.map(\.id).joined(separator: ", ")
+        let emptyIDs = resourceReport.emptyResourceEntries.map(\.id).joined(separator: ", ")
+
+        XCTAssertTrue(
+            resourceReport.isReadyForBundledResources,
+            "Missing license resources: \(missingIDs). Empty license resources: \(emptyIDs)."
+        )
+        XCTAssertEqual(
+            resourceReport.entriesRequiringFinalLicenseText.count,
+            TaptionOpenSourceNoticeCatalog.shippedComponents.count
+        )
+
+        for entry in TaptionOpenSourceNoticeCatalog.shippedComponents {
+            let licenseText = TaptionOpenSourceNoticeTextLoader.licenseText(for: entry, bundle: .main)
+            XCTAssertNotNil(licenseText, entry.id)
+            XCTAssertFalse(licenseText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true, entry.id)
+        }
+    }
+
+    func testBroadSoftwareBackendReadinessCanPromoteOnlyAfterAllGatesClose() {
+        let blockedReport = SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport(
+            isBundledInCurrentBuild: true,
+            satisfiedGates: [.licenseReview]
+        )
+        let readyReport = SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport(
+            isBundledInCurrentBuild: true,
+            satisfiedGates: Set(TaptionSoftwareCodecBackendReadinessGate.allCases)
+        )
+
+        XCTAssertFalse(blockedReport.isExecutableInCurrentBuild)
+        XCTAssertTrue(blockedReport.mustRemainPlanningOnly)
+        XCTAssertTrue(blockedReport.openGates.contains(.appStorePolicyReview))
+
+        XCTAssertTrue(readyReport.isExecutableInCurrentBuild)
+        XCTAssertTrue(readyReport.canPromoteToExecutableBackend)
+        XCTAssertFalse(readyReport.mustRemainPlanningOnly)
+        XCTAssertTrue(readyReport.openGates.isEmpty)
+    }
+
+    func testFFmpegCommandExecutorBlocksUntilReadinessGatesClose() async throws {
+        let commandPlan = try makeH264ToAV1CommandPlan()
+        let executor = SW_FFmpegCommandExecutor(
+            readinessReport: SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport(),
+            runner: FakeFFmpegCommandRunner { _ in
+                XCTFail("Runner should not execute while readiness gates are open.")
+                return SW_FFmpegCommandRunResult(exitCode: 0)
+            }
+        )
+
+        do {
+            _ = try await executor.execute(commandPlan, progress: { _ in })
+            XCTFail("Executor should block until the broad software backend is executable.")
+        } catch let error as SW_FFmpegCommandExecutionError {
+            guard case .backendNotExecutable(let openGates) = error else {
+                XCTFail("Unexpected execution error: \(error)")
+                return
+            }
+            XCTAssertEqual(Set(openGates), Set(TaptionSoftwareCodecBackendReadinessGate.allCases))
+            XCTAssertTrue(openGates.contains(.licenseReview))
+            XCTAssertTrue(openGates.contains(.appStorePolicyReview))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testFFmpegCommandExecutorRunsThroughInjectedRunnerWhenReady() async throws {
+        let outputURL = temporaryTestURL(fileName: "universal-command-output.mkv")
+        try? FileManager.default.removeItem(at: outputURL)
+        let commandPlan = try makeH264ToAV1CommandPlan(outputURL: outputURL)
+        let executor = SW_FFmpegCommandExecutor(
+            readinessReport: readyBroadSoftwareBackendReport(),
+            runner: FakeFFmpegCommandRunner { plan in
+                try FileManager.default.createDirectory(
+                    at: plan.outputURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try Data("fake encoded output".utf8).write(to: plan.outputURL)
+                return SW_FFmpegCommandRunResult(
+                    exitCode: 0,
+                    stdout: "encoded \(plan.routeSummary)",
+                    stderr: "frame=42"
+                )
+            }
+        )
+        var progressStages: [TaptionEncodingStage] = []
+
+        let result = try await executor.execute(commandPlan) { progress in
+            progressStages.append(progress.stage)
+        }
+
+        XCTAssertEqual(result.commandPlan, commandPlan)
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertEqual(result.outputURL, outputURL)
+        XCTAssertTrue(result.didCreateOutput)
+        XCTAssertEqual(result.stdoutTail, "encoded H.264 / AVC to AV1")
+        XCTAssertEqual(result.stderrTail, "frame=42")
+        XCTAssertEqual(progressStages, [.preparing, .encoding, .completed])
+
+        try? FileManager.default.removeItem(at: outputURL)
+    }
+
+    func testEncoderServiceRunsPreparedSoftwareCommandPlanWhenBroadBackendIsReady() async throws {
+        let outputURL = temporaryTestURL(fileName: "h264-to-av1.mkv")
+        try? FileManager.default.removeItem(at: outputURL)
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: makeAsset(sourceCodec: .h264),
+            sourceURL: URL(fileURLWithPath: "/tmp/h264-source.mp4"),
+            temporaryOutputURL: outputURL,
+            outputPolicy: TaptionVideoOutputPolicy(videoCodec: .av1, container: .mkv),
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+        )
+        let executor = SW_FFmpegCommandExecutor(
+            readinessReport: readyBroadSoftwareBackendReport(),
+            runner: FakeFFmpegCommandRunner { commandPlan in
+                XCTAssertEqual(commandPlan, plan.videoCommandPlan)
+                try FileManager.default.createDirectory(
+                    at: commandPlan.outputURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try Data("encoded through app encoder service".utf8).write(to: commandPlan.outputURL)
+                return SW_FFmpegCommandRunResult(exitCode: 0, stderr: "frame=12")
+            }
+        )
+        let service = AVFoundationHEVCEncoderService(softwareExecutor: executor)
+        var progressStages: [TaptionEncodingStage] = []
+
+        let result = try await service.encode(plan: plan) { progress in
+            progressStages.append(progress.stage)
+        }
+
+        XCTAssertEqual(plan.codecRoute, TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1))
+        XCTAssertEqual(plan.codecExecutionKind, .planned)
+        XCTAssertNotNil(plan.videoCommandPlan)
+        XCTAssertEqual(result.temporaryOutputURL, outputURL)
+        XCTAssertEqual(result.finalOutputURL?.lastPathComponent, "h264-source_taption.mkv")
+        XCTAssertEqual(result.usedBackend, .ffmpegFamily)
+        XCTAssertEqual(result.usedMode, .software)
+        XCTAssertEqual(progressStages, [.preparing, .encoding, .completed])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+
+        try? FileManager.default.removeItem(at: outputURL)
+    }
+
+    func testEncoderServiceKeepsPreparedNoAudioSoftwareCommandPlan() async throws {
+        let outputURL = temporaryTestURL(fileName: "silent-h264-to-av1.mkv")
+        try? FileManager.default.removeItem(at: outputURL)
+        let silentAsset = TaptionVideoAsset(
+            displayName: "silent-h264.mp4",
+            location: TaptionVideoAssetLocation(kind: .file),
+            container: .mp4,
+            duration: 1,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .h264,
+                naturalSize: TaptionPixelSize(width: 1920, height: 1080),
+                displaySize: TaptionPixelSize(width: 1920, height: 1080),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 30)
+            ),
+            audioTracks: []
+        )
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: silentAsset,
+            sourceURL: URL(fileURLWithPath: "/tmp/silent-h264-source.mp4"),
+            temporaryOutputURL: outputURL,
+            outputPolicy: TaptionVideoOutputPolicy(videoCodec: .av1, container: .mkv),
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+        )
+        let executor = SW_FFmpegCommandExecutor(
+            readinessReport: readyBroadSoftwareBackendReport(),
+            runner: FakeFFmpegCommandRunner { commandPlan in
+                XCTAssertEqual(commandPlan, plan.videoCommandPlan)
+                XCTAssertTrue(commandPlan.arguments.contains("-an"))
+                XCTAssertFalse(commandPlan.arguments.contains("0:a?"))
+                try FileManager.default.createDirectory(
+                    at: commandPlan.outputURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try Data("encoded silent output".utf8).write(to: commandPlan.outputURL)
+                return SW_FFmpegCommandRunResult(exitCode: 0, stderr: "frame=10")
+            }
+        )
+        let service = AVFoundationHEVCEncoderService(softwareExecutor: executor)
+
+        let result = try await service.encode(plan: plan, progress: { _ in })
+
+        XCTAssertNil(plan.audioPlan)
+        XCTAssertEqual(result.temporaryOutputURL, outputURL)
+        XCTAssertEqual(result.usedBackend, .ffmpegFamily)
+        XCTAssertEqual(result.usedMode, .software)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+
+        try? FileManager.default.removeItem(at: outputURL)
+    }
+
+    func testFFmpegCommandExecutorSurfacesRunnerFailureWithStderrTail() async throws {
+        let commandPlan = try makeH264ToAV1CommandPlan()
+        let executor = SW_FFmpegCommandExecutor(
+            readinessReport: readyBroadSoftwareBackendReport(),
+            runner: FakeFFmpegCommandRunner { _ in
+                SW_FFmpegCommandRunResult(
+                    exitCode: 64,
+                    stderr: "unsupported encoder settings"
+                )
+            }
+        )
+
+        do {
+            _ = try await executor.execute(commandPlan, progress: { _ in })
+            XCTFail("Runner failure should surface as a command failure.")
+        } catch let error as SW_FFmpegCommandExecutionError {
+            XCTAssertEqual(
+                error,
+                .commandFailed(exitCode: 64, stderrTail: "unsupported encoder settings")
+            )
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testSoftwareBackendRegistryCoversLegacyAndModernContainers() {
+        let backend = SW_SoftwareCodecBackendRegistry.ffmpegFamilyCandidate
+
+        XCTAssertTrue(backend.canReadContainer(.mp4))
+        XCTAssertTrue(backend.canReadContainer(.mov))
+        XCTAssertTrue(backend.canReadContainer(.avi))
+        XCTAssertTrue(backend.canReadContainer(.lrf))
+        XCTAssertTrue(backend.canReadContainer(.webm))
+        XCTAssertTrue(backend.canWriteContainer(.mp4))
+        XCTAssertTrue(backend.canWriteContainer(.mov))
+        XCTAssertTrue(backend.canWriteContainer(.avi))
+        XCTAssertTrue(backend.canWriteContainer(.webm))
+    }
+
+    @MainActor
+    func testPendingSaveConflictPromptsBeforeOverwritingExistingOutput() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
+        let finalURL = directoryURL.appendingPathComponent("clip_taption.mp4")
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try Data("new output".utf8).write(to: temporaryURL)
+        try Data("existing output".utf8).write(to: finalURL)
+
+        let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
+        let state = TaptionPendingSaveState(
+            planID: UUID(),
+            temporaryOutputURL: temporaryURL,
+            finalOutputURL: finalURL,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: false
+        )
+        try await store.savePendingState(state)
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: store)
+        )
+
+        await viewModel.restorePendingSavesIfNeeded()
+        viewModel.retryPendingSave()
+        try await waitForSaveConflictPrompt(in: viewModel)
+
+        XCTAssertEqual(viewModel.saveConflictPrompt?.existingURL, finalURL)
+        XCTAssertEqual(viewModel.saveConflictPrompt?.suggestedURL.lastPathComponent, "clip_taption 2.mp4")
+        XCTAssertEqual(try String(contentsOf: finalURL, encoding: .utf8), "existing output")
+        XCTAssertEqual(try String(contentsOf: temporaryURL, encoding: .utf8), "new output")
+
+        let states = try await store.loadPendingStates()
+        XCTAssertEqual(states.map(\.id), [state.id])
+        XCTAssertEqual(states.first?.requiresRewardedAd, false)
+    }
+
+    @MainActor
+    func testPendingSaveOverwriteChoiceReplacesExistingOutputWithoutAnotherAd() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
+        let finalURL = directoryURL.appendingPathComponent("clip_taption.mp4")
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try Data("new output".utf8).write(to: temporaryURL)
+        try Data("existing output".utf8).write(to: finalURL)
+
+        let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
+        let state = TaptionPendingSaveState(
+            planID: UUID(),
+            temporaryOutputURL: temporaryURL,
+            finalOutputURL: finalURL,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: false
+        )
+        try await store.savePendingState(state)
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: store)
+        )
+
+        await viewModel.restorePendingSavesIfNeeded()
+        viewModel.retryPendingSave()
+        try await waitForSaveConflictPrompt(in: viewModel)
+        viewModel.overwriteExistingPendingSave()
+        try await waitForCompletedSave(in: viewModel)
+
+        XCTAssertNil(viewModel.saveConflictPrompt)
+        XCTAssertEqual(try String(contentsOf: finalURL, encoding: .utf8), "new output")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
+        let states = try await store.loadPendingStates()
+        XCTAssertTrue(states.isEmpty)
+    }
+
+    @MainActor
+    func testPendingSaveSaveAsChoiceKeepsExistingOutputAndWritesUniqueFile() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
+        let finalURL = directoryURL.appendingPathComponent("clip_taption.mp4")
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try Data("new output".utf8).write(to: temporaryURL)
+        try Data("existing output".utf8).write(to: finalURL)
+
+        let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
+        let state = TaptionPendingSaveState(
+            planID: UUID(),
+            temporaryOutputURL: temporaryURL,
+            finalOutputURL: finalURL,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: false
+        )
+        try await store.savePendingState(state)
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: store)
+        )
+
+        await viewModel.restorePendingSavesIfNeeded()
+        viewModel.retryPendingSave()
+        try await waitForSaveConflictPrompt(in: viewModel)
+        let suggestedURL = try XCTUnwrap(viewModel.saveConflictPrompt?.suggestedURL)
+        viewModel.savePendingOutputAsNewFile()
+        try await waitForCompletedSave(in: viewModel)
+
+        XCTAssertNil(viewModel.saveConflictPrompt)
+        XCTAssertEqual(try String(contentsOf: finalURL, encoding: .utf8), "existing output")
+        XCTAssertEqual(try String(contentsOf: suggestedURL, encoding: .utf8), "new output")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
+        let states = try await store.loadPendingStates()
+        XCTAssertTrue(states.isEmpty)
+    }
+
+    private struct FakeFFmpegCommandRunner: SW_FFmpegCommandRunning {
+        var runBlock: @Sendable (SW_FFmpegCommandPlan) async throws -> SW_FFmpegCommandRunResult
+
+        func run(commandPlan: SW_FFmpegCommandPlan) async throws -> SW_FFmpegCommandRunResult {
+            try await runBlock(commandPlan)
+        }
+    }
+
+    private func readyBroadSoftwareBackendReport() -> TaptionSoftwareCodecBackendReadinessReport {
+        SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport(
+            isBundledInCurrentBuild: true,
+            satisfiedGates: Set(TaptionSoftwareCodecBackendReadinessGate.allCases)
+        )
+    }
+
+    private func temporaryDirectoryURL() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("TaptionEncoderTests-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    private func makeHomeViewModelTestEnvironment(
+        pendingSaveStore: PendingSaveStoring
+    ) -> AppEnvironment {
+        let configuration = AppConfiguration()
+        return AppEnvironment(
+            configuration: configuration,
+            featureFlags: .phase0,
+            mediaInspector: FakeMediaInspector(),
+            encoderService: FakeEncoderService(),
+            storageChecker: FakeStorageChecker(),
+            sourceOpener: FakeSourceOpener(),
+            outputResolver: DefaultOutputResolver(
+                namingPolicy: TaptionOutputNamingPolicy(suffix: configuration.outputSuffix)
+            ),
+            pendingSaveStore: pendingSaveStore,
+            adGate: FakeAdGate(),
+            bannerAdProvider: FakeBannerAdProvider(),
+            rewardedAdProvider: FakeRewardedAdProvider(),
+            sessionEndAdProvider: FakeSessionEndAdProvider(),
+            backgroundCoordinator: FakeBackgroundEncodingCoordinator(),
+            projectDocumentStore: FakeProjectFileStore()
+        )
+    }
+
+    @MainActor
+    private func waitForSaveConflictPrompt(
+        in viewModel: HomeViewModel,
+        timeout: TimeInterval = 2
+    ) async throws {
+        try await waitForCondition(timeout: timeout) {
+            viewModel.saveConflictPrompt != nil
+        }
+    }
+
+    @MainActor
+    private func waitForCompletedSave(
+        in viewModel: HomeViewModel,
+        timeout: TimeInterval = 2
+    ) async throws {
+        try await waitForCondition(timeout: timeout) {
+            if case .completed = viewModel.state {
+                return true
+            }
+            return false
+        }
+    }
+
+    @MainActor
+    private func waitForCondition(
+        timeout: TimeInterval,
+        _ condition: @MainActor @escaping () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() && Date() < deadline {
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertTrue(condition())
+    }
+
+    private func makeH264ToAV1CommandPlan(
+        outputURL: URL = URL(fileURLWithPath: "/tmp/output.mkv")
+    ) throws -> SW_FFmpegCommandPlan {
+        let route = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1)
+        return try SW_FFmpegCodecCommandPlanner.makeVideoCommandPlan(
+            request: TaptionCodecTranscodeRequest(
+                sourceURL: URL(fileURLWithPath: "/tmp/input.mp4"),
+                outputURL: outputURL,
+                route: route,
+                options: .preservingSource(outputCodec: .av1, container: .mkv)
+            )
+        )
+    }
+
+    private func temporaryTestURL(fileName: String) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UUID().uuidString)-\(fileName)")
+    }
+
+    private func selectAV1ToHEVC(
+        profile: TaptionCodecHardwareSupportProfile
+    ) -> TaptionCodecRouteSelection {
+        selectRoute(
+            sourceCodec: .av1,
+            outputCodec: .hevc,
+            profile: profile
+        )
+    }
+
+    private func selectRoute(
+        sourceCodec: TaptionVideoCodec,
+        outputCodec: TaptionVideoCodec,
+        profile: TaptionCodecHardwareSupportProfile
+    ) -> TaptionCodecRouteSelection {
+        TaptionCodecRoutePlanner.selectRoute(
+            for: makeAsset(sourceCodec: sourceCodec),
+            outputCodec: outputCodec,
+            requestedMode: .automatic,
+            hardwareSupport: profile
+        )
+    }
+
+    private func makeAsset(sourceCodec: TaptionVideoCodec) -> TaptionVideoAsset {
+        TaptionVideoAsset(
+            displayName: "\(sourceCodec.rawValue).mp4",
+            location: TaptionVideoAssetLocation(kind: .file),
+            container: .mp4,
+            duration: 1,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: sourceCodec,
+                naturalSize: TaptionPixelSize(width: 1920, height: 1080),
+                displaySize: TaptionPixelSize(width: 1920, height: 1080),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 30)
+            ),
+            audioTracks: [
+                TaptionAudioTrackInfo(
+                    codec: .aac,
+                    channelCount: 2,
+                    sampleRate: 48_000
+                )
+            ],
+            fingerprint: TaptionMediaFingerprint(fileSize: 1_000_000)
+        )
+    }
+
+    private func makeAudioDescription(
+        formatID: AudioFormatID,
+        sampleRate: Double,
+        channelCount: UInt32,
+        formatFlags: AudioFormatFlags = 0,
+        bytesPerPacket: UInt32 = 0,
+        framesPerPacket: UInt32 = 0,
+        bytesPerFrame: UInt32 = 0,
+        bitsPerChannel: UInt32 = 0
+    ) throws -> CMFormatDescription {
+        var streamDescription = AudioStreamBasicDescription(
+            mSampleRate: sampleRate,
+            mFormatID: formatID,
+            mFormatFlags: formatFlags,
+            mBytesPerPacket: bytesPerPacket,
+            mFramesPerPacket: framesPerPacket,
+            mBytesPerFrame: bytesPerFrame,
+            mChannelsPerFrame: channelCount,
+            mBitsPerChannel: bitsPerChannel,
+            mReserved: 0
+        )
+        var description: CMAudioFormatDescription?
+        let status = CMAudioFormatDescriptionCreate(
+            allocator: kCFAllocatorDefault,
+            asbd: &streamDescription,
+            layoutSize: 0,
+            layout: nil,
+            magicCookieSize: 0,
+            magicCookie: nil,
+            extensions: nil,
+            formatDescriptionOut: &description
+        )
+
+        XCTAssertEqual(status, noErr)
+        return try XCTUnwrap(description)
+    }
+
+    private func syntheticDeviceCodecReport(
+        modelIdentifier: String,
+        decodeCodecs: Set<TaptionVideoCodec>,
+        encodeCodecs: Set<TaptionVideoCodec>
+    ) -> TaptionDeviceCodecCapabilityReport {
+        let probedCodecs = Set(HW_CodecCapabilityProbe.probedVideoCodecs)
+            .union(decodeCodecs)
+            .union(encodeCodecs)
+        return TaptionDeviceCodecCapabilityReport(
+            modelIdentifier: modelIdentifier,
+            systemName: "iOS",
+            systemVersion: "26.0",
+            probeResolution: TaptionPixelSize(width: 1920, height: 1080),
+            generatedAt: Date(timeIntervalSince1970: 0),
+            videoCapabilities: probedCodecs
+                .sorted { $0.rawValue < $1.rawValue }
+                .map { codec in
+                    TaptionCodecHardwareCapability(
+                        videoCodec: codec,
+                        coreMediaCodecType: codec.rawValue,
+                        hardwareDecodeSupported: decodeCodecs.contains(codec),
+                        hardwareEncodeSupported: encodeCodecs.contains(codec),
+                        encodeProbeStatus: encodeCodecs.contains(codec) ? 0 : -1,
+                        encoderIdentifier: encodeCodecs.contains(codec) ? "test.hardware.\(codec.rawValue)" : nil
+                    )
+                },
+            audioCapabilities: []
+        )
+    }
+
+    private func appleProfile(_ id: String) -> TaptionCodecHardwareSupportProfile {
+        guard let profile = HW_AppleDeviceCodecProfiles.profile(id: id) else {
+            XCTFail("Missing Apple device codec profile: \(id)")
+            return .softwareOnly
+        }
+        return profile.hardwareSupportProfile
+    }
+
+    private func appleModelProfile(_ identifier: String) -> TaptionCodecHardwareSupportProfile {
+        guard let profile = HW_AppleDeviceCodecModelMatrix.hardwareSupportProfile(identifier: identifier) else {
+            XCTFail("Missing Apple device model codec profile: \(identifier)")
+            return .softwareOnly
+        }
+        return profile
+    }
+
+    private func containerSort(
+        _ lhs: TaptionVideoContainer,
+        _ rhs: TaptionVideoContainer
+    ) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+}

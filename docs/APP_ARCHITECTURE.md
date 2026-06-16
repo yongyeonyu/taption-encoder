@@ -2,14 +2,15 @@
 
 ## Product Direction
 
-Taption Encoder is a free, phone-first video encoder that makes conversion simple enough to run directly on iPhone or iPad. The final product goal is "almost any practical user video in, H.265 out" with hardware or software codecs, old-device support where practical, background encoding where the OS allows it, and multi-video assembly into one output. The app must stay separate from the main Taption editor unless a file is intentionally ported.
+Taption Encoder is a free, phone-first video encoder that makes conversion simple enough to run directly on iPhone or iPad. The first product milestone is AV1 to H.265, the next milestone is broad input to H.265, and the final product goal is a universal codec matrix: almost any practical user video codec can be converted to any other supported output codec through hardware, software, or mixed codec paths. The app must stay separate from the main Taption editor unless a file is intentionally ported.
 
-The product core is convenience: choose one or more videos, keep the original look by default, encode with minimal setup, optionally do small edits, and get a saved H.265 output. Advertising supports the free business model; it should be dense enough to monetize the app, but it is not the product's purpose.
+The product core is convenience: choose one or more videos, keep the original look by default, encode with minimal setup, optionally do small edits, and get a saved output in the desired codec/container. Advertising supports the free business model; it should be dense enough to monetize the app, but it is not the product's purpose.
 
 Core value:
 
-- Product path: AV1 to H.265 first, All to H.265 final.
-- Convert many video formats to H.265 without making the user understand codecs.
+- Product path: AV1 to H.265 first, broad inputs to H.265 next, universal codec-to-codec conversion final.
+- Convert many video formats without making the user understand codecs.
+- Final codec matrix includes examples like H.264 to AV1, AV1 to H.264, H.265 to VP9, VP9 to H.265, and same-codec re-encode for resize, bitrate, frame-rate, color, or quality changes.
 - Preserve source-like resolution, timing, orientation, color, audio timing, and visual quality by default.
 - Combine multiple videos into one output, including videos from different cameras and formats.
 - Normalize sources for merge when needed, especially when codecs, containers, frame rates, color metadata, or audio layouts differ.
@@ -24,14 +25,17 @@ Primary constraints:
 - Visible app strings stay in English.
 - MVP input is AV1 video.
 - MVP output is fixed to H.265 video in an `.mp4` container.
-- Long-term output remains H.265 video, with future container/preset choices around that H.265 stream.
+- Mid-term output remains H.265 video while broad input support is proven.
+- Long-term output codec becomes selectable from supported codecs; H.265 remains the recommended default for compatibility and size.
+- The core codec model is an all-to-all mesh, not an H.265-only pipeline: adding a codec to the universal input catalog also makes it a planned output codec unless intentionally removed from the final product contract.
+- `TaptionUniversalCodecCompletionAuditor` is the core gate for this contract. It distinguishes current launch-route execution from planning-locked all-to-all coverage, command-plan readiness, and fully executable universal conversion.
 - Default output should preserve the source video's resolution, frame rate, orientation, aspect ratio, and color characteristics whenever technically possible.
 - Default quality should target visually source-like output, not aggressive compression.
 - Hardware encoding is preferred automatically when supported.
 - Software fallback is automatic, not user-selectable, and the UI displays the path actually used.
 - Software codec paths are required for unsupported hardware codecs, broad input support, simulator validation, and older-device fallback.
 - Older devices should be supported where performance, OS APIs, and codec availability make the experience honest.
-- Files and Photos are the first input sources.
+- File, folder, and Photos are the first input sources.
 - After a valid file is selected, the app inspects it, shows video info, and starts encoding only after the user taps Start.
 - Progress and cancellation are first-class states.
 - Progress should include a determinate bar, percent complete, processed duration, and estimated time remaining when enough samples are available.
@@ -39,7 +43,7 @@ Primary constraints:
 - Output is saved with `_taption` appended to the source name.
 - A storage check must run before producing final output.
 - Monetization is ad-supported. There is no planned paid version.
-- AdMob banner is shown on the main screen and other eligible in-app screens.
+- AdMob banners are shown at the top and bottom of the main screen and other eligible in-app screens.
 - AdMob rewarded ad is required before final save.
 - Initial ad requests should be non-personalized.
 - Additional ad formats should be added at natural pauses, not during active encoding or file selection.
@@ -72,7 +76,7 @@ Implementation status, 2026-06-15:
 
 - Phase 0 app structure is in place.
 - `AppEnvironment`, feature flags, app configuration, Home feature files, core protocol directories, and fake services compile.
-- The main screen has the required Phase 0 surfaces, but real encoding, Photos import, AdMob SDK integration, and rewarded save execution remain later-phase work.
+- The main screen has the required Phase 0 surfaces, real file/folder/selected-Photos AV1 to H.265 conversion, and AdMob SDK integration for top/bottom banner, rewarded save, app-open, start interstitial, and session-end interstitial placements. Native ads, consent UI, and broad codec support remain later-phase work.
 
 ### Phase 1: AV1 To H.265 MVP
 
@@ -88,14 +92,14 @@ Implementation status, 2026-06-15:
 - Move or copy the completed file to the resolved destination.
 - Support cancellation while encoding.
 - Surface whether the job is using Hardware Encoder or Software Encoder.
-- Integrate AdMob SDK with Debug test ad units and production configuration placeholders.
+- Integrate AdMob SDK with production configuration and use Google test ad unit IDs in Debug builds before extended ad QA.
 - Add privacy consent and tracking flows before requesting ads.
 
 Implementation status, 2026-06-15:
 
 - The Phase 1 main UX/state-machine shell is implemented with fake services before real encoding.
-- Files and Photos entry points can drive fake importing, inspecting, storage checking, encoding progress, cancellation, rewarded-save waiting, pending-save recovery, and completed states.
-- Real AV1 inspection, H.265 conversion, Photos asset handling, AdMob SDK integration, and final save execution remain for later implementation phases.
+- File, folder, and Photos entry points can drive importing, inspecting, storage checking, encoding progress, cancellation, rewarded-save waiting, pending-save recovery, and completed states.
+- Real file/folder/selected-Photos AV1 inspection, H.265 conversion, sequential folder processing, Photos output save, AdMob rewarded save gate, Debug test ad switching, and final save execution are implemented. Consent UI, native ads, and broader codec support remain for later implementation phases.
 
 ### Phase 2: Reliability And Proof
 
@@ -111,14 +115,41 @@ Implementation status, 2026-06-15:
 
 ### Phase 3: Broad Input And Legacy Device Support
 
-Output remains H.265 while input format support expands. This phase adds a backend strategy for "almost any practical user video" and older-device fallback.
+Output remains H.265 while input format support expands. This phase adds a backend strategy for "almost any practical user video" and older-device fallback. This is a milestone toward the final universal codec matrix, not the final ceiling.
+
+Current baseline artifacts:
+
+- `docs/CODEC_SUPPORT_RESEARCH.md` defines the Apple-native, software, generated-fixture, and real-world-sample codec target matrix.
+- `Scripts/generate_video_codec_fixtures.sh` creates the local synthetic video/audio fixture set.
+- `Scripts/generate_audio_codec_fixtures.sh` creates audio-family-specific samples for AAC, PCM variants, ALAC, Opus, MP3/MP2, AC3/EAC3, DTS, TrueHD, FLAC, Vorbis, iLBC, WavPack, WMA, ADPCM, and related fallback targets.
+- `Scripts/simulate_codec_route_planner.sh` verifies HW-first, HW/SW mixed, and SW fallback selection across simulated capability profiles.
+- `Core/Codecs/HW_CodecCapabilityProbe.swift` probes runtime VideoToolbox hardware support for the future Device Info menu.
+- `Core/Codecs/SW_CodecSupportCatalog.swift` tracks software decode and fixture targets.
+- `Core/Codecs/SW_UniversalCodecTranscodeAlgorithm.swift` tracks planned software descriptors for non-implemented all-to-all routes while the bundled broad software backend is still pending.
+- `SW_FFmpegVideoCodecTranscodeExecutor` can execute a planned video command from a function-style codec request through the gated FFmpeg-family executor once the broad software backend is bundled, license-reviewed, and injected with a runner.
+- `Core/Codecs/Audio/AudioCodecAlgorithm.swift` defines function-style audio transcode request, options, progress, and output contracts.
+- `Core/Codecs/Audio/SW_UniversalAudioCodecTranscodeAlgorithm.swift` tracks planned software descriptors for every universal audio source/output pair while the bundled broad software backend is still pending.
+- `SW_FFmpegAudioCodecTranscodeExecutor` can execute a planned audio command through the same gated FFmpeg-family executor used by video once the broad software backend is bundled, license-reviewed, and injected with a runner.
+- Generated AAC/MP4 audio fixture jobs now prove that fixture metadata can rebuild a function-style audio request, reproduce the planned FFmpeg-family command, and pass through the software audio executor boundary when backend readiness gates are closed.
+- `TaptionEncodingPlan` carries a planned FFmpeg-family video command plan when the selected all-to-all output route has a software encoder, and carries the first-track audio command plan separately.
+- `AVFoundationHEVCEncoderService` keeps the launch AV1-to-H.265 registry path, but dispatches prepared planned routes through `SW_FFmpegVideoCodecTranscodeExecutor` when the broad SW backend is executable and a runner is injected.
+- `Core/Codecs/CodecOutputCatalog.swift` centralizes output readiness as `Now`, `Plan Ready`, `Planned`, or `Blocked` for the Home selector UI, route/card status display, Device Info, and saved device codec reports. `Plan Ready` means the broad software command can be built, but the backend is not bundled for runtime execution yet. File cards expose the user-facing codec path as `Path HW`, `Path SW`, `Path HW/SW`, `Path SW Plan Ready`, or `Path SW Blocked` so the all-to-all matrix remains visible before every route is runnable.
+- `Features/Home/HomeMenuSheetView.swift` exposes Help, Open Source Notices, and Device Info from the top-left home menu.
 
 - H.264 / AVC
 - H.265 / HEVC
+- Dolby Vision HEVC
+- Apple ProRes / ProRes RAW
+- AV1
 - VP9
 - VP8
+- MPEG-1 Video
 - MPEG-2 Video
-- ProRes
+- MPEG-4 Part 2
+- H.263
+- Motion JPEG
+- QuickTime Animation, Cinepak, Sorenson Video, DV/DVCPro
+- Windows Media / VC-1 where software support and licensing allow it
 - Other codecs supported by the selected software codec backend, subject to licensing and App Store constraints
 
 Container support expands:
@@ -128,9 +159,17 @@ Container support expands:
 - M4V (`.m4v`)
 - WebM (`.webm`)
 - Matroska (`.mkv`)
-- AVI (`.avi`)
-- MPEG transport streams (`.ts`, `.mts`, `.m2ts`)
+- AVI/DivX (`.avi`, `.divx`)
+- MPEG transport streams (`.ts`, `.mts`, `.m2ts`, `.tp`, `.trp`, `.tod`)
 - MXF (`.mxf`)
+- DJI low-resolution proxy (`.lrf`)
+- MPEG program streams and VOB (`.mpg`, `.mpeg`, `.vob`, `.mod`)
+- DV (`.dv`)
+- Ogg/Ogv/OGM (`.ogg`, `.ogv`, `.ogm`)
+- FLV/F4V (`.flv`, `.f4v`)
+- 3GP/3G2 (`.3gp`, `.3g2`)
+- ASF/WMV (`.asf`, `.wmv`, `.dvr-ms`)
+- Raw elementary streams (`.h264`, `.h265`, `.hevc`, `.ivf`, `.obu`, `.y4m`, `.av1`, `.h263`, `.m1v`, `.m2v`, `.vc1`)
 
 Backend expansion:
 
@@ -173,6 +212,45 @@ Expose options that are represented in the architecture from the beginning:
 - Output container presets while still using H.265 video
 - Color-map, tone-map, and HDR/SDR conversion controls
 
+### Phase 5B: Universal Codec Matrix
+
+After broad input to H.265 is reliable, expand output codecs so the encoder becomes an all-to-all codec tool.
+
+This is not an all-input-to-H.265-only roadmap. The long-term contract is every supported source codec to every supported output codec, including both directions such as `H.264 -> AV1` and `AV1 -> H.264`.
+
+Core code names this final contract `All-to-All Universal Codec Mesh`. The product rule is simple: every codec admitted into the universal list becomes both an input and an output candidate, every pair is visible as a planned route, and same-codec routes remain valid for re-encode workflows such as resizing, frame-rate changes, bitrate changes, quality adjustment, and color mapping.
+
+Initial universal matrix codecs:
+
+- AV1
+- H.265 / HEVC
+- H.264 / AVC
+- VP9
+- VP8
+- ProRes
+- MPEG-2 Video
+- MPEG-4 Visual
+- Theora, if bundled software codec licensing and binary size are acceptable
+- DV, when practical for legacy workflows
+
+Routing rules:
+
+- Model each conversion as `sourceCodec -> outputCodec`, not as a special one-off feature.
+- Keep `TaptionCodecRegistry.universalSourceCodecs` and `TaptionCodecRegistry.universalOutputCodecs` as the authoritative all-to-all route lists.
+- Treat the matrix as symmetric by contract: if a codec pair exists, both `A -> B` and `B -> A` must be visible as routes unless one side is explicitly removed from the universal codec list.
+- Implement each concrete codec route as a function-style algorithm that accepts `TaptionCodecTranscodeRequest`, honors `TaptionCodecTranscodeOptions`, reports `TaptionEncodingProgress`, and returns `TaptionCodecTranscodeOutput`.
+- Keep route implementations in explicit `HW_` and `SW_` files so they can be ported back into Taption without dragging UI or ad dependencies.
+- Include same-codec re-encode routes such as `H.264 -> H.264` for resize, bitrate, frame-rate, quality, or color conversion.
+- Use `TaptionCodecRegistry` for the route matrix and `CodecRoutePlanner` for runtime route selection.
+- Store plannable SW command output on `TaptionEncodingPlan` so the future executor can run a prepared job without rebuilding route decisions from UI state.
+- Keep broad SW execution behind `TaptionSoftwareCodecBackendReadinessReport`; runner injection and closed readiness gates are both required before planned routes can execute.
+- Prefer hardware decode and hardware encode when both sides are supported.
+- Use mixed routes when only one side has hardware support, such as software decode plus hardware encode.
+- Use software decode and software encode when hardware support is unavailable or when the selected output codec is not supported by VideoToolbox.
+- Route audio separately from video: copy compatible audio when the output container allows it, otherwise decode through Apple-native or software paths and encode to the selected output audio codec. The MVP default is AAC in MP4.
+- Keep the UI simple by recommending a default output codec while exposing advanced output codec selection later.
+- Treat codec support as a runtime capability matrix because older devices, simulators, iOS versions, and App Store-safe bundled codec libraries differ.
+
 ### Phase 6: Advanced Workflows
 
 - Batch conversion.
@@ -185,7 +263,7 @@ Expose options that are represented in the architecture from the beginning:
 
 ```mermaid
 flowchart TD
-    Idle["Idle: main screen"] --> Source["Choose Files or Photos"]
+    Idle["Idle: main screen"] --> Source["Choose File, Folder, or Photos"]
     Source --> Inspect["Inspect media"]
     Inspect --> Unsupported["Unsupported input warning"]
     Inspect --> StorageCheck["Check temporary and final storage"]
@@ -461,11 +539,12 @@ The UI should feel like a compact utility, not a media editor. The first screen 
 
 Top to bottom:
 
-- AdMob banner area.
+- AdMob top and bottom banner areas.
 - App title: `Taption Encoder`.
 - Subtitle: `AV1 to H.265`.
 - Source actions:
-  - `Files` with `folder`.
+  - `File` with `doc`.
+  - `Folder` with `folder`.
   - `Photos` with `photo.on.rectangle`.
   - `Reset` with `arrow.counterclockwise`.
 - Codec path info:
@@ -945,9 +1024,9 @@ Rules:
 Maximize ad coverage through allowed, predictable placements:
 
 - App open ad: on cold launch or foreground return, only when no encoding job is active and a loading/return transition is visible.
-- Anchored adaptive banner: persistent top placement on the main screen, idle state, encoding status, completed state, failed state, and cancelled state.
+- Anchored adaptive banner: persistent top and bottom placements on the main screen, idle state, encoding status, completed state, failed state, and cancelled state.
 - Native ad: idle state below the output summary, completed state below the saved-file confirmation, and non-blocking history/result areas when those exist.
-- Interstitial ad: natural pauses only, such as after a completed save, after a cancelled job returns to idle, or after a failed job acknowledgement. Avoid showing immediately before a rewarded save ad.
+- Interstitial ad: before a user-started encoding session and at natural pauses, such as after a completed save, after a cancelled job returns to idle, or after a failed job acknowledgement. Avoid showing immediately before a rewarded save ad.
 - Rewarded ad: explicit `Watch Ad to Save` action after encoding finishes and before moving/copying the final output.
 
 ### Ad Policy Guardrails
@@ -1061,7 +1140,7 @@ User-facing error text must be short and in English.
 
 - App launches on iPhone and iPad in portrait only.
 - iPad uses the same main screen UX as iPhone.
-- Main screen has `Files`, `Photos`, and `Reset`.
+- Main screen has `File`, `Folder`, `Photos`, and `Reset`.
 - Encoder mode defaults to `Hardware`.
 - Output displays `H.265`.
 - Selecting a supported AV1 file starts encoding automatically.

@@ -32,6 +32,8 @@
 		3A2B3C4D5E6F701000000015 /* BackgroundEncodingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2B3C4D5E6F701000000309 /* BackgroundEncodingCoordinator.swift */; };
 		3A2B3C4D5E6F701000000016 /* ProjectDocumentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2B3C4D5E6F701000000310 /* ProjectDocumentStore.swift */; };
 		3A2B3C4D5E6F701000000017 /* FCPXMLValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2B3C4D5E6F701000000311 /* FCPXMLValidator.swift */; };
+		3A2B3C4D5E6F701000000018 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2B3C4D5E6F701000000312 /* AppLogger.swift */; };
+		3A2B3C4D5E6F701000000019 /* SaveFailurePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2B3C4D5E6F701000000313 /* SaveFailurePresentation.swift */; };
 		4A2B3C4D5E6F701000000001 /* SourceActionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000101 /* SourceActionBar.swift */; };
 		4A2B3C4D5E6F701000000002 /* EncoderModePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000102 /* EncoderModePicker.swift */; };
 		4A2B3C4D5E6F701000000003 /* EncodingProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000103 /* EncodingProgressView.swift */; };
@@ -40,8 +42,49 @@
 		4A2B3C4D5E6F701000000006 /* PrimaryActionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000106 /* PrimaryActionButton.swift */; };
 		4A2B3C4D5E6F701000000007 /* StatusBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000107 /* StatusBanner.swift */; };
 		4A2B3C4D5E6F701000000008 /* ProgressCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000108 /* ProgressCard.swift */; };
+		4A2B3C4D5E6F701000000009 /* HomeLayoutMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000109 /* HomeLayoutMetrics.swift */; };
+		4A2B3C4D5E6F701000000010 /* VideoDocumentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000110 /* VideoDocumentPicker.swift */; };
+		4A2B3C4D5E6F701000000011 /* ImportedPhotoVideo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000111 /* ImportedPhotoVideo.swift */; };
+		4A2B3C4D5E6F701000000012 /* ImportableVideoTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000112 /* ImportableVideoTypes.swift */; };
+		4A2B3C4D5E6F701000000013 /* LoadedFilesPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000113 /* LoadedFilesPanelView.swift */; };
+		4A2B3C4D5E6F701000000014 /* HomeQueueModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000114 /* HomeQueueModels.swift */; };
+		4A2B3C4D5E6F701000000015 /* HomeMenuSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000115 /* HomeMenuSheetView.swift */; };
 		5A2B3C4D5E6F701000000001 /* SwiftVLC in Frameworks */ = {isa = PBXBuildFile; productRef = 5A2B3C4D5E6F701000000102 /* SwiftVLC */; };
+		6A2B3C4D5E6F701000000001 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = 6A2B3C4D5E6F701000000102 /* GoogleMobileAds */; };
+		7A2B3C4D5E6F701000000001 /* CodecAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000101 /* CodecAlgorithm.swift */; };
+		7A2B3C4D5E6F701000000002 /* HW_AV1HEVCCodecAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000102 /* HW_AV1HEVCCodecAlgorithm.swift */; };
+		7A2B3C4D5E6F701000000003 /* SW_AV1HEVCCodecAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000103 /* SW_AV1HEVCCodecAlgorithm.swift */; };
+		7A2B3C4D5E6F701000000004 /* HW_CodecCapabilityProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000104 /* HW_CodecCapabilityProbe.swift */; };
+		7A2B3C4D5E6F701000000005 /* SW_CodecSupportCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000105 /* SW_CodecSupportCatalog.swift */; };
+		7A2B3C4D5E6F701000000006 /* CodecRoutePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000106 /* CodecRoutePlanner.swift */; };
+		7A2B3C4D5E6F701000000007 /* HW_AppleDeviceCodecProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000107 /* HW_AppleDeviceCodecProfiles.swift */; };
+		7A2B3C4D5E6F701000000008 /* HW_AudioCodecCapabilityCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000108 /* HW_AudioCodecCapabilityCatalog.swift */; };
+		7A2B3C4D5E6F701000000009 /* SW_AudioCodecSupportCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000109 /* SW_AudioCodecSupportCatalog.swift */; };
+		7A2B3C4D5E6F701000000010 /* AudioCodecRoutePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000110 /* AudioCodecRoutePlanner.swift */; };
+		7A2B3C4D5E6F701000000011 /* CodecTranscodingRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000111 /* CodecTranscodingRegistry.swift */; };
+		7A2B3C4D5E6F701000000012 /* SW_SoftwareCodecBackendRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000112 /* SW_SoftwareCodecBackendRegistry.swift */; };
+		7A2B3C4D5E6F701000000013 /* CodecFixtureEvidence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000113 /* CodecFixtureEvidence.swift */; };
+		7A2B3C4D5E6F701000000014 /* SW_UniversalCodecTranscodeAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000114 /* SW_UniversalCodecTranscodeAlgorithm.swift */; };
+		7A2B3C4D5E6F701000000015 /* CodecOutputCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000115 /* CodecOutputCatalog.swift */; };
+		7A2B3C4D5E6F701000000016 /* AudioCodecAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000116 /* AudioCodecAlgorithm.swift */; };
+		7A2B3C4D5E6F701000000017 /* SW_UniversalAudioCodecTranscodeAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000117 /* SW_UniversalAudioCodecTranscodeAlgorithm.swift */; };
+		7A2B3C4D5E6F701000000018 /* SW_FFmpegCodecCommandPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000118 /* SW_FFmpegCodecCommandPlanner.swift */; };
+		7A2B3C4D5E6F701000000019 /* HW_DeviceCodecReportStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000119 /* HW_DeviceCodecReportStore.swift */; };
+		7A2B3C4D5E6F701000000020 /* SW_FFmpegCommandExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000120 /* SW_FFmpegCommandExecutor.swift */; };
+		8A2B3C4D5E6F701000000001 /* CodecRoutePlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000101 /* CodecRoutePlannerTests.swift */; };
+		8A2B3C4D5E6F701000000002 /* CodecFixtureEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000102 /* CodecFixtureEvidenceTests.swift */; };
+		9A2B3C4D5E6F701000000001 /* OpenSourceNotices in Resources */ = {isa = PBXBuildFile; fileRef = 9A2B3C4D5E6F701000000101 /* OpenSourceNotices */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8A2B3C4D5E6F701000000801 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1A2B3C4D5E6F701000000800 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1A2B3C4D5E6F701000000400;
+			remoteInfo = TaptionEncoder;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		1A2B3C4D5E6F701000000100 /* Taption Encoder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Taption Encoder.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -50,6 +93,7 @@
 		1A2B3C4D5E6F701000000103 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1A2B3C4D5E6F701000000104 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = SOURCE_ROOT; };
 		1A2B3C4D5E6F701000000105 /* AGENTS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = AGENTS.md; sourceTree = SOURCE_ROOT; };
+		1A2B3C4D5E6F701000000106 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		2A2B3C4D5E6F701000000101 /* TaptionVideoCoreModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionVideoCoreModels.swift; sourceTree = "<group>"; };
 		2A2B3C4D5E6F701000000102 /* TaptionVideoEditingProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionVideoEditingProject.swift; sourceTree = "<group>"; };
 		2A2B3C4D5E6F701000000103 /* TaptionVideoEncodingPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionVideoEncodingPlan.swift; sourceTree = "<group>"; };
@@ -72,6 +116,8 @@
 		3A2B3C4D5E6F701000000309 /* BackgroundEncodingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundEncodingCoordinator.swift; sourceTree = "<group>"; };
 		3A2B3C4D5E6F701000000310 /* ProjectDocumentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDocumentStore.swift; sourceTree = "<group>"; };
 		3A2B3C4D5E6F701000000311 /* FCPXMLValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FCPXMLValidator.swift; sourceTree = "<group>"; };
+		3A2B3C4D5E6F701000000312 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
+		3A2B3C4D5E6F701000000313 /* SaveFailurePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveFailurePresentation.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000101 /* SourceActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceActionBar.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000102 /* EncoderModePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncoderModePicker.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000103 /* EncodingProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncodingProgressView.swift; sourceTree = "<group>"; };
@@ -80,6 +126,37 @@
 		4A2B3C4D5E6F701000000106 /* PrimaryActionButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryActionButton.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000107 /* StatusBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBanner.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000108 /* ProgressCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressCard.swift; sourceTree = "<group>"; };
+		4A2B3C4D5E6F701000000109 /* HomeLayoutMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeLayoutMetrics.swift; sourceTree = "<group>"; };
+		4A2B3C4D5E6F701000000110 /* VideoDocumentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDocumentPicker.swift; sourceTree = "<group>"; };
+		4A2B3C4D5E6F701000000111 /* ImportedPhotoVideo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportedPhotoVideo.swift; sourceTree = "<group>"; };
+		4A2B3C4D5E6F701000000112 /* ImportableVideoTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportableVideoTypes.swift; sourceTree = "<group>"; };
+		4A2B3C4D5E6F701000000113 /* LoadedFilesPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadedFilesPanelView.swift; sourceTree = "<group>"; };
+		4A2B3C4D5E6F701000000114 /* HomeQueueModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeQueueModels.swift; sourceTree = "<group>"; };
+		4A2B3C4D5E6F701000000115 /* HomeMenuSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeMenuSheetView.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000101 /* CodecAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecAlgorithm.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000102 /* HW_AV1HEVCCodecAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HW_AV1HEVCCodecAlgorithm.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000103 /* SW_AV1HEVCCodecAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SW_AV1HEVCCodecAlgorithm.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000104 /* HW_CodecCapabilityProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HW_CodecCapabilityProbe.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000105 /* SW_CodecSupportCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SW_CodecSupportCatalog.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000106 /* CodecRoutePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecRoutePlanner.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000107 /* HW_AppleDeviceCodecProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HW_AppleDeviceCodecProfiles.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000108 /* HW_AudioCodecCapabilityCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HW_AudioCodecCapabilityCatalog.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000109 /* SW_AudioCodecSupportCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SW_AudioCodecSupportCatalog.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000110 /* AudioCodecRoutePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCodecRoutePlanner.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000111 /* CodecTranscodingRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecTranscodingRegistry.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000112 /* SW_SoftwareCodecBackendRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SW_SoftwareCodecBackendRegistry.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000113 /* CodecFixtureEvidence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecFixtureEvidence.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000114 /* SW_UniversalCodecTranscodeAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SW_UniversalCodecTranscodeAlgorithm.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000115 /* CodecOutputCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecOutputCatalog.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000116 /* AudioCodecAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCodecAlgorithm.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000117 /* SW_UniversalAudioCodecTranscodeAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SW_UniversalAudioCodecTranscodeAlgorithm.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000118 /* SW_FFmpegCodecCommandPlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SW_FFmpegCodecCommandPlanner.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000119 /* HW_DeviceCodecReportStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HW_DeviceCodecReportStore.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F701000000120 /* SW_FFmpegCommandExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SW_FFmpegCommandExecutor.swift; sourceTree = "<group>"; };
+		8A2B3C4D5E6F701000000100 /* TaptionEncoderTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TaptionEncoderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8A2B3C4D5E6F701000000101 /* CodecRoutePlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecRoutePlannerTests.swift; sourceTree = "<group>"; };
+		8A2B3C4D5E6F701000000102 /* CodecFixtureEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecFixtureEvidenceTests.swift; sourceTree = "<group>"; };
+		9A2B3C4D5E6F701000000101 /* OpenSourceNotices */ = {isa = PBXFileReference; lastKnownFileType = folder; path = OpenSourceNotices; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -88,6 +165,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				5A2B3C4D5E6F701000000001 /* SwiftVLC in Frameworks */,
+				6A2B3C4D5E6F701000000001 /* GoogleMobileAds in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8A2B3C4D5E6F701000000200 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -98,6 +183,7 @@
 			isa = PBXGroup;
 			children = (
 				1A2B3C4D5E6F701000000301 /* TaptionEncoder */,
+				8A2B3C4D5E6F701000000300 /* TaptionEncoderTests */,
 				1A2B3C4D5E6F701000000104 /* README.md */,
 				1A2B3C4D5E6F701000000105 /* AGENTS.md */,
 				1A2B3C4D5E6F701000000302 /* Products */,
@@ -109,11 +195,13 @@
 			children = (
 				1A2B3C4D5E6F701000000101 /* TaptionEncoderApp.swift */,
 				1A2B3C4D5E6F701000000102 /* ContentView.swift */,
+				1A2B3C4D5E6F701000000106 /* Info.plist */,
 				3A2B3C4D5E6F701000000400 /* App */,
 				3A2B3C4D5E6F701000000401 /* Features */,
 				4A2B3C4D5E6F701000000203 /* Shared */,
 				2A2B3C4D5E6F701000000300 /* Core */,
 				1A2B3C4D5E6F701000000103 /* Assets.xcassets */,
+				9A2B3C4D5E6F701000000101 /* OpenSourceNotices */,
 			);
 			path = TaptionEncoder;
 			sourceTree = "<group>";
@@ -121,6 +209,7 @@
 		2A2B3C4D5E6F701000000300 /* Core */ = {
 			isa = PBXGroup;
 			children = (
+				7A2B3C4D5E6F701000000300 /* Codecs */,
 				3A2B3C4D5E6F701000000403 /* Encoding */,
 				3A2B3C4D5E6F701000000404 /* MediaInspection */,
 				3A2B3C4D5E6F701000000405 /* Storage */,
@@ -128,11 +217,55 @@
 				3A2B3C4D5E6F701000000407 /* Output */,
 				3A2B3C4D5E6F701000000408 /* PendingSave */,
 				3A2B3C4D5E6F701000000409 /* Ads */,
+				3A2B3C4D5E6F701000000412 /* Diagnostics */,
 				3A2B3C4D5E6F701000000410 /* Background */,
 				3A2B3C4D5E6F701000000411 /* ProjectDocuments */,
 				2A2B3C4D5E6F701000000301 /* VideoCore */,
 			);
 			path = Core;
+			sourceTree = "<group>";
+		};
+		7A2B3C4D5E6F701000000300 /* Codecs */ = {
+			isa = PBXGroup;
+			children = (
+				7A2B3C4D5E6F701000000101 /* CodecAlgorithm.swift */,
+				7A2B3C4D5E6F701000000111 /* CodecTranscodingRegistry.swift */,
+				7A2B3C4D5E6F701000000106 /* CodecRoutePlanner.swift */,
+				7A2B3C4D5E6F701000000115 /* CodecOutputCatalog.swift */,
+				7A2B3C4D5E6F701000000113 /* CodecFixtureEvidence.swift */,
+				7A2B3C4D5E6F701000000104 /* HW_CodecCapabilityProbe.swift */,
+				7A2B3C4D5E6F701000000107 /* HW_AppleDeviceCodecProfiles.swift */,
+				7A2B3C4D5E6F701000000119 /* HW_DeviceCodecReportStore.swift */,
+				7A2B3C4D5E6F701000000105 /* SW_CodecSupportCatalog.swift */,
+				7A2B3C4D5E6F701000000112 /* SW_SoftwareCodecBackendRegistry.swift */,
+				7A2B3C4D5E6F701000000114 /* SW_UniversalCodecTranscodeAlgorithm.swift */,
+				7A2B3C4D5E6F701000000118 /* SW_FFmpegCodecCommandPlanner.swift */,
+				7A2B3C4D5E6F701000000120 /* SW_FFmpegCommandExecutor.swift */,
+				7A2B3C4D5E6F701000000302 /* Audio */,
+				7A2B3C4D5E6F701000000301 /* AV1 */,
+			);
+			path = Codecs;
+			sourceTree = "<group>";
+		};
+		7A2B3C4D5E6F701000000301 /* AV1 */ = {
+			isa = PBXGroup;
+			children = (
+				7A2B3C4D5E6F701000000102 /* HW_AV1HEVCCodecAlgorithm.swift */,
+				7A2B3C4D5E6F701000000103 /* SW_AV1HEVCCodecAlgorithm.swift */,
+			);
+			path = AV1;
+			sourceTree = "<group>";
+		};
+		7A2B3C4D5E6F701000000302 /* Audio */ = {
+			isa = PBXGroup;
+			children = (
+				7A2B3C4D5E6F701000000116 /* AudioCodecAlgorithm.swift */,
+				7A2B3C4D5E6F701000000108 /* HW_AudioCodecCapabilityCatalog.swift */,
+				7A2B3C4D5E6F701000000109 /* SW_AudioCodecSupportCatalog.swift */,
+				7A2B3C4D5E6F701000000117 /* SW_UniversalAudioCodecTranscodeAlgorithm.swift */,
+				7A2B3C4D5E6F701000000110 /* AudioCodecRoutePlanner.swift */,
+			);
+			path = Audio;
 			sourceTree = "<group>";
 		};
 		3A2B3C4D5E6F701000000400 /* App */ = {
@@ -162,6 +295,13 @@
 				3A2B3C4D5E6F701000000202 /* HomeViewModel.swift */,
 				3A2B3C4D5E6F701000000203 /* HomeScreenState.swift */,
 				4A2B3C4D5E6F701000000101 /* SourceActionBar.swift */,
+				4A2B3C4D5E6F701000000109 /* HomeLayoutMetrics.swift */,
+				4A2B3C4D5E6F701000000110 /* VideoDocumentPicker.swift */,
+				4A2B3C4D5E6F701000000111 /* ImportedPhotoVideo.swift */,
+				4A2B3C4D5E6F701000000112 /* ImportableVideoTypes.swift */,
+				4A2B3C4D5E6F701000000113 /* LoadedFilesPanelView.swift */,
+				4A2B3C4D5E6F701000000114 /* HomeQueueModels.swift */,
+				4A2B3C4D5E6F701000000115 /* HomeMenuSheetView.swift */,
 			);
 			path = Home;
 			sourceTree = "<group>";
@@ -246,6 +386,7 @@
 			isa = PBXGroup;
 			children = (
 				3A2B3C4D5E6F701000000306 /* PendingSaveStore.swift */,
+				3A2B3C4D5E6F701000000313 /* SaveFailurePresentation.swift */,
 			);
 			path = PendingSave;
 			sourceTree = "<group>";
@@ -257,6 +398,14 @@
 				3A2B3C4D5E6F701000000308 /* AdProviders.swift */,
 			);
 			path = Ads;
+			sourceTree = "<group>";
+		};
+		3A2B3C4D5E6F701000000412 /* Diagnostics */ = {
+			isa = PBXGroup;
+			children = (
+				3A2B3C4D5E6F701000000312 /* AppLogger.swift */,
+			);
+			path = Diagnostics;
 			sourceTree = "<group>";
 		};
 		3A2B3C4D5E6F701000000410 /* Background */ = {
@@ -288,10 +437,20 @@
 			path = VideoCore;
 			sourceTree = "<group>";
 		};
+		8A2B3C4D5E6F701000000300 /* TaptionEncoderTests */ = {
+			isa = PBXGroup;
+			children = (
+				8A2B3C4D5E6F701000000101 /* CodecRoutePlannerTests.swift */,
+				8A2B3C4D5E6F701000000102 /* CodecFixtureEvidenceTests.swift */,
+			);
+			path = TaptionEncoderTests;
+			sourceTree = "<group>";
+		};
 		1A2B3C4D5E6F701000000302 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				1A2B3C4D5E6F701000000100 /* Taption Encoder.app */,
+				8A2B3C4D5E6F701000000100 /* TaptionEncoderTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -314,10 +473,31 @@
 			name = TaptionEncoder;
 			packageProductDependencies = (
 				5A2B3C4D5E6F701000000102 /* SwiftVLC */,
+				6A2B3C4D5E6F701000000102 /* GoogleMobileAds */,
 			);
 			productName = "Taption Encoder";
 			productReference = 1A2B3C4D5E6F701000000100 /* Taption Encoder.app */;
 			productType = "com.apple.product-type.application";
+		};
+		8A2B3C4D5E6F701000000400 /* TaptionEncoderTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8A2B3C4D5E6F701000000700 /* Build configuration list for PBXNativeTarget "TaptionEncoderTests" */;
+			buildPhases = (
+				8A2B3C4D5E6F701000000500 /* Sources */,
+				8A2B3C4D5E6F701000000200 /* Frameworks */,
+				8A2B3C4D5E6F701000000600 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8A2B3C4D5E6F701000000800 /* PBXTargetDependency */,
+			);
+			name = TaptionEncoderTests;
+			packageProductDependencies = (
+			);
+			productName = TaptionEncoderTests;
+			productReference = 8A2B3C4D5E6F701000000100 /* TaptionEncoderTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -332,6 +512,10 @@
 					1A2B3C4D5E6F701000000400 = {
 						CreatedOnToolsVersion = 16.0;
 					};
+					8A2B3C4D5E6F701000000400 = {
+						CreatedOnToolsVersion = 16.0;
+						TestTargetID = 1A2B3C4D5E6F701000000400;
+					};
 				};
 			};
 			buildConfigurationList = 1A2B3C4D5E6F701000000900 /* Build configuration list for PBXProject "TaptionEncoder" */;
@@ -345,12 +529,14 @@
 			mainGroup = 1A2B3C4D5E6F701000000300;
 			packageReferences = (
 				5A2B3C4D5E6F701000000101 /* XCRemoteSwiftPackageReference "SwiftVLC" */,
+				6A2B3C4D5E6F701000000101 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
 			);
 			productRefGroup = 1A2B3C4D5E6F701000000302 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				1A2B3C4D5E6F701000000400 /* TaptionEncoder */,
+				8A2B3C4D5E6F701000000400 /* TaptionEncoderTests */,
 			);
 		};
 /* End PBXProject section */
@@ -361,6 +547,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A2B3C4D5E6F701000000003 /* Assets.xcassets in Resources */,
+				9A2B3C4D5E6F701000000001 /* OpenSourceNotices in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8A2B3C4D5E6F701000000600 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -395,6 +589,8 @@
 				3A2B3C4D5E6F701000000015 /* BackgroundEncodingCoordinator.swift in Sources */,
 				3A2B3C4D5E6F701000000016 /* ProjectDocumentStore.swift in Sources */,
 				3A2B3C4D5E6F701000000017 /* FCPXMLValidator.swift in Sources */,
+				3A2B3C4D5E6F701000000018 /* AppLogger.swift in Sources */,
+				3A2B3C4D5E6F701000000019 /* SaveFailurePresentation.swift in Sources */,
 				4A2B3C4D5E6F701000000001 /* SourceActionBar.swift in Sources */,
 				4A2B3C4D5E6F701000000002 /* EncoderModePicker.swift in Sources */,
 				4A2B3C4D5E6F701000000003 /* EncodingProgressView.swift in Sources */,
@@ -403,10 +599,54 @@
 				4A2B3C4D5E6F701000000006 /* PrimaryActionButton.swift in Sources */,
 				4A2B3C4D5E6F701000000007 /* StatusBanner.swift in Sources */,
 				4A2B3C4D5E6F701000000008 /* ProgressCard.swift in Sources */,
+				4A2B3C4D5E6F701000000009 /* HomeLayoutMetrics.swift in Sources */,
+				4A2B3C4D5E6F701000000010 /* VideoDocumentPicker.swift in Sources */,
+				4A2B3C4D5E6F701000000011 /* ImportedPhotoVideo.swift in Sources */,
+				4A2B3C4D5E6F701000000012 /* ImportableVideoTypes.swift in Sources */,
+				4A2B3C4D5E6F701000000013 /* LoadedFilesPanelView.swift in Sources */,
+				4A2B3C4D5E6F701000000014 /* HomeQueueModels.swift in Sources */,
+				4A2B3C4D5E6F701000000015 /* HomeMenuSheetView.swift in Sources */,
+				7A2B3C4D5E6F701000000001 /* CodecAlgorithm.swift in Sources */,
+				7A2B3C4D5E6F701000000002 /* HW_AV1HEVCCodecAlgorithm.swift in Sources */,
+				7A2B3C4D5E6F701000000003 /* SW_AV1HEVCCodecAlgorithm.swift in Sources */,
+				7A2B3C4D5E6F701000000004 /* HW_CodecCapabilityProbe.swift in Sources */,
+				7A2B3C4D5E6F701000000007 /* HW_AppleDeviceCodecProfiles.swift in Sources */,
+				7A2B3C4D5E6F701000000019 /* HW_DeviceCodecReportStore.swift in Sources */,
+				7A2B3C4D5E6F701000000005 /* SW_CodecSupportCatalog.swift in Sources */,
+				7A2B3C4D5E6F701000000006 /* CodecRoutePlanner.swift in Sources */,
+				7A2B3C4D5E6F701000000008 /* HW_AudioCodecCapabilityCatalog.swift in Sources */,
+				7A2B3C4D5E6F701000000009 /* SW_AudioCodecSupportCatalog.swift in Sources */,
+				7A2B3C4D5E6F701000000010 /* AudioCodecRoutePlanner.swift in Sources */,
+				7A2B3C4D5E6F701000000011 /* CodecTranscodingRegistry.swift in Sources */,
+				7A2B3C4D5E6F701000000012 /* SW_SoftwareCodecBackendRegistry.swift in Sources */,
+				7A2B3C4D5E6F701000000013 /* CodecFixtureEvidence.swift in Sources */,
+				7A2B3C4D5E6F701000000014 /* SW_UniversalCodecTranscodeAlgorithm.swift in Sources */,
+				7A2B3C4D5E6F701000000015 /* CodecOutputCatalog.swift in Sources */,
+				7A2B3C4D5E6F701000000016 /* AudioCodecAlgorithm.swift in Sources */,
+				7A2B3C4D5E6F701000000017 /* SW_UniversalAudioCodecTranscodeAlgorithm.swift in Sources */,
+				7A2B3C4D5E6F701000000018 /* SW_FFmpegCodecCommandPlanner.swift in Sources */,
+				7A2B3C4D5E6F701000000020 /* SW_FFmpegCommandExecutor.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8A2B3C4D5E6F701000000500 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8A2B3C4D5E6F701000000001 /* CodecRoutePlannerTests.swift in Sources */,
+				8A2B3C4D5E6F701000000002 /* CodecFixtureEvidenceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8A2B3C4D5E6F701000000800 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1A2B3C4D5E6F701000000400 /* TaptionEncoder */;
+			targetProxy = 8A2B3C4D5E6F701000000801 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCRemoteSwiftPackageReference section */
 		5A2B3C4D5E6F701000000101 /* XCRemoteSwiftPackageReference "SwiftVLC" */ = {
@@ -417,6 +657,14 @@
 				version = 0.10.0;
 			};
 		};
+		6A2B3C4D5E6F701000000101 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googleads/swift-package-manager-google-mobile-ads.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 13.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -424,6 +672,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 5A2B3C4D5E6F701000000101 /* XCRemoteSwiftPackageReference "SwiftVLC" */;
 			productName = SwiftVLC;
+		};
+		6A2B3C4D5E6F701000000102 /* GoogleMobileAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6A2B3C4D5E6F701000000101 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */;
+			productName = GoogleMobileAds;
 		};
 /* End XCSwiftPackageProductDependency section */
 
@@ -551,20 +804,12 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Taption Encoder";
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Taption Encoder needs access to selected videos for local conversion.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UIRequiresFullScreen = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TaptionEncoder/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -588,20 +833,12 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Taption Encoder";
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.video";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Taption Encoder needs access to selected videos for local conversion.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UIRequiresFullScreen = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TaptionEncoder/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -616,6 +853,64 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		8A2B3C4D5E6F701000001100 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 4FWG8XXYM7;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = TaptionEncoderTests;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 00.01.00;
+				PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Taption Encoder.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Taption Encoder";
+				TEST_TARGET_NAME = TaptionEncoder;
+			};
+			name = Debug;
+		};
+		8A2B3C4D5E6F701000001101 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 4FWG8XXYM7;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = TaptionEncoderTests;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 00.01.00;
+				PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Taption Encoder.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Taption Encoder";
+				TEST_TARGET_NAME = TaptionEncoder;
 			};
 			name = Release;
 		};
@@ -636,6 +931,15 @@
 			buildConfigurations = (
 				1A2B3C4D5E6F701000001000 /* Debug */,
 				1A2B3C4D5E6F701000001001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8A2B3C4D5E6F701000000700 /* Build configuration list for PBXNativeTarget "TaptionEncoderTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8A2B3C4D5E6F701000001100 /* Debug */,
+				8A2B3C4D5E6F701000001101 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

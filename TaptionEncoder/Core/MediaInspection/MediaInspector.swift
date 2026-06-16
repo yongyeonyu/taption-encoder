@@ -1,3 +1,4 @@
+import AudioToolbox
 import AVFoundation
 import CoreMedia
 import Foundation
@@ -83,11 +84,10 @@ struct AVFoundationMediaInspector: MediaInspecting {
     private func inspectAudioTrack(_ track: AVAssetTrack) async throws -> TaptionAudioTrackInfo {
         let estimatedDataRate = try await track.load(.estimatedDataRate)
         let formatDescriptions = try await track.load(.formatDescriptions)
-        return TaptionAudioTrackInfo(
-            codec: audioCodec(from: formatDescriptions),
-            channelCount: nil,
-            sampleRate: nil,
-            estimatedBitrate: estimatedDataRate > 0 ? Int(estimatedDataRate) : nil
+        let estimatedBitrate = estimatedDataRate > 0 ? Int(estimatedDataRate) : nil
+        return TaptionAudioFormatDescriptionParser.trackInfo(
+            from: formatDescriptions,
+            estimatedBitrate: estimatedBitrate
         )
     }
 
@@ -100,6 +100,10 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return .av1
         case "hvc1", "hev1":
             return .hevc
+        case "muxa":
+            return .hevcWithAlpha
+        case "dvh1", "dvhe":
+            return .dolbyVisionHEVC
         case "avc1", "avc3":
             return .h264
         case "vp09":
@@ -108,28 +112,36 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return .vp8
         case "mp4v":
             return .mpeg4Visual
-        default:
-            return .unknown
-        }
-    }
-
-    private func audioCodec(from descriptions: [CMFormatDescription]) -> TaptionAudioCodec {
-        guard let description = descriptions.first else {
-            return .unknown
-        }
-        switch fourCharacterCode(CMFormatDescriptionGetMediaSubType(description)) {
-        case "aac ", "aach", "aacl":
-            return .aac
-        case "alac":
-            return .alac
-        case "opus":
-            return .opus
-        case ".mp3":
-            return .mp3
-        case "ac-3":
-            return .ac3
-        case "ec-3":
-            return .eac3
+        case "mp2v":
+            return .mpeg2
+        case "mp1v":
+            return .mpeg1
+        case "h263":
+            return .h263
+        case "jpeg", "dmb1":
+            return .jpeg
+        case "mjpa", "mjpb":
+            return .motionJPEG
+        case "jxlc":
+            return .jpegXL
+        case "rle":
+            return .animation
+        case "cvid":
+            return .cinepak
+        case "svq1":
+            return .sorensonVideo
+        case "svq3":
+            return .sorensonVideo3
+        case "dvc":
+            return .dv
+        case "dvcp", "dvpp", "dv5n", "dv5p":
+            return .dvcPro
+        case "dvhp", "dvhq", "dvh6", "dvh5", "dvh3", "dvh2":
+            return .dvcProHD
+        case "ap4x", "ap4h", "apch", "apcn", "apcs", "apco":
+            return .proRes
+        case "aprn", "aprh":
+            return .proResRaw
         default:
             return .unknown
         }
@@ -170,26 +182,7 @@ struct AVFoundationMediaInspector: MediaInspecting {
     }
 
     private func container(for url: URL) -> TaptionVideoContainer {
-        switch url.pathExtension.lowercased() {
-        case "mp4", "m4v":
-            return .mp4
-        case "mov", "qt":
-            return .mov
-        case "mkv":
-            return .mkv
-        case "avi":
-            return .avi
-        case "webm":
-            return .webm
-        case "mxf":
-            return .mxf
-        case "ts", "mts", "m2ts":
-            return .mpegTransportStream
-        case "mpg", "mpeg":
-            return .mpegProgramStream
-        default:
-            return .unknown
-        }
+        TaptionVideoContainer.inferred(from: url)
     }
 
     private func fingerprint(for url: URL) -> TaptionMediaFingerprint {
@@ -265,6 +258,106 @@ struct AVFoundationMediaInspector: MediaInspecting {
 
     private func string(_ value: CFString) -> String {
         value as String
+    }
+}
+
+enum TaptionAudioFormatDescriptionParser {
+    static func trackInfo(
+        from descriptions: [CMFormatDescription],
+        estimatedBitrate: Int?
+    ) -> TaptionAudioTrackInfo {
+        let description = firstAudioDescription(from: descriptions)
+        return TaptionAudioTrackInfo(
+            codec: codec(from: descriptions),
+            channelCount: channelCount(from: description),
+            sampleRate: sampleRate(from: description),
+            estimatedBitrate: estimatedBitrate
+        )
+    }
+
+    static func codec(from descriptions: [CMFormatDescription]) -> TaptionAudioCodec {
+        guard let description = descriptions.first else {
+            return .unknown
+        }
+        switch fourCharacterCode(CMFormatDescriptionGetMediaSubType(description)) {
+        case "aac", "aach", "aacl":
+            return .aac
+        case "aace":
+            return .xheAAC
+        case "alac":
+            return .alac
+        case "opus":
+            return .opus
+        case ".mp3", "mp3":
+            return .mp3
+        case ".mp2", "mp2":
+            return .mp2
+        case "ac-3":
+            return .ac3
+        case "ec-3":
+            return .eac3
+        case "dtsc", "dtsh", "dtsl", "dtsx":
+            return .dts
+        case "mlpa":
+            return .trueHD
+        case "flac":
+            return .flac
+        case "samr", "sawb":
+            return .amr
+        case "ilbc":
+            return .ilbc
+        case "lpcm", "sowt", "twos", "in24", "in32", "fl32", "fl64", "raw":
+            return .pcm
+        case "alaw":
+            return .aLaw
+        case "ulaw":
+            return .muLaw
+        default:
+            return .unknown
+        }
+    }
+
+    static func channelCount(from description: CMFormatDescription?) -> Int? {
+        guard let streamDescription = streamBasicDescription(from: description) else {
+            return nil
+        }
+        let count = Int(streamDescription.mChannelsPerFrame)
+        return count > 0 ? count : nil
+    }
+
+    static func sampleRate(from description: CMFormatDescription?) -> Double? {
+        guard let streamDescription = streamBasicDescription(from: description) else {
+            return nil
+        }
+        let rate = streamDescription.mSampleRate
+        return rate.isFinite && rate > 0 ? rate : nil
+    }
+
+    private static func firstAudioDescription(from descriptions: [CMFormatDescription]) -> CMFormatDescription? {
+        descriptions.first { CMFormatDescriptionGetMediaType($0) == kCMMediaType_Audio }
+            ?? descriptions.first
+    }
+
+    private static func streamBasicDescription(
+        from description: CMFormatDescription?
+    ) -> AudioStreamBasicDescription? {
+        guard let description,
+              CMFormatDescriptionGetMediaType(description) == kCMMediaType_Audio,
+              let pointer = CMAudioFormatDescriptionGetStreamBasicDescription(description) else {
+            return nil
+        }
+        return pointer.pointee
+    }
+
+    private static func fourCharacterCode(_ code: FourCharCode) -> String {
+        String(bytes: [
+            UInt8((code >> 24) & 0xFF),
+            UInt8((code >> 16) & 0xFF),
+            UInt8((code >> 8) & 0xFF),
+            UInt8(code & 0xFF)
+        ], encoding: .ascii)?
+            .trimmingCharacters(in: .controlCharacters.union(.whitespacesAndNewlines))
+            .lowercased() ?? ""
     }
 }
 

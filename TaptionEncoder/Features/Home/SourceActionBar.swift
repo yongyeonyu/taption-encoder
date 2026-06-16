@@ -4,18 +4,35 @@ struct SourceActionBar: View {
     var canSelectSource: Bool
     var canReset: Bool
     var onFiles: () -> Void
+    var onFolder: () -> Void
     var onPhotos: () -> Void
     var onReset: () -> Void
+    var controlHeight: CGFloat = 44
+    var buttonFont: Font = .body
 
     var body: some View {
         VStack(spacing: 10) {
-            PrimaryActionButton(
-                title: "Files",
-                systemImage: "folder",
-                isProminent: true,
-                isEnabled: canSelectSource,
-                action: onFiles
-            )
+            HStack(spacing: 10) {
+                PrimaryActionButton(
+                    title: "File",
+                    systemImage: "doc",
+                    isProminent: true,
+                    isEnabled: canSelectSource,
+                    height: controlHeight,
+                    font: buttonFont,
+                    action: onFiles
+                )
+
+                PrimaryActionButton(
+                    title: "Folder",
+                    systemImage: "folder",
+                    isProminent: true,
+                    isEnabled: canSelectSource,
+                    height: controlHeight,
+                    font: buttonFont,
+                    action: onFolder
+                )
+            }
 
             HStack(spacing: 10) {
                 PrimaryActionButton(
@@ -23,6 +40,8 @@ struct SourceActionBar: View {
                     systemImage: "photo.on.rectangle",
                     isProminent: false,
                     isEnabled: canSelectSource,
+                    height: controlHeight,
+                    font: buttonFont,
                     action: onPhotos
                 )
 
@@ -31,6 +50,8 @@ struct SourceActionBar: View {
                     systemImage: "arrow.counterclockwise",
                     isProminent: false,
                     isEnabled: canReset,
+                    height: controlHeight,
+                    font: buttonFont,
                     action: onReset
                 )
             }

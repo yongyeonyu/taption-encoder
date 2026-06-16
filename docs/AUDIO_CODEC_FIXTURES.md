@@ -1,0 +1,154 @@
+# Audio Codec Fixtures
+
+Date: 2026-06-16
+
+## Purpose
+
+Taption Encoder must eventually handle broad audio inputs while converting video to H.265 or to another selected output codec. Audio should either be preserved when compatible or transcoded to a compatible output, with the default MVP output using AAC in MP4.
+
+This fixture set focuses on audio families. Each generated file contains:
+
+- A short synthetic video track.
+- One audio track with the target codec.
+- A manifest row compatible with `Scripts/transcode_fixtures_to_hevc.sh`.
+- An `.ffprobe.json` sidecar.
+
+Generated media is ignored by git.
+
+## Generate
+
+```sh
+Scripts/generate_audio_codec_fixtures.sh
+```
+
+The default output folder is:
+
+```text
+Samples/CodecFixtures/audio_generated/
+```
+
+For a quick smoke run:
+
+```sh
+TAPTION_AUDIO_FIXTURE_DURATION=1 TAPTION_AUDIO_FIXTURE_SIZE=160x90 TAPTION_AUDIO_FIXTURE_FPS=15 \
+  Scripts/generate_audio_codec_fixtures.sh Samples/CodecFixtures/audio_generated_smoke
+```
+
+The script writes:
+
+- `fixtures.tsv` for generated pass cases.
+- `audio_fixture_generation.tsv` for pass, skip, and fail status.
+- one `.ffprobe.json` per generated file.
+- per-target generation logs.
+
+## Transcode To H.265
+
+```sh
+Scripts/transcode_fixtures_to_hevc.sh \
+  Samples/CodecFixtures/audio_generated_smoke \
+  Samples/CodecFixtures/transcode_reports/audio_smoke_latest
+```
+
+The transcode gate uses both:
+
+- `SW_HEVC`: `libx265`
+- `HW_HEVC`: `hevc_videotoolbox`
+
+Each passing row requires:
+
+- Output video codec probes as `hevc`.
+- Output audio stream exists.
+- Output audio signal is detected by FFmpeg `volumedetect`.
+- Output audio peak is above `TAPTION_AUDIO_SIGNAL_THRESHOLD_DB`, default `-60 dB`.
+
+## App-Core Execution Readiness
+
+`TaptionAudioCodecExecutionReadinessReporter` summarizes every planned audio source/output route before the broad software backend ships. It separates:
+
+- Copy routes that can remain in the selected container.
+- Apple-native decode/encode routes.
+- FFmpeg-family command-plan routes that are not runnable until the backend is bundled and reviewed.
+- Output encoder gaps such as `xHE-AAC` and `AMR`.
+
+The report is intentionally stricter than route selection: every route can stay in the universal roadmap while still exposing whether the current app build can execute it, can only plan it, or needs another encoder decision.
+
+`HW_AudioCodecAlgorithmCatalog` and `TaptionAudioCodecDescriptorRegistry` expose the same split as code descriptors: Apple-native/copy routes prefer `HW_` descriptors, FFmpeg-family routes use `SW_` descriptors, and missing output encoders remain blocked instead of pretending to be executable.
+
+`TaptionCodecFixtureEvidence.verifyAudioFixtureCatalogCoverage()` now checks the audio fixture catalog against `TaptionAudioCodecRoutePlanner.universalAudioCodecs`. Every universal audio codec must be tracked as either generated or explicitly pending, so the final all-to-all codec mesh cannot add an audio source/output family without also updating the sample plan.
+
+`TaptionCodecFixtureEvidence.verifyAudioFixtureGeneration()` also checks `audio_fixture_generation.tsv` directly. Pending codecs such as `xHE-AAC`, `AMR-NB`, and `AMR-WB` must keep a concrete generator attempt row, attempted encoder name, no output file, and a useful blocking reason such as a missing local FFmpeg encoder. The generator now also tries an Apple `afconvert` alternate for those pending codecs before recording the skip, so the evidence distinguishes "not attempted" from "tried FFmpeg and Apple system encoding on this machine." If a pending codec starts generating successfully on a future machine, the app-scheme tests intentionally fail until the codec is moved from pending to generated fixture coverage.
+
+## Latest Local Smoke Result
+
+Command:
+
+```sh
+TAPTION_AUDIO_FIXTURE_DURATION=1 TAPTION_AUDIO_FIXTURE_SIZE=160x90 TAPTION_AUDIO_FIXTURE_FPS=15 \
+  Scripts/generate_audio_codec_fixtures.sh Samples/CodecFixtures/audio_generated_smoke
+
+Scripts/transcode_fixtures_to_hevc.sh \
+  Samples/CodecFixtures/audio_generated_smoke \
+  Samples/CodecFixtures/transcode_reports/audio_smoke_latest
+```
+
+Generation:
+
+| Status | Count |
+| --- | ---: |
+| PASS | 22 |
+| SKIP | 3 |
+| FAIL | 0 |
+
+Transcode:
+
+| Metric | Count |
+| --- | ---: |
+| Input fixtures | 22 |
+| SW_HEVC attempts | 22 |
+| HW_HEVC attempts | 22 |
+| Total attempts | 44 |
+| Passed | 44 |
+| Skipped | 0 |
+| Failed | 0 |
+| Audio signal checks passed | 44 |
+
+## Generated Audio Coverage
+
+| Taption audio model | Fixture coverage |
+| --- | --- |
+| `aac` | AAC in MP4 |
+| `xheAAC` | Skipped locally; FFmpeg encoder unavailable and Apple `afconvert` USAC alternate failed with `fmt?` |
+| `pcm` | PCM S16LE, S24LE, F32LE in MOV |
+| `aLaw` | PCM A-law in AVI |
+| `muLaw` | PCM mu-law in AVI |
+| `alac` | ALAC in MOV |
+| `opus` | Opus in WebM and MKV |
+| `mp3` | MP3 in AVI |
+| `mp2` | MP2 in MPEG-PS |
+| `ac3` | AC3 in MP4 |
+| `eac3` | EAC3 in MP4 |
+| `dts` | DTS/DCA in MKV |
+| `trueHD` | TrueHD in MKV |
+| `flac` | FLAC in MKV |
+| `vorbis` | Vorbis in MKV |
+| `amr` | Skipped locally; AMR-NB and AMR-WB FFmpeg encoders unavailable and Apple `afconvert` AMR alternates failed with `fmt?` |
+| `ilbc` | iLBC in MOV via AudioToolbox encoder |
+| `wavPack` | WavPack in MKV |
+| `wma` | WMA2 in WMV/ASF |
+| `adpcm` | IMA WAV ADPCM and Microsoft ADPCM in AVI |
+
+## Remaining Work
+
+- Implemented app-core route planning now lives in `HW_AudioCodecCapabilityCatalog.swift`, `SW_AudioCodecSupportCatalog.swift`, and `AudioCodecRoutePlanner.swift`.
+- App-core tests verify that every planned source audio codec has a default route to AAC for MP4/H.265 output, compatible AAC can be copied, and software-only codecs such as Opus route through software decode before Apple-native AAC encode.
+- App-core fixture evidence tests now build AAC/MP4 audio route plans, FFmpeg-family software fallback command plans, and gated executor jobs from every generated audio fixture row while preserving sample rate, channel count, and source bitrate options. They also match those jobs against the latest SW/HW H.265 output and audio-signal evidence rows.
+- Audio fixture catalog tests now prove every universal audio codec is either generated locally or explicitly marked pending for a real or alternate generator path.
+- Audio fixture generation tests now enforce that every pending codec has a concrete skipped/failed generation attempt with a useful blocking reason and an Apple `afconvert` alternate attempt where applicable, and that a successfully generated pending codec must be promoted to generated coverage.
+- All-to-all app-core tests now build FFmpeg-family command plans from every generated audio fixture to every currently plannable output audio codec, while preserving source sample rate, channel count, and bitrate options. `verifyAudioFixtureAllToAllCommandPlanCoverage()` summarizes expected/planned job counts, expected/planned route counts, duplicate job IDs, and missing routes for that command-plan surface.
+- AAC/MP4 audio fixture execution jobs now rebuild a function-style `TaptionAudioCodecTranscodeRequest` and run through `SW_FFmpegAudioCodecTranscodeExecutor` with a fake runner when the broad software backend gates are satisfied.
+- Broader all-to-all app-side audio execution still needs to cover every plannable output codec after the FFmpeg-family backend is bundled and license-reviewed.
+- Collect or generate xHE-AAC samples through an App Store-safe path.
+- Collect or generate AMR-NB and AMR-WB samples through an App Store-safe path.
+- Add real-world multichannel, surround, high sample-rate, odd channel-layout, and silent/damaged audio samples.
+- Keep objective audio signal verification in app-scheme evidence tests and expand executor coverage beyond the current AAC/MP4 audio route test surface.
+- Decide when audio can be copied versus transcoded to AAC or another selected output audio codec.

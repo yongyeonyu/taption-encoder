@@ -33,23 +33,26 @@ struct TaptionAdvancedOutputOptions: Codable, Equatable {
     var frameRate: TaptionRationalFrameRate?
     var targetBitrate: Int?
     var color: TaptionColorDescription?
+    var rotationDegrees: Int?
 
     init(
         resizeTo: TaptionPixelSize? = nil,
         frameRate: TaptionRationalFrameRate? = nil,
         targetBitrate: Int? = nil,
-        color: TaptionColorDescription? = nil
+        color: TaptionColorDescription? = nil,
+        rotationDegrees: Int? = nil
     ) {
         self.resizeTo = resizeTo
         self.frameRate = frameRate
         self.targetBitrate = targetBitrate
         self.color = color
+        self.rotationDegrees = rotationDegrees
     }
 
     static let preserveSource = TaptionAdvancedOutputOptions()
 }
 
-struct TaptionHEVCOutputPolicy: Codable, Equatable {
+struct TaptionVideoOutputPolicy: Codable, Equatable {
     var videoCodec: TaptionVideoCodec
     var container: TaptionVideoContainer
     var profile: TaptionHEVCProfile
@@ -68,6 +71,40 @@ struct TaptionHEVCOutputPolicy: Codable, Equatable {
         self.profile = profile
         self.qualityPolicy = qualityPolicy
         self.advancedOptions = advancedOptions
+    }
+}
+
+typealias TaptionHEVCOutputPolicy = TaptionVideoOutputPolicy
+
+enum TaptionSourcePreservingOutputPolicyResolver {
+    static func resolvedPolicy(
+        for asset: TaptionVideoAsset,
+        requestedPolicy: TaptionVideoOutputPolicy
+    ) -> TaptionVideoOutputPolicy {
+        guard requestedPolicy.qualityPolicy == .preserveSourceVisuals,
+              let videoTrack = asset.videoTrack else {
+            return requestedPolicy
+        }
+
+        var resolvedPolicy = requestedPolicy
+        resolvedPolicy.advancedOptions = resolvedOptions(
+            for: videoTrack,
+            requestedOptions: requestedPolicy.advancedOptions
+        )
+        return resolvedPolicy
+    }
+
+    static func resolvedOptions(
+        for videoTrack: TaptionVideoTrackInfo,
+        requestedOptions: TaptionAdvancedOutputOptions
+    ) -> TaptionAdvancedOutputOptions {
+        TaptionAdvancedOutputOptions(
+            resizeTo: requestedOptions.resizeTo ?? videoTrack.displaySize,
+            frameRate: requestedOptions.frameRate ?? videoTrack.nominalFrameRate,
+            targetBitrate: requestedOptions.targetBitrate ?? videoTrack.estimatedBitrate,
+            color: requestedOptions.color ?? videoTrack.color,
+            rotationDegrees: requestedOptions.rotationDegrees ?? videoTrack.rotationDegrees
+        )
     }
 }
 
@@ -139,7 +176,11 @@ struct TaptionEncodingInput: Codable, Equatable {
 struct TaptionEncodingPlan: Identifiable, Codable, Equatable {
     var id: UUID
     var input: TaptionEncodingInput
-    var outputPolicy: TaptionHEVCOutputPolicy
+    var outputPolicy: TaptionVideoOutputPolicy
+    var codecRoute: TaptionCodecRoute?
+    var codecExecutionKind: TaptionCodecRouteExecutionKind?
+    var videoCommandPlan: SW_FFmpegCommandPlan?
+    var audioPlan: TaptionAudioTranscodePlan?
     var savePolicy: TaptionSavePolicy
     var encoderSelection: TaptionEncoderSelection
     var sourceURL: URL?
@@ -149,7 +190,11 @@ struct TaptionEncodingPlan: Identifiable, Codable, Equatable {
     init(
         id: UUID = UUID(),
         input: TaptionEncodingInput,
-        outputPolicy: TaptionHEVCOutputPolicy = TaptionHEVCOutputPolicy(),
+        outputPolicy: TaptionVideoOutputPolicy = TaptionVideoOutputPolicy(),
+        codecRoute: TaptionCodecRoute? = nil,
+        codecExecutionKind: TaptionCodecRouteExecutionKind? = nil,
+        videoCommandPlan: SW_FFmpegCommandPlan? = nil,
+        audioPlan: TaptionAudioTranscodePlan? = nil,
         savePolicy: TaptionSavePolicy = TaptionSavePolicy(),
         encoderSelection: TaptionEncoderSelection = TaptionEncoderSelection(),
         sourceURL: URL? = nil,
@@ -159,6 +204,10 @@ struct TaptionEncodingPlan: Identifiable, Codable, Equatable {
         self.id = id
         self.input = input
         self.outputPolicy = outputPolicy
+        self.codecRoute = codecRoute
+        self.codecExecutionKind = codecExecutionKind
+        self.videoCommandPlan = videoCommandPlan
+        self.audioPlan = audioPlan
         self.savePolicy = savePolicy
         self.encoderSelection = encoderSelection
         self.sourceURL = sourceURL
@@ -175,6 +224,8 @@ struct TaptionPendingSaveState: Identifiable, Codable, Equatable {
     var saveDestination: TaptionSaveDestinationKind
     var requiresRewardedAd: Bool
     var createdAt: Date
+    var accessBookmarkData: Data?
+    var rewardedAdCompletedAt: Date?
 
     init(
         id: UUID = UUID(),
@@ -183,7 +234,9 @@ struct TaptionPendingSaveState: Identifiable, Codable, Equatable {
         finalOutputURL: URL? = nil,
         saveDestination: TaptionSaveDestinationKind,
         requiresRewardedAd: Bool,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        accessBookmarkData: Data? = nil,
+        rewardedAdCompletedAt: Date? = nil
     ) {
         self.id = id
         self.planID = planID
@@ -192,6 +245,8 @@ struct TaptionPendingSaveState: Identifiable, Codable, Equatable {
         self.saveDestination = saveDestination
         self.requiresRewardedAd = requiresRewardedAd
         self.createdAt = createdAt
+        self.accessBookmarkData = accessBookmarkData
+        self.rewardedAdCompletedAt = rewardedAdCompletedAt
     }
 }
 
@@ -276,25 +331,99 @@ enum TaptionEncodingPlanner {
         preferredMode: TaptionEncoderMode = .automatic,
         savePolicy: TaptionSavePolicy = TaptionSavePolicy()
     ) -> TaptionEncodingPlan {
-        let outputPolicy = TaptionHEVCOutputPolicy(
+        let outputPolicy = TaptionVideoOutputPolicy(
             videoCodec: .hevc,
             container: .mp4,
             profile: .automatic,
             qualityPolicy: .preserveSourceVisuals,
             advancedOptions: .preserveSource
         )
+        return makeSingleAssetPlan(
+            asset: asset,
+            sourceURL: sourceURL,
+            temporaryOutputURL: temporaryOutputURL,
+            outputPolicy: outputPolicy,
+            preferredMode: preferredMode,
+            savePolicy: savePolicy
+        )
+    }
+
+    static func makeSingleAssetPlan(
+        asset: TaptionVideoAsset,
+        sourceURL: URL,
+        temporaryOutputURL: URL,
+        outputPolicy: TaptionVideoOutputPolicy,
+        preferredMode: TaptionEncoderMode = .automatic,
+        savePolicy: TaptionSavePolicy = TaptionSavePolicy()
+    ) -> TaptionEncodingPlan {
+        let resolvedOutputPolicy = TaptionSourcePreservingOutputPolicyResolver.resolvedPolicy(
+            for: asset,
+            requestedPolicy: outputPolicy
+        )
         let finalURL = savePolicy.namingPolicy.outputURL(
             for: sourceURL,
-            container: outputPolicy.container
+            container: resolvedOutputPolicy.container
+        )
+        let routeSelection = TaptionCodecRoutePlanner.selectRoute(
+            for: asset,
+            outputCodec: resolvedOutputPolicy.videoCodec,
+            requestedMode: preferredMode
+        )
+        let audioPlan = TaptionAudioTranscodePlanner.makeFirstTrackPlan(
+            asset: asset,
+            sourceURL: sourceURL,
+            outputURL: temporaryOutputURL,
+            outputContainer: resolvedOutputPolicy.container
+        )
+        let videoCommandPlan = makeVideoCommandPlanIfAvailable(
+            sourceURL: sourceURL,
+            outputURL: temporaryOutputURL,
+            routeSelection: routeSelection,
+            outputPolicy: resolvedOutputPolicy,
+            audioPlan: audioPlan
         )
         return TaptionEncodingPlan(
             input: TaptionEncodingInput(kind: .singleAsset, assetID: asset.id),
-            outputPolicy: outputPolicy,
+            outputPolicy: resolvedOutputPolicy,
+            codecRoute: routeSelection.route,
+            codecExecutionKind: routeSelection.executionKind,
+            videoCommandPlan: videoCommandPlan,
+            audioPlan: audioPlan,
             savePolicy: savePolicy,
-            encoderSelection: TaptionEncoderSelection(requestedMode: preferredMode),
+            encoderSelection: routeSelection.encoderSelection,
             sourceURL: sourceURL,
             temporaryOutputURL: temporaryOutputURL,
             finalOutputURL: finalURL
+        )
+    }
+
+    private static func makeVideoCommandPlanIfAvailable(
+        sourceURL: URL,
+        outputURL: URL,
+        routeSelection: TaptionCodecRouteSelection,
+        outputPolicy: TaptionVideoOutputPolicy,
+        audioPlan: TaptionAudioTranscodePlan?
+    ) -> SW_FFmpegCommandPlan? {
+        let readiness = TaptionVideoCodecExecutionReadinessReporter.item(
+            for: routeSelection.route,
+            outputContainer: outputPolicy.container
+        )
+        guard readiness.hasCommandPlan else {
+            return nil
+        }
+
+        return try? SW_FFmpegCodecCommandPlanner.makeVideoCommandPlan(
+            request: TaptionCodecTranscodeRequest(
+                sourceURL: sourceURL,
+                outputURL: outputURL,
+                route: routeSelection.route,
+                options: TaptionCodecTranscodeOptions(
+                    outputPolicy: outputPolicy,
+                    preserveSourceVisualQuality: true,
+                    preserveAudioWhenPossible: audioPlan != nil
+                )
+            ),
+            audioPlan: audioPlan
         )
     }
 }

@@ -12,6 +12,16 @@
 
 This project is the standalone app shell for Taption's AV1 to H.265 conversion feature. It should stay separate from the main Taption editor unless a file is intentionally ported.
 
+## Product Direction
+
+- First release: AV1 to H.265.
+- Next milestone: broad practical video inputs to H.265.
+- Final direction: universal all-to-all codec conversion.
+- Treat routes such as `H.264 -> AV1` and `AV1 -> H.264` as equally valid planned routes.
+- Keep source and output codec catalogs symmetric unless a codec is intentionally excluded from the universal product contract.
+- H.265 is the recommended default output, not a permanent architecture limit.
+- Codec implementations must stay route-based and portable through explicit `HW_` and `SW_` core files.
+
 ## Starting Rules
 
 - Check `git status --short --branch` first if this folder becomes a git repo.

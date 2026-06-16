@@ -29,6 +29,7 @@ struct FeatureFlags: Equatable {
 
     static let phase0 = FeatureFlags(
         isRealEncodingEnabled: true,
+        isAdMobEnabled: true,
         usesFakeServices: false
     )
 }

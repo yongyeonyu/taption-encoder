@@ -8,3 +8,8 @@ build/
 *.ipa
 *.dSYM
 *.dSYM.zip
+/Samples/CodecFixtures/generated/
+/Samples/CodecFixtures/generated_smoke/
+/Samples/CodecFixtures/audio_generated/
+/Samples/CodecFixtures/audio_generated_smoke/
+/Samples/CodecFixtures/transcode_reports/

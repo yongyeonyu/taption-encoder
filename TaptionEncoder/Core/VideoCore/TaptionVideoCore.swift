@@ -14,15 +14,18 @@ enum TaptionVideoCoreError: Error, Equatable {
 struct TaptionPreparedEncodingJob: Equatable {
     var asset: TaptionVideoAsset
     var plan: TaptionEncodingPlan
+    var routeSelection: TaptionCodecRouteSelection
     var storageRequirement: TaptionStorageRequirement
 
     init(
         asset: TaptionVideoAsset,
         plan: TaptionEncodingPlan,
+        routeSelection: TaptionCodecRouteSelection,
         storageRequirement: TaptionStorageRequirement
     ) {
         self.asset = asset
         self.plan = plan
+        self.routeSelection = routeSelection
         self.storageRequirement = storageRequirement
     }
 }
@@ -40,22 +43,49 @@ struct TaptionVideoCore {
         preferredMode: TaptionEncoderMode = .automatic,
         savePolicy: TaptionSavePolicy = TaptionSavePolicy()
     ) async throws -> TaptionPreparedEncodingJob {
+        let job = try await prepareSingleAssetJob(
+            sourceURL: sourceURL,
+            temporaryOutputURL: temporaryOutputURL,
+            outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4),
+            preferredMode: preferredMode,
+            savePolicy: savePolicy
+        )
+
+        guard job.routeSelection.isEncodableNow else {
+            throw TaptionVideoCoreError.unsupportedSourceCodec(job.asset.videoTrack?.codec ?? .unknown)
+        }
+        return job
+    }
+
+    func prepareSingleAssetJob(
+        sourceURL: URL,
+        temporaryOutputURL: URL,
+        outputPolicy: TaptionVideoOutputPolicy,
+        preferredMode: TaptionEncoderMode = .automatic,
+        savePolicy: TaptionSavePolicy = TaptionSavePolicy()
+    ) async throws -> TaptionPreparedEncodingJob {
         let asset = try await services.inspector.inspectVideo(at: sourceURL)
-        guard let videoTrack = asset.videoTrack else {
+        guard asset.videoTrack != nil else {
             throw TaptionVideoCoreError.noVideoTrack
         }
-        guard videoTrack.codec == .av1 else {
-            throw TaptionVideoCoreError.unsupportedSourceCodec(videoTrack.codec)
-        }
-        let plan = TaptionEncodingPlanner.makeSingleAssetHEVCPlan(
+        let routeSelection = TaptionCodecRoutePlanner.selectRoute(
+            for: asset,
+            outputCodec: outputPolicy.videoCodec,
+            requestedMode: preferredMode
+        )
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
             asset: asset,
             sourceURL: sourceURL,
             temporaryOutputURL: temporaryOutputURL,
+            outputPolicy: outputPolicy,
             preferredMode: preferredMode,
             savePolicy: savePolicy
         )
         let storageRequirement = try await services.storageChecker.storageRequirement(for: plan)
-        guard storageRequirement.hasEnoughSpace else {
+        let canRunInThisBuild = routeSelection.isEncodableNow
+            && outputPolicy.videoCodec == .hevc
+            && outputPolicy.container == .mp4
+        guard !canRunInThisBuild || storageRequirement.hasEnoughSpace else {
             throw TaptionVideoCoreError.insufficientStorage(
                 requiredBytes: storageRequirement.requiredWorkingBytes,
                 availableBytes: storageRequirement.availableBytes
@@ -64,6 +94,7 @@ struct TaptionVideoCore {
         return TaptionPreparedEncodingJob(
             asset: asset,
             plan: plan,
+            routeSelection: routeSelection,
             storageRequirement: storageRequirement
         )
     }
@@ -106,9 +137,16 @@ struct TaptionVideoCore {
     }
 
     func authorizePendingSave(_ state: TaptionPendingSaveState) async throws -> Bool {
+        guard state.requiresRewardedAd else {
+            return true
+        }
+
         let isAuthorized = try await services.saveGateAuthorizer.authorizeFinalSave(for: state)
         if isAuthorized {
-            try await services.pendingSaveStore.removePendingState(id: state.id)
+            var authorizedState = state
+            authorizedState.requiresRewardedAd = false
+            authorizedState.rewardedAdCompletedAt = Date()
+            try await services.pendingSaveStore.savePendingState(authorizedState)
         }
         return isAuthorized
     }
@@ -146,7 +184,7 @@ extension TaptionVideoCoreError: LocalizedError {
         case .noVideoTrack:
             return "This file does not contain a readable video track."
         case .unsupportedSourceCodec(let codec):
-            return "This build only supports AV1 input. Detected codec: \(codec.displayName)."
+            return "This build can run AV1 to H.265 / MP4 now. \(codec.displayName) is part of the universal codec roadmap, but this route is not executable in this build yet."
         case .compatibleHEVCPresetUnavailable:
             return "This device cannot create a compatible H.265 export session for this file."
         case .exportFailed(let message):

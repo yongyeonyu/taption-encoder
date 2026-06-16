@@ -7,7 +7,7 @@ Status date: 2026-06-15
 Taption Encoder should be developed in 9 execution phases.
 
 - Phase 0 to Phase 3: build and launch the first monetized AV1 to H.265 app.
-- Phase 4 to Phase 8: expand from the launched app into the final "All to H.265" encoder with legacy software support, FCPXML projects, merge editing, and advanced controls.
+- Phase 4 to Phase 8: expand from the launched app into a broad input encoder, then into the final universal codec-to-codec encoder with legacy software support, FCPXML projects, merge editing, and advanced controls.
 
 Launch target:
 
@@ -18,7 +18,7 @@ Launch target:
 
 The app is considered complete when it can:
 
-- Convert AV1 first, then broadly used user video formats, into H.265.
+- Convert AV1 first, then broadly used user video formats into H.265, then support codec-to-codec conversion across the supported matrix.
 - Use hardware, software, or mixed codec paths based on file and device capability.
 - Support older iPhones and iPads honestly through software encoding, warnings, and capability checks.
 - Run background encoding on iOS/iPadOS 26 or later when the user selects it.
@@ -26,12 +26,12 @@ The app is considered complete when it can:
 - Save output automatically with `_taption` naming or Photos equivalent.
 - Gate final save through rewarded AdMob ads.
 - Preserve completed temporary outputs if rewarded save cannot finish, then restore a pending-save state later without re-encoding.
-- Show top banner ads and additional non-disruptive non-personalized ad placements.
+- Show top and bottom banner ads plus additional non-disruptive non-personalized ad placements.
 - Save merge/edit projects as native `.fcpxml`.
 - Later support `.fcpxmld` bundles for thumbnails, proxies, richer metadata, and user-selected managed media copies.
 - Merge multiple videos into one H.265 output.
 - Provide video-segment editing: trim, cut, split, shorten, reorder, and canvas placement.
-- Offer advanced output controls for H.265 container choice, size, frame rate, bitrate, quality, and color handling.
+- Offer advanced output controls for output codec, container, size, frame rate, bitrate, quality, and color handling.
 
 ## Phase 0: Foundation Lock
 
@@ -73,23 +73,24 @@ Exit criteria:
 
 Goal: replace the placeholder shell with the first usable app surface.
 
-Status, 2026-06-15: implemented for fake UX flow. The Home screen is componentized and can run fake Files/Photos flows through inspecting, storage checking, progress with ETA, cancellation, rewarded-save waiting, pending-save recovery, and completed states. Real encoder and real AdMob integration remain later-phase work.
+Status, 2026-06-16: implemented for the main UX flow and now connected to real AdMob placements. The Home screen is componentized and can run File, folder, and selected Photos flows through inspecting, storage checking, progress with ETA, cancellation, rewarded-save waiting, pending-save recovery, and completed states. Real file-based, folder-based, and selected Photos AV1 encoding paths are implemented; additional ad/privacy hardening remains later-phase work.
 
 Scope:
 
 - Build the main screen:
-  - AdMob banner container
+  - AdMob top and bottom banner containers
   - `Taption Encoder`
   - `AV1 to H.265`
-  - `Files`
+  - `File`
+  - `Folder`
   - `Photos`
   - `Reset`
   - automatic codec-path info display
   - H.265 output summary
   - status, progress, ETA, and cancel area
 - Implement `HomeScreenState`.
-- Add Files picker and Photos picker entry points behind source protocols.
-- Add fake encoding flow for UI testing.
+- Add File picker, Folder picker, and Photos picker entry points behind source protocols.
+- Add fake encoding flow for UI testing and real AV1 source flows for device proof.
 - Add progress bar, percent, elapsed time, and estimated time remaining placeholders.
 - Add cancellation state and failed/completed state shells.
 - Keep ads visually separated from primary controls.
@@ -108,13 +109,15 @@ Exit criteria:
 
 - iPhone portrait layout works.
 - iPad portrait layout uses the same mobile-width UX.
-- Files and Photos buttons enter the expected placeholder flows.
+- File, Folder, and Photos buttons enter the expected source-selection flows.
 - Fake encoding can progress, cancel, fail, and complete.
-- No production ad SDK is required yet.
+- GoogleMobileAds is integrated; Debug builds use Google test ad unit IDs before extended ad QA.
 
 ## Phase 2: AV1 To H.265 Core
 
-Status, 2026-06-15: partially implemented for the first Files-based AV1 path. The app now uses AVFoundation media inspection, AV1-only validation, AVFoundation HEVC export, automatic software AV1 decode fallback through SwiftVLC/libVLC, VideoToolbox hardware encoder capability reporting, real export/fallback progress, cancellation cleanup, storage checks, security-scoped Files access, and `_taption.mp4` final copy after the save gate. Photos save, durable pending-save restoration, AdMob, software fallback audio preservation, and broad software codec integration remain open.
+Status, 2026-06-16: partially implemented for the first AV1 path. The app now uses AVFoundation media inspection, AV1-only validation, AVFoundation HEVC export, automatic software AV1 decode fallback through SwiftVLC/libVLC, VideoToolbox hardware encoder capability reporting, real export/fallback progress, sequential folder processing for common video file extensions, selected Photos import, Photos output save, cancellation cleanup, storage checks, security-scoped file/folder access, AdMob rewarded save, and `_taption.mp4` final copy after the save gate. Durable pending-save restoration hardening, software fallback audio preservation, consent UI, and broad software codec integration remain open.
+
+Status, 2026-06-16 update: broad codec planning now has a concrete research and fixture base in `docs/CODEC_SUPPORT_RESEARCH.md`, `docs/VIDEO_CODEC_FIXTURES.md`, `docs/AUDIO_CODEC_FIXTURES.md`, `docs/HEVC_TRANSCODE_TEST_RESULTS.md`, `docs/DEVICE_CODEC_ROUTE_SIMULATION.md`, `Scripts/generate_video_codec_fixtures.sh`, `Scripts/generate_audio_codec_fixtures.sh`, `Scripts/transcode_fixtures_to_hevc.sh`, `Scripts/verify_codec_fixture_evidence.sh`, `Scripts/simulate_codec_route_planner.sh`, `HW_CodecCapabilityProbe.swift`, `SW_CodecSupportCatalog.swift`, `SW_SoftwareCodecBackendRegistry.swift`, `CodecRoutePlanner.swift`, `TaptionCodecTranscodingRegistry.swift`, `CodecFixtureEvidence.swift`, and the `TaptionEncoderTests` Xcode test target. The local host-side smoke gate converted 45 synthetic input fixtures through both `SW_HEVC` and `HW_HEVC`, for 90/90 passing H.265 outputs; 80 attempts preserve measured audio signal, and 10 raw elementary-stream attempts are explicitly recorded as no-source-audio. The fixture set now includes representative container/raw aliases such as DivX, TP/TRP/TOD, MOD, OGM, DVR-MS, AV1 OBU, H.263, M1V, and M2V; VC-1 remains a real-world or alternate-generator target because the current local FFmpeg build has no VC-1 encoder. The fixture evidence verifier now enforces that every generated fixture has both SW and HW H.265 PASS rows with output audio signal preserved when the source has audio. `CodecFixtureEvidenceTests` now runs the same evidence check inside the app scheme by parsing both the video smoke TSV and audio-focused smoke TSV from Swift; it also parses the generated video smoke manifest and compares it with `SW_CodecSupportCatalog.fixtureTargets`, so the video sample set stays tied to the software codec roadmap. The same tests build source-preserving H.265/MP4 command plans and gated FFmpeg-family execution jobs for every generated video fixture row, match those jobs against the latest SW/HW H.265 and audio-signal evidence rows, and preserve source-derived size, frame rate, bitrate, audio-to-AAC decisions, and no-audio elementary streams. The audio-focused smoke gate generated 22 audio codec fixtures and converted them through both SW/HW H.265 paths for 44/44 passing outputs with measured audio signal present; the app-scheme fixture evidence tests also parse the audio generation TSV, build AAC/MP4 app-core audio route plans, FFmpeg-family software fallback command plans, and gated execution jobs for every generated audio fixture row, match those jobs against the latest SW/HW H.265 and audio-signal evidence rows, and preserve sample rate, channel count, and source bitrate options so generated codec coverage and pending xHE-AAC, AMR-NB, and AMR-WB generator attempts stay explicit. The route simulator now emits 11,665 TSV lines across 16 generic and Apple device-family capability profiles and verifies HW-first, HW/SW mixed, and SW fallback behavior for `AV1 -> H.265`; app-scheme evidence tests also parse the generated route matrix TSV to prove profile coverage, universal route coverage, implemented/planned row counts, and per-side HW decode/encode backend preference. The live AV1-to-H.265 encoder now dispatches through a codec registry, with HW and SW algorithms registered as route implementations and covered by unit tests. The broad SW backend registry now models future software video/audio decode, video/audio encode, and container read/write coverage for all-to-all route planning; `SW_UniversalCodecTranscodeAlgorithm` now adds planned software descriptors for every non-implemented universal route while returning a clear not-bundled error until the broad backend ships. Audio conversion now has `AudioCodecAlgorithm.swift` plus `SW_UniversalAudioCodecTranscodeAlgorithm.swift`, so every universal audio source/output pair has a function-style planned software descriptor and a clear not-bundled execution error until the broad backend ships. The Xcode route planner tests verify the same HW/SW priority behavior inside the app scheme, selected output policy preservation for the generic plan model, and symmetric all-to-all route coverage so pairs such as `H.264 -> AV1` and `AV1 -> H.264` remain first-class planned routes. `TaptionUniversalCodecCompletionAuditor` now turns that final all-to-all target into a single core audit stage: current builds are planning-locked for the universal mesh, but command-plan gaps, software-backend gates, and runtime gaps still block full universal execution. The app now reports per-file planned codec paths as `HW`, `SW`, `HW/SW`, `Planned`, or `Unsupported`; the Home screen exposes output codec/container selectors for the all-to-all roadmap, while the implemented app conversion path is still AV1 to H.265 / MP4. Actual bundled broad-codec execution, broad app-side all-to-H.265, and all-to-all conversion algorithms remain implementation work.
 
 Goal: complete the first real conversion path.
 
@@ -176,12 +179,12 @@ Scope:
 
 - Integrate Google Mobile Ads SDK.
 - Add User Messaging Platform consent if required.
-- Add test ad units in Debug builds.
+- Use test ad units in Debug builds.
 - Prevent production ad IDs in Debug builds.
-- Add top anchored adaptive banner.
+- Add top and bottom banner placements.
 - Add rewarded ad gate before final save.
 - Use non-personalized ad requests initially.
-- Add app-open, interstitial, and native ad providers behind protocols, with conservative placement switches.
+- Add app-open, start interstitial, session-end interstitial, and native ad providers behind protocols, with conservative placement switches.
 - Add App Store privacy answers for ads, analytics, diagnostics, and tracking.
 - Add production AdMob IDs and `app-ads.txt`, privacy policy URL, and support URL through the existing account/site setup.
 - Add Live Activity progress where supported.
@@ -245,7 +248,18 @@ Exit criteria:
 
 ## Phase 5: Broad Input Engine
 
-Goal: move from AV1-only toward "All to H.265."
+Goal: move from AV1-only toward broad input support. The first milestone is "All to H.265"; the final architecture must support all-to-all codec routes.
+
+Research baseline:
+
+- Use `docs/CODEC_SUPPORT_RESEARCH.md` as the current codec/container/audio target list.
+- Use `Scripts/generate_video_codec_fixtures.sh` for synthetic samples with audio.
+- Use `Scripts/generate_audio_codec_fixtures.sh` for audio-family-specific samples.
+- Use `Scripts/transcode_fixtures_to_hevc.sh` for repeatable SW/HW H.265 fixture conversion tests.
+- Use `Scripts/simulate_codec_route_planner.sh` for repeatable HW/SW priority checks across capability profiles.
+- Use `xcodebuild test -scheme TaptionEncoder` for app-scheme codec route planner unit tests.
+- Use `HW_CodecCapabilityProbe` for runtime device hardware support reporting.
+- Use `SW_CodecSupportCatalog` for software fallback and fixture coverage tracking.
 
 Scope:
 
@@ -263,16 +277,19 @@ Scope:
   - M4V
   - WebM
   - MKV
-  - AVI
-  - TS / MTS / M2TS
+  - AVI / DivX
+  - TS / MTS / M2TS / TP / TRP / TOD
+  - MPEG-PS / VOB / MOD
   - MXF
+  - OGM, DVR-MS, and raw elementary stream aliases
 - Add software codec backend behind protocols.
 - Evaluate FFmpeg-family software codec options and pull broad support as far as App Store, licensing, binary-size, and performance limits allow.
 - Accept a larger app binary when broad codec support justifies it and review constraints are satisfied.
 - Complete license and binary-size review.
 - Add mixed decode/encode path reporting.
 - Add unsupported-input explanations.
-- Keep output H.265.
+- Keep output H.265 for this milestone while route modeling already supports future selectable output codecs.
+- Keep the final universal contract as a symmetric all-to-all codec mesh, so `H.264 -> AV1`, `AV1 -> H.264`, and same-codec re-encode routes remain first-class planned routes.
 - Preserve source-like defaults for broad-format inputs.
 
 Deliverables:
@@ -390,7 +407,8 @@ Goal: complete the final product direction without losing the simple default flo
 
 Scope:
 
-- Add output container selector around H.265 video only, such as `.mp4` and `.mov`.
+- Add output codec and output container selectors for the universal all-to-all route matrix.
+- Keep H.265 as the recommended default output while allowing supported routes such as H.264 to AV1, AV1 to H.264, VP9 to H.265, and same-codec re-encode.
 - Add resolution controls.
 - Add frame-rate controls.
 - Add bitrate controls.
@@ -407,8 +425,10 @@ Scope:
 Exit criteria:
 
 - The default path remains simple and source-preserving.
+- Output selection supports every executable source/output codec pair in the universal matrix, with unavailable pairs shown honestly as planned or blocked.
 - Advanced users can intentionally change output size, frame rate, bitrate, quality, and color handling.
 - Broad input support is stable enough to market as "All to H.265" within honest compatibility limits.
+- Codec routing is generic enough to add routes such as H.264 to AV1, AV1 to H.264, VP9 to H.265, and same-codec re-encode without rewriting the core plan model.
 - Old-device software support is documented and verified.
 - Project, merge, and edit workflows are stable.
 - Final completion release is ready.

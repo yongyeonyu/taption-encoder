@@ -9,7 +9,8 @@ This document is the implementation-level plan for building Taption Encoder from
 The product path is:
 
 - First release: AV1 to H.265.
-- Final product: All practical user video inputs to H.265.
+- Next product milestone: all practical user video inputs to H.265.
+- Final product: universal codec-to-codec conversion across the supported matrix.
 - Business model: free app supported by ads.
 - Core value: easy phone-based encoding, old-device software encoding support, source-like output defaults, and later multi-video merge/edit workflows.
 
@@ -25,8 +26,9 @@ This plan is more detailed than `docs/DEVELOPMENT_PLAN.md`. Use this document as
 - Main Taption editor code must not be imported unless a file is intentionally ported.
 - MVP input is AV1 video.
 - MVP output is H.265 video in an `.mp4` container.
-- Long-term output remains H.265 video.
-- Advanced "format" settings mean H.265 container selection, such as `.mp4` and `.mov`, not non-H.265 output codecs.
+- Mid-term output remains H.265 video.
+- Long-term output becomes selectable by codec and container.
+- MVP "format" settings mean H.265 container selection, such as `.mp4` and `.mov`; later advanced format settings include output codec selection.
 - Default quality policy is source-like visual preservation, not smallest file size.
 - Hardware encoder is recommended.
 - Software encoder remains a first-class option for unsupported hardware, old devices, broad input, and simulator validation.
@@ -836,7 +838,7 @@ Reliability:
 
 ### Objective
 
-Expand input support from AV1-only toward broad practical user video support while keeping output H.265.
+Expand input support from AV1-only toward broad practical user video support while keeping output H.265 for this milestone. The core route model must already be able to grow into all-to-all output codecs.
 
 ### Product Scope
 
@@ -870,8 +872,9 @@ Codec strategy:
 
 - Prefer AVFoundation/VideoToolbox for Apple-native inputs.
 - Use software backend for unsupported input decode.
-- Use hardware H.265 encode when possible.
+- Use hardware H.265 encode when possible for this milestone.
 - Use software H.265 encode when hardware is unavailable or settings are unsupported.
+- Keep codec routing generic enough for later routes such as H.264 to AV1, AV1 to H.264, VP9 to H.265, and same-codec re-encode.
 - Show `Hardware Encoder`, `Software Encoder`, or `Mixed Codec Path`.
 
 Software codec evaluation:
@@ -1179,9 +1182,9 @@ Complete the final product direction while keeping the default flow simple.
 
 Advanced settings:
 
-- H.265 output container:
-  - `.mp4`
-  - `.mov`
+- output codec selector across the universal all-to-all route matrix
+- output container selector across supported writable containers
+- H.265 as the recommended default output, not the permanent architecture limit
 - resolution
 - frame rate
 - bitrate
@@ -1208,6 +1211,7 @@ Settings:
 
 Encoding:
 
+- Route every job as `source codec -> output codec`; keep `H.264 -> AV1`, `AV1 -> H.264`, and same-codec re-encode as first-class paths.
 - Feed advanced settings into storage estimation.
 - Feed advanced settings into encoding options.
 - Add validation for impossible combinations.
