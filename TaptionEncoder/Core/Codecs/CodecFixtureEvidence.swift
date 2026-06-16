@@ -1543,6 +1543,10 @@ enum TaptionCodecFixtureEvidence {
             return .dnxhd
         case "png":
             return .pngVideo
+        case "r10k":
+            return .r10k
+        case "v210":
+            return .v210
         case "dvvideo":
             return .dv
         case "libtheora":

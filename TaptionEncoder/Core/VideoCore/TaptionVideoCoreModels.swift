@@ -40,6 +40,8 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
     case cineForm
     case dnxhd
     case pngVideo
+    case r10k
+    case v210
     case rawVideo
     case unknown
 
@@ -115,6 +117,10 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
             return "DNxHD / DNxHR"
         case .pngVideo:
             return "PNG Video"
+        case .r10k:
+            return "AJA Kona 10-bit RGB"
+        case .v210:
+            return "V210 10-bit 4:2:2"
         case .rawVideo:
             return "Raw Video"
         case .unknown:
@@ -154,6 +160,10 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
             return "DNxHD"
         case .pngVideo:
             return "PNG"
+        case .r10k:
+            return "R10k"
+        case .v210:
+            return "V210"
         case .rawVideo:
             return "Raw"
         case .unknown:

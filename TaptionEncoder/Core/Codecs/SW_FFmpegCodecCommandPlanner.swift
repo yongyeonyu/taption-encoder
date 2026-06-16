@@ -345,7 +345,7 @@ enum SW_FFmpegCodecCommandPlanner {
             arguments += ["-level", "3"]
         case .dnxhd:
             arguments += ["-profile:v", "dnxhr_lb"]
-        case .huffYUV, .utVideo, .magicYUV, .cineForm, .pngVideo, .rawVideo:
+        case .huffYUV, .utVideo, .magicYUV, .cineForm, .pngVideo, .r10k, .v210, .rawVideo:
             break
         default:
             arguments += ["-q:v", "2"]
@@ -366,6 +366,10 @@ enum SW_FFmpegCodecCommandPlanner {
             return ["-pix_fmt", "yuv422p10le"]
         case .pngVideo:
             return ["-pix_fmt", "rgb24"]
+        case .r10k:
+            return ["-pix_fmt", "gbrp10le"]
+        case .v210:
+            return ["-pix_fmt", "yuv422p10le"]
         default:
             break
         }
@@ -545,6 +549,8 @@ enum SW_FFmpegCodecCommandPlanner {
         .cineForm: "cfhd",
         .dnxhd: "dnxhd",
         .pngVideo: "png",
+        .r10k: "r10k",
+        .v210: "v210",
         .rawVideo: "rawvideo"
     ]
 

@@ -54,6 +54,8 @@ enum SW_CodecSupportCatalog {
         .cineForm,
         .dnxhd,
         .pngVideo,
+        .r10k,
+        .v210,
         .rawVideo
     ]
 
@@ -367,6 +369,22 @@ enum SW_CodecSupportCatalog {
             audioCodec: .pcm,
             container: .mov,
             sourceFamily: "Lossless frame-based QuickTime video",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "r10k_mov_pcm",
+            videoCodec: .r10k,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "10-bit RGB capture and finishing intermediate",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "v210_mov_pcm",
+            videoCodec: .v210,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "10-bit 4:2:2 capture and broadcast intermediate",
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(

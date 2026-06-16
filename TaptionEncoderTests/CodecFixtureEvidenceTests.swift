@@ -199,7 +199,7 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         )
 
         XCTAssertTrue(summary.isPassing, summary.failures.joined(separator: "\n"))
-        XCTAssertGreaterThanOrEqual(summary.fixtureCount, 62)
+        XCTAssertGreaterThanOrEqual(summary.fixtureCount, 64)
         XCTAssertEqual(summary.verifiedTranscodeCount, summary.fixtureCount * 2)
         XCTAssertEqual(
             summary.verifiedAudioSignalCount + summary.noSourceAudioAttemptCount,
@@ -220,7 +220,7 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         let manifestText = try String(contentsOf: manifestURL, encoding: .utf8)
         let rows = try TaptionCodecFixtureEvidence.parseVideoFixtureManifestTSV(manifestText)
 
-        XCTAssertGreaterThanOrEqual(rows.count, 62)
+        XCTAssertGreaterThanOrEqual(rows.count, 64)
 
         for row in rows {
             let sourceURL = fixtureDirectoryURL.appendingPathComponent(row.file)
@@ -276,7 +276,7 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         let outputCodecs = SW_FFmpegCodecCommandPlanner.plannableVideoOutputCodecs
         let sourceCodecs = Set(rows.map(\.videoCodec))
 
-        XCTAssertGreaterThanOrEqual(rows.count, 62)
+        XCTAssertGreaterThanOrEqual(rows.count, 64)
         XCTAssertTrue(outputCodecs.contains(.av1))
         XCTAssertTrue(outputCodecs.contains(.h264))
         XCTAssertTrue(outputCodecs.contains(.hevc))
@@ -289,6 +289,8 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         XCTAssertTrue(outputCodecs.contains(.cineForm))
         XCTAssertTrue(outputCodecs.contains(.dnxhd))
         XCTAssertTrue(outputCodecs.contains(.pngVideo))
+        XCTAssertTrue(outputCodecs.contains(.r10k))
+        XCTAssertTrue(outputCodecs.contains(.v210))
         XCTAssertTrue(outputCodecs.contains(.rawVideo))
 
         var plannedRoutes = Set<TaptionCodecRoute>()

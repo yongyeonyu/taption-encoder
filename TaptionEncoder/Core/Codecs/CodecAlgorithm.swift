@@ -185,6 +185,8 @@ enum TaptionCodecRegistry {
         .cineForm,
         .dnxhd,
         .pngVideo,
+        .r10k,
+        .v210,
         .rawVideo
     ]
 
