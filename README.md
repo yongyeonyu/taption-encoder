@@ -91,6 +91,7 @@ Next implementation pass should isolate the media conversion core before importi
 - `CodecOutputCatalog` now centralizes output readiness as `Now`, `Plan Ready`, `Planned`, or `Blocked`, so the Home output selectors, file cards, Device Info, and saved device codec reports use the same core status model. Planned output routes are visible in file cards as states such as `Path SW Plan Ready` or `Path SW Blocked`, but only `AV1 -> H.265 / MP4` is executable in the current build.
 - `TaptionAudioCodecOutputCatalog` mirrors that output readiness model for audio codec/container pairs. Device Info now shows audio output readiness and saved device codec JSON snapshots include the audio output catalog beside the video output catalog.
 - The Home output selector now exposes video codec, audio codec, and container as separate route axes. Current execution is still gated to the launch-safe `H.265 + AAC / MP4` route while planned all-to-all combinations remain visible as readiness states.
+- `TaptionUniversalCodecCompletionAuditor` now includes video and audio output-selector coverage in the all-to-all completion audit, so saved device codec reports prove both route-mesh planning and Home selector readiness from one snapshot.
 
 ## Verification
 

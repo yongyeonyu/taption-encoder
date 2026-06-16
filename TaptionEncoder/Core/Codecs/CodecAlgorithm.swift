@@ -344,14 +344,145 @@ struct TaptionUniversalCodecCompletionAuditReport: Codable, Equatable {
     var audioBlockedMissingSoftwareEncoderRouteCount: Int
     var videoBlockedOutputCodecs: [TaptionVideoCodec]
     var audioBlockedOutputCodecs: [TaptionAudioCodec]
+    var videoOutputSelectionCount: Int
+    var audioOutputSelectionCount: Int
+    var videoOutputImplementedSelectionCount: Int
+    var audioOutputImplementedSelectionCount: Int
+    var videoOutputCommandPlanReadySelectionCount: Int
+    var audioOutputCommandPlanReadySelectionCount: Int
+    var videoOutputPlannedSelectionCount: Int
+    var audioOutputPlannedSelectionCount: Int
+    var videoOutputBlockedSelectionCount: Int
+    var audioOutputBlockedSelectionCount: Int
+    var videoOutputSelectionCoverageIsPassing: Bool
+    var audioOutputSelectionCoverageIsPassing: Bool
+    var outputSelectionCoverageIsPassing: Bool
     var broadSoftwareBackendDisplayName: String
     var broadSoftwareBackendBundled: Bool
     var broadSoftwareBackendExecutable: Bool
     var broadSoftwareBackendOpenGateCount: Int
     var broadSoftwareBackendRequiresLicenseReview: Bool
 
+    init(
+        contractName: String,
+        stage: TaptionUniversalCodecCompletionStage,
+        planningCoverageIsPassing: Bool,
+        requiredBidirectionalVideoRoutes: [TaptionCodecRoute],
+        missingRequiredBidirectionalVideoRoutes: [TaptionCodecRoute],
+        videoRouteCount: Int,
+        audioRouteCount: Int,
+        videoCurrentBuildRunnableRouteCount: Int,
+        audioCurrentBuildRunnableRouteCount: Int,
+        videoPendingRuntimeRouteCount: Int,
+        audioPendingRuntimeRouteCount: Int,
+        videoCommandPlanOnlyRouteCount: Int,
+        audioCommandPlanOnlyRouteCount: Int,
+        videoBlockedMissingSoftwareEncoderRouteCount: Int,
+        audioBlockedMissingSoftwareEncoderRouteCount: Int,
+        videoBlockedOutputCodecs: [TaptionVideoCodec],
+        audioBlockedOutputCodecs: [TaptionAudioCodec],
+        videoOutputSelectionCount: Int,
+        audioOutputSelectionCount: Int,
+        videoOutputImplementedSelectionCount: Int,
+        audioOutputImplementedSelectionCount: Int,
+        videoOutputCommandPlanReadySelectionCount: Int,
+        audioOutputCommandPlanReadySelectionCount: Int,
+        videoOutputPlannedSelectionCount: Int,
+        audioOutputPlannedSelectionCount: Int,
+        videoOutputBlockedSelectionCount: Int,
+        audioOutputBlockedSelectionCount: Int,
+        videoOutputSelectionCoverageIsPassing: Bool,
+        audioOutputSelectionCoverageIsPassing: Bool,
+        broadSoftwareBackendDisplayName: String,
+        broadSoftwareBackendBundled: Bool,
+        broadSoftwareBackendExecutable: Bool,
+        broadSoftwareBackendOpenGateCount: Int,
+        broadSoftwareBackendRequiresLicenseReview: Bool
+    ) {
+        self.contractName = contractName
+        self.stage = stage
+        self.planningCoverageIsPassing = planningCoverageIsPassing
+        self.requiredBidirectionalVideoRoutes = requiredBidirectionalVideoRoutes
+        self.missingRequiredBidirectionalVideoRoutes = missingRequiredBidirectionalVideoRoutes
+        self.videoRouteCount = videoRouteCount
+        self.audioRouteCount = audioRouteCount
+        self.videoCurrentBuildRunnableRouteCount = videoCurrentBuildRunnableRouteCount
+        self.audioCurrentBuildRunnableRouteCount = audioCurrentBuildRunnableRouteCount
+        self.videoPendingRuntimeRouteCount = videoPendingRuntimeRouteCount
+        self.audioPendingRuntimeRouteCount = audioPendingRuntimeRouteCount
+        self.videoCommandPlanOnlyRouteCount = videoCommandPlanOnlyRouteCount
+        self.audioCommandPlanOnlyRouteCount = audioCommandPlanOnlyRouteCount
+        self.videoBlockedMissingSoftwareEncoderRouteCount = videoBlockedMissingSoftwareEncoderRouteCount
+        self.audioBlockedMissingSoftwareEncoderRouteCount = audioBlockedMissingSoftwareEncoderRouteCount
+        self.videoBlockedOutputCodecs = videoBlockedOutputCodecs
+        self.audioBlockedOutputCodecs = audioBlockedOutputCodecs
+        self.videoOutputSelectionCount = videoOutputSelectionCount
+        self.audioOutputSelectionCount = audioOutputSelectionCount
+        self.videoOutputImplementedSelectionCount = videoOutputImplementedSelectionCount
+        self.audioOutputImplementedSelectionCount = audioOutputImplementedSelectionCount
+        self.videoOutputCommandPlanReadySelectionCount = videoOutputCommandPlanReadySelectionCount
+        self.audioOutputCommandPlanReadySelectionCount = audioOutputCommandPlanReadySelectionCount
+        self.videoOutputPlannedSelectionCount = videoOutputPlannedSelectionCount
+        self.audioOutputPlannedSelectionCount = audioOutputPlannedSelectionCount
+        self.videoOutputBlockedSelectionCount = videoOutputBlockedSelectionCount
+        self.audioOutputBlockedSelectionCount = audioOutputBlockedSelectionCount
+        self.videoOutputSelectionCoverageIsPassing = videoOutputSelectionCoverageIsPassing
+        self.audioOutputSelectionCoverageIsPassing = audioOutputSelectionCoverageIsPassing
+        self.outputSelectionCoverageIsPassing = videoOutputSelectionCoverageIsPassing
+            && audioOutputSelectionCoverageIsPassing
+        self.broadSoftwareBackendDisplayName = broadSoftwareBackendDisplayName
+        self.broadSoftwareBackendBundled = broadSoftwareBackendBundled
+        self.broadSoftwareBackendExecutable = broadSoftwareBackendExecutable
+        self.broadSoftwareBackendOpenGateCount = broadSoftwareBackendOpenGateCount
+        self.broadSoftwareBackendRequiresLicenseReview = broadSoftwareBackendRequiresLicenseReview
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let outputReadinessCatalog = TaptionCodecOutputCatalog.makeReadinessReport()
+        let audioOutputReadinessCatalog = TaptionAudioCodecOutputCatalog.makeReadinessReport()
+
+        self.init(
+            contractName: try container.decode(String.self, forKey: .contractName),
+            stage: try container.decode(TaptionUniversalCodecCompletionStage.self, forKey: .stage),
+            planningCoverageIsPassing: try container.decode(Bool.self, forKey: .planningCoverageIsPassing),
+            requiredBidirectionalVideoRoutes: try container.decode([TaptionCodecRoute].self, forKey: .requiredBidirectionalVideoRoutes),
+            missingRequiredBidirectionalVideoRoutes: try container.decode([TaptionCodecRoute].self, forKey: .missingRequiredBidirectionalVideoRoutes),
+            videoRouteCount: try container.decode(Int.self, forKey: .videoRouteCount),
+            audioRouteCount: try container.decode(Int.self, forKey: .audioRouteCount),
+            videoCurrentBuildRunnableRouteCount: try container.decode(Int.self, forKey: .videoCurrentBuildRunnableRouteCount),
+            audioCurrentBuildRunnableRouteCount: try container.decode(Int.self, forKey: .audioCurrentBuildRunnableRouteCount),
+            videoPendingRuntimeRouteCount: try container.decode(Int.self, forKey: .videoPendingRuntimeRouteCount),
+            audioPendingRuntimeRouteCount: try container.decode(Int.self, forKey: .audioPendingRuntimeRouteCount),
+            videoCommandPlanOnlyRouteCount: try container.decode(Int.self, forKey: .videoCommandPlanOnlyRouteCount),
+            audioCommandPlanOnlyRouteCount: try container.decode(Int.self, forKey: .audioCommandPlanOnlyRouteCount),
+            videoBlockedMissingSoftwareEncoderRouteCount: try container.decode(Int.self, forKey: .videoBlockedMissingSoftwareEncoderRouteCount),
+            audioBlockedMissingSoftwareEncoderRouteCount: try container.decode(Int.self, forKey: .audioBlockedMissingSoftwareEncoderRouteCount),
+            videoBlockedOutputCodecs: try container.decode([TaptionVideoCodec].self, forKey: .videoBlockedOutputCodecs),
+            audioBlockedOutputCodecs: try container.decode([TaptionAudioCodec].self, forKey: .audioBlockedOutputCodecs),
+            videoOutputSelectionCount: try container.decodeIfPresent(Int.self, forKey: .videoOutputSelectionCount) ?? outputReadinessCatalog.outputSelectionCount,
+            audioOutputSelectionCount: try container.decodeIfPresent(Int.self, forKey: .audioOutputSelectionCount) ?? audioOutputReadinessCatalog.outputSelectionCount,
+            videoOutputImplementedSelectionCount: try container.decodeIfPresent(Int.self, forKey: .videoOutputImplementedSelectionCount) ?? outputReadinessCatalog.implementedOutputSelectionCount,
+            audioOutputImplementedSelectionCount: try container.decodeIfPresent(Int.self, forKey: .audioOutputImplementedSelectionCount) ?? audioOutputReadinessCatalog.implementedOutputSelectionCount,
+            videoOutputCommandPlanReadySelectionCount: try container.decodeIfPresent(Int.self, forKey: .videoOutputCommandPlanReadySelectionCount) ?? outputReadinessCatalog.commandPlanReadyOutputSelectionCount,
+            audioOutputCommandPlanReadySelectionCount: try container.decodeIfPresent(Int.self, forKey: .audioOutputCommandPlanReadySelectionCount) ?? audioOutputReadinessCatalog.commandPlanReadyOutputSelectionCount,
+            videoOutputPlannedSelectionCount: try container.decodeIfPresent(Int.self, forKey: .videoOutputPlannedSelectionCount) ?? outputReadinessCatalog.plannedOutputSelectionCount,
+            audioOutputPlannedSelectionCount: try container.decodeIfPresent(Int.self, forKey: .audioOutputPlannedSelectionCount) ?? audioOutputReadinessCatalog.plannedOutputSelectionCount,
+            videoOutputBlockedSelectionCount: try container.decodeIfPresent(Int.self, forKey: .videoOutputBlockedSelectionCount) ?? outputReadinessCatalog.unsupportedOutputSelectionCount,
+            audioOutputBlockedSelectionCount: try container.decodeIfPresent(Int.self, forKey: .audioOutputBlockedSelectionCount) ?? audioOutputReadinessCatalog.unsupportedOutputSelectionCount,
+            videoOutputSelectionCoverageIsPassing: try container.decodeIfPresent(Bool.self, forKey: .videoOutputSelectionCoverageIsPassing) ?? outputReadinessCatalog.outputSelectionCoverageIsPassing,
+            audioOutputSelectionCoverageIsPassing: try container.decodeIfPresent(Bool.self, forKey: .audioOutputSelectionCoverageIsPassing) ?? audioOutputReadinessCatalog.outputSelectionCoverageIsPassing,
+            broadSoftwareBackendDisplayName: try container.decode(String.self, forKey: .broadSoftwareBackendDisplayName),
+            broadSoftwareBackendBundled: try container.decode(Bool.self, forKey: .broadSoftwareBackendBundled),
+            broadSoftwareBackendExecutable: try container.decode(Bool.self, forKey: .broadSoftwareBackendExecutable),
+            broadSoftwareBackendOpenGateCount: try container.decode(Int.self, forKey: .broadSoftwareBackendOpenGateCount),
+            broadSoftwareBackendRequiresLicenseReview: try container.decode(Bool.self, forKey: .broadSoftwareBackendRequiresLicenseReview)
+        )
+    }
+
     var universalPlanningIsLocked: Bool {
         planningCoverageIsPassing
+            && outputSelectionCoverageIsPassing
             && missingRequiredBidirectionalVideoRoutes.isEmpty
     }
 
@@ -391,6 +522,8 @@ enum TaptionUniversalCodecCompletionAuditor {
             outputContainer: .mkv,
             broadSoftwareBackendExecutable: broadSoftwareBackendExecutable
         )
+        let outputReadinessCatalog = TaptionCodecOutputCatalog.makeReadinessReport()
+        let audioOutputReadinessCatalog = TaptionAudioCodecOutputCatalog.makeReadinessReport()
         let missingRequiredRoutes = requiredBidirectionalVideoRoutes.filter {
             !TaptionCodecRegistry.plannedUniversalRoutes.contains($0)
         }
@@ -398,7 +531,11 @@ enum TaptionUniversalCodecCompletionAuditor {
             - videoExecutionReport.runnableInCurrentBuildRouteCount
         let audioPendingRuntimeRouteCount = audioExecutionReport.routeCount
             - audioExecutionReport.runnableInCurrentBuildRouteCount
-        let planningIsLocked = meshReport.planningCoverageIsPassing && missingRequiredRoutes.isEmpty
+        let outputSelectionCoverageIsPassing = outputReadinessCatalog.outputSelectionCoverageIsPassing
+            && audioOutputReadinessCatalog.outputSelectionCoverageIsPassing
+        let planningIsLocked = meshReport.planningCoverageIsPassing
+            && outputSelectionCoverageIsPassing
+            && missingRequiredRoutes.isEmpty
         let commandPlanningIsComplete = planningIsLocked
             && videoExecutionReport.blockedMissingSoftwareEncoderRouteCount == 0
             && audioExecutionReport.blockedMissingSoftwareEncoderRouteCount == 0
@@ -432,6 +569,18 @@ enum TaptionUniversalCodecCompletionAuditor {
             audioBlockedMissingSoftwareEncoderRouteCount: audioExecutionReport.blockedMissingSoftwareEncoderRouteCount,
             videoBlockedOutputCodecs: videoExecutionReport.blockedOutputCodecs,
             audioBlockedOutputCodecs: audioExecutionReport.blockedOutputCodecs,
+            videoOutputSelectionCount: outputReadinessCatalog.outputSelectionCount,
+            audioOutputSelectionCount: audioOutputReadinessCatalog.outputSelectionCount,
+            videoOutputImplementedSelectionCount: outputReadinessCatalog.implementedOutputSelectionCount,
+            audioOutputImplementedSelectionCount: audioOutputReadinessCatalog.implementedOutputSelectionCount,
+            videoOutputCommandPlanReadySelectionCount: outputReadinessCatalog.commandPlanReadyOutputSelectionCount,
+            audioOutputCommandPlanReadySelectionCount: audioOutputReadinessCatalog.commandPlanReadyOutputSelectionCount,
+            videoOutputPlannedSelectionCount: outputReadinessCatalog.plannedOutputSelectionCount,
+            audioOutputPlannedSelectionCount: audioOutputReadinessCatalog.plannedOutputSelectionCount,
+            videoOutputBlockedSelectionCount: outputReadinessCatalog.unsupportedOutputSelectionCount,
+            audioOutputBlockedSelectionCount: audioOutputReadinessCatalog.unsupportedOutputSelectionCount,
+            videoOutputSelectionCoverageIsPassing: outputReadinessCatalog.outputSelectionCoverageIsPassing,
+            audioOutputSelectionCoverageIsPassing: audioOutputReadinessCatalog.outputSelectionCoverageIsPassing,
             broadSoftwareBackendDisplayName: backendReadiness.displayName,
             broadSoftwareBackendBundled: backendReadiness.isBundledInCurrentBuild,
             broadSoftwareBackendExecutable: broadSoftwareBackendExecutable,

@@ -1,7 +1,7 @@
 import Foundation
 
 struct HW_DeviceCodecReportSnapshot: Codable, Equatable, Identifiable {
-    static let currentSchemaVersion = 5
+    static let currentSchemaVersion = 6
 
     var id: String
     var schemaVersion: Int

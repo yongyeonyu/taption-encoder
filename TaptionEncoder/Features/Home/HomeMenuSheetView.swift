@@ -284,6 +284,7 @@ private struct DeviceInfoSheetContentView: View {
                         ("Required", codecCompletionAudit.missingRequiredBidirectionalVideoRoutes.isEmpty ? "H.264 to AV1, AV1 to H.264, and same-codec re-encode routes are planned." : "Review required bidirectional route gaps."),
                         ("Video", "\(codecCompletionAudit.videoCurrentBuildRunnableRouteCount) runnable · \(codecCompletionAudit.videoCommandPlanOnlyRouteCount) command-plan · \(codecCompletionAudit.videoBlockedMissingSoftwareEncoderRouteCount) blocked · \(codecCompletionAudit.videoPendingRuntimeRouteCount) pending runtime"),
                         ("Audio", "\(codecCompletionAudit.audioCurrentBuildRunnableRouteCount) runnable · \(codecCompletionAudit.audioCommandPlanOnlyRouteCount) command-plan · \(codecCompletionAudit.audioBlockedMissingSoftwareEncoderRouteCount) blocked · \(codecCompletionAudit.audioPendingRuntimeRouteCount) pending runtime"),
+                        ("Selectors", codecCompletionAudit.outputSelectionCoverageIsPassing ? "Video and audio output selectors cover the universal route catalogs." : "Review output selector coverage gaps."),
                         ("Backend", "\(codecCompletionAudit.broadSoftwareBackendDisplayName) has \(codecCompletionAudit.broadSoftwareBackendOpenGateCount) open readiness gates.")
                     ]
                 )

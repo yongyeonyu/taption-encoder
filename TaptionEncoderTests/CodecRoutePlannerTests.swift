@@ -210,6 +210,8 @@ final class CodecRoutePlannerTests: XCTestCase {
 
     func testUniversalCodecCompletionAuditLocksAllToAllFinalGoal() {
         let report = TaptionUniversalCodecCompletionAuditor.makeReport()
+        let outputReadinessCatalog = TaptionCodecOutputCatalog.makeReadinessReport()
+        let audioOutputReadinessCatalog = TaptionAudioCodecOutputCatalog.makeReadinessReport()
         let h264ToAV1 = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1)
         let av1ToH264 = TaptionCodecRoute(sourceCodec: .av1, outputCodec: .h264)
         let sameCodecReencode = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .h264)
@@ -236,6 +238,19 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertGreaterThan(report.audioCommandPlanOnlyRouteCount, 0)
         XCTAssertGreaterThan(report.videoBlockedMissingSoftwareEncoderRouteCount, 0)
         XCTAssertGreaterThan(report.audioBlockedMissingSoftwareEncoderRouteCount, 0)
+        XCTAssertTrue(report.outputSelectionCoverageIsPassing)
+        XCTAssertEqual(report.videoOutputSelectionCount, outputReadinessCatalog.outputSelectionCount)
+        XCTAssertEqual(report.audioOutputSelectionCount, audioOutputReadinessCatalog.outputSelectionCount)
+        XCTAssertEqual(report.videoOutputImplementedSelectionCount, outputReadinessCatalog.implementedOutputSelectionCount)
+        XCTAssertEqual(report.audioOutputImplementedSelectionCount, audioOutputReadinessCatalog.implementedOutputSelectionCount)
+        XCTAssertEqual(report.videoOutputCommandPlanReadySelectionCount, outputReadinessCatalog.commandPlanReadyOutputSelectionCount)
+        XCTAssertEqual(report.audioOutputCommandPlanReadySelectionCount, audioOutputReadinessCatalog.commandPlanReadyOutputSelectionCount)
+        XCTAssertEqual(report.videoOutputPlannedSelectionCount, outputReadinessCatalog.plannedOutputSelectionCount)
+        XCTAssertEqual(report.audioOutputPlannedSelectionCount, audioOutputReadinessCatalog.plannedOutputSelectionCount)
+        XCTAssertEqual(report.videoOutputBlockedSelectionCount, outputReadinessCatalog.unsupportedOutputSelectionCount)
+        XCTAssertEqual(report.audioOutputBlockedSelectionCount, audioOutputReadinessCatalog.unsupportedOutputSelectionCount)
+        XCTAssertTrue(report.videoOutputSelectionCoverageIsPassing)
+        XCTAssertTrue(report.audioOutputSelectionCoverageIsPassing)
         XCTAssertEqual(
             Set(report.videoBlockedOutputCodecs),
             Set(SW_FFmpegCodecCommandPlanner.commandUnsupportedVideoOutputCodecs)
@@ -2371,6 +2386,15 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(decoded.schemaVersion, HW_DeviceCodecReportSnapshot.currentSchemaVersion)
         XCTAssertEqual(decoded.universalCodecCompletionAudit?.stage, .allToAllPlanningLocked)
         XCTAssertTrue(decoded.universalCodecCompletionAudit?.universalPlanningIsLocked == true)
+        XCTAssertTrue(decoded.universalCodecCompletionAudit?.outputSelectionCoverageIsPassing == true)
+        XCTAssertEqual(
+            decoded.universalCodecCompletionAudit?.videoOutputSelectionCount,
+            decoded.outputReadinessCatalog?.outputSelectionCount
+        )
+        XCTAssertEqual(
+            decoded.universalCodecCompletionAudit?.audioOutputSelectionCount,
+            decoded.audioOutputReadinessCatalog?.outputSelectionCount
+        )
         XCTAssertEqual(decoded.outputReadinessCatalog?.defaultOutputState, .implemented)
         XCTAssertTrue(decoded.outputReadinessCatalog?.outputSelectionCoverageIsPassing == true)
         XCTAssertEqual(decoded.audioOutputReadinessCatalog?.defaultOutputState, .implemented)
@@ -2378,9 +2402,59 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"routeSimulationSummary\"") == true)
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"staticMatrixReconciliation\"") == true)
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"universalCodecCompletionAudit\"") == true)
+        XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"outputSelectionCoverageIsPassing\"") == true)
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"outputReadinessCatalog\"") == true)
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"audioOutputReadinessCatalog\"") == true)
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"videoCapabilities\"") == true)
+    }
+
+    func testDeviceCodecReportStoreDecodesLegacyCompletionAuditWithoutSelectorFields() throws {
+        let snapshot = HW_DeviceCodecReportStore.makeSnapshot(
+            report: HW_CodecCapabilityProbe.makeReport(
+                probeSize: TaptionPixelSize(width: 1280, height: 720),
+                generatedAt: Date(timeIntervalSince1970: 0)
+            ),
+            routeSimulationSummary: HW_CodecRouteSimulator.summary(),
+            createdAt: Date(timeIntervalSince1970: 0)
+        )
+        let data = try HW_DeviceCodecReportStore.encode(snapshot)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        var audit = try XCTUnwrap(
+            object["universalCodecCompletionAudit"] as? [String: Any]
+        )
+        [
+            "videoOutputSelectionCount",
+            "audioOutputSelectionCount",
+            "videoOutputImplementedSelectionCount",
+            "audioOutputImplementedSelectionCount",
+            "videoOutputCommandPlanReadySelectionCount",
+            "audioOutputCommandPlanReadySelectionCount",
+            "videoOutputPlannedSelectionCount",
+            "audioOutputPlannedSelectionCount",
+            "videoOutputBlockedSelectionCount",
+            "audioOutputBlockedSelectionCount",
+            "videoOutputSelectionCoverageIsPassing",
+            "audioOutputSelectionCoverageIsPassing"
+        ].forEach {
+            audit.removeValue(forKey: $0)
+        }
+        object["universalCodecCompletionAudit"] = audit
+
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try HW_DeviceCodecReportStore.decode(legacyData)
+
+        XCTAssertEqual(decoded.universalCodecCompletionAudit?.stage, .allToAllPlanningLocked)
+        XCTAssertTrue(decoded.universalCodecCompletionAudit?.outputSelectionCoverageIsPassing == true)
+        XCTAssertEqual(
+            decoded.universalCodecCompletionAudit?.videoOutputSelectionCount,
+            TaptionCodecOutputCatalog.makeReadinessReport().outputSelectionCount
+        )
+        XCTAssertEqual(
+            decoded.universalCodecCompletionAudit?.audioOutputSelectionCount,
+            TaptionAudioCodecOutputCatalog.makeReadinessReport().outputSelectionCount
+        )
     }
 
     func testDeviceCodecReportStoreSavesAndLoadsSnapshots() throws {
@@ -2412,6 +2486,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(fileURL.lastPathComponent.hasPrefix("hw-codec-report-"))
         XCTAssertEqual(loadedSnapshots, [snapshot])
         XCTAssertEqual(loadedSnapshots.first?.universalCodecCompletionAudit?.contractName, "All-to-All Universal Codec Mesh")
+        XCTAssertTrue(loadedSnapshots.first?.universalCodecCompletionAudit?.outputSelectionCoverageIsPassing == true)
         XCTAssertEqual(loadedSnapshots.first?.outputReadinessCatalog?.defaultOutputCodec, .hevc)
         XCTAssertTrue(loadedSnapshots.first?.outputReadinessCatalog?.outputSelectionCoverageIsPassing == true)
         XCTAssertEqual(loadedSnapshots.first?.audioOutputReadinessCatalog?.defaultOutputCodec, .aac)
