@@ -159,7 +159,9 @@ struct TaptionCodecTranscodingRegistry: @unchecked Sendable {
         switch executionKind {
         case .hardware:
             return [.hardware, .software]
-        case .mixed, .software:
+        case .mixed:
+            return [.hardware, .software]
+        case .software:
             return [.software]
         case .planned, .unsupported:
             return []

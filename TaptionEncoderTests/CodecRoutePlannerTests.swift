@@ -572,15 +572,83 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(descriptor?.backend, .appleVideoToolbox)
     }
 
-    func testLiveTranscodingRegistryPrefersSoftwareForMixedExecution() {
+    func testLiveTranscodingRegistryPrefersHardwareForMixedExecution() {
         let route = TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc)
         let descriptor = TaptionCodecTranscodingRegistry.live.preferredDescriptor(
             for: route,
             executionKind: .mixed
         )
 
-        XCTAssertEqual(descriptor?.mode, .software)
-        XCTAssertEqual(descriptor?.backend, .softwareVLCDecoder)
+        XCTAssertEqual(descriptor?.mode, .hardware)
+        XCTAssertEqual(descriptor?.backend, .appleVideoToolbox)
+    }
+
+    func testLiveTranscodingRegistryExecutesHardwareFirstForMixedExecution() async throws {
+        let route = TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc)
+        let outputURL = temporaryTestURL(fileName: "mixed-first-hevc.mkv")
+        let request = TaptionCodecTranscodeRequest(
+            sourceURL: URL(fileURLWithPath: "/tmp/mixed-input.av1"),
+            outputURL: outputURL,
+            route: route
+        )
+        actor ExecutionOrderRecorder {
+            private var executionOrder: [TaptionEncoderMode] = []
+
+            func append(_ mode: TaptionEncoderMode) {
+                executionOrder.append(mode)
+            }
+
+            func value() -> [TaptionEncoderMode] {
+                executionOrder
+            }
+        }
+        let executionOrderRecorder = ExecutionOrderRecorder()
+        let expectedError = NSError(domain: "TaptionEncoderTests", code: 1)
+
+        let hardwareDescriptor = TaptionCodecAlgorithmDescriptor(
+            route: route,
+            mode: .hardware,
+            backend: .appleVideoToolbox,
+            displayName: "hardware av1->hevc"
+        )
+        let softwareDescriptor = TaptionCodecAlgorithmDescriptor(
+            route: route,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "software av1->hevc"
+        )
+        let hardwareEntry = TaptionCodecTranscodingAlgorithmEntry(
+            descriptor: hardwareDescriptor,
+            transcode: { _, _ in
+                await executionOrderRecorder.append(.hardware)
+                return TaptionCodecTranscodeOutput(
+                    outputURL: outputURL,
+                    route: route,
+                    usedMode: .hardware,
+                    usedBackend: .appleVideoToolbox,
+                    outputVideoCodec: .hevc,
+                    outputAudioTrackCount: 0
+                )
+            }
+        )
+        let softwareEntry = TaptionCodecTranscodingAlgorithmEntry(
+            descriptor: softwareDescriptor,
+            transcode: { _, _ in
+                await executionOrderRecorder.append(.software)
+                throw expectedError
+            }
+        )
+        let registry = TaptionCodecTranscodingRegistry(
+            algorithms: [hardwareEntry, softwareEntry],
+            plannedDescriptors: []
+        )
+
+        _ = try await registry.transcode(
+            request: request,
+            executionKind: .mixed
+        ) { _ in }
+
+        XCTAssertEqual(await executionOrderRecorder.value(), [.hardware])
     }
 
     func testUniversalSoftwareAlgorithmCatalogCoversEveryNonImplementedRoute() {

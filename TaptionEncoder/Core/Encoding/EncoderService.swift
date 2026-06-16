@@ -197,17 +197,11 @@ final class AVFoundationHEVCEncoderService: EncoderServicing {
     }
 
     private func shouldUseSoftwareCommandPlan(for plan: TaptionEncodingPlan) -> Bool {
-        guard plan.videoCommandPlan != nil else {
+        guard let executionKind = plan.codecExecutionKind,
+              plan.videoCommandPlan != nil else {
             return false
         }
-        if plan.outputPolicy.advancedOptions.targetBitrate != nil {
-            return true
-        }
-        if plan.codecExecutionKind == .planned {
-            return true
-        }
-        return plan.outputPolicy.videoCodec != .hevc
-            || plan.outputPolicy.container != .mp4
+        return executionKind == .planned || executionKind == .software
     }
 
     private func executeSoftwareCodecRequest(
