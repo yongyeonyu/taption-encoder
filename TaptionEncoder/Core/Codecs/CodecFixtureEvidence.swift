@@ -1529,6 +1529,20 @@ enum TaptionCodecFixtureEvidence {
             return .cinepak
         case "wmv2":
             return .wmv
+        case "ffv1":
+            return .ffv1
+        case "huffyuv", "ffvhuff":
+            return .huffYUV
+        case "utvideo":
+            return .utVideo
+        case "magicyuv":
+            return .magicYUV
+        case "cfhd":
+            return .cineForm
+        case "dnxhd":
+            return .dnxhd
+        case "png":
+            return .pngVideo
         case "dvvideo":
             return .dv
         case "libtheora":
@@ -1550,7 +1564,7 @@ enum TaptionCodecFixtureEvidence {
             return .aac
         case "libopus":
             return .opus
-        case "pcm_s16le":
+        case "pcm_s16le", "pcm_s24le", "pcm_f32le":
             return .pcm
         case "flac":
             return .flac
@@ -1566,8 +1580,38 @@ enum TaptionCodecFixtureEvidence {
             return .mp2
         case "libmp3lame":
             return .mp3
+        case "dca":
+            return .dts
+        case "truehd":
+            return .trueHD
+        case "ilbc_at":
+            return .ilbc
+        case "g722":
+            return .g722
+        case "g723_1":
+            return .g723
+        case "g726":
+            return .g726
+        case "mlp":
+            return .mlp
+        case "tta":
+            return .tta
+        case "nellymoser":
+            return .nellymoser
+        case "real_144":
+            return .realAudio
+        case "roq_dpcm":
+            return .roqDPCM
+        case "wavpack":
+            return .wavPack
         case "wmav2":
             return .wma
+        case "adpcm_ima_wav", "adpcm_ms":
+            return .adpcm
+        case "pcm_alaw":
+            return .aLaw
+        case "pcm_mulaw":
+            return .muLaw
         case "none":
             return .unknown
         default:

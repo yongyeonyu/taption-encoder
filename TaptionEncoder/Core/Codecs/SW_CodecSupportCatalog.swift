@@ -47,6 +47,13 @@ enum SW_CodecSupportCatalog {
         .dvcProHD,
         .vc1,
         .wmv,
+        .ffv1,
+        .huffYUV,
+        .utVideo,
+        .magicYUV,
+        .cineForm,
+        .dnxhd,
+        .pngVideo,
         .rawVideo
     ]
 
@@ -66,6 +73,14 @@ enum SW_CodecSupportCatalog {
         .vorbis,
         .amr,
         .ilbc,
+        .g722,
+        .g723,
+        .g726,
+        .mlp,
+        .tta,
+        .nellymoser,
+        .realAudio,
+        .roqDPCM,
         .wavPack,
         .wma,
         .adpcm,
@@ -288,6 +303,70 @@ enum SW_CodecSupportCatalog {
             audioCodec: .alac,
             container: .mov,
             sourceFamily: "Camera and editor exports with Apple Lossless",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "ffv1_mkv_flac",
+            videoCodec: .ffv1,
+            audioCodec: .flac,
+            container: .mkv,
+            sourceFamily: "Lossless archival video",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "huffyuv_avi_pcm",
+            videoCodec: .huffYUV,
+            audioCodec: .pcm,
+            container: .avi,
+            sourceFamily: "Legacy lossless capture",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "ffvhuff_avi_pcm",
+            videoCodec: .huffYUV,
+            audioCodec: .pcm,
+            container: .avi,
+            sourceFamily: "FFmpeg HuffYUV variant",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "utvideo_avi_pcm",
+            videoCodec: .utVideo,
+            audioCodec: .pcm,
+            container: .avi,
+            sourceFamily: "Lossless editing intermediate",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "magicyuv_avi_pcm",
+            videoCodec: .magicYUV,
+            audioCodec: .pcm,
+            container: .avi,
+            sourceFamily: "Lossless editing intermediate",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "cineform_mov_pcm",
+            videoCodec: .cineForm,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "GoPro CineForm intermediate",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "dnxhr_mov_pcm",
+            videoCodec: .dnxhd,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "Avid DNxHD/DNxHR intermediate",
+            generationStatus: .implemented
+        ),
+        TaptionSoftwareFixtureTarget(
+            name: "png_mov_pcm",
+            videoCodec: .pngVideo,
+            audioCodec: .pcm,
+            container: .mov,
+            sourceFamily: "Lossless frame-based QuickTime video",
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(

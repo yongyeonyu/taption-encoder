@@ -295,6 +295,46 @@ generate_av_fixture \
   -c:a alac -ar 48000 -ac 2
 
 generate_av_fixture \
+  "ffv1_mkv_flac" "mkv" "ffv1" "flac" \
+  -c:v ffv1 -level 3 -pix_fmt yuv420p \
+  -c:a flac -ar 48000 -ac 2
+
+generate_av_fixture \
+  "huffyuv_avi_pcm" "avi" "huffyuv" "pcm_s16le" \
+  -c:v huffyuv -pix_fmt yuv422p \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "ffvhuff_avi_pcm" "avi" "ffvhuff" "pcm_s16le" \
+  -c:v ffvhuff -pix_fmt yuv420p \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "utvideo_avi_pcm" "avi" "utvideo" "pcm_s16le" \
+  -c:v utvideo -pix_fmt yuv420p \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "magicyuv_avi_pcm" "avi" "magicyuv" "pcm_s16le" \
+  -c:v magicyuv -pix_fmt yuv420p \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "cineform_mov_pcm" "mov" "cfhd" "pcm_s16le" \
+  -vf scale=1280:720 -c:v cfhd -pix_fmt yuv422p10le \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "dnxhr_mov_pcm" "mov" "dnxhd" "pcm_s16le" \
+  -vf scale=1280:720 -r 24000/1001 -c:v dnxhd -profile:v dnxhr_lb -pix_fmt yuv422p \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
+  "png_mov_pcm" "mov" "png" "pcm_s16le" \
+  -c:v png -pix_fmt rgb24 \
+  -c:a pcm_s16le -ar 48000 -ac 2
+
+generate_av_fixture \
   "mpeg1_mpg_mp2" "mpg" "mpeg1video" "mp2" \
   -vf scale=352:288 -r 25 -c:v mpeg1video -b:v 1400k -pix_fmt yuv420p \
   -c:a mp2 -b:a 128k

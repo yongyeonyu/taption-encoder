@@ -327,6 +327,46 @@ generate_audio_fixture \
   -c:a ilbc_at -ar 8000 -ac 1
 
 generate_audio_fixture \
+  "audio_g722_mkv" "mkv" "g722" "libx264" "g722" "16000" "1" \
+  -c:v libx264 -preset ultrafast -crf 24 -pix_fmt yuv420p \
+  -c:a g722 -ar 16000 -ac 1
+
+generate_audio_fixture \
+  "audio_g723_mkv" "mkv" "g723" "libx264" "g723_1" "8000" "1" \
+  -c:v libx264 -preset ultrafast -crf 24 -pix_fmt yuv420p \
+  -c:a g723_1 -b:a 6300 -ar 8000 -ac 1
+
+generate_audio_fixture \
+  "audio_g726_mkv" "mkv" "g726" "libx264" "g726" "8000" "1" \
+  -c:v libx264 -preset ultrafast -crf 24 -pix_fmt yuv420p \
+  -c:a g726 -b:a 32k -ar 8000 -ac 1
+
+generate_audio_fixture \
+  "audio_mlp_mkv" "mkv" "mlp" "libx264" "mlp" "48000" "2" \
+  -c:v libx264 -preset ultrafast -crf 24 -pix_fmt yuv420p \
+  -strict -2 -c:a mlp -ar 48000 -ac 2
+
+generate_audio_fixture \
+  "audio_tta_mkv" "mkv" "tta" "libx264" "tta" "48000" "2" \
+  -c:v libx264 -preset ultrafast -crf 24 -pix_fmt yuv420p \
+  -c:a tta -ar 48000 -ac 2
+
+generate_audio_fixture \
+  "audio_nellymoser_flv" "flv" "nellymoser" "flv" "nellymoser" "8000" "1" \
+  -c:v flv -b:v 600k \
+  -c:a nellymoser -ar 8000 -ac 1
+
+generate_audio_fixture \
+  "audio_real144_mkv" "mkv" "realAudio" "libx264" "real_144" "8000" "1" \
+  -c:v libx264 -preset ultrafast -crf 24 -pix_fmt yuv420p \
+  -c:a real_144 -ar 8000 -ac 1
+
+generate_audio_fixture \
+  "audio_roq_dpcm_roq" "roq" "roqDPCM" "roqvideo" "roq_dpcm" "22050" "1" \
+  -vf scale=160:96 -c:v roqvideo -pix_fmt yuvj444p \
+  -c:a roq_dpcm -ar 22050 -ac 1
+
+generate_audio_fixture \
   "audio_wavpack_mkv" "mkv" "wavPack" "libx264" "wavpack" "48000" "2" \
   -c:v libx264 -preset ultrafast -crf 24 -pix_fmt yuv420p \
   -c:a wavpack -ar 48000 -ac 2

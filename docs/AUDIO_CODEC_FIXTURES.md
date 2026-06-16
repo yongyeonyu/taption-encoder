@@ -95,7 +95,7 @@ Generation:
 
 | Status | Count |
 | --- | ---: |
-| PASS | 22 |
+| PASS | 30 |
 | SKIP | 3 |
 | FAIL | 0 |
 
@@ -103,14 +103,14 @@ Transcode:
 
 | Metric | Count |
 | --- | ---: |
-| Input fixtures | 22 |
-| SW_HEVC attempts | 22 |
-| HW_HEVC attempts | 22 |
-| Total attempts | 44 |
-| Passed | 44 |
+| Input fixtures | 30 |
+| SW_HEVC attempts | 30 |
+| HW_HEVC attempts | 30 |
+| Total attempts | 60 |
+| Passed | 60 |
 | Skipped | 0 |
 | Failed | 0 |
-| Audio signal checks passed | 44 |
+| Audio signal checks passed | 60 |
 
 ## Generated Audio Coverage
 
@@ -133,6 +133,14 @@ Transcode:
 | `vorbis` | Vorbis in MKV |
 | `amr` | Skipped locally; AMR-NB and AMR-WB FFmpeg encoders unavailable and Apple `afconvert` AMR alternates failed with `fmt?` |
 | `ilbc` | iLBC in MOV via AudioToolbox encoder |
+| `g722` | G.722 in MKV |
+| `g723` | G.723.1 in MKV |
+| `g726` | G.726 in MKV |
+| `mlp` | MLP in MKV |
+| `tta` | TTA in MKV |
+| `nellymoser` | Nellymoser in FLV |
+| `realAudio` | RealAudio 1.0 in MKV |
+| `roqDPCM` | RoQ DPCM in RoQ |
 | `wavPack` | WavPack in MKV |
 | `wma` | WMA2 in WMV/ASF |
 | `adpcm` | IMA WAV ADPCM and Microsoft ADPCM in AVI |

@@ -178,6 +178,13 @@ enum TaptionCodecRegistry {
         .dvcProHD,
         .vc1,
         .wmv,
+        .ffv1,
+        .huffYUV,
+        .utVideo,
+        .magicYUV,
+        .cineForm,
+        .dnxhd,
+        .pngVideo,
         .rawVideo
     ]
 

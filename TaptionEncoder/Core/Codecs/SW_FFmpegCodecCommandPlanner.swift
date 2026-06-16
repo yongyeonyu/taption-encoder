@@ -341,7 +341,11 @@ enum SW_FFmpegCodecCommandPlanner {
             arguments += ["-crf", "30", "-b:v", "0"]
         case .proRes:
             arguments += ["-profile:v", "3"]
-        case .rawVideo:
+        case .ffv1:
+            arguments += ["-level", "3"]
+        case .dnxhd:
+            arguments += ["-profile:v", "dnxhr_lb"]
+        case .huffYUV, .utVideo, .magicYUV, .cineForm, .pngVideo, .rawVideo:
             break
         default:
             arguments += ["-q:v", "2"]
@@ -353,6 +357,19 @@ enum SW_FFmpegCodecCommandPlanner {
         for codec: TaptionVideoCodec,
         options: TaptionAdvancedOutputOptions
     ) -> [String] {
+        switch codec {
+        case .ffv1, .utVideo, .magicYUV:
+            return ["-pix_fmt", "yuv420p"]
+        case .huffYUV, .dnxhd:
+            return ["-pix_fmt", "yuv422p"]
+        case .cineForm, .proRes:
+            return ["-pix_fmt", "yuv422p10le"]
+        case .pngVideo:
+            return ["-pix_fmt", "rgb24"]
+        default:
+            break
+        }
+
         guard let bitDepth = options.color?.bitDepth,
               bitDepth >= 10 else {
             return []
@@ -361,8 +378,6 @@ enum SW_FFmpegCodecCommandPlanner {
         switch codec {
         case .hevc, .h264, .av1, .vp9:
             return ["-pix_fmt", "yuv420p10le"]
-        case .proRes:
-            return ["-pix_fmt", "yuv422p10le"]
         default:
             return []
         }
@@ -523,6 +538,13 @@ enum SW_FFmpegCodecCommandPlanner {
         .dvcPro: "dvvideo",
         .dvcProHD: "dvvideo",
         .wmv: "wmv2",
+        .ffv1: "ffv1",
+        .huffYUV: "huffyuv",
+        .utVideo: "utvideo",
+        .magicYUV: "magicyuv",
+        .cineForm: "cfhd",
+        .dnxhd: "dnxhd",
+        .pngVideo: "png",
         .rawVideo: "rawvideo"
     ]
 
@@ -540,6 +562,12 @@ enum SW_FFmpegCodecCommandPlanner {
         .flac: "flac",
         .vorbis: "vorbis",
         .ilbc: "ilbc_at",
+        .g722: "g722",
+        .g723: "g723_1",
+        .g726: "g726",
+        .mlp: "mlp",
+        .tta: "tta",
+        .realAudio: "real_144",
         .wavPack: "wavpack",
         .wma: "wmav2",
         .adpcm: "adpcm_ima_wav",

@@ -199,7 +199,7 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         )
 
         XCTAssertTrue(summary.isPassing, summary.failures.joined(separator: "\n"))
-        XCTAssertGreaterThanOrEqual(summary.fixtureCount, 54)
+        XCTAssertGreaterThanOrEqual(summary.fixtureCount, 62)
         XCTAssertEqual(summary.verifiedTranscodeCount, summary.fixtureCount * 2)
         XCTAssertEqual(
             summary.verifiedAudioSignalCount + summary.noSourceAudioAttemptCount,
@@ -220,7 +220,7 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         let manifestText = try String(contentsOf: manifestURL, encoding: .utf8)
         let rows = try TaptionCodecFixtureEvidence.parseVideoFixtureManifestTSV(manifestText)
 
-        XCTAssertGreaterThanOrEqual(rows.count, 54)
+        XCTAssertGreaterThanOrEqual(rows.count, 62)
 
         for row in rows {
             let sourceURL = fixtureDirectoryURL.appendingPathComponent(row.file)
@@ -276,12 +276,19 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         let outputCodecs = SW_FFmpegCodecCommandPlanner.plannableVideoOutputCodecs
         let sourceCodecs = Set(rows.map(\.videoCodec))
 
-        XCTAssertGreaterThanOrEqual(rows.count, 54)
+        XCTAssertGreaterThanOrEqual(rows.count, 62)
         XCTAssertTrue(outputCodecs.contains(.av1))
         XCTAssertTrue(outputCodecs.contains(.h264))
         XCTAssertTrue(outputCodecs.contains(.hevc))
         XCTAssertTrue(outputCodecs.contains(.vp9))
         XCTAssertTrue(outputCodecs.contains(.proRes))
+        XCTAssertTrue(outputCodecs.contains(.ffv1))
+        XCTAssertTrue(outputCodecs.contains(.huffYUV))
+        XCTAssertTrue(outputCodecs.contains(.utVideo))
+        XCTAssertTrue(outputCodecs.contains(.magicYUV))
+        XCTAssertTrue(outputCodecs.contains(.cineForm))
+        XCTAssertTrue(outputCodecs.contains(.dnxhd))
+        XCTAssertTrue(outputCodecs.contains(.pngVideo))
         XCTAssertTrue(outputCodecs.contains(.rawVideo))
 
         var plannedRoutes = Set<TaptionCodecRoute>()
@@ -464,6 +471,12 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         XCTAssertTrue(summary.generatedAudioCodecs.contains(.opus))
         XCTAssertTrue(summary.generatedAudioCodecs.contains(.dts))
         XCTAssertTrue(summary.generatedAudioCodecs.contains(.trueHD))
+        XCTAssertTrue(summary.generatedAudioCodecs.contains(.g722))
+        XCTAssertTrue(summary.generatedAudioCodecs.contains(.g723))
+        XCTAssertTrue(summary.generatedAudioCodecs.contains(.mlp))
+        XCTAssertTrue(summary.generatedAudioCodecs.contains(.tta))
+        XCTAssertTrue(summary.generatedAudioCodecs.contains(.realAudio))
+        XCTAssertTrue(summary.generatedAudioCodecs.contains(.roqDPCM))
         XCTAssertTrue(summary.generatedAudioCodecs.contains(.wavPack))
         XCTAssertTrue(summary.generatedAudioCodecs.contains(.adpcm))
         XCTAssertTrue(summary.generatedAudioCodecs.contains(.aLaw))
@@ -577,6 +590,12 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         XCTAssertTrue(outputCodecs.contains(.opus))
         XCTAssertTrue(outputCodecs.contains(.flac))
         XCTAssertTrue(outputCodecs.contains(.trueHD))
+        XCTAssertTrue(outputCodecs.contains(.g722))
+        XCTAssertTrue(outputCodecs.contains(.g723))
+        XCTAssertTrue(outputCodecs.contains(.g726))
+        XCTAssertTrue(outputCodecs.contains(.mlp))
+        XCTAssertTrue(outputCodecs.contains(.tta))
+        XCTAssertTrue(outputCodecs.contains(.realAudio))
         XCTAssertTrue(outputCodecs.contains(.wavPack))
         XCTAssertTrue(outputCodecs.contains(.aLaw))
         XCTAssertTrue(outputCodecs.contains(.muLaw))
@@ -1044,7 +1063,11 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         switch row.targetAudioCodec {
         case .aLaw, .muLaw, .amr, .ilbc:
             return (8_000, 1, 64_000)
-        case .adpcm:
+        case .g722:
+            return (16_000, 1, 64_000)
+        case .g723, .g726, .nellymoser, .realAudio:
+            return (8_000, 1, 64_000)
+        case .adpcm, .roqDPCM:
             return (22_050, 1, 96_000)
         default:
             return (48_000, 2, 192_000)

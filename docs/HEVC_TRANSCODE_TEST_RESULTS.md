@@ -20,14 +20,14 @@ Scripts/transcode_fixtures_to_hevc.sh \
 
 | Metric | Count |
 | --- | ---: |
-| Input fixtures | 54 |
-| SW_HEVC attempts | 54 |
-| HW_HEVC attempts | 54 |
-| Total attempts | 108 |
-| Passed | 108 |
+| Input fixtures | 62 |
+| SW_HEVC attempts | 62 |
+| HW_HEVC attempts | 62 |
+| Total attempts | 124 |
+| Passed | 124 |
 | Skipped | 0 |
 | Failed | 0 |
-| Audio signal checks passed | 94 |
+| Audio signal checks passed | 110 |
 | No-source-audio attempts | 14 |
 | Output peak range | -20.6 dB to -17.3 dB |
 
@@ -37,21 +37,21 @@ Audio fixture generation:
 
 | Metric | Count |
 | --- | ---: |
-| Generated audio fixtures | 22 |
-| Skipped audio targets | 2 |
+| Generated audio fixtures | 30 |
+| Skipped audio target rows | 3 |
 | Generation failures | 0 |
 
 Audio fixture transcode:
 
 | Metric | Count |
 | --- | ---: |
-| SW_HEVC attempts | 22 |
-| HW_HEVC attempts | 22 |
-| Total attempts | 44 |
-| Passed | 44 |
+| SW_HEVC attempts | 30 |
+| HW_HEVC attempts | 30 |
+| Total attempts | 60 |
+| Passed | 60 |
 | Skipped | 0 |
 | Failed | 0 |
-| Audio signal checks passed | 44 |
+| Audio signal checks passed | 60 |
 
 The skipped generation targets are xHE-AAC, AMR-NB, and AMR-WB because the local FFmpeg build does not provide those encoders. They remain real-sample or alternate-generator targets.
 
@@ -64,6 +64,9 @@ The skipped generation targets are xHE-AAC, AMR-NB, and AMR-WB because the local
 - HEVC in MP4 and MOV with AAC and ALAC
 - VP9 and VP8 in WebM with Opus
 - ProRes in MOV with PCM and ALAC
+- FFV1 in MKV with FLAC
+- HuffYUV, FFVHuff, Ut Video, and MagicYUV in AVI with PCM
+- GoPro CineForm, DNxHD/DNxHR, and PNG video in MOV with PCM
 - MPEG-1 and MPEG-2 program streams with MP2, including `.dat`, `.mod`, and `.vob`
 - MPEG-2 in MXF with PCM
 - MPEG-4 Part 2 in AVI and `.divx` with MP3
@@ -91,6 +94,9 @@ VC-1 raw elementary streams remain tracked as a real-world or alternate-generato
 - DTS/DCA and TrueHD
 - FLAC and Vorbis
 - iLBC
+- G.722, G.723.1, and G.726
+- MLP and TTA
+- Nellymoser, RealAudio 1.0, and RoQ DPCM
 - WavPack
 - WMA2
 - IMA WAV ADPCM and Microsoft ADPCM

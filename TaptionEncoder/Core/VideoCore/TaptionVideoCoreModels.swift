@@ -33,6 +33,13 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
     case dvcProHD
     case vc1
     case wmv
+    case ffv1
+    case huffYUV
+    case utVideo
+    case magicYUV
+    case cineForm
+    case dnxhd
+    case pngVideo
     case rawVideo
     case unknown
 
@@ -94,6 +101,20 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
             return "VC-1"
         case .wmv:
             return "Windows Media Video"
+        case .ffv1:
+            return "FFV1"
+        case .huffYUV:
+            return "HuffYUV"
+        case .utVideo:
+            return "Ut Video"
+        case .magicYUV:
+            return "MagicYUV"
+        case .cineForm:
+            return "GoPro CineForm"
+        case .dnxhd:
+            return "DNxHD / DNxHR"
+        case .pngVideo:
+            return "PNG Video"
         case .rawVideo:
             return "Raw Video"
         case .unknown:
@@ -121,6 +142,18 @@ enum TaptionVideoCodec: String, Codable, Equatable, CaseIterable {
             return "Sorenson 3"
         case .roqVideo:
             return "RoQ"
+        case .huffYUV:
+            return "HuffYUV"
+        case .utVideo:
+            return "UtVideo"
+        case .magicYUV:
+            return "MagicYUV"
+        case .cineForm:
+            return "CineForm"
+        case .dnxhd:
+            return "DNxHD"
+        case .pngVideo:
+            return "PNG"
         case .rawVideo:
             return "Raw"
         case .unknown:
@@ -147,6 +180,14 @@ enum TaptionAudioCodec: String, Codable, Equatable, CaseIterable {
     case vorbis
     case amr
     case ilbc
+    case g722
+    case g723
+    case g726
+    case mlp
+    case tta
+    case nellymoser
+    case realAudio
+    case roqDPCM
     case wavPack
     case wma
     case adpcm
@@ -186,6 +227,22 @@ enum TaptionAudioCodec: String, Codable, Equatable, CaseIterable {
             return "AMR"
         case .ilbc:
             return "iLBC"
+        case .g722:
+            return "G.722"
+        case .g723:
+            return "G.723.1"
+        case .g726:
+            return "G.726"
+        case .mlp:
+            return "MLP"
+        case .tta:
+            return "TTA"
+        case .nellymoser:
+            return "Nellymoser"
+        case .realAudio:
+            return "RealAudio"
+        case .roqDPCM:
+            return "RoQ DPCM"
         case .wavPack:
             return "WavPack"
         case .wma:
