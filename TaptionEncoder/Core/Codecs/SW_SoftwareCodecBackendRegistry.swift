@@ -209,12 +209,12 @@ enum TaptionOpenSourceNoticeCatalog {
             TaptionOpenSourceNoticeEntry(
                 id: "swiftvlc-libvlc",
                 name: "SwiftVLC / libVLC",
-                summary: "Software AV1 media decoding fallback used by the current app build.",
+                summary: "Software AV1, VP9, and VP8 media decoding fallback used by the current app build.",
                 category: .shippedComponent,
                 isShippedInCurrentBuild: true,
                 requiresFinalLicenseText: true,
                 licenseTextResourcePath: "OpenSourceNotices/SwiftVLC-libVLC.txt",
-                relatedBackend: .softwareAV1Decoder
+                relatedBackend: .softwareVLCDecoder
             ),
             TaptionOpenSourceNoticeEntry(
                 id: "google-mobile-ads",
@@ -314,17 +314,17 @@ enum TaptionOpenSourceNoticeCatalog {
 }
 
 enum SW_SoftwareCodecBackendRegistry {
-    static let av1SoftwareDecoder = TaptionSoftwareCodecBackendProfile(
-        backend: .softwareAV1Decoder,
-        displayName: "SwiftVLC AV1 Software Decoder",
-        videoDecodeCodecs: [.av1],
+    static let vlcSoftwareDecoder = TaptionSoftwareCodecBackendProfile(
+        backend: .softwareVLCDecoder,
+        displayName: "SwiftVLC Video Software Decoder",
+        videoDecodeCodecs: [.av1, .vp9, .vp8],
         videoEncodeCodecs: [],
         audioDecodeCodecs: [],
         audioEncodeCodecs: [],
         readableContainers: [.mp4, .mov, .m4v, .mkv, .webm],
         writableContainers: [],
         requiresLicenseReview: true,
-        notes: "Current app fallback for AV1 decode. Output encoding is handled by the route-specific AV1-to-H.265 algorithm."
+        notes: "Current app fallback for AV1, VP9, and VP8 decode. Output encoding is handled by the route-specific software-to-H.265 algorithms."
     )
 
     static let ffmpegFamilyCandidate = TaptionSoftwareCodecBackendProfile(
@@ -341,7 +341,7 @@ enum SW_SoftwareCodecBackendRegistry {
     )
 
     static let profiles: [TaptionSoftwareCodecBackendProfile] = [
-        av1SoftwareDecoder,
+        vlcSoftwareDecoder,
         ffmpegFamilyCandidate
     ]
 
@@ -379,8 +379,8 @@ enum SW_SoftwareCodecBackendRegistry {
     }
 
     static func preferredVideoDecodeBackend(for codec: TaptionVideoCodec) -> TaptionEncodingBackend? {
-        if av1SoftwareDecoder.canDecodeVideo(codec) {
-            return av1SoftwareDecoder.backend
+        if vlcSoftwareDecoder.canDecodeVideo(codec) {
+            return vlcSoftwareDecoder.backend
         }
         return profiles.first { $0.canDecodeVideo(codec) }?.backend
     }

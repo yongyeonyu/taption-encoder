@@ -2,6 +2,7 @@ import AudioToolbox
 import AVFoundation
 import CoreMedia
 import Foundation
+import SwiftVLC
 
 protocol MediaInspecting: TaptionVideoInspecting {}
 
@@ -28,27 +29,34 @@ struct FakeMediaInspector: MediaInspecting {
 
 struct AVFoundationMediaInspector: MediaInspecting {
     func inspectVideo(at url: URL) async throws -> TaptionVideoAsset {
-        let asset = AVURLAsset(url: url)
-        let duration = try await asset.load(.duration).seconds
-        let videoTracks = try await asset.loadTracks(withMediaType: .video)
-        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
-        let videoTrack: TaptionVideoTrackInfo?
-        if let firstVideoTrack = videoTracks.first {
-            videoTrack = try await inspectVideoTrack(firstVideoTrack)
-        } else {
-            videoTrack = nil
-        }
-        let audioTrackInfo = try await audioTracks.asyncMap { try await inspectAudioTrack($0) }
+        do {
+            let asset = AVURLAsset(url: url)
+            let duration = try await asset.load(.duration).seconds
+            let videoTracks = try await asset.loadTracks(withMediaType: .video)
+            let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+            let videoTrack: TaptionVideoTrackInfo?
+            if let firstVideoTrack = videoTracks.first {
+                videoTrack = try await inspectVideoTrack(firstVideoTrack)
+            } else {
+                videoTrack = nil
+            }
+            let audioTrackInfo = try await audioTracks.asyncMap { try await inspectAudioTrack($0) }
 
-        return TaptionVideoAsset(
-            displayName: url.lastPathComponent,
-            location: TaptionVideoAssetLocation(kind: .file, url: url),
-            container: container(for: url),
-            duration: duration.isFinite ? duration : nil,
-            videoTrack: videoTrack,
-            audioTracks: audioTrackInfo,
-            fingerprint: fingerprint(for: url)
-        )
+            return TaptionVideoAsset(
+                displayName: url.lastPathComponent,
+                location: TaptionVideoAssetLocation(kind: .file, url: url),
+                container: container(for: url),
+                duration: duration.isFinite ? duration : nil,
+                videoTrack: videoTrack,
+                audioTracks: audioTrackInfo,
+                fingerprint: fingerprint(for: url)
+            )
+        } catch {
+            guard shouldFallbackToSoftwareInspection(for: url, error: error) else {
+                throw error
+            }
+            return try await SW_VLCMediaInspector().inspectVideo(at: url)
+        }
     }
 
     private func inspectVideoTrack(_ track: AVAssetTrack) async throws -> TaptionVideoTrackInfo {
@@ -258,6 +266,196 @@ struct AVFoundationMediaInspector: MediaInspecting {
 
     private func string(_ value: CFString) -> String {
         value as String
+    }
+
+    private func shouldFallbackToSoftwareInspection(for url: URL, error: Error) -> Bool {
+        let container = TaptionVideoContainer.inferred(from: url)
+        guard SW_SoftwareCodecBackendRegistry.vlcSoftwareDecoder.readableContainers.contains(container) else {
+            return false
+        }
+
+        let nsError = error as NSError
+        guard nsError.domain == AVFoundationErrorDomain else {
+            return false
+        }
+
+        return nsError.code == AVError.unknown.rawValue
+            || nsError.code == AVError.fileFormatNotRecognized.rawValue
+            || nsError.code == -11828
+    }
+}
+
+private struct SW_VLCMediaInspector: MediaInspecting {
+    func inspectVideo(at url: URL) async throws -> TaptionVideoAsset {
+        let media = try Media(url: url)
+        _ = try await media.parse(timeout: .seconds(10))
+        let tracks = media.tracks()
+        let videoTrack = tracks
+            .first(where: { $0.type == .video })
+            .map(makeVideoTrackInfo)
+        let audioTracks = tracks
+            .filter { $0.type == .audio }
+            .map(makeAudioTrackInfo)
+
+        return TaptionVideoAsset(
+            displayName: url.lastPathComponent,
+            location: TaptionVideoAssetLocation(kind: .file, url: url),
+            container: TaptionVideoContainer.inferred(from: url),
+            duration: media.duration.map { Double($0.milliseconds) / 1000.0 },
+            videoTrack: videoTrack,
+            audioTracks: audioTracks,
+            fingerprint: fingerprint(for: url)
+        )
+    }
+
+    private func makeVideoTrackInfo(from track: Track) -> TaptionVideoTrackInfo {
+        let width = max(track.width ?? 0, 2)
+        let height = max(track.height ?? 0, 2)
+        return TaptionVideoTrackInfo(
+            codec: videoCodec(from: track.codec),
+            naturalSize: TaptionPixelSize(width: width, height: height),
+            displaySize: TaptionPixelSize(width: width, height: height),
+            nominalFrameRate: frameRate(from: track.frameRate),
+            estimatedBitrate: track.bitrate > 0 ? track.bitrate : nil,
+            color: TaptionColorDescription(),
+            rotationDegrees: 0
+        )
+    }
+
+    private func makeAudioTrackInfo(from track: Track) -> TaptionAudioTrackInfo {
+        TaptionAudioTrackInfo(
+            codec: audioCodec(from: track.codec),
+            channelCount: track.channels,
+            sampleRate: track.sampleRate.map(Double.init),
+            estimatedBitrate: track.bitrate > 0 ? track.bitrate : nil
+        )
+    }
+
+    private func videoCodec(from codec: Int) -> TaptionVideoCodec {
+        switch normalizedFourCC(codec) {
+        case "av01", "av1":
+            return .av1
+        case "vp80", "vp8":
+            return .vp8
+        case "vp90", "vp9":
+            return .vp9
+        case "h264", "avc1", "avc3":
+            return .h264
+        case "hevc", "hvc1", "hev1":
+            return .hevc
+        case "dvh1", "dvhe":
+            return .dolbyVisionHEVC
+        case "mp4v":
+            return .mpeg4Visual
+        case "mp2v", "mpeg":
+            return .mpeg2
+        case "mp1v":
+            return .mpeg1
+        case "h263":
+            return .h263
+        case "jpeg":
+            return .jpeg
+        case "mjpg":
+            return .motionJPEG
+        case "cvid":
+            return .cinepak
+        case "svq1":
+            return .sorensonVideo
+        case "svq3":
+            return .sorensonVideo3
+        case "dvc":
+            return .dv
+        case "dvcp", "dvpp", "dv5n", "dv5p":
+            return .dvcPro
+        case "dvhp", "dvhq", "dvh6", "dvh5", "dvh3", "dvh2":
+            return .dvcProHD
+        case "ap4x", "ap4h", "apch", "apcn", "apcs", "apco":
+            return .proRes
+        case "aprn", "aprh":
+            return .proResRaw
+        default:
+            return .unknown
+        }
+    }
+
+    private func audioCodec(from codec: Int) -> TaptionAudioCodec {
+        switch normalizedFourCC(codec) {
+        case "aac", "mp4a", "aach", "aacl":
+            return .aac
+        case "aace":
+            return .xheAAC
+        case "alac":
+            return .alac
+        case "opus":
+            return .opus
+        case "mp3", ".mp3":
+            return .mp3
+        case "mp2", ".mp2":
+            return .mp2
+        case "ac-3":
+            return .ac3
+        case "ec-3", "eac3":
+            return .eac3
+        case "dtsc", "dtsh", "dtsl", "dtsx":
+            return .dts
+        case "mlpa":
+            return .trueHD
+        case "flac":
+            return .flac
+        case "samr", "sawb":
+            return .amr
+        case "ilbc":
+            return .ilbc
+        case "lpcm", "sowt", "twos", "in24", "in32", "fl32", "fl64", "raw":
+            return .pcm
+        case "alaw":
+            return .aLaw
+        case "ulaw":
+            return .muLaw
+        case "vorb", "vrbs":
+            return .vorbis
+        case "wma1", "wma2", "wmap", "wmav":
+            return .wma
+        default:
+            return .unknown
+        }
+    }
+
+    private func frameRate(from value: Double?) -> TaptionRationalFrameRate? {
+        guard let value, value.isFinite, value > 0 else {
+            return nil
+        }
+        let scaled = Int((value * 1000).rounded())
+        return TaptionRationalFrameRate(numerator: scaled, denominator: 1000)
+    }
+
+    private func fingerprint(for url: URL) -> TaptionMediaFingerprint {
+        guard let values = try? url.resourceValues(forKeys: [
+            .fileSizeKey,
+            .creationDateKey,
+            .contentModificationDateKey
+        ]) else {
+            return TaptionMediaFingerprint()
+        }
+
+        return TaptionMediaFingerprint(
+            fileSize: values.fileSize.map(Int64.init),
+            creationDate: values.creationDate,
+            modificationDate: values.contentModificationDate,
+            contentIdentifier: nil
+        )
+    }
+
+    private func normalizedFourCC(_ code: Int) -> String {
+        let value = UInt32(truncatingIfNeeded: code)
+        return String(bytes: [
+            UInt8(value & 0xFF),
+            UInt8((value >> 8) & 0xFF),
+            UInt8((value >> 16) & 0xFF),
+            UInt8((value >> 24) & 0xFF)
+        ], encoding: .ascii)?
+            .trimmingCharacters(in: .controlCharacters.union(.whitespacesAndNewlines))
+            .lowercased() ?? ""
     }
 }
 

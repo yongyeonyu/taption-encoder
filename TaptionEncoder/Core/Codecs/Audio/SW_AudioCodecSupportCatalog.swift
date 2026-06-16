@@ -32,6 +32,10 @@ enum SW_AudioCodecSupportCatalog {
         .muLaw
     ]
 
+    static let bundledNativeAACDecodeCodecs: Set<TaptionAudioCodec> = [
+        .vorbis
+    ]
+
     static let fixtureCoveredCodecs: Set<TaptionAudioCodec> = [
         .aac,
         .pcm,
@@ -68,6 +72,19 @@ enum SW_AudioCodecSupportCatalog {
 
     static func canSoftwareDecode(_ codec: TaptionAudioCodec) -> Bool {
         softwareDecodeCodecs.contains(codec)
+    }
+
+    static func currentBuildBundledDecodeBackend(
+        for sourceCodec: TaptionAudioCodec,
+        outputCodec: TaptionAudioCodec,
+        outputContainer: TaptionVideoContainer
+    ) -> TaptionEncodingBackend? {
+        guard outputCodec == .aac,
+              outputContainer == .mp4,
+              bundledNativeAACDecodeCodecs.contains(sourceCodec) else {
+            return nil
+        }
+        return .softwareVLCDecoder
     }
 
     static func fixtureStatus(for codec: TaptionAudioCodec) -> TaptionAudioFixtureStatus {

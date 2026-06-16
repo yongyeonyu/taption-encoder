@@ -12,6 +12,12 @@ enum AdLoadState: String, Equatable {
     case unavailable
 }
 
+enum RewardedAdShowResult: String, Equatable {
+    case earnedReward
+    case closedWithoutReward
+    case unavailable
+}
+
 enum SessionEndAdReason: String, Equatable {
     case startingEncoding
     case completedSave
@@ -117,8 +123,20 @@ struct AdMobBannerAdProvider: BannerAdProviding {
 }
 
 struct AdMobRewardedAdProvider: RewardedAdProviding {
+    let configuration: AdMobRuntimeConfiguration
+
+    init(configuration: AdMobRuntimeConfiguration = .current()) {
+        self.configuration = configuration
+    }
+
     func currentRewardedState() async -> AdLoadState {
-        .ready
+        #if canImport(GoogleMobileAds)
+        return await AdMobRewardedAdManager.shared.currentState(
+            adUnitID: configuration.rewardedSaveAdUnitID
+        )
+        #else
+        return .unavailable
+        #endif
     }
 }
 
@@ -413,22 +431,40 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
     private var activeContinuation: CheckedContinuation<Bool, Never>?
     private var didEarnReward = false
     private var isLoading = false
+    private var lastKnownState: AdLoadState = .idle
+
+    func currentState(adUnitID: String) async -> AdLoadState {
+        guard !adUnitID.isEmpty else {
+            return .unavailable
+        }
+        if preparedAd != nil, preparedAdUnitID == adUnitID {
+            return .ready
+        }
+        if isLoading {
+            return .loading
+        }
+        return lastKnownState
+    }
 
     func loadIfNeeded(adUnitID: String) async -> AdLoadState {
         guard !adUnitID.isEmpty else {
             AppLogger.warning("Rewarded ad load skipped because ad unit is empty", category: .ads)
+            lastKnownState = .unavailable
             return .unavailable
         }
         if preparedAd != nil, preparedAdUnitID == adUnitID {
             AppLogger.debug("Rewarded ad already ready", category: .ads)
+            lastKnownState = .ready
             return .ready
         }
         guard !isLoading else {
             AppLogger.debug("Rewarded ad already loading", category: .ads)
+            lastKnownState = .loading
             return .loading
         }
 
         isLoading = true
+        lastKnownState = .loading
         defer { isLoading = false }
 
         do {
@@ -440,11 +476,13 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
             ad.fullScreenContentDelegate = self
             preparedAd = ad
             preparedAdUnitID = adUnitID
+            lastKnownState = .ready
             AppLogger.info("Rewarded ad loaded", category: .ads)
             return .ready
         } catch {
             preparedAd = nil
             preparedAdUnitID = ""
+            lastKnownState = .unavailable
             AppLogger.error(
                 "Rewarded ad failed to load",
                 category: .ads,
@@ -454,18 +492,33 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
         }
     }
 
-    func show(adUnitID: String) async -> Bool {
-        let loadState = await loadIfNeeded(adUnitID: adUnitID)
-        guard loadState == .ready,
-              let ad = preparedAd,
-              let rootViewController = AdMobRootViewControllerProvider.topViewController(),
-              activeContinuation == nil else {
+    func show(adUnitID: String) async -> RewardedAdShowResult {
+        guard activeContinuation == nil else {
             AppLogger.warning(
-                "Rewarded ad show unavailable",
+                "Rewarded ad show skipped because another rewarded ad is active",
+                category: .ads
+            )
+            return .unavailable
+        }
+
+        let loadState = await prepareForPresentation(adUnitID: adUnitID)
+        guard loadState == .ready,
+              let ad = preparedAd else {
+            AppLogger.warning(
+                "Rewarded ad show unavailable after preparation",
                 category: .ads,
                 metadata: ["loadState": loadState.rawValue]
             )
-            return false
+            return .unavailable
+        }
+
+        guard let rootViewController = await waitForTopViewController() else {
+            AppLogger.warning(
+                "Rewarded ad show unavailable because root view controller is missing",
+                category: .ads
+            )
+            lastKnownState = .unavailable
+            return .unavailable
         }
 
         AppLogger.info("Rewarded ad presenting", category: .ads)
@@ -473,6 +526,7 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
         preparedAdUnitID = ""
         activeAd = ad
         didEarnReward = false
+        lastKnownState = .loading
 
         return await withCheckedContinuation { continuation in
             activeContinuation = continuation
@@ -483,6 +537,70 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
                 }
             }
         }
+        ? .earnedReward : .closedWithoutReward
+    }
+
+    private func prepareForPresentation(adUnitID: String) async -> AdLoadState {
+        let retryDelays: [UInt64] = [0, 350_000_000, 900_000_000]
+        var latestState = await currentState(adUnitID: adUnitID)
+        if latestState == .ready {
+            return .ready
+        }
+
+        for (index, delay) in retryDelays.enumerated() {
+            if delay > 0 {
+                try? await Task.sleep(nanoseconds: delay)
+            }
+
+            latestState = await loadIfNeeded(adUnitID: adUnitID)
+            if latestState == .ready {
+                return .ready
+            }
+
+            if latestState == .loading {
+                latestState = await waitForReadyState(adUnitID: adUnitID)
+                if latestState == .ready {
+                    return .ready
+                }
+            }
+
+            AppLogger.warning(
+                "Rewarded ad not ready after load attempt",
+                category: .ads,
+                metadata: [
+                    "attempt": "\(index + 1)",
+                    "loadState": latestState.rawValue
+                ]
+            )
+        }
+
+        return latestState
+    }
+
+    private func waitForReadyState(adUnitID: String) async -> AdLoadState {
+        for _ in 0..<10 {
+            let current = await currentState(adUnitID: adUnitID)
+            if current != .loading {
+                return current
+            }
+            try? await Task.sleep(nanoseconds: 150_000_000)
+        }
+        return await currentState(adUnitID: adUnitID)
+    }
+
+    private func waitForTopViewController() async -> UIViewController? {
+        for attempt in 0..<10 {
+            if let controller = AdMobRootViewControllerProvider.topViewController() {
+                return controller
+            }
+            AppLogger.warning(
+                "Rewarded ad root view controller missing; retrying",
+                category: .ads,
+                metadata: ["attempt": "\(attempt + 1)"]
+            )
+            try? await Task.sleep(nanoseconds: 150_000_000)
+        }
+        return AdMobRootViewControllerProvider.topViewController()
     }
 
     private func finishCurrentPresentation(allowed: Bool) {
@@ -513,6 +631,7 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
             category: .ads,
             metadata: ["earned": "\(didComplete)"]
         )
+        lastKnownState = .idle
         finishCurrentPresentation(allowed: didComplete)
         Task { @MainActor in
             await loadIfNeeded(adUnitID: AdMobRuntimeConfiguration.current().rewardedSaveAdUnitID)
@@ -529,6 +648,7 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
             category: .ads,
             metadata: ["error": error.localizedDescription]
         )
+        lastKnownState = .unavailable
         finishCurrentPresentation(allowed: false)
         Task { @MainActor in
             await loadIfNeeded(adUnitID: AdMobRuntimeConfiguration.current().rewardedSaveAdUnitID)

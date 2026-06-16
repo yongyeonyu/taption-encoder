@@ -43,7 +43,7 @@ struct AdMobRewardedSaveAdGate: AdGate {
             category: .ads,
             metadata: ["id": state.id.uuidString]
         )
-        let didEarnReward = await AdMobRewardedAdManager.shared.show(
+        let showResult = await AdMobRewardedAdManager.shared.show(
             adUnitID: configuration.rewardedSaveAdUnitID
         )
         AppLogger.info(
@@ -51,10 +51,17 @@ struct AdMobRewardedSaveAdGate: AdGate {
             category: .ads,
             metadata: [
                 "id": state.id.uuidString,
-                "earned": "\(didEarnReward)"
+                "result": showResult.rawValue
             ]
         )
-        return didEarnReward ? .allowed : .unavailable
+        switch showResult {
+        case .earnedReward:
+            return .allowed
+        case .closedWithoutReward:
+            return .skipped
+        case .unavailable:
+            return .unavailable
+        }
         #else
         AppLogger.warning("Rewarded save authorization unavailable because GoogleMobileAds is not linked", category: .ads)
         return .unavailable

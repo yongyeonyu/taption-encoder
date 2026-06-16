@@ -112,6 +112,118 @@ struct TaptionAudioOutputReadinessCatalogReport: Codable, Equatable {
     }
 }
 
+enum TaptionLaunchInputSupportAvailability: String, Codable, Equatable {
+    case availableNow
+    case availableOnSupportedHardware
+}
+
+struct TaptionLaunchInputVideoSupportItem: Codable, Equatable {
+    var codec: TaptionVideoCodec
+    var availability: TaptionLaunchInputSupportAvailability
+}
+
+struct TaptionLaunchOutputSupport: Codable, Equatable {
+    var videoCodec: TaptionVideoCodec
+    var audioCodec: TaptionAudioCodec
+    var container: TaptionVideoContainer
+}
+
+enum TaptionLaunchInputSupportState: String, Codable, Equatable {
+    case supported
+    case unsupportedContainer
+    case unsupportedCodec
+}
+
+struct TaptionLaunchInputSupportDiagnosis: Codable, Equatable {
+    var state: TaptionLaunchInputSupportState
+    var title: String
+    var detail: String
+
+    var isSupportedNow: Bool {
+        state == .supported
+    }
+}
+
+enum TaptionLaunchSupportCatalog {
+    static let supportedInputContainers: [TaptionVideoContainer] = [
+        .mp4,
+        .mov,
+        .m4v,
+        .webm
+    ]
+
+    static let supportedInputVideoCodecs: [TaptionLaunchInputVideoSupportItem] = [
+        TaptionLaunchInputVideoSupportItem(codec: .av1, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .vp9, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .vp8, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableOnSupportedHardware),
+        TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableOnSupportedHardware),
+        TaptionLaunchInputVideoSupportItem(codec: .proRes, availability: .availableOnSupportedHardware)
+    ]
+
+    static let supportedOutput = TaptionLaunchOutputSupport(
+        videoCodec: .hevc,
+        audioCodec: TaptionAudioCodecRoutePlanner.defaultOutputCodec,
+        container: .mp4
+    )
+
+    static var supportedInputVideoSummary: String {
+        supportedInputVideoCodecs
+            .map { $0.codec.displayName }
+            .joined(separator: ", ")
+    }
+
+    static var supportedInputContainerSummary: String {
+        supportedInputContainers
+            .flatMap(\.supportedFileExtensions)
+            .map { $0.uppercased() }
+            .joined(separator: ", ")
+    }
+
+    static var supportedInputVideoNote: String {
+        let deviceLimited = supportedInputVideoCodecs
+            .filter { $0.availability == .availableOnSupportedHardware }
+            .map { $0.codec.displayName }
+
+        guard !deviceLimited.isEmpty else {
+            return "All listed input codecs are executable in the current launch build."
+        }
+
+        return "\(deviceLimited.joined(separator: ", ")) input requires Apple-native hardware routes on the current device."
+    }
+
+    static var supportedInputContainerNote: String {
+        "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as WebM."
+    }
+
+    static func diagnoseInput(
+        container: TaptionVideoContainer,
+        videoCodec: TaptionVideoCodec
+    ) -> TaptionLaunchInputSupportDiagnosis {
+        guard supportedInputContainers.contains(container) else {
+            return TaptionLaunchInputSupportDiagnosis(
+                state: .unsupportedContainer,
+                title: "Input Container Unsupported",
+                detail: "\(container.defaultFileExtension.uppercased()) input is not supported in the current launch build."
+            )
+        }
+
+        guard supportedInputVideoCodecs.contains(where: { $0.codec == videoCodec }) else {
+            return TaptionLaunchInputSupportDiagnosis(
+                state: .unsupportedCodec,
+                title: "Input Codec Unsupported",
+                detail: "\(videoCodec.displayName) input is not supported in the current launch build."
+            )
+        }
+
+        return TaptionLaunchInputSupportDiagnosis(
+            state: .supported,
+            title: "Input Supported",
+            detail: "The current launch build can inspect this input container and codec."
+        )
+    }
+}
+
 enum TaptionCodecOutputCatalog {
     static var selectableVideoCodecs: [TaptionVideoCodec] {
         TaptionCodecRegistry.universalOutputCodecs

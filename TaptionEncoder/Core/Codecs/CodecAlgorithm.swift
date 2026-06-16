@@ -1,5 +1,33 @@
 import Foundation
 
+struct TaptionCodecTranscodingAlgorithmEntry: @unchecked Sendable {
+    var descriptor: TaptionCodecAlgorithmDescriptor
+    var transcode: @Sendable (
+        _ request: TaptionCodecTranscodeRequest,
+        _ progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput
+
+    init<Algorithm: TaptionStaticCodecTranscodingAlgorithm>(
+        _ algorithm: Algorithm.Type
+    ) {
+        self.descriptor = algorithm.descriptor
+        self.transcode = { request, progress in
+            try await algorithm.transcode(request: request, progress: progress)
+        }
+    }
+
+    init(
+        descriptor: TaptionCodecAlgorithmDescriptor,
+        transcode: @escaping @Sendable (
+            _ request: TaptionCodecTranscodeRequest,
+            _ progress: @escaping (TaptionEncodingProgress) -> Void
+        ) async throws -> TaptionCodecTranscodeOutput
+    ) {
+        self.descriptor = descriptor
+        self.transcode = transcode
+    }
+}
+
 struct TaptionCodecRoute: Codable, Hashable {
     var sourceCodec: TaptionVideoCodec
     var outputCodec: TaptionVideoCodec
@@ -249,7 +277,9 @@ enum TaptionCodecRegistry {
     ]
 
     static let softwareImplementedRoutes: Set<TaptionCodecRoute> = [
-        TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc)
+        TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .vp9, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .vp8, outputCodec: .hevc)
     ]
 
     static let appleNativeHEVCHardwareSourceCodecs: [TaptionVideoCodec] = [
@@ -297,8 +327,22 @@ enum TaptionCodecRegistry {
             sourceCodec: .av1,
             outputCodec: .hevc,
             mode: .software,
-            backend: .softwareAV1Decoder,
+            backend: .softwareVLCDecoder,
             displayName: "AV1 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .vp9,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "VP9 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .vp8,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "VP8 to H.265 Software"
         )
         ] + appleNativeHEVCHardwareAlgorithmDescriptors
     }

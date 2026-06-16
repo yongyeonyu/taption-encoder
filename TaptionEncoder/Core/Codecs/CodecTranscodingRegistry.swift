@@ -1,33 +1,5 @@
 import Foundation
 
-struct TaptionCodecTranscodingAlgorithmEntry: @unchecked Sendable {
-    var descriptor: TaptionCodecAlgorithmDescriptor
-    var transcode: @Sendable (
-        _ request: TaptionCodecTranscodeRequest,
-        _ progress: @escaping (TaptionEncodingProgress) -> Void
-    ) async throws -> TaptionCodecTranscodeOutput
-
-    init<Algorithm: TaptionStaticCodecTranscodingAlgorithm>(
-        _ algorithm: Algorithm.Type
-    ) {
-        self.descriptor = algorithm.descriptor
-        self.transcode = { request, progress in
-            try await algorithm.transcode(request: request, progress: progress)
-        }
-    }
-
-    init(
-        descriptor: TaptionCodecAlgorithmDescriptor,
-        transcode: @escaping @Sendable (
-            _ request: TaptionCodecTranscodeRequest,
-            _ progress: @escaping (TaptionEncodingProgress) -> Void
-        ) async throws -> TaptionCodecTranscodeOutput
-    ) {
-        self.descriptor = descriptor
-        self.transcode = transcode
-    }
-}
-
 enum TaptionCodecTranscodingRegistryError: LocalizedError, Equatable {
     case routeNotImplemented(TaptionCodecRoute)
     case requestRouteMismatch(expected: TaptionCodecRoute, actual: TaptionCodecRoute)
@@ -57,10 +29,16 @@ struct TaptionCodecTranscodingRegistry: @unchecked Sendable {
         self.plannedDescriptors = plannedDescriptors
     }
 
-    static let live = TaptionCodecTranscodingRegistry(
-        algorithms: [
+    static let live = makeLive()
+
+    static func makeLive(
+        softwareExecutor: SW_FFmpegCommandExecutor? = nil
+    ) -> TaptionCodecTranscodingRegistry {
+        var algorithms = [
             TaptionCodecTranscodingAlgorithmEntry(HW_AV1HEVCCodecAlgorithm.self),
-            TaptionCodecTranscodingAlgorithmEntry(SW_AV1HEVCTranscoder.self)
+            TaptionCodecTranscodingAlgorithmEntry(SW_AV1HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_VP9HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_VP8HEVCTranscoder.self)
         ] + HW_AppleHEVCCodecAlgorithm.nativeDescriptors.map { descriptor in
             TaptionCodecTranscodingAlgorithmEntry(
                 descriptor: descriptor,
@@ -68,9 +46,25 @@ struct TaptionCodecTranscodingRegistry: @unchecked Sendable {
                     try await HW_AppleHEVCCodecAlgorithm.transcode(request: request, progress: progress)
                 }
             )
-        },
-        plannedDescriptors: SW_UniversalCodecTranscodeAlgorithm.plannedDescriptors
-    )
+        }
+
+        var plannedDescriptors = SW_UniversalCodecTranscodeAlgorithm.plannedDescriptors
+        if let softwareExecutor,
+           softwareExecutor.readinessReport.isExecutableInCurrentBuild,
+           softwareExecutor.runner != nil {
+            let runtimeDescriptors = SW_UniversalCodecTranscodeAlgorithm.runtimeAlgorithmEntries(
+                executor: SW_FFmpegVideoCodecTranscodeExecutor(executor: softwareExecutor)
+            )
+            let runtimeRoutes = Set(runtimeDescriptors.map(\.descriptor.route))
+            algorithms += runtimeDescriptors
+            plannedDescriptors.removeAll { runtimeRoutes.contains($0.route) }
+        }
+
+        return TaptionCodecTranscodingRegistry(
+            algorithms: algorithms,
+            plannedDescriptors: plannedDescriptors
+        )
+    }
 
     var descriptors: [TaptionCodecAlgorithmDescriptor] {
         algorithms.map(\.descriptor)
@@ -106,7 +100,8 @@ struct TaptionCodecTranscodingRegistry: @unchecked Sendable {
         executionKind: TaptionCodecRouteExecutionKind,
         progress: @escaping (TaptionEncodingProgress) -> Void
     ) async throws -> TaptionCodecTranscodeOutput {
-        guard TaptionCodecRegistry.support(for: request.route) == .implemented else {
+        let routeSupport = TaptionCodecRegistry.support(for: request.route)
+        guard routeSupport != .unsupported else {
             throw TaptionCodecTranscodingRegistryError.routeNotImplemented(request.route)
         }
 
@@ -114,6 +109,9 @@ struct TaptionCodecTranscodingRegistry: @unchecked Sendable {
             algorithms.first { $0.descriptor.route == request.route && $0.descriptor.mode == mode }
         }
         guard !candidates.isEmpty else {
+            if routeSupport == .planned {
+                throw TaptionCodecTranscodingRegistryError.routeNotImplemented(request.route)
+            }
             throw TaptionCodecTranscodingRegistryError.algorithmUnavailable(
                 route: request.route,
                 executionKind: executionKind

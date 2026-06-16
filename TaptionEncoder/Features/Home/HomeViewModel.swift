@@ -55,6 +55,42 @@ final class HomeViewModel: ObservableObject {
         "\(selectedOutput.summary) / same folder + \(environment.configuration.outputSuffix)"
     }
 
+    var selectedOutputDetailTitle: String {
+        currentReview == nil ? "Selected Output" : "Selected Route"
+    }
+
+    var selectedOutputDetailStatusText: String {
+        currentReview?.videoInfo.codecPathTitle ?? selectedOutput.statusTitle
+    }
+
+    var selectedOutputDetailSummary: String {
+        currentReview?.videoInfo.outputSummary ?? selectedOutput.summary
+    }
+
+    var selectedOutputDetailText: String {
+        guard let currentReview else {
+            return selectedOutput.detailText
+        }
+
+        var parts = [currentReview.videoInfo.readinessDetailText]
+        if currentReview.videoInfo.audioPathDetail != "Audio route has not been inspected yet." {
+            parts.append(currentReview.videoInfo.audioPathDetail)
+        }
+        return parts.joined(separator: " ")
+    }
+
+    var selectedOutputRouteBadges: [String] {
+        guard let currentReview else {
+            return []
+        }
+
+        var badges = ["Video \(currentReview.videoInfo.codecPathBadge)"]
+        if currentReview.videoInfo.audioPathBadge != "None" {
+            badges.append("Audio \(currentReview.videoInfo.audioPathBadge)")
+        }
+        return badges
+    }
+
     var outputCodecOptions: [TaptionVideoCodec] {
         TaptionOutputSelection.videoCodecOptions
     }
@@ -65,6 +101,30 @@ final class HomeViewModel: ObservableObject {
 
     var outputContainerOptions: [TaptionVideoContainer] {
         TaptionOutputSelection.containerOptions
+    }
+
+    var outputResolutionOptions: [TaptionOutputResolutionPreset] {
+        let asset = selectedAssetForOutputConfiguration
+        let supported = TaptionOutputSelection.resolutionOptions.filter { resolutionPresetIsAvailable($0, for: asset) }
+        let unsupported = TaptionOutputSelection.resolutionOptions.filter { !resolutionPresetIsAvailable($0, for: asset) }
+        return supported + unsupported
+    }
+
+    var selectedOutputTargetSizeText: String {
+        guard selectedOutput.sizePreset == .manual else {
+            return "Auto"
+        }
+
+        let value = selectedOutput.normalizedTargetSizeMB(for: selectedAssetForOutputConfiguration)
+        return "\(Int(value.rounded())) MB"
+    }
+
+    var outputTargetSizeRangeMB: ClosedRange<Double> {
+        selectedOutput.targetSizeRangeMB(for: selectedAssetForOutputConfiguration)
+    }
+
+    var selectedOutputTargetSizeValueMB: Double {
+        selectedOutput.normalizedTargetSizeMB(for: selectedAssetForOutputConfiguration)
     }
 
     var selectedOutputStatusText: String {
@@ -115,7 +175,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     var backgroundSummary: String {
-        "Keep the app open on iOS 18-25. Background encoding can be offered on iOS 26+."
+        "Encoding keeps the device awake. If the screen is locked manually, iOS grants limited background time."
     }
 
     var bannerAdUnitID: String {
@@ -197,6 +257,78 @@ final class HomeViewModel: ObservableObject {
         refreshPreparedSourceAfterOutputChange()
     }
 
+    func selectOutputResolution(_ preset: TaptionOutputResolutionPreset) {
+        guard canChangeOutputSelection else {
+            AppLogger.warning(
+                "Output resolution change ignored while flow is busy",
+                category: .ui,
+                metadata: ["resolution": preset.rawValue]
+            )
+            return
+        }
+        guard resolutionPresetIsAvailable(preset, for: selectedAssetForOutputConfiguration) else {
+            return
+        }
+        guard selectedOutput.resolutionPreset != preset else {
+            return
+        }
+
+        selectedOutput.resolutionPreset = preset
+        AppLogger.info(
+            "Output resolution selected",
+            category: .ui,
+            metadata: ["resolution": preset.rawValue]
+        )
+        refreshPreparedSourceAfterOutputChange()
+    }
+
+    func selectOutputSize(_ preset: TaptionOutputSizePreset) {
+        guard canChangeOutputSelection else {
+            AppLogger.warning(
+                "Output size change ignored while flow is busy",
+                category: .ui,
+                metadata: ["size": preset.rawValue]
+            )
+            return
+        }
+        guard selectedOutput.sizePreset != preset else {
+            return
+        }
+
+        selectedOutput.sizePreset = preset
+        if preset == .manual, selectedOutput.targetSizeMB == nil {
+            selectedOutput.targetSizeMB = selectedOutput.suggestedTargetSizeMB(
+                for: selectedAssetForOutputConfiguration
+            )
+        }
+        AppLogger.info(
+            "Output size selected",
+            category: .ui,
+            metadata: ["size": preset.rawValue]
+        )
+        refreshPreparedSourceAfterOutputChange()
+    }
+
+    func updateOutputTargetSizeMB(_ value: Double) {
+        guard canChangeOutputSelection else {
+            return
+        }
+
+        let clamped = min(max(value, outputTargetSizeRangeMB.lowerBound), outputTargetSizeRangeMB.upperBound)
+        guard selectedOutput.targetSizeMB != clamped || selectedOutput.sizePreset != .manual else {
+            return
+        }
+
+        selectedOutput.sizePreset = .manual
+        selectedOutput.targetSizeMB = clamped
+        AppLogger.info(
+            "Output target size updated",
+            category: .ui,
+            metadata: ["targetMB": String(Int(clamped.rounded()))]
+        )
+        refreshPreparedSourceAfterOutputChange()
+    }
+
     func outputCodecMenuTitle(_ codec: TaptionVideoCodec) -> String {
         "\(codec.displayName) - \(outputCodecStatusText(codec))"
     }
@@ -206,7 +338,15 @@ final class HomeViewModel: ObservableObject {
     }
 
     func outputContainerMenuTitle(_ container: TaptionVideoContainer) -> String {
-        "\(container.defaultFileExtension.uppercased()) - \(outputContainerStatusText(container))"
+        container.defaultFileExtension.uppercased()
+    }
+
+    func outputResolutionMenuTitle(_ preset: TaptionOutputResolutionPreset) -> String {
+        preset.menuTitle
+    }
+
+    func outputSizeMenuTitle(_ preset: TaptionOutputSizePreset) -> String {
+        preset.menuTitle
     }
 
     private func outputCodecStatusText(_ codec: TaptionVideoCodec) -> String {
@@ -236,6 +376,30 @@ final class HomeViewModel: ObservableObject {
             return videoState.shortDisplayName
         }
         return "\(videoState.shortDisplayName) / \(audioState.shortDisplayName)"
+    }
+
+    func outputContainerIsAvailableNow(_ container: TaptionVideoContainer) -> Bool {
+        let videoState = TaptionCodecOutputCatalog.implementationState(
+            videoCodec: selectedOutput.videoCodec,
+            container: container
+        )
+        let audioState = TaptionAudioCodecOutputCatalog.implementationState(
+            audioCodec: selectedOutput.audioCodec,
+            container: container
+        )
+        return videoState == .implemented && audioState == .implemented
+    }
+
+    func resolutionPresetIsAvailable(
+        _ preset: TaptionOutputResolutionPreset,
+        for asset: TaptionVideoAsset? = nil
+    ) -> Bool {
+        guard let sourceSize = asset?.videoTrack?.displaySize,
+              let referenceSize = preset.referenceSize else {
+            return true
+        }
+        return referenceSize.width <= sourceSize.width
+            && referenceSize.height <= sourceSize.height
     }
 
     var pendingSaveRecoveryJob: PendingSaveJob? {
@@ -296,11 +460,11 @@ final class HomeViewModel: ObservableObject {
                 source: review.source,
                 videoInfo: review.videoInfo,
                 statusText: review.videoInfo.readinessStatusText,
-                detailText: review.videoInfo.isRouteEncodable ? "Ready to encode." : review.videoInfo.codecPathDetail,
+                detailText: review.videoInfo.readinessDetailText,
                 progress: nil,
                 isActive: true,
                 isSelected: true,
-                isEnabled: true
+                isEnabled: review.videoInfo.isRouteEncodable
             )]
         case .encoding(let progress):
             if let currentReview {
@@ -683,6 +847,14 @@ final class HomeViewModel: ObservableObject {
         savePendingJob(job)
     }
 
+    func saveCurrentPendingOutput() {
+        if state.completedTemporaryOutput != nil {
+            saveCompletedTemporaryOutput()
+            return
+        }
+        retryPendingSave()
+    }
+
     func saveCompletedTemporaryOutput() {
         guard let output = state.completedTemporaryOutput else {
             AppLogger.warning("Save requested without completed temporary output", category: .saving)
@@ -857,12 +1029,18 @@ final class HomeViewModel: ObservableObject {
                 )
                 state = .inspecting(source)
 
+                let asset = try await environment.videoCoreServices.inspector.inspectVideo(at: source.url)
+                guard asset.videoTrack != nil else {
+                    throw TaptionVideoCoreError.noVideoTrack
+                }
+
                 let temporaryOutputURL = makeTemporaryOutputURL(for: source)
                 let core = TaptionVideoCore(services: environment.videoCoreServices)
                 let job = try await core.prepareSingleAssetJob(
+                    asset: asset,
                     sourceURL: source.url,
                     temporaryOutputURL: temporaryOutputURL,
-                    outputPolicy: selectedOutput.outputPolicy,
+                    outputPolicy: selectedOutput.outputPolicy(for: asset),
                     preferredMode: .automatic,
                     savePolicy: TaptionSavePolicy(
                         destination: source.kind == .photos ? .photosLibrary : .sourceFolder,
@@ -947,7 +1125,7 @@ final class HomeViewModel: ObservableObject {
                     asset: job.asset,
                     videoInfo: review.videoInfo,
                     statusText: review.videoInfo.readinessStatusText,
-                    detailText: review.videoInfo.isRouteEncodable ? "Ready to encode." : review.videoInfo.codecPathDetail,
+                    detailText: review.videoInfo.readinessDetailText,
                     progress: nil,
                     isActive: true
                 )
@@ -1288,37 +1466,39 @@ final class HomeViewModel: ObservableObject {
 
                 if workingJob.state.requiresRewardedAd {
                     let adDecision = try await environment.adGate.requestSaveAuthorization(for: workingJob.state)
-                    guard adDecision == .allowed else {
-                        let gateMessage = saveGateMessage(for: adDecision)
-                        workingJob.saveGateMessage = gateMessage
-                        updatePendingSaveJob(workingJob)
+                    if adDecision != .allowed {
                         AppLogger.warning(
-                            "Rewarded save was not authorized; pending state retained",
+                            "Rewarded save was not authorized; returning to pending save",
                             category: .saving,
                             metadata: [
                                 "source": workingJob.sourceName,
                                 "decision": adDecision.rawValue
                             ]
                         )
+                        workingJob.saveGateMessage = saveGateMessage(for: adDecision)
+                        updatePendingSaveJob(workingJob)
                         markCurrentSaveItem(
-                            statusText: "Ad Unavailable",
-                            detailText: gateMessage,
+                            statusText: "Pending Save",
+                            detailText: workingJob.saveGateMessage,
                             progress: completedProgressSnapshot(label: "Pending Save"),
                             isActive: true
                         )
                         state = .pendingSave(workingJob)
                         activeTask = nil
                         return
+                    } else {
+                        workingJob = try await clearRewardedAdRequirement(
+                            for: workingJob,
+                            rewardedAdCompleted: true
+                        )
+                        markCurrentSaveItem(
+                            statusText: "Saving",
+                            detailText: "Ad completed. Writing the output.",
+                            progress: completedProgressSnapshot(label: "Saving"),
+                            isActive: true
+                        )
+                        state = .saving(workingJob)
                     }
-
-                    workingJob = try await clearRewardedAdRequirement(for: workingJob)
-                    markCurrentSaveItem(
-                        statusText: "Saving",
-                        detailText: "Ad completed. Writing the output.",
-                        progress: completedProgressSnapshot(label: "Saving"),
-                        isActive: true
-                    )
-                    state = .saving(workingJob)
                 } else {
                     AppLogger.info(
                         "Rewarded save flag already cleared; skipping ad",
@@ -1336,6 +1516,8 @@ final class HomeViewModel: ObservableObject {
                     )
                     state = .saving(workingJob)
                 }
+
+                workingJob.saveGateMessage = nil
 
                 if conflictResolution == .saveAsUnique {
                     try await environment.pendingSaveStore.savePendingState(workingJob.state)
@@ -1475,9 +1657,9 @@ final class HomeViewModel: ObservableObject {
         case .allowed:
             return "Rewarded ad complete. Saving can continue."
         case .unavailable:
-            return "No rewarded ad is available right now. The encoded video is kept pending; try Watch Ad & Save again later."
+            return "Rewarded ad is still loading. Try Save again in a moment."
         case .skipped:
-            return "Rewarded ad was skipped. The encoded video is kept pending until one ad is completed."
+            return "The rewarded ad was skipped. Watch the full ad to save."
         }
     }
 
@@ -1621,7 +1803,7 @@ final class HomeViewModel: ObservableObject {
                     asset: asset,
                     videoInfo: info,
                     statusText: "No Video",
-                    detailText: "Disabled. No readable video track.",
+                    detailText: "Not supported yet. No readable video track.",
                     progress: nil,
                     isActive: false,
                     isEnabled: false
@@ -1665,7 +1847,7 @@ final class HomeViewModel: ObservableObject {
                     asset: asset,
                     videoInfo: info,
                     statusText: info.readinessStatusText,
-                    detailText: "Disabled. \(info.codecPathDetail)",
+                    detailText: info.readinessDetailText,
                     progress: nil,
                     isActive: false,
                     isEnabled: false
@@ -1682,8 +1864,8 @@ final class HomeViewModel: ObservableObject {
             )
             markBatchItem(
                 url,
-                statusText: "Unreadable",
-                detailText: "Disabled. \(error.localizedDescription)",
+                statusText: "Not supported yet",
+                detailText: "Not supported yet. \(error.localizedDescription)",
                 progress: nil,
                 isActive: false,
                 isEnabled: false
@@ -1949,19 +2131,13 @@ final class HomeViewModel: ObservableObject {
             let detailText: String
             if isSaving {
                 statusText = "Saving"
-                detailText = job.state.requiresRewardedAd
-                    ? "Waiting for rewarded ad before saving."
-                    : "Ad completed. Writing this video."
+                detailText = "Writing this video."
             } else if isActive {
-                statusText = job.saveGateMessage == nil ? "Pending Save" : "Ad Unavailable"
-                detailText = job.saveGateMessage ?? (job.state.requiresRewardedAd
-                    ? "Watch one rewarded ad to save this video."
-                    : "Ad completed. Save this video now.")
+                statusText = "Pending Save"
+                detailText = job.saveGateMessage ?? "Ready to save."
             } else {
                 statusText = "Pending Save"
-                detailText = job.saveGateMessage ?? (job.state.requiresRewardedAd
-                    ? "Waiting for its rewarded ad save turn."
-                    : "Ad completed. Waiting to save.")
+                detailText = job.saveGateMessage ?? "Waiting to save."
             }
 
             return EncodingFileCardSnapshot(
@@ -2008,14 +2184,17 @@ final class HomeViewModel: ObservableObject {
         )
     }
 
-    private func clearRewardedAdRequirement(for job: PendingSaveJob) async throws -> PendingSaveJob {
+    private func clearRewardedAdRequirement(
+        for job: PendingSaveJob,
+        rewardedAdCompleted: Bool
+    ) async throws -> PendingSaveJob {
         guard job.state.requiresRewardedAd else {
             return job
         }
 
         var updatedState = job.state
         updatedState.requiresRewardedAd = false
-        updatedState.rewardedAdCompletedAt = Date()
+        updatedState.rewardedAdCompletedAt = rewardedAdCompleted ? Date() : nil
         try await environment.pendingSaveStore.savePendingState(updatedState)
 
         let updatedJob = PendingSaveJob(sourceName: job.sourceName, state: updatedState)
@@ -2118,7 +2297,7 @@ final class HomeViewModel: ObservableObject {
             item.videoInfo = info
             item.isEnabled = info.isRouteEncodable
             item.statusText = info.isRouteEncodable ? "Queued" : info.readinessStatusText
-            item.detailText = info.isRouteEncodable ? "\(routeSelection.displayTitle). Ready to encode." : "Disabled. \(info.codecPathDetail)"
+            item.detailText = info.isRouteEncodable ? "\(routeSelection.displayTitle). Ready to encode." : info.readinessDetailText
             item.progress = nil
             item.isActive = false
             batch.itemStates[url] = item
@@ -2219,6 +2398,10 @@ final class HomeViewModel: ObservableObject {
     ) -> LoadedVideoInfo {
         let videoTrack = asset.videoTrack
         let audioTrack = asset.audioTracks.first
+        let inputSupport = TaptionLaunchSupportCatalog.diagnoseInput(
+            container: asset.container,
+            videoCodec: videoTrack?.codec ?? .unknown
+        )
         let routeSelection = routeSelection ?? TaptionCodecRoutePlanner.selectRoute(
             for: asset,
             outputCodec: selectedOutput.videoCodec,
@@ -2246,6 +2429,9 @@ final class HomeViewModel: ObservableObject {
             audioPathDetail: audioPath.detail,
             audioOutputSummary: audioPath.outputSummary,
             fileSize: fileSizeText(asset.fingerprint.fileSize),
+            inputSupportTitle: inputSupport.title,
+            inputSupportDetail: inputSupport.detail,
+            isInputSupportedNow: inputSupport.isSupportedNow,
             codecPathTitle: videoPath.title,
             codecPathDetail: videoPath.detail,
             outputSummary: videoPath.outputSummary,
@@ -2350,6 +2536,18 @@ final class HomeViewModel: ObservableObject {
         return directoryURL
             .appendingPathComponent(UUID().uuidString + "_" + baseName + environment.configuration.outputSuffix)
             .appendingPathExtension(selectedOutput.container.defaultFileExtension)
+    }
+
+    private var selectedAssetForOutputConfiguration: TaptionVideoAsset? {
+        if let asset = currentReview?.job.asset {
+            return asset
+        }
+
+        guard let batch = folderBatch,
+              let selectedURL = batch.selectedURL else {
+            return nil
+        }
+        return batch.itemStates[selectedURL]?.asset
     }
 
     private func finalizeSave(
@@ -2668,8 +2866,8 @@ final class HomeViewModel: ObservableObject {
         switch (mode, backend) {
         case (.hardware, .appleVideoToolbox):
             return "This file was converted with the device H.265 hardware encoder."
-        case (.software, .softwareAV1Decoder):
-            return "Native AV1 conversion was unavailable, so the app used software AV1 decoding automatically."
+        case (.software, .softwareVLCDecoder):
+            return "Native conversion was unavailable, so the app used the VLC-based software decode path automatically."
         case (.software, _):
             return "Hardware conversion was unavailable, so the app used the software fallback automatically."
         case (.automatic, _):

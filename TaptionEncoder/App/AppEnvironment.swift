@@ -64,10 +64,10 @@ struct AppEnvironment {
             pendingSaveStore: pendingSaveStore,
             adGate: adGate,
             bannerAdProvider: AdMobBannerAdProvider(configuration: adMobConfiguration),
-            rewardedAdProvider: AdMobRewardedAdProvider(),
+            rewardedAdProvider: AdMobRewardedAdProvider(configuration: adMobConfiguration),
             sessionEndAdProvider: AdMobSessionEndAdProvider(configuration: adMobConfiguration),
-            backgroundCoordinator: FakeBackgroundEncodingCoordinator(),
-            projectDocumentStore: FakeProjectFileStore()
+            backgroundCoordinator: UIApplicationBackgroundEncodingCoordinator(),
+            projectDocumentStore: FCPXMLProjectDocumentStore()
         )
     }
 

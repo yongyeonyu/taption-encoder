@@ -40,7 +40,7 @@ struct LoadedFilesPanelView: View {
             Image(systemName: "rectangle.stack.badge.plus")
                 .font(.system(size: 24 * contentScale, weight: .semibold))
                 .foregroundStyle(TaptionTheme.mutedText)
-            Text("Select files or a folder.")
+            Text("Imported files appear here and are analyzed automatically.")
                 .font(contentScale < 0.9 ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
                 .foregroundStyle(TaptionTheme.mutedText)
                 .multilineTextAlignment(.center)
@@ -61,7 +61,7 @@ private struct EncodingFileCardView: View {
         }
         .buttonStyle(.plain)
         .disabled(!file.isEnabled)
-        .opacity(file.isEnabled ? 1 : 0.48)
+        .opacity(file.isEnabled ? 1 : 0.58)
     }
 
     private var cardContent: some View {
@@ -69,7 +69,7 @@ private struct EncodingFileCardView: View {
             HStack(alignment: .firstTextBaseline, spacing: 8 * contentScale) {
                 Image(systemName: file.isSelected ? "folder.fill" : "folder")
                     .font(.system(size: 15 * contentScale, weight: .semibold))
-                    .foregroundStyle(file.isSelected ? TaptionTheme.accent : TaptionTheme.mutedText)
+                    .foregroundStyle(file.isEnabled && file.isSelected ? Color.white.opacity(0.92) : TaptionTheme.disabledText)
                     .frame(width: 20 * contentScale)
 
                 Text(file.fileName)
@@ -126,24 +126,38 @@ private struct EncodingFileCardView: View {
         }
         .padding(9 * contentScale)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(file.isSelected ? TaptionTheme.selectedSurface : TaptionTheme.elevatedSurface)
+        .background(cardBackground)
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(file.isSelected ? TaptionTheme.accent.opacity(0.45) : TaptionTheme.border, lineWidth: 1)
+                .stroke(cardBorder, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var cardBackground: Color {
+        guard file.isEnabled else {
+            return TaptionTheme.elevatedSurface.opacity(0.55)
+        }
+        return file.isSelected ? TaptionTheme.selectedSurface : TaptionTheme.elevatedSurface
+    }
+
+    private var cardBorder: Color {
+        guard file.isEnabled else {
+            return Color.white.opacity(0.08)
+        }
+        return file.isSelected ? Color.white.opacity(0.35) : TaptionTheme.border
     }
 
     private var statusColor: Color {
         if !file.isEnabled {
             return TaptionTheme.disabledText
         }
-        return file.isSelected || file.isActive ? TaptionTheme.accent : TaptionTheme.mutedText
+        return file.isSelected || file.isActive ? Color.white.opacity(0.92) : TaptionTheme.mutedText
     }
 
     private var detailLineLimit: Int? {
         switch file.statusText {
-        case "Failed", "Unreadable":
+        case "Failed", "Unreadable", "Not supported yet":
             return nil
         default:
             return 2
@@ -152,56 +166,59 @@ private struct EncodingFileCardView: View {
 
     private func infoGrid(_ info: LoadedVideoInfo) -> some View {
         VStack(alignment: .leading, spacing: 4 * contentScale) {
+            Text("Codec Info (Video / Audio)")
+                .font(contentScale < 0.9 ? .caption.weight(.semibold) : .caption.weight(.semibold))
+                .foregroundStyle(TaptionTheme.mutedText)
+
             HStack(spacing: 8 * contentScale) {
-                infoCell("Input", info.inputSummary)
-                infoCell("Size", info.resolution)
+                infoCell("Time", info.duration)
+                infoCell("Resolution", info.resolution)
             }
             HStack(spacing: 8 * contentScale) {
                 infoCell("FPS", info.frameRate)
-                infoCell("Time", info.duration)
-            }
-            HStack(spacing: 8 * contentScale) {
-                infoCell("Audio", info.audio)
                 infoCell("File", info.fileSize)
             }
+
+
+            Divider()
+                .overlay(TaptionTheme.border)
+
+
+
             HStack(spacing: 8 * contentScale) {
-                infoCell("Path", info.codecPathTitle)
-                infoCell("Out", info.outputSummary)
+                infoCell("Video In", info.inputSummary)
+                infoCell("Video Out", info.outputSummary)
             }
             HStack(spacing: 8 * contentScale) {
-                infoCell("Audio Path", info.audioPathTitle)
+                infoCell("Audio In", info.audio)
                 infoCell("Audio Out", info.audioOutputSummary)
             }
-            Text(info.codecPathDetail)
-                .font(contentScale < 0.9 ? .caption2 : .caption)
-                .foregroundStyle(TaptionTheme.mutedText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-            Text(info.audioPathDetail)
-                .font(contentScale < 0.9 ? .caption2 : .caption)
-                .foregroundStyle(TaptionTheme.mutedText)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-            Text(info.outputName)
-                .font(contentScale < 0.9 ? .caption2 : .caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
         }
     }
 
-    private func infoCell(_ title: String, _ value: String) -> some View {
+    private func infoCell(_ title: String, _ value: String, valueColor: Color? = nil) -> some View {
         HStack(spacing: 4 * contentScale) {
             Text(title)
                 .font(contentScale < 0.9 ? .caption2.weight(.semibold) : .caption2.weight(.semibold))
                 .foregroundStyle(TaptionTheme.mutedText)
             Text(value)
                 .font(contentScale < 0.9 ? .caption2.weight(.semibold) : .caption.weight(.semibold))
-                .foregroundStyle(file.isEnabled ? Color.white.opacity(0.88) : TaptionTheme.disabledText)
+                .foregroundStyle(valueColor ?? defaultValueColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var defaultValueColor: Color {
+        file.isEnabled ? Color.white.opacity(0.88) : TaptionTheme.disabledText
+    }
+
+    private func supportValueColor(isSupported: Bool) -> Color {
+        guard file.isEnabled else {
+            return TaptionTheme.disabledText
+        }
+        return isSupported ? Color.white.opacity(0.92) : TaptionTheme.disabledText
     }
 
     private func formatTime(_ seconds: TimeInterval) -> String {
@@ -275,32 +292,14 @@ private struct VideoInfoSummaryView: View {
             }
 
             HStack(spacing: 8) {
-                infoPill(title: "Path", value: info.codecPathTitle)
-                infoPill(title: "Out", value: info.outputSummary)
+                infoPill(title: "Video", value: info.codecPathBadge)
+                infoPill(title: "Audio", value: info.audioPathBadge)
             }
 
             HStack(spacing: 8) {
-                infoPill(title: "Audio Path", value: info.audioPathTitle)
+                infoPill(title: "Out", value: info.outputSummary)
                 infoPill(title: "Audio Out", value: info.audioOutputSummary)
             }
-
-            Text(info.codecPathDetail)
-                .font(contentScale < 0.9 ? .caption2 : .caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-
-            Text(info.audioPathDetail)
-                .font(contentScale < 0.9 ? .caption2 : .caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-
-            Label(info.outputName, systemImage: "arrow.down.doc")
-                .font(contentScale < 0.9 ? .caption2 : .caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10 * contentScale)

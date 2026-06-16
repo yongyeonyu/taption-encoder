@@ -34,6 +34,7 @@
 		3A2B3C4D5E6F701000000017 /* FCPXMLValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2B3C4D5E6F701000000311 /* FCPXMLValidator.swift */; };
 		3A2B3C4D5E6F701000000018 /* AppLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2B3C4D5E6F701000000312 /* AppLogger.swift */; };
 		3A2B3C4D5E6F701000000019 /* SaveFailurePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2B3C4D5E6F701000000313 /* SaveFailurePresentation.swift */; };
+		3A2B3C4D5E6F701000000020 /* FCPXMLProjectDocumentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2B3C4D5E6F701000000314 /* FCPXMLProjectDocumentStore.swift */; };
 		4A2B3C4D5E6F701000000001 /* SourceActionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000101 /* SourceActionBar.swift */; };
 		4A2B3C4D5E6F701000000002 /* EncoderModePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000102 /* EncoderModePicker.swift */; };
 		4A2B3C4D5E6F701000000003 /* EncodingProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000103 /* EncodingProgressView.swift */; };
@@ -74,6 +75,7 @@
 		7A2B3C4D5E6F701000000021 /* HW_AppleHEVCCodecAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000121 /* HW_AppleHEVCCodecAlgorithm.swift */; };
 		8A2B3C4D5E6F701000000001 /* CodecRoutePlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000101 /* CodecRoutePlannerTests.swift */; };
 		8A2B3C4D5E6F701000000002 /* CodecFixtureEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000102 /* CodecFixtureEvidenceTests.swift */; };
+		8A2B3C4D5E6F701000000003 /* ProjectDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000103 /* ProjectDocumentTests.swift */; };
 		9A2B3C4D5E6F701000000001 /* OpenSourceNotices in Resources */ = {isa = PBXBuildFile; fileRef = 9A2B3C4D5E6F701000000101 /* OpenSourceNotices */; };
 /* End PBXBuildFile section */
 
@@ -119,6 +121,7 @@
 		3A2B3C4D5E6F701000000311 /* FCPXMLValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FCPXMLValidator.swift; sourceTree = "<group>"; };
 		3A2B3C4D5E6F701000000312 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
 		3A2B3C4D5E6F701000000313 /* SaveFailurePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveFailurePresentation.swift; sourceTree = "<group>"; };
+		3A2B3C4D5E6F701000000314 /* FCPXMLProjectDocumentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FCPXMLProjectDocumentStore.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000101 /* SourceActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceActionBar.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000102 /* EncoderModePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncoderModePicker.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000103 /* EncodingProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncodingProgressView.swift; sourceTree = "<group>"; };
@@ -158,6 +161,7 @@
 		8A2B3C4D5E6F701000000100 /* TaptionEncoderTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TaptionEncoderTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8A2B3C4D5E6F701000000101 /* CodecRoutePlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecRoutePlannerTests.swift; sourceTree = "<group>"; };
 		8A2B3C4D5E6F701000000102 /* CodecFixtureEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecFixtureEvidenceTests.swift; sourceTree = "<group>"; };
+		8A2B3C4D5E6F701000000103 /* ProjectDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDocumentTests.swift; sourceTree = "<group>"; };
 		9A2B3C4D5E6F701000000101 /* OpenSourceNotices */ = {isa = PBXFileReference; lastKnownFileType = folder; path = OpenSourceNotices; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -423,6 +427,7 @@
 			isa = PBXGroup;
 			children = (
 				3A2B3C4D5E6F701000000310 /* ProjectDocumentStore.swift */,
+				3A2B3C4D5E6F701000000314 /* FCPXMLProjectDocumentStore.swift */,
 				3A2B3C4D5E6F701000000311 /* FCPXMLValidator.swift */,
 			);
 			path = ProjectDocuments;
@@ -445,6 +450,7 @@
 			children = (
 				8A2B3C4D5E6F701000000101 /* CodecRoutePlannerTests.swift */,
 				8A2B3C4D5E6F701000000102 /* CodecFixtureEvidenceTests.swift */,
+				8A2B3C4D5E6F701000000103 /* ProjectDocumentTests.swift */,
 			);
 			path = TaptionEncoderTests;
 			sourceTree = "<group>";
@@ -591,6 +597,7 @@
 				3A2B3C4D5E6F701000000014 /* AdProviders.swift in Sources */,
 				3A2B3C4D5E6F701000000015 /* BackgroundEncodingCoordinator.swift in Sources */,
 				3A2B3C4D5E6F701000000016 /* ProjectDocumentStore.swift in Sources */,
+				3A2B3C4D5E6F701000000020 /* FCPXMLProjectDocumentStore.swift in Sources */,
 				3A2B3C4D5E6F701000000017 /* FCPXMLValidator.swift in Sources */,
 				3A2B3C4D5E6F701000000018 /* AppLogger.swift in Sources */,
 				3A2B3C4D5E6F701000000019 /* SaveFailurePresentation.swift in Sources */,
@@ -639,6 +646,7 @@
 			files = (
 				8A2B3C4D5E6F701000000001 /* CodecRoutePlannerTests.swift in Sources */,
 				8A2B3C4D5E6F701000000002 /* CodecFixtureEvidenceTests.swift in Sources */,
+				8A2B3C4D5E6F701000000003 /* ProjectDocumentTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -819,7 +827,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 00.01.00;
+				MARKETING_VERSION = 00.00.00;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder;
 				PRODUCT_NAME = "Taption Encoder";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -848,7 +856,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 00.01.00;
+				MARKETING_VERSION = 00.00.00;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder;
 				PRODUCT_NAME = "Taption Encoder";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -875,7 +883,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 00.01.00;
+				MARKETING_VERSION = 00.00.00;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -904,7 +912,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 00.01.00;
+				MARKETING_VERSION = 00.00.00;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

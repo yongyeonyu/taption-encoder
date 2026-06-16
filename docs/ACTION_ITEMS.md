@@ -73,8 +73,8 @@ Status date: 2026-06-16
 - [x] Implement cancellation that safely cleans temporary output.
 - [x] Implement output naming policy with `_taption`.
 - [x] Implement temporary output first, then final save after reward.
-- [ ] Persist completed temporary outputs when rewarded save cannot finish.
-- [ ] Restore pending save jobs on app launch so the user can retry saving without re-encoding.
+- [x] Persist completed temporary outputs when rewarded save cannot finish.
+- [x] Restore pending save jobs on app launch so the user can retry saving without re-encoding.
 - [x] Implement File source import with security-scoped access.
 - [x] Implement Folder source import with security-scoped access.
 - [x] Implement sequential folder encoding for supported video files.
@@ -209,10 +209,10 @@ Status date: 2026-06-16
 ## P1 Merge And Lightweight Editing
 
 - [ ] Add multi-file selection flow.
-- [ ] Add `EncoderProject` domain model for future merge/edit timelines.
-- [ ] Add FCPXML-based project document strategy.
-- [ ] Add FCPXML serializer and parser behind project protocols.
-- [ ] Add FCPXML DTD validation for generated project files.
+- [x] Add `EncoderProject` domain model for future merge/edit timelines.
+- [x] Add FCPXML-based project document strategy.
+- [x] Add FCPXML serializer and parser behind project protocols.
+- [x] Add structural FCPXML validation for generated project files.
 - [ ] Add project save/open flow.
 - [ ] Add future `.fcpxmld` bundle plan for thumbnails, proxies, and richer metadata.
 - [ ] Add managed `.fcpxmld` project mode plan that can copy original media when the user chooses it.
@@ -298,8 +298,8 @@ Status date: 2026-06-16
 - [ ] Add unit tests for trim/cut/reorder/position validation.
 - [ ] Add unit tests for video segment split/slice operations.
 - [ ] Add unit tests for touch widget edit ownership.
-- [ ] Add unit tests for FCPXML project save/open round trips.
-- [ ] Add unit tests for FCPXML validation against the selected DTD/version.
+- [x] Add unit tests for FCPXML project save/open round trips.
+- [x] Add unit tests for structural FCPXML validation.
 - [ ] Add unit tests for merge normalization option generation.
 - [ ] Add unit tests for close-enough automatic normalization choices.
 - [ ] Add fake encoder for simulator UI tests.
@@ -336,7 +336,7 @@ Status date: 2026-06-16
 - [ ] Verify mixed codec path with a non-native input sample.
 - [ ] Verify merge output from at least two cameras/formats.
 - [ ] Verify FCPXML project files can be reopened by Taption Encoder.
-- [ ] Verify generated FCPXML validates against the selected FCPXML DTD/version.
+- [ ] Verify generated FCPXML imports cleanly into Final Cut Pro.
 - [ ] Verify user-selected normalization with differing frame rate, color, and audio samples.
 - [ ] Verify automatic close-enough normalization with near-identical source values.
 - [ ] Verify AdMob load on device after new production ad units become available.

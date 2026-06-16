@@ -149,14 +149,21 @@ enum TaptionAudioCodecRoutePlanner {
 
         if SW_AudioCodecSupportCatalog.canSoftwareDecode(sourceCodec),
            HW_AudioCodecCapabilityCatalog.canNativeEncode(outputCodec) {
+            let decodeBackend = SW_AudioCodecSupportCatalog.currentBuildBundledDecodeBackend(
+                for: sourceCodec,
+                outputCodec: outputCodec,
+                outputContainer: outputContainer
+            ) ?? .ffmpegFamily
             return TaptionAudioCodecRouteSelection(
                 route: route,
                 support: .softwareTranscode,
-                decodeBackend: .ffmpegFamily,
+                decodeBackend: decodeBackend,
                 encodeBackend: .appleAVAssetExport,
                 shouldCopy: false,
                 fixtureStatus: fixtureStatus,
-                reason: "Software audio decode should feed an Apple-native output encoder."
+                reason: decodeBackend == .softwareVLCDecoder
+                    ? "Bundled software audio decode will feed the Apple-native AAC encoder in the current build."
+                    : "Software audio decode should feed an Apple-native output encoder."
             )
         }
 

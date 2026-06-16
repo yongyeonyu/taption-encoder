@@ -200,6 +200,9 @@ final class AVFoundationHEVCEncoderService: EncoderServicing {
         guard plan.videoCommandPlan != nil else {
             return false
         }
+        if plan.outputPolicy.advancedOptions.targetBitrate != nil {
+            return true
+        }
         if plan.codecExecutionKind == .planned {
             return true
         }

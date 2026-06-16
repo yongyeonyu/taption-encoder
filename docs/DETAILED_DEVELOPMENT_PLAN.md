@@ -398,7 +398,7 @@ Simulator tests:
 
 ## Phase 2: AV1 To H.265 Core
 
-Implementation status, 2026-06-15: partially implemented for the first Files-based AV1 path. AVFoundation inspection, AV1 codec validation, AVFoundation HEVC export, automatic SwiftVLC/libVLC software AV1 decode fallback, VideoToolbox hardware capability reporting, real progress/ETA, cancellation cleanup, storage checks, security-scoped Files access, and `_taption.mp4` final save after the save gate are in place. Photos import/save, durable pending-save restoration, AdMob, software fallback audio preservation, and broad software codec fallback remain open.
+Implementation status, 2026-06-15: partially implemented for the first Files-based AV1 path. AVFoundation inspection, AV1 codec validation, AVFoundation HEVC export, automatic SwiftVLC/libVLC software AV1 decode fallback, VideoToolbox hardware capability reporting, real progress/ETA, cancellation cleanup, storage checks, security-scoped Files access, and `_taption.mp4` final save after the save gate are in place. The current build also preserves audio for the bundled Vorbis-to-AAC / MP4 software path used by the real WebM sample proof. Photos import/save, durable pending-save restoration, AdMob, broader software fallback audio preservation, and broad software codec fallback remain open.
 
 ### Objective
 

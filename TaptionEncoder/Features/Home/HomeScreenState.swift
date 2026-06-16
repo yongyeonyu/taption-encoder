@@ -42,6 +42,9 @@ struct LoadedVideoInfo: Equatable {
     var audioPathDetail: String = "Audio route has not been inspected yet."
     var audioOutputSummary: String = "Source"
     var fileSize: String
+    var inputSupportTitle: String
+    var inputSupportDetail: String
+    var isInputSupportedNow: Bool
     var codecPathTitle: String
     var codecPathDetail: String
     var outputSummary: String
@@ -52,17 +55,79 @@ struct LoadedVideoInfo: Equatable {
         if isRouteEncodable {
             return "Ready"
         }
-        if codecPathTitle == TaptionCodecRouteExecutionKind.unsupported.shortDisplayName
-            || codecPathTitle.localizedCaseInsensitiveContains("Unsupported") {
+        return "Not supported yet"
+    }
+
+    var readinessDetailText: String {
+        if isRouteEncodable {
+            return "Ready to encode."
+        }
+        if !isInputSupportedNow {
+            return "Not supported yet. \(inputSupportDetail)"
+        }
+        return "Not supported yet. \(codecPathDetail)"
+    }
+
+    var codecPathBadge: String {
+        switch codecPathTitle {
+        case "Path HW":
+            return "HW"
+        case "Path SW":
+            return "SW"
+        case "Path HW/SW":
+            return "HW/SW"
+        case "Path SW Plan Ready":
+            return "SW"
+        case "Path SW Blocked":
+            return "SW"
+        case "Path Planned":
+            return "SW"
+        case "Path Unsupported":
             return "Unsupported"
+        default:
+            return codecPathTitle.replacingOccurrences(of: "Path ", with: "")
         }
-        if codecPathTitle.localizedCaseInsensitiveContains("Blocked") {
+    }
+
+    var audioPathBadge: String {
+        switch audioPathTitle {
+        case "Audio Copy":
+            return "Copy"
+        case "Audio HW":
+            return "HW"
+        case "Audio SW":
+            return "SW"
+        case "Audio Blocked":
             return "Blocked"
+        case "Audio Unsupported":
+            return "Unsupported"
+        case "No Audio":
+            return "None"
+        default:
+            return audioPathTitle.replacingOccurrences(of: "Audio ", with: "")
         }
-        if codecPathTitle.localizedCaseInsensitiveContains("Plan Ready") {
-            return "Plan Ready"
+    }
+
+    var isInputSupportedForCurrentBuild: Bool {
+        isInputSupportedNow
+    }
+
+    var isCodecPathSupportedForCurrentBuild: Bool {
+        switch codecPathBadge {
+        case "HW", "SW", "HW/SW":
+            return true
+        default:
+            return false
         }
-        return "Planned"
+    }
+
+    var isAudioPathSupportedForCurrentBuild: Bool {
+        switch audioPathBadge {
+        case "HW", "SW", "Copy", "None":
+            return true
+        default:
+            return false
+        }
     }
 }
 
@@ -168,33 +233,103 @@ struct LoadedAudioPathInfo: Equatable {
     }
 }
 
+enum TaptionOutputResolutionPreset: String, Codable, Equatable, CaseIterable {
+    case source
+    case uhd4k
+    case qhd1440
+    case fullHD
+    case hd720
+    case sd480
+
+    var menuTitle: String {
+        switch self {
+        case .source:
+            return "Source"
+        case .uhd4k:
+            return "4K"
+        case .qhd1440:
+            return "1440p"
+        case .fullHD:
+            return "1080p"
+        case .hd720:
+            return "720p"
+        case .sd480:
+            return "480p"
+        }
+    }
+
+    var referenceSize: TaptionPixelSize? {
+        switch self {
+        case .source:
+            return nil
+        case .uhd4k:
+            return TaptionPixelSize(width: 3840, height: 2160)
+        case .qhd1440:
+            return TaptionPixelSize(width: 2560, height: 1440)
+        case .fullHD:
+            return TaptionPixelSize(width: 1920, height: 1080)
+        case .hd720:
+            return TaptionPixelSize(width: 1280, height: 720)
+        case .sd480:
+            return TaptionPixelSize(width: 854, height: 480)
+        }
+    }
+}
+
+enum TaptionOutputSizePreset: String, Codable, Equatable, CaseIterable {
+    case auto
+    case manual
+
+    var menuTitle: String {
+        switch self {
+        case .auto:
+            return "Auto"
+        case .manual:
+            return "Manual"
+        }
+    }
+}
+
 struct TaptionOutputSelection: Identifiable, Equatable {
     var videoCodec: TaptionVideoCodec
     var audioCodec: TaptionAudioCodec
     var container: TaptionVideoContainer
+    var resolutionPreset: TaptionOutputResolutionPreset
+    var sizePreset: TaptionOutputSizePreset
+    var targetSizeMB: Double?
 
     init(
         videoCodec: TaptionVideoCodec = .hevc,
         audioCodec: TaptionAudioCodec = TaptionAudioCodecRoutePlanner.defaultOutputCodec,
-        container: TaptionVideoContainer = .mp4
+        container: TaptionVideoContainer = .mp4,
+        resolutionPreset: TaptionOutputResolutionPreset = .source,
+        sizePreset: TaptionOutputSizePreset = .auto,
+        targetSizeMB: Double? = nil
     ) {
         self.videoCodec = videoCodec
         self.audioCodec = audioCodec
         self.container = container
+        self.resolutionPreset = resolutionPreset
+        self.sizePreset = sizePreset
+        self.targetSizeMB = targetSizeMB
     }
 
     var id: String {
-        "\(videoCodec.rawValue)-\(audioCodec.rawValue)-\(container.rawValue)"
+        let sizeValue = targetSizeMB.map { String(Int($0.rounded())) } ?? "auto"
+        return "\(videoCodec.rawValue)-\(audioCodec.rawValue)-\(container.rawValue)-\(resolutionPreset.rawValue)-\(sizePreset.rawValue)-\(sizeValue)"
     }
 
-    var outputPolicy: TaptionVideoOutputPolicy {
+    func outputPolicy(for asset: TaptionVideoAsset? = nil) -> TaptionVideoOutputPolicy {
         TaptionVideoOutputPolicy(
             videoCodec: videoCodec,
             audioCodec: audioCodec,
             container: container,
             profile: .automatic,
             qualityPolicy: .preserveSourceVisuals,
-            advancedOptions: .preserveSource
+            advancedOptions: TaptionAdvancedOutputOptions(
+                resizeTo: resolvedResizeTarget(for: asset?.videoTrack),
+                targetBitrate: resolvedTargetBitrate(for: asset)
+            )
         )
     }
 
@@ -202,11 +337,22 @@ struct TaptionOutputSelection: Identifiable, Equatable {
         "\(videoCodec.shortDisplayName) + \(audioCodec.displayName) / \(container.defaultFileExtension.uppercased())"
     }
 
-    var implementationNote: String? {
+    var videoImplementationNote: String? {
         TaptionCodecOutputCatalog.implementationNote(
             videoCodec: videoCodec,
             container: container
         )
+    }
+
+    var audioImplementationNote: String? {
+        TaptionAudioCodecOutputCatalog.implementationNote(
+            audioCodec: audioCodec,
+            container: container
+        )
+    }
+
+    var implementationNote: String? {
+        combinedDetailText
     }
 
     var implementationState: TaptionOutputImplementationState {
@@ -214,6 +360,26 @@ struct TaptionOutputSelection: Identifiable, Equatable {
             videoState: videoImplementationState,
             audioState: audioImplementationState
         )
+    }
+
+    var statusTitle: String {
+        switch implementationState {
+        case .implemented:
+            return "Output Ready"
+        case .commandPlanReady:
+            return "Output Plan Ready"
+        case .planned:
+            return "Output Planned"
+        case .unsupported:
+            return "Output Unsupported"
+        }
+    }
+
+    var detailText: String {
+        if let combinedDetailText {
+            return combinedDetailText
+        }
+        return "This exact output selection can run in the current build."
     }
 
     var videoImplementationState: TaptionOutputImplementationState {
@@ -248,6 +414,14 @@ struct TaptionOutputSelection: Identifiable, Equatable {
         TaptionCodecOutputCatalog.selectableContainers
     }
 
+    static var resolutionOptions: [TaptionOutputResolutionPreset] {
+        TaptionOutputResolutionPreset.allCases
+    }
+
+    static var sizeOptions: [TaptionOutputSizePreset] {
+        TaptionOutputSizePreset.allCases
+    }
+
     private func combinedImplementationState(
         videoState: TaptionOutputImplementationState,
         audioState: TaptionOutputImplementationState
@@ -262,6 +436,138 @@ struct TaptionOutputSelection: Identifiable, Equatable {
             return .commandPlanReady
         }
         return .implemented
+    }
+
+    private var combinedDetailText: String? {
+        let notes = [videoImplementationNote, audioImplementationNote]
+            .compactMap { $0 }
+        guard !notes.isEmpty else {
+            return nil
+        }
+
+        var uniqueNotes: [String] = []
+        for note in notes where !uniqueNotes.contains(note) {
+            uniqueNotes.append(note)
+        }
+        return uniqueNotes.joined(separator: " ")
+    }
+
+    private func resolvedResizeTarget(for track: TaptionVideoTrackInfo?) -> TaptionPixelSize? {
+        guard resolutionPreset != .source else {
+            return nil
+        }
+
+        let baseSize = baseResizeSize(for: track)
+        guard let track else {
+            return baseSize
+        }
+
+        return clampToSourceBounds(baseSize, sourceSize: track.displaySize)
+    }
+
+    private func baseResizeSize(for track: TaptionVideoTrackInfo?) -> TaptionPixelSize {
+        if let referenceSize = resolutionPreset.referenceSize {
+            guard let track else {
+                return referenceSize
+            }
+            return fittedSize(
+                sourceSize: track.displaySize,
+                boundingSize: referenceSize
+            )
+        }
+
+        return track?.displaySize ?? TaptionPixelSize(width: 1920, height: 1080)
+    }
+
+    private func clampToSourceBounds(
+        _ size: TaptionPixelSize,
+        sourceSize: TaptionPixelSize
+    ) -> TaptionPixelSize {
+        let maxWidth = max(2, evenDimension(Double(sourceSize.width)))
+        let maxHeight = max(2, evenDimension(Double(sourceSize.height)))
+        return TaptionPixelSize(
+            width: min(size.width, maxWidth),
+            height: min(size.height, maxHeight)
+        )
+    }
+
+    private func fittedSize(
+        sourceSize: TaptionPixelSize,
+        boundingSize: TaptionPixelSize
+    ) -> TaptionPixelSize {
+        guard sourceSize.width > 0,
+              sourceSize.height > 0,
+              boundingSize.width > 0,
+              boundingSize.height > 0 else {
+            return boundingSize
+        }
+
+        let widthScale = Double(boundingSize.width) / Double(sourceSize.width)
+        let heightScale = Double(boundingSize.height) / Double(sourceSize.height)
+        let scale = min(widthScale, heightScale, 1)
+
+        return TaptionPixelSize(
+            width: max(2, evenDimension(Double(sourceSize.width) * scale)),
+            height: max(2, evenDimension(Double(sourceSize.height) * scale))
+        )
+    }
+
+    private func evenDimension(_ value: Double) -> Int {
+        let rounded = max(2, Int(value.rounded()))
+        return rounded.isMultiple(of: 2) ? rounded : rounded - 1
+    }
+
+    private func resolvedTargetBitrate(for asset: TaptionVideoAsset?) -> Int? {
+        guard sizePreset == .manual,
+              let asset,
+              let duration = asset.duration,
+              duration.isFinite,
+              duration > 0 else {
+            return nil
+        }
+
+        let targetSizeMB = normalizedTargetSizeMB(for: asset)
+        let totalBitBudget = Int((targetSizeMB * 8_000_000).rounded())
+        let audioBitrate = estimatedAudioBitrate(for: asset)
+        let targetBitrate = Int((Double(totalBitBudget) / duration).rounded()) - audioBitrate
+        return max(targetBitrate, 300_000)
+    }
+
+    func normalizedTargetSizeMB(for asset: TaptionVideoAsset?) -> Double {
+        let range = targetSizeRangeMB(for: asset)
+        let suggested = targetSizeMB ?? suggestedTargetSizeMB(for: asset)
+        return min(max(suggested, range.lowerBound), range.upperBound)
+    }
+
+    func suggestedTargetSizeMB(for asset: TaptionVideoAsset?) -> Double {
+        if let fileSize = asset?.fingerprint.fileSize,
+           fileSize > 0 {
+            return max(1, Double(fileSize) / 1_000_000)
+        }
+
+        guard let asset,
+              let duration = asset.duration,
+              duration.isFinite,
+              duration > 0 else {
+            return 100
+        }
+
+        let videoBitrate = Double(asset.videoTrack?.estimatedBitrate ?? 4_000_000)
+        let audioBitrate = Double(estimatedAudioBitrate(for: asset))
+        return max(1, ((videoBitrate + audioBitrate) * duration) / 8_000_000)
+    }
+
+    func targetSizeRangeMB(for asset: TaptionVideoAsset?) -> ClosedRange<Double> {
+        let suggested = suggestedTargetSizeMB(for: asset)
+        let minimum = max(1, floor(suggested * 0.25))
+        let maximum = max(minimum + 1, ceil(suggested * 1.75))
+        return minimum...maximum
+    }
+
+    private func estimatedAudioBitrate(for asset: TaptionVideoAsset) -> Int {
+        asset.audioTracks
+            .compactMap(\.estimatedBitrate)
+            .reduce(0, +)
     }
 }
 
@@ -581,7 +887,7 @@ enum HomeScreenState: Equatable {
             return issue.message
         case .readyToStart(let review):
             if !review.videoInfo.isRouteEncodable {
-                return review.videoInfo.codecPathDetail
+                return review.videoInfo.readinessDetailText
             }
             if let folderQueue = review.folderQueue {
                 return "\(folderQueue.statusText). Review the first video, then start sequential \(review.videoInfo.outputSummary) encoding."

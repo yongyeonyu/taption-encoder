@@ -5,6 +5,7 @@ struct EncodingProgressView: View {
     var controlHeight: CGFloat = 44
     var contentScale: CGFloat = 1
     var onStart: () -> Void
+    var onSave: () -> Void
     var onCancel: () -> Void
 
     var body: some View {
@@ -68,6 +69,23 @@ struct EncodingProgressView: View {
                 onStart()
             } label: {
                 Label("Start", systemImage: "play.fill")
+                    .font(contentScale < 0.9 ? .caption.weight(.semibold) : .body.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: controlHeight)
+            }
+            .buttonStyle(.plain)
+            .background(TaptionTheme.accent)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(TaptionTheme.accent.opacity(0.65), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else if state.completedTemporaryOutput != nil || state.pendingSaveJob != nil {
+            Button {
+                onSave()
+            } label: {
+                Label("Save", systemImage: "square.and.arrow.down")
                     .font(contentScale < 0.9 ? .caption.weight(.semibold) : .body.weight(.semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)

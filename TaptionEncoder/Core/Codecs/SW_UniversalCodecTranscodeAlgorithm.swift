@@ -89,6 +89,22 @@ enum SW_UniversalCodecTranscodeAlgorithm {
         ))
         throw TaptionUniversalSoftwareCodecError.backendNotBundled(backend, request.route)
     }
+
+    static func runtimeAlgorithmEntries(
+        executor: SW_FFmpegVideoCodecTranscodeExecutor = SW_FFmpegVideoCodecTranscodeExecutor()
+    ) -> [TaptionCodecTranscodingAlgorithmEntry] {
+        plannedDescriptors.map { descriptor in
+            TaptionCodecTranscodingAlgorithmEntry(
+                descriptor: descriptor,
+                transcode: { request, progress in
+                    try await executor.transcode(
+                        request: request,
+                        progress: progress
+                    )
+                }
+            )
+        }
+    }
 }
 
 struct SW_FFmpegVideoCodecTranscodeExecutor {

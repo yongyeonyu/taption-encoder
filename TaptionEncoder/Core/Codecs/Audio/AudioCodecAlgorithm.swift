@@ -401,6 +401,21 @@ enum TaptionAudioCodecExecutionReadinessReporter {
             )
         }
 
+        if selection.support == .softwareTranscode,
+           selection.decodeBackend == .softwareVLCDecoder,
+           selection.encodeBackend == .appleAVAssetExport {
+            return item(
+                route: route,
+                outputContainer: outputContainer,
+                selection: selection,
+                readiness: .softwareBackendExecutable,
+                commandBackend: .softwareVLCDecoder,
+                isRunnableInCurrentBuild: true,
+                hasCommandPlan: false,
+                blockingReason: nil
+            )
+        }
+
         guard SW_FFmpegCodecCommandPlanner.audioEncoderName(for: route.outputCodec) != nil else {
             return item(
                 route: route,
@@ -500,6 +515,14 @@ struct TaptionAudioCodecDescriptorRegistry: Equatable {
                 outputContainer: outputContainer
             )
         case .softwareBackendExecutable, .commandPlanOnly:
+            if readiness.commandBackend == .softwareVLCDecoder {
+                return TaptionAudioCodecAlgorithmDescriptor(
+                    route: route,
+                    mode: .software,
+                    backend: .softwareVLCDecoder,
+                    displayName: "\(route.displayName) Bundled Software"
+                )
+            }
             return SW_UniversalAudioCodecTranscodeAlgorithm.descriptor(for: route)
         case .blockedMissingSoftwareEncoder, .unsupported:
             return nil

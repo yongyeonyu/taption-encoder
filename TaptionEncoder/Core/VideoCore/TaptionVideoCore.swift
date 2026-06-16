@@ -65,6 +65,24 @@ struct TaptionVideoCore {
         savePolicy: TaptionSavePolicy = TaptionSavePolicy()
     ) async throws -> TaptionPreparedEncodingJob {
         let asset = try await services.inspector.inspectVideo(at: sourceURL)
+        return try await prepareSingleAssetJob(
+            asset: asset,
+            sourceURL: sourceURL,
+            temporaryOutputURL: temporaryOutputURL,
+            outputPolicy: outputPolicy,
+            preferredMode: preferredMode,
+            savePolicy: savePolicy
+        )
+    }
+
+    func prepareSingleAssetJob(
+        asset: TaptionVideoAsset,
+        sourceURL: URL,
+        temporaryOutputURL: URL,
+        outputPolicy: TaptionVideoOutputPolicy,
+        preferredMode: TaptionEncoderMode = .automatic,
+        savePolicy: TaptionSavePolicy = TaptionSavePolicy()
+    ) async throws -> TaptionPreparedEncodingJob {
         guard asset.videoTrack != nil else {
             throw TaptionVideoCoreError.noVideoTrack
         }
@@ -82,10 +100,12 @@ struct TaptionVideoCore {
             savePolicy: savePolicy
         )
         let storageRequirement = try await services.storageChecker.storageRequirement(for: plan)
+        let audioRunnableInThisBuild = plan.audioPlan?.isRunnableInCurrentBuild ?? true
         let canRunInThisBuild = routeSelection.isEncodableNow
             && outputPolicy.videoCodec == .hevc
             && outputPolicy.audioCodec == TaptionAudioCodecRoutePlanner.defaultOutputCodec
             && outputPolicy.container == .mp4
+            && audioRunnableInThisBuild
         guard !canRunInThisBuild || storageRequirement.hasEnoughSpace else {
             throw TaptionVideoCoreError.insufficientStorage(
                 requiredBytes: storageRequirement.requiredWorkingBytes,
@@ -185,7 +205,7 @@ extension TaptionVideoCoreError: LocalizedError {
         case .noVideoTrack:
             return "This file does not contain a readable video track."
         case .unsupportedSourceCodec(let codec):
-            return "This build can run H.265 / MP4 output for AV1 with HW/SW fallback, and for H.264, H.265, or ProRes when this device has the required hardware path. \(codec.displayName) remains part of the universal codec roadmap, but this route is not executable on the selected device/output path yet."
+            return "This build can run H.265 / MP4 output for AV1, VP9, and VP8 with software fallback, and for H.264, H.265, or ProRes when this device has the required hardware path. \(codec.displayName) remains part of the universal codec roadmap, but this route is not executable on the selected device/output path yet."
         case .compatibleHEVCPresetUnavailable:
             return "This device cannot create a compatible H.265 export session for this file."
         case .exportFailed(let message):

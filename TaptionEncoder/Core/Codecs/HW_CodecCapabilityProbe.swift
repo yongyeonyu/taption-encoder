@@ -18,6 +18,10 @@ struct TaptionCodecHardwareCapability: Codable, Equatable, Identifiable {
     var hardwareEncodeSupported: Bool?
     var encodeProbeStatus: Int32?
     var encoderIdentifier: String?
+
+    var isSupportedOnInstalledDevice: Bool {
+        hardwareDecodeSupported == true || hardwareEncodeSupported == true
+    }
 }
 
 struct TaptionAudioCodecHardwareCapability: Codable, Equatable, Identifiable {
@@ -27,6 +31,13 @@ struct TaptionAudioCodecHardwareCapability: Codable, Equatable, Identifiable {
     var nativeEncodeSupported: Bool
     var mp4CopySupported: Bool
     var movCopySupported: Bool
+
+    var isSupportedOnInstalledDevice: Bool {
+        nativeDecodeSupported
+            || nativeEncodeSupported
+            || mp4CopySupported
+            || movCopySupported
+    }
 }
 
 struct TaptionDeviceCodecCapabilityReport: Codable, Equatable {

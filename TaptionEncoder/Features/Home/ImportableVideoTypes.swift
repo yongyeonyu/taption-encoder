@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 enum SupportedVideoFileExtensions {
     static let fileExtensions: [String] = Array(
         Set(
-            TaptionVideoContainer.allCases
+            TaptionLaunchSupportCatalog.supportedInputContainers
                 .flatMap(\.supportedFileExtensions)
         )
     ).sorted()
@@ -23,16 +23,9 @@ enum ImportableVideoTypes {
 
     static let all: [UTType] = {
         var types: [UTType] = [
-            .audiovisualContent,
-            .video,
-            .movie,
             .mpeg4Movie,
             .quickTimeMovie
         ]
-
-        if let taptionVideoType = UTType("com.taption.video") {
-            types.append(taptionVideoType)
-        }
 
         for pathExtension in fileExtensions {
             if let type = UTType(filenameExtension: pathExtension),

@@ -51,17 +51,14 @@ struct PendingSaveRecoveryView: View {
         if let saveGateMessage = job.saveGateMessage {
             return saveGateMessage
         }
-        if job.state.requiresRewardedAd {
-            return "\(job.sourceName) is ready. Watch one rewarded ad to save this video."
-        }
-        return "\(job.sourceName) is ready. The rewarded ad is complete, so it can be saved now."
+        return "\(job.sourceName) is ready to save."
     }
 
     private var primaryButtonTitle: String {
-        job.state.requiresRewardedAd ? "Watch Ad & Save" : "Save"
+        "Save"
     }
 
     private var primaryButtonImage: String {
-        job.state.requiresRewardedAd ? "play.rectangle" : "square.and.arrow.down"
+        "square.and.arrow.down"
     }
 }

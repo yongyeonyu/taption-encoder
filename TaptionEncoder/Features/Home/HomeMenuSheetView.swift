@@ -57,36 +57,76 @@ struct HomeMenuSheetView: View {
 }
 
 private struct HelpSheetContentView: View {
+    private let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "00.00.00"
+    private let supportedVideoCodecs = Set(TaptionLaunchSupportCatalog.supportedInputVideoCodecs.map(\.codec))
+
+    private var videoCodecEntries: [HelpCodecEntry] {
+        let entries = TaptionCodecRegistry.universalSourceCodecs.map { codec in
+            HelpCodecEntry(
+                name: codec.displayName,
+                isAvailableNow: supportedVideoCodecs.contains(codec)
+            )
+        }
+        return sort(entries: entries)
+    }
+
+    private var audioCodecEntries: [HelpCodecEntry] {
+        let entries = TaptionAudioCodecRoutePlanner.universalAudioCodecs.map { codec in
+            let isAvailableNow = TaptionAudioCodecRoutePlanner
+                .selectRoute(
+                    sourceCodec: codec,
+                    outputCodec: .aac,
+                    outputContainer: .mp4
+                )
+                .isSupportedNow
+            return HelpCodecEntry(
+                name: codec.displayName,
+                isAvailableNow: isAvailableNow
+            )
+        }
+        return sort(entries: entries)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 SheetInfoCard(
-                    title: "Quick Flow",
+                    title: "Version",
                     rows: [
-                        ("1", "Pick files, a folder, or a Photos video."),
-                        ("2", "Review the detected media information."),
-                        ("3", "Start encoding, then watch the save ad when the output is ready.")
+                        ("App", appVersion)
                     ]
                 )
 
                 SheetInfoCard(
-                    title: "Codec Policy",
+                    title: "Containers",
                     rows: [
-                        ("HW", "Hardware is used first when the device supports the route."),
-                        ("SW", "Software is used when hardware is unavailable or the input needs fallback."),
-                        ("Quality", "Default options preserve source-like resolution, frame rate, audio timing, and visual quality.")
+                        ("Input", TaptionLaunchSupportCatalog.supportedInputContainerSummary),
+                        ("Output", TaptionVideoContainer.mp4.defaultFileExtension.uppercased())
                     ]
                 )
 
-                SheetInfoCard(
-                    title: "Current Build",
-                    rows: [
-                        ("Now", "H.265 output supports AV1 with HW/SW fallback plus Apple-native H.264, H.265, and ProRes hardware routes."),
-                        ("Next", "Broader software fallback, then selectable all-to-all output codecs.")
-                    ]
+                HelpLegendCard()
+
+                HelpCodecSectionCard(
+                    title: "Video Codecs",
+                    entries: videoCodecEntries
+                )
+
+                HelpCodecSectionCard(
+                    title: "Audio Codecs",
+                    entries: audioCodecEntries
                 )
             }
             .padding(18)
+        }
+    }
+
+    private func sort(entries: [HelpCodecEntry]) -> [HelpCodecEntry] {
+        entries.sorted { lhs, rhs in
+            if lhs.isAvailableNow != rhs.isAvailableNow {
+                return lhs.isAvailableNow && !rhs.isAvailableNow
+            }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
         }
     }
 }
@@ -233,11 +273,6 @@ private struct BroadCodecBackendNoticeCard: View {
 private struct DeviceInfoSheetContentView: View {
     @State private var report = HW_CodecCapabilityProbe.makeReport()
     @State private var reportSaveMessage: ReportSaveMessage?
-    private let routeSimulationSummary = HW_CodecRouteSimulator.summary()
-    private let codecCompletionAudit = TaptionUniversalCodecCompletionAuditor.makeReport()
-    private let outputReadinessCatalog = TaptionCodecOutputCatalog.makeReadinessReport()
-    private let audioOutputReadinessCatalog = TaptionAudioCodecOutputCatalog.makeReadinessReport()
-    private let modelCoverageReport = HW_AppleDeviceCodecModelMatrix.coverageReport()
 
     var body: some View {
         ScrollView {
@@ -246,72 +281,9 @@ private struct DeviceInfoSheetContentView: View {
                     title: "Device",
                     rows: [
                         ("Model", report.modelIdentifier),
-                        ("Static Match", staticModelSummary),
-                        ("Matrix", reportReconciliationSummary),
                         ("OS", "\(report.systemName) \(report.systemVersion)"),
-                        ("Probe", "\(report.probeResolution.width)x\(report.probeResolution.height)")
-                    ]
-                )
-
-                SheetInfoCard(
-                    title: "Apple Device Route Simulation",
-                    rows: [
-                        ("Profiles", "\(routeSimulationSummary.profileCount) family and model profiles"),
-                        ("Routes", "\(routeSimulationSummary.routeCountPerProfile) routes per profile"),
-                        ("Rows", "\(routeSimulationSummary.rowCount) simulated route decisions"),
-                        ("AV1", routeSimulationSummary.av1ToHEVCPathSummary),
-                        ("Priority", routeSimulationSummary.isPassing ? "HW-first route priority passed." : "Review HW route priority warnings.")
-                    ]
-                )
-
-                SheetInfoCard(
-                    title: "Static Apple Model Matrix",
-                    rows: [
-                        ("Scope", modelCoverageReport.scope),
-                        ("Models", "\(modelCoverageReport.modelCount) total · \(modelCoverageReport.iPhoneModelCount) iPhone · \(modelCoverageReport.iPadModelCount) iPad"),
-                        ("AV1 Decode", "\(modelCoverageReport.av1HardwareDecodeModelCount) models"),
-                        ("HEVC Encode", "\(modelCoverageReport.hevcHardwareEncodeModelCount) models"),
-                        ("ProRes Encode", "\(modelCoverageReport.proResHardwareEncodeModelCount) models"),
-                        ("Status", modelCoverageReport.isPassing ? "No duplicate or missing profile rows." : "Review matrix coverage warnings.")
-                    ]
-                )
-
-                SheetInfoCard(
-                    title: "Universal Codec Mesh Readiness",
-                    rows: [
-                        ("Contract", codecCompletionAudit.contractName),
-                        ("Stage", codecCompletionAuditStageSummary),
-                        ("Required", codecCompletionAudit.missingRequiredBidirectionalVideoRoutes.isEmpty ? "H.264 to AV1, AV1 to H.264, and same-codec re-encode routes are planned." : "Review required bidirectional route gaps."),
-                        ("Video", "\(codecCompletionAudit.videoCurrentBuildRunnableRouteCount) runnable · \(codecCompletionAudit.videoCommandPlanOnlyRouteCount) command-plan · \(codecCompletionAudit.videoBlockedMissingSoftwareEncoderRouteCount) blocked · \(codecCompletionAudit.videoPendingRuntimeRouteCount) pending runtime"),
-                        ("Audio", "\(codecCompletionAudit.audioCurrentBuildRunnableRouteCount) runnable · \(codecCompletionAudit.audioCommandPlanOnlyRouteCount) command-plan · \(codecCompletionAudit.audioBlockedMissingSoftwareEncoderRouteCount) blocked · \(codecCompletionAudit.audioPendingRuntimeRouteCount) pending runtime"),
-                        ("Selectors", codecCompletionAudit.outputSelectionCoverageIsPassing ? "Video and audio output selectors cover the universal route catalogs." : "Review output selector coverage gaps."),
-                        ("Backend", "\(codecCompletionAudit.broadSoftwareBackendDisplayName) has \(codecCompletionAudit.broadSoftwareBackendOpenGateCount) open readiness gates.")
-                    ]
-                )
-
-                SheetInfoCard(
-                    title: "Output Selector Readiness",
-                    rows: [
-                        ("Catalog", "\(outputReadinessCatalog.videoCodecCount) codecs · \(outputReadinessCatalog.containerCount) containers"),
-                        ("Selections", "\(outputReadinessCatalog.outputSelectionCount) output codec/container pairs"),
-                        ("Now", "\(outputReadinessCatalog.implementedOutputSelectionCount) executable in this build"),
-                        ("Plan Ready", "\(outputReadinessCatalog.commandPlanReadyOutputSelectionCount) command-plan ready"),
-                        ("Planned", "\(outputReadinessCatalog.plannedOutputSelectionCount) waiting for codec/backend decisions"),
-                        ("Blocked", "\(outputReadinessCatalog.unsupportedOutputSelectionCount) unsupported selections"),
-                        ("Default", "\(outputReadinessCatalog.defaultOutputCodec.shortDisplayName) / \(outputReadinessCatalog.defaultOutputContainer.defaultFileExtension.uppercased()) is \(outputReadinessCatalog.defaultOutputState.shortDisplayName)")
-                    ]
-                )
-
-                SheetInfoCard(
-                    title: "Audio Output Readiness",
-                    rows: [
-                        ("Catalog", "\(audioOutputReadinessCatalog.audioCodecCount) codecs · \(audioOutputReadinessCatalog.containerCount) containers"),
-                        ("Selections", "\(audioOutputReadinessCatalog.outputSelectionCount) audio codec/container pairs"),
-                        ("Now", "\(audioOutputReadinessCatalog.implementedOutputSelectionCount) executable in this build"),
-                        ("Plan Ready", "\(audioOutputReadinessCatalog.commandPlanReadyOutputSelectionCount) command-plan ready"),
-                        ("Planned", "\(audioOutputReadinessCatalog.plannedOutputSelectionCount) waiting for codec/backend decisions"),
-                        ("Blocked", "\(audioOutputReadinessCatalog.unsupportedOutputSelectionCount) unsupported selections"),
-                        ("Default", "\(audioOutputReadinessCatalog.defaultOutputCodec.displayName) / \(audioOutputReadinessCatalog.defaultOutputContainer.defaultFileExtension.uppercased()) is \(audioOutputReadinessCatalog.defaultOutputState.shortDisplayName)")
+                        ("Probe", "\(report.probeResolution.width)x\(report.probeResolution.height)"),
+                        ("Checked", generatedAtText)
                     ]
                 )
 
@@ -341,12 +313,24 @@ private struct DeviceInfoSheetContentView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Video HW Codec Support")
+                    Text("Video Codec Paths")
                         .font(.headline)
                         .foregroundStyle(.white)
 
-                    ForEach(report.videoCapabilities) { capability in
-                        DeviceVideoCodecCapabilityRow(capability: capability)
+                    Text("White rows prefer hardware on this device. Gray rows need software-only handling or are unavailable.")
+                        .font(.caption)
+                        .foregroundStyle(TaptionTheme.mutedText)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if allVideoCapabilities.isEmpty {
+                        Text("No video codec probe results are available.")
+                            .font(.caption)
+                            .foregroundStyle(TaptionTheme.mutedText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        ForEach(allVideoCapabilities) { capability in
+                            DeviceVideoCodecCapabilityRow(capability: capability)
+                        }
                     }
                 }
                 .padding(14)
@@ -358,12 +342,24 @@ private struct DeviceInfoSheetContentView: View {
                 )
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Audio Native Codec Support")
+                    Text("Audio Codec Paths")
                         .font(.headline)
                         .foregroundStyle(.white)
 
-                    ForEach(report.audioCapabilities) { capability in
-                        DeviceAudioCodecCapabilityRow(capability: capability)
+                    Text("White rows can use native or copy paths on this device. Gray rows need software handling or are unavailable.")
+                        .font(.caption)
+                        .foregroundStyle(TaptionTheme.mutedText)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if allAudioCapabilities.isEmpty {
+                        Text("No audio codec probe results are available.")
+                            .font(.caption)
+                            .foregroundStyle(TaptionTheme.mutedText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        ForEach(allAudioCapabilities) { capability in
+                            DeviceAudioCodecCapabilityRow(capability: capability)
+                        }
                     }
                 }
                 .padding(14)
@@ -374,7 +370,7 @@ private struct DeviceInfoSheetContentView: View {
                         .stroke(TaptionTheme.border, lineWidth: 1)
                 )
 
-                Text("Video hardware support is probed on this device at runtime. Audio support uses Apple-native codec capability catalogs. Encoding still falls back to software if hardware or native support is unavailable, busy, or unsupported for the selected route.")
+                Text("This screen is focused on the installed device only. Use the path rows below to decide whether each codec should run with HW first or fall back to SW.")
                     .font(.footnote)
                     .foregroundStyle(Color.white.opacity(0.58))
                     .fixedSize(horizontal: false, vertical: true)
@@ -383,30 +379,29 @@ private struct DeviceInfoSheetContentView: View {
         }
     }
 
-    private var staticModelSummary: String {
-        guard let model = HW_AppleDeviceCodecModelMatrix.model(identifier: report.modelIdentifier) else {
-            return "Runtime probe only"
+    private var allVideoCapabilities: [TaptionCodecHardwareCapability] {
+        report.videoCapabilities.sorted { lhs, rhs in
+            if lhs.isSupportedOnInstalledDevice != rhs.isSupportedOnInstalledDevice {
+                return lhs.isSupportedOnInstalledDevice && !rhs.isSupportedOnInstalledDevice
+            }
+            return lhs.videoCodec.displayName < rhs.videoCodec.displayName
         }
-        return "\(model.marketingName) · \(model.chipFamily)"
     }
 
-    private var reportReconciliationSummary: String {
-        HW_DeviceCodecReportReconciler
-            .reconcile(report: report)
-            .statusSummary
+    private var allAudioCapabilities: [TaptionAudioCodecHardwareCapability] {
+        report.audioCapabilities.sorted { lhs, rhs in
+            if lhs.isSupportedOnInstalledDevice != rhs.isSupportedOnInstalledDevice {
+                return lhs.isSupportedOnInstalledDevice && !rhs.isSupportedOnInstalledDevice
+            }
+            return lhs.audioCodec.displayName < rhs.audioCodec.displayName
+        }
     }
 
-    private var codecCompletionAuditStageSummary: String {
-        switch codecCompletionAudit.stage {
-        case .launchRouteOnly:
-            return "Launch route only. Universal planning needs review."
-        case .allToAllPlanningLocked:
-            return "All-to-all planning locked. Runtime execution is still gated."
-        case .allToAllCommandPlansReady:
-            return "All-to-all command plans ready. Backend execution is still gated."
-        case .allToAllExecutable:
-            return "All-to-all execution ready."
-        }
+    private var generatedAtText: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: report.generatedAt)
     }
 
     private func saveDeviceReport() {
@@ -414,7 +409,7 @@ private struct DeviceInfoSheetContentView: View {
             let freshReport = HW_CodecCapabilityProbe.makeReport()
             let snapshot = HW_DeviceCodecReportStore.makeSnapshot(
                 report: freshReport,
-                routeSimulationSummary: routeSimulationSummary,
+                routeSimulationSummary: HW_CodecRouteSimulator.summary(),
                 createdAt: freshReport.generatedAt
             )
             let fileURL = try HW_DeviceCodecReportStore.save(snapshot: snapshot)
@@ -458,23 +453,56 @@ private struct DeviceVideoCodecCapabilityRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(capability.videoCodec.displayName)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(titleColor)
                     .lineLimit(1)
 
-                Text(capability.coreMediaCodecType ?? "Software catalog only")
+                Text(preferredPathSummary)
                     .font(.caption)
-                    .foregroundStyle(Color.white.opacity(0.52))
-                    .lineLimit(1)
+                    .foregroundStyle(detailColor)
+                    .lineLimit(2)
             }
 
             Spacer(minLength: 10)
 
-            CapabilityBadge(label: "Decode", value: capability.hardwareDecodeSupported)
-            CapabilityBadge(label: "Encode", value: capability.hardwareEncodeSupported)
+            CapabilityBadge(label: "Decode", value: capability.hardwareDecodeSupported, trueText: "HW", falseText: "SW")
+            CapabilityBadge(label: "Encode", value: capability.hardwareEncodeSupported, trueText: "HW", falseText: "SW")
         }
         .padding(10)
-        .background(Color.white.opacity(0.045))
+        .background(rowBackground)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var preferredPathSummary: String {
+        switch (capability.hardwareDecodeSupported, capability.hardwareEncodeSupported) {
+        case (.some(true), .some(true)):
+            return "Preferred path: HW decode + HW encode"
+        case (.some(true), .some(false)):
+            return "Preferred path: HW decode + SW encode"
+        case (.some(false), .some(true)):
+            return "Preferred path: SW decode + HW encode"
+        case (.some(false), .some(false)):
+            return "Preferred path: SW only"
+        case (.some(true), .none):
+            return "Preferred path: HW decode. Encode probe unavailable"
+        case (.none, .some(true)):
+            return "Preferred path: HW encode. Decode probe unavailable"
+        default:
+            return capability.coreMediaCodecType == nil
+                ? "Preferred path: Software catalog only"
+                : "Preferred path: Probe unavailable"
+        }
+    }
+
+    private var rowBackground: Color {
+        capability.isSupportedOnInstalledDevice ? Color.white.opacity(0.045) : Color.white.opacity(0.025)
+    }
+
+    private var titleColor: Color {
+        capability.isSupportedOnInstalledDevice ? .white : Color.white.opacity(0.42)
+    }
+
+    private var detailColor: Color {
+        capability.isSupportedOnInstalledDevice ? Color.white.opacity(0.52) : Color.white.opacity(0.32)
     }
 }
 
@@ -486,13 +514,13 @@ private struct DeviceAudioCodecCapabilityRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(capability.audioCodec.displayName)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(titleColor)
                     .lineLimit(1)
 
-                Text(copySummary)
+                Text(preferredPathSummary)
                     .font(.caption)
-                    .foregroundStyle(Color.white.opacity(0.52))
-                    .lineLimit(1)
+                    .foregroundStyle(detailColor)
+                    .lineLimit(2)
             }
 
             Spacer(minLength: 10)
@@ -511,11 +539,27 @@ private struct DeviceAudioCodecCapabilityRow: View {
             )
         }
         .padding(10)
-        .background(Color.white.opacity(0.045))
+        .background(rowBackground)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
-    private var copySummary: String {
+    private var preferredPathSummary: String {
+        if capability.mp4CopySupported || capability.movCopySupported {
+            return "Preferred path: Copy \(copyTargets)"
+        }
+        if capability.nativeDecodeSupported && capability.nativeEncodeSupported {
+            return "Preferred path: Native decode + Native encode"
+        }
+        if capability.nativeDecodeSupported {
+            return "Preferred path: Native decode + SW encode"
+        }
+        if capability.nativeEncodeSupported {
+            return "Preferred path: SW decode + Native encode"
+        }
+        return "Preferred path: SW only"
+    }
+
+    private var copyTargets: String {
         var containers: [String] = []
         if capability.mp4CopySupported {
             containers.append("MP4")
@@ -523,10 +567,19 @@ private struct DeviceAudioCodecCapabilityRow: View {
         if capability.movCopySupported {
             containers.append("MOV")
         }
-        guard !containers.isEmpty else {
-            return "Transcode required for MP4/MOV"
-        }
-        return "Copy: \(containers.joined(separator: ", "))"
+        return containers.joined(separator: ", ")
+    }
+
+    private var rowBackground: Color {
+        capability.isSupportedOnInstalledDevice ? Color.white.opacity(0.045) : Color.white.opacity(0.025)
+    }
+
+    private var titleColor: Color {
+        capability.isSupportedOnInstalledDevice ? .white : Color.white.opacity(0.42)
+    }
+
+    private var detailColor: Color {
+        capability.isSupportedOnInstalledDevice ? Color.white.opacity(0.52) : Color.white.opacity(0.32)
     }
 }
 
@@ -569,6 +622,66 @@ private struct CapabilityBadge: View {
         case .none:
             return Color.white.opacity(0.42)
         }
+    }
+}
+
+private struct HelpCodecEntry: Identifiable {
+    let id = UUID()
+    var name: String
+    var isAvailableNow: Bool
+}
+
+private struct HelpLegendCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("White rows are available now. Gray rows are planned.")
+                .font(.subheadline)
+                .foregroundStyle(Color.white.opacity(0.76))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(TaptionTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(TaptionTheme.border, lineWidth: 1)
+        )
+    }
+}
+
+private struct HelpCodecSectionCard: View {
+    var title: String
+    var entries: [HelpCodecEntry]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(.white)
+
+            ForEach(entries) { entry in
+                HStack(spacing: 10) {
+                    Text(entry.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(entry.isAvailableNow ? Color.white.opacity(0.92) : Color.white.opacity(0.38))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(entry.isAvailableNow ? "Now" : "Planned")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(entry.isAvailableNow ? Color.white.opacity(0.58) : Color.white.opacity(0.32))
+                }
+                .padding(.vertical, 2)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(TaptionTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(TaptionTheme.border, lineWidth: 1)
+        )
     }
 }
 

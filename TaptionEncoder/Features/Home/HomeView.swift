@@ -53,6 +53,25 @@ struct HomeView: View {
 
                     outputSelector(metrics: metrics)
 
+                    OutputSummaryView(
+                        title: viewModel.selectedOutputDetailTitle,
+                        statusText: viewModel.selectedOutputDetailStatusText,
+                        outputSummary: viewModel.selectedOutputDetailSummary,
+                        detailText: viewModel.selectedOutputDetailText,
+                        routeBadges: viewModel.selectedOutputRouteBadges,
+                        contentScale: metrics.contentScale
+                    )
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Detected Files")
+                            .font(metrics.contentScale < 0.9 ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.92))
+                        Text("Imported files are inspected automatically and show their video and audio route results here.")
+                            .font(metrics.contentScale < 0.9 ? .caption2 : .caption)
+                            .foregroundStyle(TaptionTheme.mutedText)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
                     LoadedFilesPanelView(
                         files: viewModel.fileCardSnapshots,
                         contentScale: metrics.contentScale,
@@ -73,28 +92,9 @@ struct HomeView: View {
                         controlHeight: metrics.controlHeight,
                         contentScale: metrics.contentScale,
                         onStart: { viewModel.startPreparedEncoding() },
+                        onSave: { viewModel.saveCurrentPendingOutput() },
                         onCancel: { viewModel.cancel() }
                     )
-
-                    if viewModel.state.completedTemporaryOutput != nil {
-                        Button {
-                            AppLogger.info("Watch Ad & Save button tapped", category: .ui)
-                            viewModel.saveCompletedTemporaryOutput()
-                        } label: {
-                            Label("Watch Ad & Save", systemImage: "play.rectangle")
-                                .font(metrics.buttonFont)
-                                .foregroundStyle(.white)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: metrics.controlHeight)
-                        }
-                        .buttonStyle(.plain)
-                        .background(TaptionTheme.accent)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(TaptionTheme.accent.opacity(0.65), lineWidth: 1)
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    }
 
                     Spacer(minLength: 0)
 
@@ -298,67 +298,154 @@ struct HomeView: View {
     private func outputSelector(metrics: HomeLayoutMetrics) -> some View {
         HStack(spacing: 8 * metrics.contentScale) {
             outputMenu(
-                title: "Video",
-                value: "\(viewModel.selectedOutput.videoCodec.shortDisplayName) - \(viewModel.selectedVideoOutputStatusText)",
-                systemImage: "arrow.triangle.2.circlepath",
-                isEnabled: viewModel.canChangeOutputSelection,
-                metrics: metrics
-            ) {
-                ForEach(viewModel.outputCodecOptions, id: \.self) { codec in
-                    Button {
-                        viewModel.selectOutputCodec(codec)
-                    } label: {
-                        if codec == viewModel.selectedOutput.videoCodec {
-                            Label(viewModel.outputCodecMenuTitle(codec), systemImage: "checkmark")
-                        } else {
-                            Text(viewModel.outputCodecMenuTitle(codec))
-                        }
-                    }
-                }
-            }
-
-            outputMenu(
-                title: "Audio",
-                value: "\(viewModel.selectedOutput.audioCodec.displayName) - \(viewModel.selectedAudioOutputStatusText)",
-                systemImage: "waveform",
-                isEnabled: viewModel.canChangeOutputSelection,
-                metrics: metrics
-            ) {
-                ForEach(viewModel.outputAudioCodecOptions, id: \.self) { codec in
-                    Button {
-                        viewModel.selectOutputAudioCodec(codec)
-                    } label: {
-                        if codec == viewModel.selectedOutput.audioCodec {
-                            Label(viewModel.outputAudioCodecMenuTitle(codec), systemImage: "checkmark")
-                        } else {
-                            Text(viewModel.outputAudioCodecMenuTitle(codec))
-                        }
-                    }
-                }
-            }
-
-            outputMenu(
-                title: "Container",
+                title: "Output\nFormat",
                 value: "\(viewModel.selectedOutput.container.defaultFileExtension.uppercased())",
                 systemImage: "shippingbox",
                 isEnabled: viewModel.canChangeOutputSelection,
                 metrics: metrics
             ) {
-                ForEach(viewModel.outputContainerOptions, id: \.self) { container in
+                let availableContainers = viewModel.outputContainerOptions.filter { viewModel.outputContainerIsAvailableNow($0) }
+                let unavailableContainers = viewModel.outputContainerOptions.filter { !viewModel.outputContainerIsAvailableNow($0) }
+
+                ForEach(availableContainers, id: \.self) { container in
                     Button {
                         viewModel.selectOutputContainer(container)
                     } label: {
-                        let label = viewModel.outputContainerMenuTitle(container)
-                        if container == viewModel.selectedOutput.container {
-                            Label(label, systemImage: "checkmark")
-                        } else {
-                            Text(label)
-                        }
+                        menuItemLabel(
+                            title: viewModel.outputContainerMenuTitle(container),
+                            isSelected: container == viewModel.selectedOutput.container,
+                            isEnabled: true
+                        )
                     }
                 }
+
+                if !availableContainers.isEmpty && !unavailableContainers.isEmpty {
+                    Divider()
+                }
+
+                ForEach(unavailableContainers, id: \.self) { container in
+                    Button {
+                        viewModel.selectOutputContainer(container)
+                    } label: {
+                        menuItemLabel(
+                            title: viewModel.outputContainerMenuTitle(container),
+                            isSelected: container == viewModel.selectedOutput.container,
+                            isEnabled: false
+                        )
+                    }
+                    .disabled(true)
+                }
             }
+
+            outputMenu(
+                title: "Reso\nlution",
+                value: viewModel.selectedOutput.resolutionPreset.menuTitle,
+                systemImage: "rectangle.compress.vertical",
+                isEnabled: viewModel.canChangeOutputSelection,
+                metrics: metrics
+            ) {
+                let availableResolutions = viewModel.outputResolutionOptions.filter { viewModel.resolutionPresetIsAvailable($0) }
+                let unavailableResolutions = viewModel.outputResolutionOptions.filter { !viewModel.resolutionPresetIsAvailable($0) }
+
+                ForEach(availableResolutions, id: \.self) { preset in
+                    Button {
+                        viewModel.selectOutputResolution(preset)
+                    } label: {
+                        menuItemLabel(
+                            title: viewModel.outputResolutionMenuTitle(preset),
+                            isSelected: preset == viewModel.selectedOutput.resolutionPreset,
+                            isEnabled: true
+                        )
+                    }
+                }
+
+                if !availableResolutions.isEmpty && !unavailableResolutions.isEmpty {
+                    Divider()
+                }
+
+                ForEach(unavailableResolutions, id: \.self) { preset in
+                    Button {
+                        viewModel.selectOutputResolution(preset)
+                    } label: {
+                        menuItemLabel(
+                            title: viewModel.outputResolutionMenuTitle(preset),
+                            isSelected: preset == viewModel.selectedOutput.resolutionPreset,
+                            isEnabled: false
+                        )
+                    }
+                    .disabled(true)
+                }
+            }
+
+            outputSizeControl(metrics: metrics)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func outputSizeControl(metrics: HomeLayoutMetrics) -> some View {
+        let range = viewModel.outputTargetSizeRangeMB
+        return VStack(alignment: .leading, spacing: 6 * metrics.contentScale) {
+            HStack(spacing: 7 * metrics.contentScale) {
+                Image(systemName: "internaldrive")
+                    .font(.system(size: 14 * metrics.contentScale, weight: .semibold))
+                Text("Size\n(MB)")
+                    .font((metrics.contentScale < 0.9 ? Font.caption : metrics.buttonFont).weight(.semibold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.75)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 4)
+                Button {
+                    viewModel.selectOutputSize(.auto)
+                } label: {
+                    Text("Auto")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(viewModel.selectedOutput.sizePreset == .auto ? Color.black : Color.white.opacity(0.82))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(viewModel.selectedOutput.sizePreset == .auto ? Color.white : Color.white.opacity(0.08))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(!viewModel.canChangeOutputSelection)
+            }
+
+            Text(viewModel.selectedOutputTargetSizeText)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(TaptionTheme.mutedText)
+
+            Slider(
+                value: Binding(
+                    get: { viewModel.selectedOutputTargetSizeValueMB },
+                    set: { newValue in
+                        viewModel.updateOutputTargetSizeMB(newValue)
+                    }
+                ),
+                in: range,
+                step: 1
+            )
+            .tint(TaptionTheme.accent)
+            .disabled(!viewModel.canChangeOutputSelection)
+
+            HStack {
+                Text("\(Int(range.lowerBound.rounded())) MB")
+                Spacer()
+                Text("\(Int(range.upperBound.rounded())) MB")
+            }
+            .font(.caption2)
+            .foregroundStyle(TaptionTheme.mutedText)
+        }
+        .foregroundStyle(viewModel.canChangeOutputSelection ? Color.white.opacity(0.9) : TaptionTheme.disabledText)
+        .padding(.horizontal, 10 * metrics.contentScale)
+        .padding(.vertical, 8 * metrics.contentScale)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minHeight: max(metrics.controlHeight, 86 * metrics.contentScale))
+        .background(TaptionTheme.elevatedSurface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(viewModel.canChangeOutputSelection ? TaptionTheme.border : Color.white.opacity(0.06), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .opacity(viewModel.canChangeOutputSelection ? 1 : 0.48)
     }
 
     private func outputMenu<Content: View>(
@@ -377,8 +464,9 @@ struct HomeView: View {
                     .font(.system(size: 14 * metrics.contentScale, weight: .semibold))
                 Text(title)
                     .font((metrics.contentScale < 0.9 ? Font.caption : metrics.buttonFont).weight(.semibold))
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .minimumScaleFactor(0.75)
+                    .multilineTextAlignment(.leading)
                 Spacer(minLength: 4)
                 Text(value)
                     .font(Font.caption2.weight(.semibold))
@@ -389,7 +477,7 @@ struct HomeView: View {
             .foregroundStyle(isEnabled ? Color.white.opacity(0.9) : TaptionTheme.disabledText)
             .padding(.horizontal, 10 * metrics.contentScale)
             .frame(maxWidth: .infinity)
-            .frame(height: metrics.controlHeight)
+            .frame(minHeight: max(metrics.controlHeight, 52 * metrics.contentScale))
             .background(TaptionTheme.elevatedSurface)
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -399,6 +487,22 @@ struct HomeView: View {
             .opacity(isEnabled ? 1 : 0.48)
         }
         .disabled(!isEnabled)
+    }
+
+    private func menuItemLabel(
+        title: String,
+        isSelected: Bool,
+        isEnabled: Bool
+    ) -> some View {
+        HStack(spacing: 8) {
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.caption.weight(.semibold))
+            }
+            Text(title)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(isEnabled ? Color.white.opacity(0.92) : TaptionTheme.disabledText)
     }
 }
 

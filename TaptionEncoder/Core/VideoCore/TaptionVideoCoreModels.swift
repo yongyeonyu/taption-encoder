@@ -538,7 +538,7 @@ enum TaptionEncoderMode: String, Codable, Equatable, CaseIterable {
 enum TaptionEncodingBackend: String, Codable, Equatable, CaseIterable {
     case appleVideoToolbox
     case appleAVAssetExport
-    case softwareAV1Decoder
+    case softwareVLCDecoder
     case ffmpegFamily
     case customSoftware
     case simulatedHardware
