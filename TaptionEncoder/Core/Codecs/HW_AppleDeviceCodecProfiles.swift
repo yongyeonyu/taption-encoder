@@ -71,6 +71,7 @@ struct HW_AppleDeviceCodecModelCoverageReport: Codable, Equatable {
     var iPhoneModelCount: Int
     var iPadModelCount: Int
     var duplicateModelIdentifierCount: Int
+    var profileChipFamilyMismatchCount: Int
     var missingProfileIDs: Set<String>
     var profileCounts: [String: Int]
     var identifierFamilyCounts: [String: Int]
@@ -81,6 +82,7 @@ struct HW_AppleDeviceCodecModelCoverageReport: Codable, Equatable {
 
     var isPassing: Bool {
         duplicateModelIdentifierCount == 0
+            && profileChipFamilyMismatchCount == 0
             && missingProfileIDs.isEmpty
             && modelCount == iPhoneModelCount + iPadModelCount
     }
@@ -125,6 +127,12 @@ enum HW_AppleDeviceCodecModelMatrix {
             iPhoneModelCount: models.filter { $0.platformName == "iPhone" }.count,
             iPadModelCount: models.filter { $0.platformName == "iPad" }.count,
             duplicateModelIdentifierCount: duplicateCount,
+            profileChipFamilyMismatchCount: models.filter { model in
+                guard let profile = profilesByID[model.profileID] else {
+                    return true
+                }
+                return !profile.chipFamilies.contains(model.chipFamily)
+            }.count,
             missingProfileIDs: Set(models.compactMap { model in
                 profilesByID[model.profileID] == nil ? model.profileID : nil
             }),
@@ -216,8 +224,8 @@ enum HW_AppleDeviceCodecModelMatrix {
     private static let iPadBaseModels: [HW_AppleDeviceCodecModel] = [
         model("iPad7,11", "iPad (7th generation) Wi-Fi", profileID: "apple_ipados18_legacy_a10_h264", chipFamily: "A10 Fusion"),
         model("iPad7,12", "iPad (7th generation) Cellular", profileID: "apple_ipados18_legacy_a10_h264", chipFamily: "A10 Fusion"),
-        model("iPad11,6", "iPad (8th generation) Wi-Fi", profileID: "apple_a13_a14_h264_hevc", chipFamily: "A12 Bionic"),
-        model("iPad11,7", "iPad (8th generation) Cellular", profileID: "apple_a13_a14_h264_hevc", chipFamily: "A12 Bionic"),
+        model("iPad11,6", "iPad (8th generation) Wi-Fi", profileID: "apple_ios18_a12_h264_hevc", chipFamily: "A12 Bionic"),
+        model("iPad11,7", "iPad (8th generation) Cellular", profileID: "apple_ios18_a12_h264_hevc", chipFamily: "A12 Bionic"),
         model("iPad12,1", "iPad (9th generation) Wi-Fi", profileID: "apple_a13_a14_h264_hevc", chipFamily: "A13 Bionic"),
         model("iPad12,2", "iPad (9th generation) Cellular", profileID: "apple_a13_a14_h264_hevc", chipFamily: "A13 Bionic"),
         model("iPad13,18", "iPad (10th generation) Wi-Fi", profileID: "apple_a13_a14_h264_hevc", chipFamily: "A14 Bionic"),
@@ -339,6 +347,7 @@ enum HW_AppleDeviceCodecProfiles {
             "iPhone XR",
             "iPad mini (5th generation)",
             "iPad Air (3rd generation)",
+            "iPad (8th generation)",
             "iPad Pro 11-inch (1st generation)",
             "iPad Pro 12.9-inch (3rd generation)"
         ],
@@ -360,7 +369,6 @@ enum HW_AppleDeviceCodecProfiles {
         representativeDevices: [
             "iPhone 11 family",
             "iPhone 12 family",
-            "iPad (8th generation)",
             "iPad (9th generation)",
             "iPad (10th generation)",
             "iPad Air (4th generation)"

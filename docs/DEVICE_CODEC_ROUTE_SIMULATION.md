@@ -97,6 +97,9 @@ These are the base generic and Apple family capability profiles. The simulator a
 | `apple_a17pro_av1_decode` | A17 Pro class with AV1 hardware decode. |
 | `apple_a18_av1_decode` | A18 class with AV1 hardware decode. |
 | `apple_a18pro_av1_decode_prores` | A18 Pro class with AV1 decode and ProRes paths. |
+| `apple_a19_av1_decode` | A19 class with AV1 hardware decode. |
+| `apple_a19pro_av1_decode` | iPhone Air A19 Pro class with AV1 hardware decode. |
+| `apple_a19pro_av1_decode_prores_raw` | iPhone 17 Pro family class with AV1 decode plus ProRes/ProRes RAW media paths. |
 | `apple_ipad_m3_m4_av1_prores` | M3/M4 iPad class with AV1 decode and ProRes paths. |
 
 ## Latest Local Check
@@ -110,14 +113,16 @@ Scripts/simulate_codec_route_planner.sh Samples/CodecFixtures/transcode_reports/
 Result:
 
 - Generated `codec_route_matrix.tsv`.
-- Base generic + Apple family profiles: 17.
+- Base generic + Apple family profiles: 19.
 - Total simulation profiles after adding model identifiers: 112.
-- Routes per profile: 729.
-- Total route rows: 81,648.
-- Output file rows including header: 81,649.
+- Source codecs: 29.
+- Output codecs: 29.
+- Routes per profile: 841.
+- Total route rows: 94,192.
+- Output file rows including header: 94,193.
 - Current-build encodable rows: 366.
-- Current-build path split: 284 `HW`, 77 `HW/SW`, 5 `SW`, and 81,282 `Planned`.
-- Universal source/output route coverage: 729/729 pairs per profile, no unsupported route-map gaps.
+- Current-build path split: 284 `HW`, 77 `HW/SW`, 5 `SW`, and 93,826 `Planned`.
+- Universal source/output route coverage: 841/841 pairs per profile, no unsupported route-map gaps.
 - Planned all-to-all routes still prefer hardware decode and hardware encode backends per codec side when a simulation profile exposes that capability.
 - `AV1 -> H.265` selected:
   - `SW` for `software_only`.

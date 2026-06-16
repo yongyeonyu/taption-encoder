@@ -327,6 +327,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(coverage.modelCount, 93)
         XCTAssertEqual(coverage.iPhoneModelCount, 35)
         XCTAssertEqual(coverage.iPadModelCount, 58)
+        XCTAssertEqual(coverage.profileChipFamilyMismatchCount, 0)
         XCTAssertEqual(coverage.av1HardwareDecodeModelCount, 22)
         XCTAssertEqual(coverage.hevcHardwareEncodeModelCount, 91)
         XCTAssertEqual(coverage.h264OnlyModelCount, 2)
@@ -347,6 +348,14 @@ final class CodecRoutePlannerTests: XCTestCase {
             "apple_ipados18_legacy_a10_h264"
         )
         XCTAssertEqual(
+            HW_AppleDeviceCodecModelMatrix.model(identifier: "iPad11,6")?.profileID,
+            "apple_ios18_a12_h264_hevc"
+        )
+        XCTAssertEqual(
+            HW_AppleDeviceCodecModelMatrix.model(identifier: "iPad11,7")?.profileID,
+            "apple_ios18_a12_h264_hevc"
+        )
+        XCTAssertEqual(
             HW_AppleDeviceCodecModelMatrix.model(identifier: "iPad16,3")?.profileID,
             "apple_ipad_m3_m4_av1_prores"
         )
@@ -362,6 +371,20 @@ final class CodecRoutePlannerTests: XCTestCase {
             HW_AppleDeviceCodecModelMatrix.model(identifier: "iPhone18,4")?.profileID,
             "apple_a19pro_av1_decode"
         )
+    }
+
+    func testAppleDeviceModelRowsMatchProfileChipFamilies() {
+        for model in HW_AppleDeviceCodecModelMatrix.all {
+            guard let profile = model.profile else {
+                XCTFail("\(model.modelIdentifier) references missing profile \(model.profileID)")
+                continue
+            }
+
+            XCTAssertTrue(
+                profile.chipFamilies.contains(model.chipFamily),
+                "\(model.modelIdentifier) \(model.marketingName) uses \(model.chipFamily) but maps to \(profile.id) with chips \(profile.chipFamilies.joined(separator: ", "))"
+            )
+        }
     }
 
     func testAppleDeviceModelMatrixSelectsExpectedAV1ToHEVCPath() {

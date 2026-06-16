@@ -40,6 +40,8 @@ The archive analyzer can summarize multiple saved snapshots into known models, u
   <https://support.apple.com/guide/ipad/ipad-models-compatible-with-ipados-26-ipad213a25b2/ipados>
 - iPad 7th generation technical specifications
   <https://support.apple.com/en-us/111911>
+- iPad 8th generation technical specifications
+  <https://support.apple.com/en-us/118451>
 - iPhone 15 Pro technical specifications
   <https://support.apple.com/en-us/111829>
 - iPhone 16 technical specifications
@@ -78,8 +80,8 @@ The current model-identifier seed table also lives in that file as `HW_AppleDevi
 | Profile ID | Representative class | HW decode model | HW encode model | AV1 route expectation |
 | --- | --- | --- | --- | --- |
 | `apple_ipados18_legacy_a10_h264` | iPad 7th generation / A10 | H.264 only | H.264 only | `AV1 -> H.265` uses `SW` |
-| `apple_ios18_a12_h264_hevc` | iPhone XS/XR, A12/A12X/A12Z iPads | H.264, H.265/HEVC family | H.264, H.265/HEVC | `HW/SW` |
-| `apple_a13_a14_h264_hevc` | iPhone 11/12, A13/A14 iPads | H.264, H.265/HEVC family | H.264, H.265/HEVC | `HW/SW` |
+| `apple_ios18_a12_h264_hevc` | iPhone XS/XR, A12/A12X/A12Z iPads including iPad 8th generation | H.264, H.265/HEVC family | H.264, H.265/HEVC | `HW/SW` |
+| `apple_a13_a14_h264_hevc` | iPhone 11/12, A13/A14 iPads from iPad 9th/10th generation and iPad Air 4th generation | H.264, H.265/HEVC family | H.264, H.265/HEVC | `HW/SW` |
 | `apple_a15_a16_h264_hevc` | iPhone 13/14/base 15, A15/A16 iPads | H.264, H.265/HEVC family | H.264, H.265/HEVC | `HW/SW` |
 | `apple_iphone_pro_a15_a16_prores` | iPhone 13 Pro / 14 Pro | H.264, H.265/HEVC, ProRes | H.264, H.265/HEVC, ProRes | `HW/SW` |
 | `apple_ipad_pro_m1_m2_prores` | M1/M2 iPad Pro | H.264, H.265/HEVC, ProRes, ProRes RAW | H.264, H.265/HEVC, ProRes | `HW/SW` |
@@ -111,11 +113,11 @@ Current output:
 - Base generic + Apple family profiles: 19.
 - Static model identifier rows: 93.
 - Total simulation profiles after adding model identifiers: 112.
-- Source codecs: 27.
-- Output codecs: 27.
-- Routes per profile: 729.
-- Total route rows: 81,648.
-- Output file rows including header: 81,649.
+- Source codecs: 29.
+- Output codecs: 29.
+- Routes per profile: 841.
+- Total route rows: 94,192.
+- Output file rows including header: 94,193.
 
 Static model coverage report:
 
@@ -125,6 +127,7 @@ Static model coverage report:
 - H.265/HEVC hardware encode model rows: 91.
 - H.264-only fallback rows: 2.
 - ProRes hardware encode model rows: 32.
+- Profile/chip-family mismatches: 0.
 
 The simulator fails if:
 
