@@ -85,6 +85,10 @@ enum HW_AppleHEVCCodecAlgorithm {
         exportSession.outputURL = request.outputURL
         exportSession.outputFileType = outputFileType
         exportSession.shouldOptimizeForNetworkUse = true
+        exportSession.videoComposition = try await videoCompositionIfNeeded(
+            for: asset,
+            targetSize: request.options.outputPolicy.advancedOptions.resizeTo
+        )
 
         let exportSessionBox = HW_AppleHEVCExportSessionBox(exportSession)
         let progressTask = Task { [exportSessionBox] in
@@ -151,6 +155,104 @@ enum HW_AppleHEVCCodecAlgorithm {
                 || nativeSourceCodecs.contains(request.route.sourceCodec) else {
             throw TaptionCodecTranscodingRegistryError.routeNotImplemented(request.route)
         }
+    }
+
+    private static func videoCompositionIfNeeded(
+        for asset: AVAsset,
+        targetSize: TaptionPixelSize?
+    ) async throws -> AVMutableVideoComposition? {
+        guard let targetSize,
+              targetSize.isValid else {
+            return nil
+        }
+
+        let tracks = try await asset.loadTracks(withMediaType: .video)
+        guard let videoTrack = tracks.first else {
+            return nil
+        }
+
+        let naturalSize = try await videoTrack.load(.naturalSize)
+        let preferredTransform = try await videoTrack.load(.preferredTransform)
+        let nominalFrameRate = try await videoTrack.load(.nominalFrameRate)
+        let duration = try await asset.load(.duration)
+        let displayedRect = CGRect(origin: .zero, size: naturalSize)
+            .applying(preferredTransform)
+        let displayedSize = CGSize(
+            width: abs(displayedRect.width),
+            height: abs(displayedRect.height)
+        )
+        let renderSize = evenSize(CGSize(
+            width: CGFloat(targetSize.width),
+            height: CGFloat(targetSize.height)
+        ))
+
+        guard displayedSize.width > 0,
+              displayedSize.height > 0,
+              renderSize.width > 0,
+              renderSize.height > 0,
+              !sizesAreEquivalent(displayedSize, renderSize) else {
+            return nil
+        }
+
+        let scale = min(
+            renderSize.width / displayedSize.width,
+            renderSize.height / displayedSize.height
+        )
+        let scaledSize = CGSize(
+            width: displayedSize.width * scale,
+            height: displayedSize.height * scale
+        )
+        let originTransform = preferredTransform.concatenating(
+            CGAffineTransform(translationX: -displayedRect.minX, y: -displayedRect.minY)
+        )
+        let scaleTransform = CGAffineTransform(scaleX: scale, y: scale)
+        let centeringTransform = CGAffineTransform(
+            translationX: (renderSize.width - scaledSize.width) / 2,
+            y: (renderSize.height - scaledSize.height) / 2
+        )
+
+        let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: videoTrack)
+        layerInstruction.setTransform(
+            originTransform
+                .concatenating(scaleTransform)
+                .concatenating(centeringTransform),
+            at: .zero
+        )
+
+        let instruction = AVMutableVideoCompositionInstruction()
+        instruction.timeRange = CMTimeRange(start: .zero, duration: duration)
+        instruction.layerInstructions = [layerInstruction]
+
+        let composition = AVMutableVideoComposition()
+        composition.renderSize = renderSize
+        composition.frameDuration = frameDuration(for: nominalFrameRate)
+        composition.instructions = [instruction]
+        return composition
+    }
+
+    private static func evenSize(_ size: CGSize) -> CGSize {
+        CGSize(
+            width: CGFloat(evenDimension(size.width)),
+            height: CGFloat(evenDimension(size.height))
+        )
+    }
+
+    private static func evenDimension(_ value: CGFloat) -> Int {
+        let rounded = max(2, Int(value.rounded()))
+        return rounded.isMultiple(of: 2) ? rounded : rounded - 1
+    }
+
+    private static func sizesAreEquivalent(_ lhs: CGSize, _ rhs: CGSize) -> Bool {
+        abs(lhs.width.rounded() - rhs.width.rounded()) < 1
+            && abs(lhs.height.rounded() - rhs.height.rounded()) < 1
+    }
+
+    private static func frameDuration(for nominalFrameRate: Float) -> CMTime {
+        guard nominalFrameRate.isFinite,
+              nominalFrameRate > 0 else {
+            return CMTime(value: 1, timescale: 30)
+        }
+        return CMTime(seconds: 1.0 / Double(nominalFrameRate), preferredTimescale: 600)
     }
 
     private static func export(_ exportSessionBox: HW_AppleHEVCExportSessionBox) async throws {

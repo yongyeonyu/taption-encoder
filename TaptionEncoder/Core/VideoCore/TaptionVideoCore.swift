@@ -176,15 +176,13 @@ struct TaptionVideoCore {
         plan: TaptionEncodingPlan,
         result: TaptionEncodingResult
     ) -> TaptionPendingSaveState? {
-        guard plan.savePolicy.saveGate == .rewardedAdBeforeFinalSave else {
-            return nil
-        }
+        let requiresRewardedAd = plan.savePolicy.saveGate == .rewardedAdBeforeFinalSave
         return TaptionPendingSaveState(
             planID: plan.id,
             temporaryOutputURL: result.temporaryOutputURL,
             finalOutputURL: plan.finalOutputURL,
             saveDestination: plan.savePolicy.destination,
-            requiresRewardedAd: true
+            requiresRewardedAd: requiresRewardedAd
         )
     }
 }

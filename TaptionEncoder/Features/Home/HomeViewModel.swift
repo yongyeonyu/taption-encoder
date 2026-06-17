@@ -12,6 +12,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var state: HomeScreenState
     @Published private(set) var selectedOutput: TaptionOutputSelection
     @Published private(set) var saveConflictPrompt: PendingSaveConflictPrompt?
+    @Published private(set) var folderAccessPrompt: PendingFolderAccessPrompt?
 
     private let environment: AppEnvironment
     private var activeTask: Task<Void, Never>?
@@ -31,6 +32,7 @@ final class HomeViewModel: ObservableObject {
         )
         self.state = .idle
         self.saveConflictPrompt = nil
+        self.folderAccessPrompt = nil
         AppLogger.info(
             "HomeViewModel initialized",
             category: .app,
@@ -499,7 +501,7 @@ final class HomeViewModel: ObservableObject {
                 sourceKind: currentReview?.source.kind ?? .files,
                 videoInfo: currentReview?.videoInfo,
                 statusText: "Waiting to Save",
-                detailText: "Watch the rewarded ad to save the encoded video.",
+                detailText: "Ready to save the encoded video.",
                 progress: completedProgressSnapshot(label: codecPathTitle(mode: output.usedEncoderMode)),
                 isActive: true,
                 isSelected: true,
@@ -580,7 +582,9 @@ final class HomeViewModel: ObservableObject {
 
         do {
             let pendingStates = try await environment.pendingSaveStore.loadPendingStates()
-            let jobs = pendingStates.map(makePendingSaveJob(from:))
+            let saveReadyStates = await pendingStatesWithoutSaveAdRequirement(pendingStates)
+            beginRestoredPendingSaveAccessIfNeeded(for: saveReadyStates)
+            let jobs = saveReadyStates.map(makePendingSaveJob(from:))
             guard let firstJob = jobs.first else {
                 AppLogger.info("No pending save found", category: .saving)
                 return
@@ -595,6 +599,7 @@ final class HomeViewModel: ObservableObject {
                 ]
             )
             state = .pendingSave(firstJob)
+            requestFolderAccessRecoveryIfNeeded(for: firstJob)
         } catch {
             AppLogger.error(
                 "Restore pending saves failed",
@@ -931,6 +936,46 @@ final class HomeViewModel: ObservableObject {
         saveConflictPrompt = nil
     }
 
+    func recoverFolderAccessForPendingSave(url: URL) {
+        guard let prompt = folderAccessPrompt else {
+            return
+        }
+        folderAccessPrompt = nil
+        beginSecurityScopedAccessIfNeeded(for: url)
+
+        var updatedState = prompt.job.state
+        updatedState.accessBookmarkData = makeSecurityScopedBookmarkData(for: url)
+        var job = PendingSaveJob(sourceName: prompt.job.sourceName, state: updatedState)
+        job.saveGateMessage = "Folder access restored. Saving again."
+
+        AppLogger.info(
+            "Folder access recovery selected",
+            category: .saving,
+            metadata: [
+                "source": job.sourceName,
+                "folder": url.lastPathComponent
+            ]
+        )
+
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+            try? await environment.pendingSaveStore.savePendingState(updatedState)
+        }
+        updatePendingSaveJob(job)
+        state = .pendingSave(job)
+        savePendingJob(job)
+    }
+
+    func dismissFolderAccessRecoveryPrompt() {
+        guard folderAccessPrompt != nil else {
+            return
+        }
+        AppLogger.info("Folder access recovery prompt dismissed", category: .saving)
+        folderAccessPrompt = nil
+    }
+
     func reset() {
         guard state.canReset else {
             AppLogger.info("Reset ignored because state cannot reset", category: .ui)
@@ -944,6 +989,7 @@ final class HomeViewModel: ObservableObject {
         selectionInspectionTask = nil
         currentReview = nil
         saveConflictPrompt = nil
+        folderAccessPrompt = nil
         pendingSaveQueue = []
         lastBatchFileCards = []
         folderBatch = nil
@@ -1353,7 +1399,7 @@ final class HomeViewModel: ObservableObject {
 
                 let completedProgress = completedProgressSnapshot(label: codecPathTitle(mode: result.usedMode))
                 AppLogger.info(
-                    "Encoding completed and queued for rewarded save",
+                    "Encoding completed and queued for final save",
                     category: .encoding,
                     metadata: [
                         "name": review.source.displayName,
@@ -1371,28 +1417,14 @@ final class HomeViewModel: ObservableObject {
                 markBatchItem(
                     review.source.url,
                     videoInfo: review.videoInfo,
-                    statusText: folderBatch == nil ? "Waiting to Save" : "Encoded",
+                    statusText: "Saving",
                     detailText: codecPathDetail(mode: result.usedMode, backend: result.usedBackend),
                     progress: completedProgress,
-                    isActive: folderBatch == nil
+                    isActive: true
                 )
-
-                if folderBatch != nil {
-                    if handleFolderItemEncoded() {
-                        return
-                    }
-                }
-
-                state = .waitingForReward(CompletedTemporaryOutput(
-                    planID: result.planID,
-                    sourceName: review.source.displayName,
-                    temporaryOutputURL: result.temporaryOutputURL,
-                    finalOutputURL: result.finalOutputURL,
-                    pendingSaveState: restorablePendingState,
-                    usedEncoderMode: result.usedMode,
-                    usedBackend: result.usedBackend
-                ))
                 activeTask = nil
+                state = .pendingSave(pendingJob)
+                savePendingJob(pendingJob)
             } catch is CancellationError {
                 AppLogger.warning(
                     "Encoding task cancelled",
@@ -1497,9 +1529,7 @@ final class HomeViewModel: ObservableObject {
         activeTask?.cancel()
         markCurrentSaveItem(
             statusText: "Saving",
-            detailText: job.state.requiresRewardedAd
-                ? "Waiting for rewarded ad before saving."
-                : "Rewarded ad completed. Writing the output.",
+            detailText: "Writing the output.",
             progress: completedProgressSnapshot(label: "Saving"),
             isActive: true
         )
@@ -1515,57 +1545,18 @@ final class HomeViewModel: ObservableObject {
                 try await Task.sleep(nanoseconds: 300_000_000)
 
                 if workingJob.state.requiresRewardedAd {
-                    let adDecision = try await environment.adGate.requestSaveAuthorization(for: workingJob.state)
-                    if adDecision != .allowed {
-                        AppLogger.warning(
-                            "Rewarded save was not authorized; returning to pending save",
-                            category: .saving,
-                            metadata: [
-                                "source": workingJob.sourceName,
-                                "decision": adDecision.rawValue
-                            ]
-                        )
-                        workingJob.saveGateMessage = saveGateMessage(for: adDecision)
-                        updatePendingSaveJob(workingJob)
-                        markCurrentSaveItem(
-                            statusText: "Pending Save",
-                            detailText: workingJob.saveGateMessage,
-                            progress: completedProgressSnapshot(label: "Pending Save"),
-                            isActive: true
-                        )
-                        state = .pendingSave(workingJob)
-                        activeTask = nil
-                        return
-                    } else {
-                        workingJob = try await clearRewardedAdRequirement(
-                            for: workingJob,
-                            rewardedAdCompleted: true
-                        )
-                        markCurrentSaveItem(
-                            statusText: "Saving",
-                            detailText: "Ad completed. Writing the output.",
-                            progress: completedProgressSnapshot(label: "Saving"),
-                            isActive: true
-                        )
-                        state = .saving(workingJob)
-                    }
-                } else {
-                    AppLogger.info(
-                        "Rewarded save flag already cleared; skipping ad",
-                        category: .saving,
-                        metadata: [
-                            "source": workingJob.sourceName,
-                            "id": workingJob.state.id.uuidString
-                        ]
+                    workingJob = try await clearRewardedAdRequirement(
+                        for: workingJob,
+                        rewardedAdCompleted: false
                     )
-                    markCurrentSaveItem(
-                        statusText: "Saving",
-                        detailText: "Ad already completed. Writing the output.",
-                        progress: completedProgressSnapshot(label: "Saving"),
-                        isActive: true
-                    )
-                    state = .saving(workingJob)
                 }
+                markCurrentSaveItem(
+                    statusText: "Saving",
+                    detailText: "Writing the output.",
+                    progress: completedProgressSnapshot(label: "Saving"),
+                    isActive: true
+                )
+                state = .saving(workingJob)
 
                 workingJob.saveGateMessage = nil
 
@@ -1596,6 +1587,11 @@ final class HomeViewModel: ObservableObject {
                     isActive: false
                 )
 
+                if folderBatch != nil,
+                   handleFolderItemEncoded() {
+                    return
+                }
+
                 if showNextPendingSaveIfNeeded(afterSaving: workingJob) {
                     return
                 }
@@ -1606,7 +1602,6 @@ final class HomeViewModel: ObservableObject {
                     destinationDescription: destination
                 ))
                 stopSecurityScopedAccess()
-                requestSessionEndAd(reason: .completedSave)
                 activeTask = nil
             } catch is CancellationError {
                 AppLogger.warning(
@@ -1620,8 +1615,8 @@ final class HomeViewModel: ObservableObject {
                 markCurrentSaveItem(
                     statusText: "Pending Save",
                     detailText: workingJob.state.requiresRewardedAd
-                        ? "The save was interrupted and can be retried."
-                        : "Ad completed. Save can be retried without another ad.",
+                        ? "The save was interrupted and can be retried without another ad."
+                        : "Save can be retried without another ad.",
                     progress: completedProgressSnapshot(label: "Pending Save"),
                     isActive: true
                 )
@@ -1658,6 +1653,30 @@ final class HomeViewModel: ObservableObject {
                 state = .pendingSave(workingJob)
                 activeTask = nil
             } catch {
+                if workingJob.state.saveDestination == .sourceFolder,
+                   isFileProviderWritePermissionDenied(error) {
+                    workingJob.saveGateMessage = "Choose the original folder again so iOS can grant write access, then the save will continue."
+                    updatePendingSaveJob(workingJob)
+                    folderAccessPrompt = PendingFolderAccessPrompt(job: workingJob)
+                    AppLogger.warning(
+                        "Final save needs folder access recovery",
+                        category: .saving,
+                        metadata: [
+                            "source": workingJob.sourceName,
+                            "error": error.localizedDescription
+                        ]
+                    )
+                    markCurrentSaveItem(
+                        statusText: "Needs Folder Access",
+                        detailText: workingJob.saveGateMessage,
+                        progress: completedProgressSnapshot(label: "Pending Save"),
+                        isActive: true
+                    )
+                    state = .pendingSave(workingJob)
+                    activeTask = nil
+                    return
+                }
+
                 let failure = TaptionSaveFailurePresenter.presentation(
                     for: error,
                     saveDestination: workingJob.state.saveDestination,
@@ -1685,9 +1704,20 @@ final class HomeViewModel: ObservableObject {
                     message: failure.displayMessage
                 ))
                 activeTask = nil
-                requestSessionEndAd(reason: .failedEncoding)
             }
         }
+    }
+
+    private func requestFolderAccessRecoveryIfNeeded(for job: PendingSaveJob) {
+        guard job.state.saveDestination == .sourceFolder else {
+            return
+        }
+        folderAccessPrompt = PendingFolderAccessPrompt(job: job)
+        AppLogger.info(
+            "Folder access recovery requested for restored pending save",
+            category: .saving,
+            metadata: ["source": job.sourceName]
+        )
     }
 
     private func requestSessionEndAd(reason: SessionEndAdReason) {
@@ -1705,11 +1735,11 @@ final class HomeViewModel: ObservableObject {
     private func saveGateMessage(for decision: AdGateDecision) -> String {
         switch decision {
         case .allowed:
-            return "Rewarded ad complete. Saving can continue."
+            return "Saving can continue."
         case .unavailable:
-            return "Rewarded ad is still loading or temporarily unavailable. The app will retry automatically. Try Save again in a moment."
+            return "The save is temporarily unavailable. Try Save again in a moment."
         case .skipped:
-            return "The rewarded ad was skipped. Watch the full ad to save."
+            return "The save was skipped."
         }
     }
 
@@ -2057,11 +2087,13 @@ final class HomeViewModel: ObservableObject {
             ))
         }
         stopSecurityScopedAccess()
-        requestSessionEndAd(reason: batch.failedCount > 0 ? .failedEncoding : .completedSave)
+        if batch.failedCount > 0 {
+            requestSessionEndAd(reason: .failedEncoding)
+        }
     }
 
     private func folderCompletionMessage(for batch: FolderEncodingBatch) -> String {
-        var message = "Folder encoding complete. \(batch.completedCount) of \(batch.totalCount) files are ready to save with rewarded ads."
+        var message = "Folder encoding complete. \(batch.completedCount) of \(batch.totalCount) files were saved."
         if batch.failedCount > 0 {
             message += " \(batch.failedCount) failed."
         }
@@ -2597,7 +2629,7 @@ final class HomeViewModel: ObservableObject {
             : .sourceFolder
         return TaptionSavePolicy(
             destination: destination,
-            saveGate: .rewardedAdBeforeFinalSave,
+            saveGate: .none,
             namingPolicy: TaptionOutputNamingPolicy(suffix: environment.configuration.outputSuffix),
             shouldRestorePendingSaveOnLaunch: true
         )
@@ -2883,11 +2915,49 @@ final class HomeViewModel: ObservableObject {
         return PendingSaveJob(sourceName: sourceName, state: state)
     }
 
+    private func pendingStatesWithoutSaveAdRequirement(
+        _ states: [TaptionPendingSaveState]
+    ) async -> [TaptionPendingSaveState] {
+        var updatedStates: [TaptionPendingSaveState] = []
+        for state in states {
+            guard state.requiresRewardedAd else {
+                updatedStates.append(state)
+                continue
+            }
+
+            var updatedState = state
+            updatedState.requiresRewardedAd = false
+            updatedState.rewardedAdCompletedAt = nil
+            do {
+                try await environment.pendingSaveStore.savePendingState(updatedState)
+                AppLogger.info(
+                    "Restored pending save no longer requires save-time ad",
+                    category: .saving,
+                    metadata: ["id": updatedState.id.uuidString]
+                )
+            } catch {
+                AppLogger.warning(
+                    "Failed to persist save-time ad removal for restored pending save",
+                    category: .saving,
+                    metadata: [
+                        "id": updatedState.id.uuidString,
+                        "error": error.localizedDescription
+                    ]
+                )
+            }
+            updatedStates.append(updatedState)
+        }
+        return updatedStates
+    }
+
     private func pendingSaveStateWithAccessBookmark(
         _ state: TaptionPendingSaveState,
         source: HomeSelectedSource
     ) async -> TaptionPendingSaveState {
         var updatedState = state
+        guard source.kind != .photos else {
+            return updatedState
+        }
         if updatedState.accessBookmarkData == nil {
             let bookmarkURL = securityBookmarkSourceURL(for: source)
             updatedState.accessBookmarkData = makeSecurityScopedBookmarkData(for: bookmarkURL)
@@ -2914,6 +2984,9 @@ final class HomeViewModel: ObservableObject {
            let folderURL = folderBatch?.folderURL {
             return folderURL
         }
+        if source.kind == .files {
+            return source.url.deletingLastPathComponent()
+        }
         return source.url
     }
 
@@ -2925,14 +2998,14 @@ final class HomeViewModel: ObservableObject {
                 relativeTo: nil
             )
             AppLogger.info(
-                "Security scoped bookmark created",
+                "Access bookmark created",
                 category: .fileImport,
                 metadata: ["name": url.lastPathComponent]
             )
             return data
         } catch {
             AppLogger.warning(
-                "Security scoped bookmark creation failed",
+                "Access bookmark creation failed",
                 category: .fileImport,
                 metadata: [
                     "name": url.lastPathComponent,
@@ -2957,7 +3030,7 @@ final class HomeViewModel: ObservableObject {
                 bookmarkDataIsStale: &isStale
             )
             AppLogger.info(
-                "Security scoped bookmark resolved",
+                "Access bookmark resolved",
                 category: .fileImport,
                 metadata: [
                     "name": url.lastPathComponent,
@@ -2967,12 +3040,20 @@ final class HomeViewModel: ObservableObject {
             return url
         } catch {
             AppLogger.warning(
-                "Security scoped bookmark resolve failed",
+                "Access bookmark resolve failed",
                 category: .fileImport,
                 metadata: ["error": error.localizedDescription]
             )
             return nil
         }
+    }
+
+    private func beginRestoredPendingSaveAccessIfNeeded(for states: [TaptionPendingSaveState]) {
+        let urls = states.compactMap { resolveSecurityScopedAccessURL(from: $0.accessBookmarkData) }
+        guard !urls.isEmpty else {
+            return
+        }
+        beginSecurityScopedAccessIfNeeded(for: urls)
     }
 
     private func removeTemporaryOutput(for state: TaptionPendingSaveState) throws {

@@ -808,6 +808,17 @@ struct PendingSaveConflictPrompt: Identifiable, Equatable {
     }
 }
 
+struct PendingFolderAccessPrompt: Identifiable, Equatable {
+    var id: UUID {
+        job.id
+    }
+
+    var job: PendingSaveJob
+    var message: String {
+        "Choose the original folder again so iOS grants write access for \(job.sourceName)."
+    }
+}
+
 struct SavedOutput: Equatable {
     var displayName: String
     var destinationDescription: String
@@ -913,7 +924,7 @@ enum HomeScreenState: Equatable {
             if job.state.requiresRewardedAd {
                 return "Saving \(job.sourceName)."
             }
-            return "Saving \(job.sourceName). Rewarded ad already completed."
+            return "Saving \(job.sourceName)."
         case .completed(let output):
             if let detailOverride = output.detailOverride {
                 return detailOverride

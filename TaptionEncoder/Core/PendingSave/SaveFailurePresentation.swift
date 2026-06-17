@@ -75,7 +75,7 @@ enum TaptionSaveFailurePresenter {
             guard !requiresRewardedAd else {
                 return action
             }
-            return action + " The rewarded ad is already complete, so retry will save without another ad."
+            return action + " Retry will save without another ad."
         }
 
         if case .destinationAlreadyExists(let url)? = error as? TaptionFinalSaveConflictError {

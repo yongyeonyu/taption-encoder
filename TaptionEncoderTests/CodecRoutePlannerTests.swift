@@ -1430,6 +1430,18 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(TaptionOutputSelection(videoCodec: .hevc, audioCodec: .opus, container: .mp4).isImplementedNow)
     }
 
+    func testOutputSelectionResolutionPresetBuildsResizePolicy() {
+        let selection = TaptionOutputSelection(
+            videoCodec: .hevc,
+            container: .mp4,
+            resolutionPreset: .hd720
+        )
+
+        let policy = selection.outputPolicy(for: makeAsset(sourceCodec: .h264))
+
+        XCTAssertEqual(policy.advancedOptions.resizeTo, TaptionPixelSize(width: 1280, height: 720))
+    }
+
     func testOutputCatalogSeparatesImplementedCommandPlanReadyPlannedAndUnsupportedOutputs() {
         XCTAssertEqual(
             TaptionCodecOutputCatalog.implementationState(videoCodec: .hevc, container: .mp4),
@@ -2228,6 +2240,30 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(outputAsset.videoTrack?.codec, .hevc)
         XCTAssertEqual(outputAsset.audioTracks.first?.codec, .aac)
         XCTAssertFalse(outputAsset.audioTracks.isEmpty)
+    }
+
+    func testEncodePreparedJobCreatesPendingSaveStateWithoutSaveAdWhenSaveGateIsNone() async throws {
+        let outputURL = temporaryTestURL(fileName: "encoded.mp4")
+        let core = TaptionVideoCore(
+            services: TaptionVideoCoreServices(
+                inspector: FakeMediaInspector(),
+                encoder: FakeEncoderService(),
+                storageChecker: FakeStorageChecker(),
+                pendingSaveStore: FakePendingSaveStore(),
+                saveGateAuthorizer: FakeAdGate()
+            )
+        )
+        let job = try await core.prepareSingleAssetHEVCJob(
+            sourceURL: URL(fileURLWithPath: "/tmp/input.mp4"),
+            temporaryOutputURL: outputURL,
+            savePolicy: TaptionSavePolicy(destination: .sourceFolder, saveGate: .none)
+        )
+
+        let result = try await core.encodePreparedJob(job, progress: { _ in })
+
+        XCTAssertEqual(result.pendingSaveState?.temporaryOutputURL, outputURL)
+        XCTAssertEqual(result.pendingSaveState?.saveDestination, .sourceFolder)
+        XCTAssertEqual(result.pendingSaveState?.requiresRewardedAd, false)
     }
 
     func testAudioCodecRoutesCoverEveryPlannedSourceToAAC() {
@@ -3884,7 +3920,7 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertEqual(presentation.cause, "A file already exists at the save destination.")
         XCTAssertTrue(presentation.action.contains("Choose Overwrite"))
-        XCTAssertTrue(presentation.action.contains("retry will save without another ad"))
+        XCTAssertTrue(presentation.action.contains("Retry will save without another ad"))
     }
 
     private struct FakeFFmpegCommandRunner: SW_FFmpegCommandRunning {

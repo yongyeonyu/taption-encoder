@@ -173,6 +173,40 @@ struct HomeView: View {
                 viewModel.fail(message: error.localizedDescription)
             }
         }
+        .fileImporter(
+            isPresented: Binding(
+                get: { viewModel.folderAccessPrompt != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.dismissFolderAccessRecoveryPrompt()
+                    }
+                }
+            ),
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                AppLogger.info(
+                    "Folder access recovery picker returned folders",
+                    category: .saving,
+                    metadata: [
+                        "count": "\(urls.count)",
+                        "names": urls.map(\.lastPathComponent).joined(separator: "|")
+                    ]
+                )
+                if let url = urls.first {
+                    viewModel.recoverFolderAccessForPendingSave(url: url)
+                }
+            case .failure(let error):
+                AppLogger.error(
+                    "Folder access recovery picker failed",
+                    category: .saving,
+                    metadata: ["error": error.localizedDescription]
+                )
+                viewModel.dismissFolderAccessRecoveryPrompt()
+            }
+        }
         .photosPicker(
             isPresented: $isPhotosPickerPresented,
             selection: $selectedPhotoItem,
@@ -487,7 +521,7 @@ struct HomeView: View {
                         .minimumScaleFactor(0.72)
 
                     if let secondaryValue {
-                        Label(secondaryValue, systemImage: "aspectratio")
+                        Text(secondaryValue)
                             .font(Font.caption2.weight(.semibold))
                             .foregroundStyle(TaptionTheme.mutedText)
                             .lineLimit(1)
