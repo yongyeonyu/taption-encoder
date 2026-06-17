@@ -7,13 +7,19 @@ struct OutputSummaryView: View {
     var contentScale: CGFloat = 1
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6 * contentScale) {
-            Label(title, systemImage: "slider.horizontal.3")
+        HStack(alignment: .firstTextBaseline, spacing: 10 * contentScale) {
+            Label(title, systemImage: "film")
                 .font(contentScale < 0.9 ? .subheadline.weight(.semibold) : .headline)
                 .foregroundStyle(Color.white.opacity(0.92))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
 
-            codecLine(videoCodecText)
-            codecLine(audioCodecText)
+            Spacer(minLength: 4 * contentScale)
+
+            HStack(alignment: .firstTextBaseline, spacing: 8 * contentScale) {
+                codecLine(videoCodecText)
+                codecLine(audioCodecText)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10 * contentScale)
@@ -27,9 +33,9 @@ struct OutputSummaryView: View {
 
     private func codecLine(_ text: String) -> some View {
         Text(text)
-            .font(contentScale < 0.9 ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
+            .font(contentScale < 0.9 ? .caption2.weight(.semibold) : .caption.weight(.semibold))
             .foregroundStyle(Color.white.opacity(0.9))
             .lineLimit(1)
-            .minimumScaleFactor(0.75)
+            .minimumScaleFactor(0.7)
     }
 }

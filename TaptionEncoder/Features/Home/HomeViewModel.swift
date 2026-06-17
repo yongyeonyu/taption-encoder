@@ -56,17 +56,41 @@ final class HomeViewModel: ObservableObject {
     }
 
     var selectedOutputDetailTitle: String {
-        "Selected Codec"
+        "Selected Codec[\(selectedCodecModeText)]"
     }
 
     var selectedVideoCodecText: String {
-        let mode = currentReview?.videoInfo.codecPathBadge ?? "Auto"
-        return "Video Codec [\(mode)]: \(selectedOutput.videoCodec.displayName)"
+        "Video: \(selectedOutput.videoCodec.displayName)"
     }
 
     var selectedAudioCodecText: String {
-        let mode = currentReview?.videoInfo.audioPathBadge ?? "Auto"
-        return "Audio Codec [\(mode)]: \(selectedOutput.audioCodec.displayName)"
+        "Audio: \(selectedOutput.audioCodec.displayName)"
+    }
+
+    private var selectedCodecModeText: String {
+        guard let info = currentReview?.videoInfo else {
+            return "Auto"
+        }
+
+        let videoMode = info.codecPathBadge
+        let audioMode = info.audioPathBadge
+
+        if videoMode == "Unsupported" || audioMode == "Unsupported" {
+            return "Unsupported"
+        }
+        if videoMode == "Blocked" || audioMode == "Blocked" {
+            return "Blocked"
+        }
+        if videoMode == "HW/SW" || audioMode == "HW/SW" {
+            return "HW/SW"
+        }
+        if videoMode == "SW" || audioMode == "SW" {
+            return "SW"
+        }
+        if videoMode == "HW" || audioMode == "HW" || audioMode == "Copy" || audioMode == "None" {
+            return "HW"
+        }
+        return videoMode
     }
 
     var outputCodecOptions: [TaptionVideoCodec] {
@@ -95,6 +119,17 @@ final class HomeViewModel: ObservableObject {
 
         let value = selectedOutput.normalizedTargetSizeMB(for: selectedAssetForOutputConfiguration)
         return "\(Int(value.rounded())) MB"
+    }
+
+    var selectedResolutionAspectRatioText: String {
+        let sourceSize = selectedAssetForOutputConfiguration?.videoTrack?.displaySize
+        let size = sourceSize ?? selectedOutput.resolutionPreset.referenceSize
+        guard let size, size.width > 0, size.height > 0 else {
+            return "--"
+        }
+
+        let divisor = greatestCommonDivisor(size.width, size.height)
+        return "\(size.width / divisor):\(size.height / divisor)"
     }
 
     var outputTargetSizeRangeMB: ClosedRange<Double> {
@@ -1014,19 +1049,18 @@ final class HomeViewModel: ObservableObject {
 
                 let temporaryOutputURL = makeTemporaryOutputURL(for: source)
                 let core = TaptionVideoCore(services: environment.videoCoreServices)
-                let job = try await core.prepareSingleAssetJob(
+                let savePolicy = defaultSavePolicy(for: source)
+                var job = try await core.prepareSingleAssetJob(
                     asset: asset,
                     sourceURL: source.url,
                     temporaryOutputURL: temporaryOutputURL,
                     outputPolicy: selectedOutput.outputPolicy(for: asset),
                     preferredMode: .automatic,
-                    savePolicy: TaptionSavePolicy(
-                        destination: source.kind == .photos ? .photosLibrary : .sourceFolder,
-                        saveGate: .rewardedAdBeforeFinalSave,
-                        namingPolicy: TaptionOutputNamingPolicy(suffix: environment.configuration.outputSuffix),
-                        shouldRestorePendingSaveOnLaunch: true
-                    )
+                    savePolicy: savePolicy
                 )
+                if source.kind == .photos {
+                    job.plan.finalOutputURL = nil
+                }
                 AppLogger.info(
                     "Prepare encoding job created",
                     category: .mediaInspection,
@@ -1051,7 +1085,45 @@ final class HomeViewModel: ObservableObject {
                 try Task.checkCancellation()
 
                 let canEncodeSelectedOutput = job.routeSelection.isEncodableNow && selectedOutput.isImplementedNow
-                guard !canEncodeSelectedOutput || job.storageRequirement.hasEnoughSpace else {
+                guard canEncodeSelectedOutput else {
+                    let detail = selectedOutput.isImplementedNow
+                        ? job.routeSelection.reason
+                        : "\(selectedOutput.implementationState.rawValue) output path is not executable in this build."
+                    AppLogger.error(
+                        "Prepare encoding blocked due to unsupported route/output",
+                        category: .encoding,
+                        metadata: [
+                            "name": source.displayName,
+                            "route": job.routeSelection.route.displayName,
+                            "output": selectedOutput.summary,
+                            "routeSelection": job.routeSelection.support.rawValue,
+                            "state": selectedOutput.implementationState.rawValue
+                        ]
+                    )
+                    markBatchItem(
+                        source.url,
+                        statusText: "Blocked",
+                        detailText: detail,
+                        progress: nil,
+                        isActive: false
+                    )
+                    if handleFolderItemFailure(
+                        source: source,
+                        errorMessage: detail
+                    ) {
+                        return
+                    }
+                    state = .failed(HomeEncodingError(
+                        title: "Encoding blocked",
+                        message: detail
+                    ))
+                    activeTask = nil
+                    stopSecurityScopedAccess()
+                    requestSessionEndAd(reason: .failedEncoding)
+                    return
+                }
+
+                guard job.storageRequirement.hasEnoughSpace else {
                     AppLogger.error(
                         "Storage check blocked encoding",
                         category: .storage,
@@ -2363,7 +2435,7 @@ final class HomeViewModel: ObservableObject {
         makeLoadedVideoInfo(
             source: source,
             asset: job.asset,
-            outputName: job.plan.finalOutputURL?.lastPathComponent ?? "Output not ready",
+            outputName: job.plan.finalOutputURL?.lastPathComponent ?? outputName(for: source),
             routeSelection: job.routeSelection
         )
     }
@@ -2419,7 +2491,10 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func outputName(for source: HomeSelectedSource) -> String {
-        source.url.deletingPathExtension().lastPathComponent
+        let baseName = source.kind == .photos
+            ? URL(fileURLWithPath: source.displayName).deletingPathExtension().lastPathComponent
+            : source.url.deletingPathExtension().lastPathComponent
+        return baseName
             + environment.configuration.outputSuffix
             + "."
             + selectedOutput.container.defaultFileExtension
@@ -2516,6 +2591,18 @@ final class HomeViewModel: ObservableObject {
             .appendingPathExtension(selectedOutput.container.defaultFileExtension)
     }
 
+    private func defaultSavePolicy(for source: HomeSelectedSource) -> TaptionSavePolicy {
+        let destination: TaptionSaveDestinationKind = source.kind == .photos
+            ? .photosLibrary
+            : .sourceFolder
+        return TaptionSavePolicy(
+            destination: destination,
+            saveGate: .rewardedAdBeforeFinalSave,
+            namingPolicy: TaptionOutputNamingPolicy(suffix: environment.configuration.outputSuffix),
+            shouldRestorePendingSaveOnLaunch: true
+        )
+    }
+
     private var selectedAssetForOutputConfiguration: TaptionVideoAsset? {
         if let asset = currentReview?.job.asset {
             return asset
@@ -2526,6 +2613,17 @@ final class HomeViewModel: ObservableObject {
             return nil
         }
         return batch.itemStates[selectedURL]?.asset
+    }
+
+    private func greatestCommonDivisor(_ lhs: Int, _ rhs: Int) -> Int {
+        var a = abs(lhs)
+        var b = abs(rhs)
+        while b != 0 {
+            let remainder = a % b
+            a = b
+            b = remainder
+        }
+        return max(a, 1)
     }
 
     private func finalizeSave(
@@ -2583,7 +2681,12 @@ final class HomeViewModel: ObservableObject {
                         category: .saving,
                         metadata: ["final": finalOutputURL.lastPathComponent]
                     )
-                    try fileManager.removeItem(at: finalOutputURL)
+                    finalOutputURL = try overwriteFinalOutputOrSaveUnique(
+                        temporaryURL: state.temporaryOutputURL,
+                        destinationURL: finalOutputURL,
+                        fileManager: fileManager
+                    )
+                    return finalOutputURL
                 case .saveAsUnique:
                     let uniqueURL = uniqueDestinationURL(
                         preferred: finalOutputURL,
@@ -2600,7 +2703,36 @@ final class HomeViewModel: ObservableObject {
                     finalOutputURL = uniqueURL
                 }
             }
-            try fileManager.copyItem(at: state.temporaryOutputURL, to: finalOutputURL)
+            do {
+                try fileManager.copyItem(at: state.temporaryOutputURL, to: finalOutputURL)
+            } catch where TaptionFinalSaveConflictError.isDestinationAlreadyExistsError(error) {
+                AppLogger.warning(
+                    "Final save copy collided with an existing destination",
+                    category: .saving,
+                    metadata: [
+                        "temporary": state.temporaryOutputURL.lastPathComponent,
+                        "final": finalOutputURL.lastPathComponent,
+                        "resolution": "\(conflictResolution)"
+                    ]
+                )
+                switch conflictResolution {
+                case .prompt:
+                    throw TaptionFinalSaveConflictError.destinationAlreadyExists(finalOutputURL)
+                case .overwrite:
+                    finalOutputURL = try overwriteFinalOutputOrSaveUnique(
+                        temporaryURL: state.temporaryOutputURL,
+                        destinationURL: finalOutputURL,
+                        fileManager: fileManager
+                    )
+                case .saveAsUnique:
+                    let uniqueURL = uniqueDestinationURL(
+                        preferred: finalOutputURL,
+                        fileManager: fileManager
+                    )
+                    try fileManager.copyItem(at: state.temporaryOutputURL, to: uniqueURL)
+                    finalOutputURL = uniqueURL
+                }
+            }
             return finalOutputURL
         case .photosLibrary:
             AppLogger.info(
@@ -2640,6 +2772,67 @@ final class HomeViewModel: ObservableObject {
         return directoryURL
             .appendingPathComponent("\(baseName) \(UUID().uuidString.prefix(8))")
             .appendingPathExtension(pathExtension)
+    }
+
+    private func overwriteFinalOutputOrSaveUnique(
+        temporaryURL: URL,
+        destinationURL: URL,
+        fileManager: FileManager
+    ) throws -> URL {
+        do {
+            let resultingURL = try fileManager.replaceItemAt(
+                destinationURL,
+                withItemAt: temporaryURL,
+                backupItemName: nil,
+                options: []
+            )
+            AppLogger.info(
+                "Existing final output replaced",
+                category: .saving,
+                metadata: ["final": destinationURL.lastPathComponent]
+            )
+            return resultingURL ?? destinationURL
+        } catch where isFileProviderWritePermissionDenied(error) {
+            let uniqueURL = uniqueDestinationURL(
+                preferred: destinationURL,
+                fileManager: fileManager
+            )
+            AppLogger.warning(
+                "Overwrite was denied by the file provider; saving with a unique name",
+                category: .saving,
+                metadata: [
+                    "original": destinationURL.lastPathComponent,
+                    "unique": uniqueURL.lastPathComponent
+                ]
+            )
+            try fileManager.copyItem(at: temporaryURL, to: uniqueURL)
+            return uniqueURL
+        }
+    }
+
+    private func isFileProviderWritePermissionDenied(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == NSCocoaErrorDomain {
+            let cocoaCode = CocoaError.Code(rawValue: nsError.code)
+            if cocoaCode == .fileWriteNoPermission || cocoaCode == .fileReadNoPermission {
+                return true
+            }
+        }
+
+        let permissionDeniedPOSIXCodes = [
+            Int(POSIXErrorCode.EPERM.rawValue),
+            Int(POSIXErrorCode.EACCES.rawValue)
+        ]
+        if nsError.domain == NSPOSIXErrorDomain,
+           permissionDeniedPOSIXCodes.contains(nsError.code) {
+            return true
+        }
+
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return isFileProviderWritePermissionDenied(underlying)
+        }
+
+        return false
     }
 
     private func saveVideoToPhotos(_ videoURL: URL) async throws {

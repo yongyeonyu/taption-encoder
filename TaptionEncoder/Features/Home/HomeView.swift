@@ -8,6 +8,7 @@ struct HomeView: View {
     @State private var isPhotosPickerPresented = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var activeMenuSheet: HomeMenuSheet?
+    @State private var isOutputSizePopoverPresented = false
 
     init(environment: AppEnvironment = .phase0) {
         _viewModel = StateObject(wrappedValue: HomeViewModel(environment: environment))
@@ -16,6 +17,7 @@ struct HomeView: View {
     var body: some View {
         GeometryReader { geometry in
             let metrics = HomeLayoutMetrics(size: geometry.size)
+            let reservesFailureLogArea = viewModel.state.reservesFailureLogArea
 
             ZStack {
                 TaptionTheme.appBackground
@@ -67,24 +69,19 @@ struct HomeView: View {
                         onSelect: { viewModel.selectFileCard(id: $0) }
                     )
 
-                    if let pendingJob = viewModel.pendingSaveRecoveryJob {
-                        PendingSaveRecoveryView(
-                            job: pendingJob,
-                            onRetry: { viewModel.retryPendingSave() },
-                            onReset: { viewModel.reset() }
-                        )
-                    }
-
                     EncodingProgressView(
                         state: viewModel.state,
                         controlHeight: metrics.controlHeight,
                         contentScale: metrics.contentScale,
+                        reservesFailureLogArea: reservesFailureLogArea,
                         onStart: { viewModel.startPreparedEncoding() },
                         onSave: { viewModel.saveCurrentPendingOutput() },
                         onCancel: { viewModel.cancel() }
                     )
 
-                    Spacer(minLength: 0)
+                    if !reservesFailureLogArea {
+                        Spacer(minLength: 0)
+                    }
 
                     AdMobBannerSlotView(
                         adUnitID: viewModel.bannerAdUnitID,
@@ -286,7 +283,7 @@ struct HomeView: View {
     private func outputSelector(metrics: HomeLayoutMetrics) -> some View {
         HStack(spacing: 8 * metrics.contentScale) {
             outputMenu(
-                title: "Output\nFormat",
+                title: "Output",
                 value: "\(viewModel.selectedOutput.container.defaultFileExtension.uppercased())",
                 systemImage: "shippingbox",
                 isEnabled: viewModel.canChangeOutputSelection,
@@ -326,8 +323,9 @@ struct HomeView: View {
             }
 
             outputMenu(
-                title: "Reso\nlution",
+                title: "Resolution",
                 value: viewModel.selectedOutput.resolutionPreset.menuTitle,
+                secondaryValue: viewModel.selectedResolutionAspectRatioText,
                 systemImage: "rectangle.compress.vertical",
                 isEnabled: viewModel.canChangeOutputSelection,
                 metrics: metrics
@@ -372,73 +370,76 @@ struct HomeView: View {
 
     private func outputSizeControl(metrics: HomeLayoutMetrics) -> some View {
         let range = viewModel.outputTargetSizeRangeMB
-        return VStack(alignment: .leading, spacing: 6 * metrics.contentScale) {
-            HStack(spacing: 7 * metrics.contentScale) {
-                Image(systemName: "internaldrive")
-                    .font(.system(size: 14 * metrics.contentScale, weight: .semibold))
-                Text("Size\n(MB)")
-                    .font((metrics.contentScale < 0.9 ? Font.caption : metrics.buttonFont).weight(.semibold))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.75)
-                    .multilineTextAlignment(.leading)
-                Spacer(minLength: 4)
-                Button {
-                    viewModel.selectOutputSize(.auto)
-                } label: {
-                    Text("Auto")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(viewModel.selectedOutput.sizePreset == .auto ? Color.black : Color.white.opacity(0.82))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(viewModel.selectedOutput.sizePreset == .auto ? Color.white : Color.white.opacity(0.08))
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .disabled(!viewModel.canChangeOutputSelection)
-            }
-
-            Text(viewModel.selectedOutputTargetSizeText)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(TaptionTheme.mutedText)
-
-            Slider(
-                value: Binding(
-                    get: { viewModel.selectedOutputTargetSizeValueMB },
-                    set: { newValue in
-                        viewModel.updateOutputTargetSizeMB(newValue)
-                    }
-                ),
-                in: range,
-                step: 1
+        return Button {
+            isOutputSizePopoverPresented = true
+        } label: {
+            outputControlLabel(
+                title: "Size",
+                value: viewModel.selectedOutputTargetSizeText,
+                secondaryValue: nil,
+                systemImage: "internaldrive",
+                isEnabled: viewModel.canChangeOutputSelection,
+                metrics: metrics
             )
-            .tint(TaptionTheme.accent)
-            .disabled(!viewModel.canChangeOutputSelection)
-
-            HStack {
-                Text("\(Int(range.lowerBound.rounded())) MB")
-                Spacer()
-                Text("\(Int(range.upperBound.rounded())) MB")
-            }
-            .font(.caption2)
-            .foregroundStyle(TaptionTheme.mutedText)
         }
-        .foregroundStyle(viewModel.canChangeOutputSelection ? Color.white.opacity(0.9) : TaptionTheme.disabledText)
-        .padding(.horizontal, 10 * metrics.contentScale)
-        .padding(.vertical, 8 * metrics.contentScale)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(minHeight: max(metrics.controlHeight, 86 * metrics.contentScale))
-        .background(TaptionTheme.elevatedSurface)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(viewModel.canChangeOutputSelection ? TaptionTheme.border : Color.white.opacity(0.06), lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .opacity(viewModel.canChangeOutputSelection ? 1 : 0.48)
+        .buttonStyle(.plain)
+        .disabled(!viewModel.canChangeOutputSelection)
+        .popover(isPresented: $isOutputSizePopoverPresented) {
+            VStack(alignment: .leading, spacing: 12 * metrics.contentScale) {
+                HStack {
+                    Text("Size")
+                        .font(.headline.weight(.semibold))
+                    Spacer()
+                    Button {
+                        viewModel.selectOutputSize(.auto)
+                    } label: {
+                        Text("Auto")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(viewModel.selectedOutput.sizePreset == .auto ? Color.black : Color.white.opacity(0.86))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(viewModel.selectedOutput.sizePreset == .auto ? Color.white : Color.white.opacity(0.10))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Text(viewModel.selectedOutputTargetSizeText)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.92))
+
+                Slider(
+                    value: Binding(
+                        get: { viewModel.selectedOutputTargetSizeValueMB },
+                        set: { newValue in
+                            viewModel.updateOutputTargetSizeMB(newValue)
+                        }
+                    ),
+                    in: range,
+                    step: 1
+                )
+                .tint(TaptionTheme.accent)
+
+                HStack {
+                    Text("\(Int(range.lowerBound.rounded())) MB")
+                    Spacer()
+                    Text("\(Int(range.upperBound.rounded())) MB")
+                }
+                .font(.caption2)
+                .foregroundStyle(TaptionTheme.mutedText)
+            }
+            .foregroundStyle(Color.white.opacity(0.92))
+            .padding(18)
+            .frame(width: 280)
+            .background(TaptionTheme.elevatedSurface)
+            .presentationCompactAdaptation(.popover)
+        }
     }
 
     private func outputMenu<Content: View>(
         title: String,
         value: String,
+        secondaryValue: String? = nil,
         systemImage: String,
         isEnabled: Bool,
         metrics: HomeLayoutMetrics,
@@ -447,34 +448,66 @@ struct HomeView: View {
         Menu {
             content()
         } label: {
-            HStack(spacing: 7 * metrics.contentScale) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 14 * metrics.contentScale, weight: .semibold))
-                Text(title)
-                    .font((metrics.contentScale < 0.9 ? Font.caption : metrics.buttonFont).weight(.semibold))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.75)
-                    .multilineTextAlignment(.leading)
-                Spacer(minLength: 4)
-                Text(value)
-                    .font(Font.caption2.weight(.semibold))
-                    .foregroundStyle(TaptionTheme.mutedText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-            }
-            .foregroundStyle(isEnabled ? Color.white.opacity(0.9) : TaptionTheme.disabledText)
-            .padding(.horizontal, 10 * metrics.contentScale)
-            .frame(maxWidth: .infinity)
-            .frame(minHeight: max(metrics.controlHeight, 52 * metrics.contentScale))
-            .background(TaptionTheme.elevatedSurface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(isEnabled ? TaptionTheme.border : Color.white.opacity(0.06), lineWidth: 1)
+            outputControlLabel(
+                title: title,
+                value: value,
+                secondaryValue: secondaryValue,
+                systemImage: systemImage,
+                isEnabled: isEnabled,
+                metrics: metrics
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .opacity(isEnabled ? 1 : 0.48)
         }
         .disabled(!isEnabled)
+    }
+
+    private func outputControlLabel(
+        title: String,
+        value: String,
+        secondaryValue: String?,
+        systemImage: String,
+        isEnabled: Bool,
+        metrics: HomeLayoutMetrics
+    ) -> some View {
+        HStack(spacing: 7 * metrics.contentScale) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14 * metrics.contentScale, weight: .semibold))
+                .frame(width: 18 * metrics.contentScale)
+
+            VStack(alignment: .leading, spacing: 2 * metrics.contentScale) {
+                Text(title)
+                    .font((metrics.contentScale < 0.9 ? Font.caption2 : Font.caption).weight(.semibold))
+                    .foregroundStyle(TaptionTheme.mutedText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                HStack(spacing: 4 * metrics.contentScale) {
+                    Text(value)
+                        .font((metrics.contentScale < 0.9 ? Font.caption : metrics.buttonFont).weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+
+                    if let secondaryValue {
+                        Label(secondaryValue, systemImage: "aspectratio")
+                            .font(Font.caption2.weight(.semibold))
+                            .foregroundStyle(TaptionTheme.mutedText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(isEnabled ? Color.white.opacity(0.9) : TaptionTheme.disabledText)
+        .padding(.horizontal, 10 * metrics.contentScale)
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: max(metrics.controlHeight, 52 * metrics.contentScale))
+        .background(TaptionTheme.elevatedSurface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(isEnabled ? TaptionTheme.border : Color.white.opacity(0.06), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .opacity(isEnabled ? 1 : 0.48)
     }
 
     private func menuItemLabel(

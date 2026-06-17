@@ -648,7 +648,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             executionKind: .mixed
         ) { _ in }
 
-        XCTAssertEqual(await executionOrderRecorder.value(), [.hardware])
+        let executionOrder = await executionOrderRecorder.value()
+        XCTAssertEqual(executionOrder, [.hardware])
     }
 
     func testUniversalSoftwareAlgorithmCatalogCoversEveryNonImplementedRoute() {
@@ -3621,6 +3622,34 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
         let states = try await store.loadPendingStates()
         XCTAssertTrue(states.isEmpty)
+    }
+
+    func testSaveFailurePresenterRecognizesCocoaFileExistsAsConflict() {
+        let underlying = NSError(
+            domain: NSPOSIXErrorDomain,
+            code: Int(POSIXErrorCode.EEXIST.rawValue),
+            userInfo: [NSLocalizedDescriptionKey: "The operation couldn’t be completed. File exists"]
+        )
+        let error = NSError(
+            domain: NSCocoaErrorDomain,
+            code: CocoaError.Code.fileWriteFileExists.rawValue,
+            userInfo: [
+                NSLocalizedDescriptionKey: "encoded.mp4 couldn’t be copied because an item with the same name already exists.",
+                NSUnderlyingErrorKey: underlying
+            ]
+        )
+
+        XCTAssertTrue(TaptionFinalSaveConflictError.isDestinationAlreadyExistsError(error))
+
+        let presentation = TaptionSaveFailurePresenter.presentation(
+            for: error,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: false
+        )
+
+        XCTAssertEqual(presentation.cause, "A file already exists at the save destination.")
+        XCTAssertTrue(presentation.action.contains("Choose Overwrite"))
+        XCTAssertTrue(presentation.action.contains("retry will save without another ad"))
     }
 
     private struct FakeFFmpegCommandRunner: SW_FFmpegCommandRunning {

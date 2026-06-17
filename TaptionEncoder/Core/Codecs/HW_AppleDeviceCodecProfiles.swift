@@ -784,7 +784,7 @@ enum HW_CodecRouteSimulator {
 
             if row.expectsHardwareDecode,
                row.expectsHardwareEncode,
-               row.executionKind != .hardware {
+               row.executionKind == .software {
                 failures.append("\(row.profile) \(row.route.displayName) should prefer hardware.")
             }
         }

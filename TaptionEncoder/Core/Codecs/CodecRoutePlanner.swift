@@ -217,6 +217,7 @@ enum TaptionCodecRoutePlanner {
             return mixedOrSoftwareSelection(
                 route: route,
                 requestedMode: requestedMode,
+                hardwareDecode: hardwareSupport.canHardwareDecode(route.sourceCodec),
                 hardwareEncode: hardwareEncode,
                 hasSoftwareAlgorithm: hasSoftwareAlgorithm,
                 hardwareSupport: hardwareSupport
@@ -241,6 +242,7 @@ enum TaptionCodecRoutePlanner {
             return mixedOrSoftwareSelection(
                 route: route,
                 requestedMode: requestedMode,
+                hardwareDecode: hardwareSupport.canHardwareDecode(route.sourceCodec),
                 hardwareEncode: hardwareEncode,
                 hasSoftwareAlgorithm: hasSoftwareAlgorithm,
                 hardwareSupport: hardwareSupport
@@ -267,6 +269,7 @@ enum TaptionCodecRoutePlanner {
     private static func mixedOrSoftwareSelection(
         route: TaptionCodecRoute,
         requestedMode: TaptionEncoderMode,
+        hardwareDecode: Bool,
         hardwareEncode: Bool,
         hasSoftwareAlgorithm: Bool,
         hardwareSupport: TaptionCodecHardwareSupportProfile
@@ -280,15 +283,18 @@ enum TaptionCodecRoutePlanner {
         }
 
         if hardwareEncode {
+            let decodeBackend = hardwareDecode ? .appleAVAssetExport : softwareDecodeBackend(for: route.sourceCodec)
             return TaptionCodecRouteSelection(
                 route: route,
                 requestedMode: requestedMode,
                 selectedMode: .software,
-                decodeBackend: softwareDecodeBackend(for: route.sourceCodec),
+                decodeBackend: decodeBackend,
                 encodeBackend: .appleVideoToolbox,
                 executionKind: .mixed,
                 support: .implemented,
-                reason: "Hardware source decode is unavailable, so software decode will feed the hardware encoder."
+                reason: hardwareDecode
+                    ? "Hardware decode is available and feeds the hardware encoder."
+                    : "Hardware source decode is unavailable, so software decode will feed the hardware encoder."
             )
         }
 

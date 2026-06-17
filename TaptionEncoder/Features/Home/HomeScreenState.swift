@@ -889,10 +889,7 @@ enum HomeScreenState: Equatable {
             if !review.videoInfo.isRouteEncodable {
                 return review.videoInfo.readinessDetailText
             }
-            if let folderQueue = review.folderQueue {
-                return "\(folderQueue.statusText). Review the first video, then start sequential \(review.videoInfo.outputSummary) encoding."
-            }
-            return "Review the video info, then start \(review.videoInfo.outputSummary) encoding."
+            return "Save Path: \(saveDestinationPath(for: review.job.plan.savePolicy.destination, finalOutputURL: review.job.plan.finalOutputURL))"
         case .encoding(let progress):
             if let outputSummary = progress.outputSummary {
                 return "\(progress.backendLabel) is converting the source to \(outputSummary)."
@@ -901,12 +898,12 @@ enum HomeScreenState: Equatable {
         case .cancelling:
             return "Stopping the current job."
         case .waitingForReward(let output):
-            return "Save Path: \((output.finalOutputURL ?? output.temporaryOutputURL).path)"
+            return "Save Path: \(saveDestinationPath(for: output.pendingSaveState))"
         case .pendingSave(let job):
             if let message = job.saveGateMessage {
                 return message
             }
-            return "Save Path: \((job.state.finalOutputURL ?? job.state.temporaryOutputURL).path)"
+            return "Save Path: \(saveDestinationPath(for: job.state))"
         case .saving(let job):
             if job.state.requiresRewardedAd {
                 return "Saving \(job.sourceName)."
@@ -931,6 +928,13 @@ enum HomeScreenState: Equatable {
         case .idle, .storageBlocked, .readyToStart, .waitingForReward, .pendingSave, .completed, .failed, .cancelled:
             return false
         }
+    }
+
+    var reservesFailureLogArea: Bool {
+        if case .failed = self {
+            return true
+        }
+        return false
     }
 
     var canSelectSource: Bool {
@@ -1045,4 +1049,22 @@ enum HomeScreenState: Equatable {
     var videoInfo: LoadedVideoInfo? {
         preparedEncodingReview?.videoInfo
     }
+}
+
+private func saveDestinationPath(
+    for destination: TaptionSaveDestinationKind,
+    finalOutputURL: URL?
+) -> String {
+    switch destination {
+    case .sourceFolder:
+        return finalOutputURL?.path ?? "source folder"
+    case .photosLibrary:
+        return "Photos"
+    case .temporaryOnly:
+        return "temporary storage"
+    }
+}
+
+private func saveDestinationPath(for state: TaptionPendingSaveState) -> String {
+    saveDestinationPath(for: state.saveDestination, finalOutputURL: state.finalOutputURL)
 }

@@ -9,6 +9,32 @@ enum TaptionFinalSaveConflictError: LocalizedError, Equatable {
             return "A file named \(url.lastPathComponent) already exists at the save destination."
         }
     }
+
+    static func isDestinationAlreadyExistsError(_ error: Error) -> Bool {
+        if case .destinationAlreadyExists = error as? TaptionFinalSaveConflictError {
+            return true
+        }
+
+        return isDestinationAlreadyExistsNSError(error as NSError)
+    }
+
+    private static func isDestinationAlreadyExistsNSError(_ error: NSError) -> Bool {
+        if error.domain == NSCocoaErrorDomain,
+           CocoaError.Code(rawValue: error.code) == .fileWriteFileExists {
+            return true
+        }
+
+        if error.domain == NSPOSIXErrorDomain,
+           error.code == Int(POSIXErrorCode.EEXIST.rawValue) {
+            return true
+        }
+
+        if let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return isDestinationAlreadyExistsNSError(underlying)
+        }
+
+        return false
+    }
 }
 
 struct SaveFailurePresentation {
@@ -56,6 +82,15 @@ enum TaptionSaveFailurePresenter {
             return SaveFailurePresentation(
                 summary: "Could not save the encoded video.",
                 cause: "A file named \(url.lastPathComponent) already exists.",
+                action: actionWithRewardNote("Choose Overwrite to replace it, or Save As to keep both files."),
+                diagnostic: diagnostic
+            )
+        }
+
+        if TaptionFinalSaveConflictError.isDestinationAlreadyExistsError(error) {
+            return SaveFailurePresentation(
+                summary: "Could not save the encoded video.",
+                cause: "A file already exists at the save destination.",
                 action: actionWithRewardNote("Choose Overwrite to replace it, or Save As to keep both files."),
                 diagnostic: diagnostic
             )

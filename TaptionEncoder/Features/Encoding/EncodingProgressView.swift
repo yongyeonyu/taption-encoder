@@ -4,6 +4,7 @@ struct EncodingProgressView: View {
     var state: HomeScreenState
     var controlHeight: CGFloat = 44
     var contentScale: CGFloat = 1
+    var reservesFailureLogArea: Bool = false
     var onStart: () -> Void
     var onSave: () -> Void
     var onCancel: () -> Void
@@ -22,9 +23,14 @@ struct EncodingProgressView: View {
                     Spacer(minLength: 0)
                 }
 
-                actionButton
+                if !usesExpandedFailureLog {
+                    actionButton
+                }
             }
+            .frame(maxHeight: usesExpandedFailureLog ? .infinity : nil, alignment: .top)
         }
+        .frame(maxHeight: usesExpandedFailureLog ? .infinity : nil, alignment: .top)
+        .layoutPriority(usesExpandedFailureLog ? 1 : 0)
     }
 
     @ViewBuilder
@@ -38,7 +44,8 @@ struct EncodingProgressView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
-            .frame(maxHeight: max(70, 96 * contentScale))
+            .frame(maxWidth: .infinity)
+            .frame(maxHeight: usesExpandedFailureLog ? .infinity : max(70, 96 * contentScale), alignment: .top)
             .padding(8)
             .background(TaptionTheme.elevatedSurface)
             .overlay(
@@ -53,6 +60,10 @@ struct EncodingProgressView: View {
                 .lineLimit(2)
                 .minimumScaleFactor(0.9)
         }
+    }
+
+    private var usesExpandedFailureLog: Bool {
+        isFailedState && reservesFailureLogArea
     }
 
     private var isFailedState: Bool {
