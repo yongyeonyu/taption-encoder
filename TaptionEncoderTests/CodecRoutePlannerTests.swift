@@ -68,6 +68,96 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(selection.encodeBackend, .customSoftware)
     }
 
+    func testDolbyVisionHEVCToHEVCUsesHardwareWhenHardwarePathIsAvailable() {
+        let selection = selectRoute(
+            sourceCodec: .dolbyVisionHEVC,
+            outputCodec: .hevc,
+            profile: .proMediaHardware
+        )
+
+        XCTAssertEqual(selection.support, .implemented)
+        XCTAssertTrue(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .hardware)
+        XCTAssertEqual(selection.selectedMode, .hardware)
+        XCTAssertEqual(selection.decodeBackend, .appleAVAssetExport)
+        XCTAssertEqual(selection.encodeBackend, .appleVideoToolbox)
+    }
+
+    func testHEVCWithAlphaToHEVCUsesHardwareWhenHardwarePathIsAvailable() {
+        let selection = selectRoute(
+            sourceCodec: .hevcWithAlpha,
+            outputCodec: .hevc,
+            profile: .proMediaHardware
+        )
+
+        XCTAssertEqual(selection.support, .implemented)
+        XCTAssertTrue(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .hardware)
+        XCTAssertEqual(selection.selectedMode, .hardware)
+        XCTAssertEqual(selection.decodeBackend, .appleAVAssetExport)
+        XCTAssertEqual(selection.encodeBackend, .appleVideoToolbox)
+    }
+
+    func testDolbyVisionHEVCToHEVCStaysPlannedWithoutRequiredHardwarePath() {
+        let selection = selectRoute(
+            sourceCodec: .dolbyVisionHEVC,
+            outputCodec: .hevc,
+            profile: .softwareOnly
+        )
+
+        XCTAssertEqual(selection.support, .planned)
+        XCTAssertFalse(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .planned)
+        XCTAssertEqual(selection.decodeBackend, .ffmpegFamily)
+        XCTAssertEqual(selection.encodeBackend, .ffmpegFamily)
+    }
+
+    func testHEVCWithAlphaToHEVCStaysPlannedWithoutRequiredHardwarePath() {
+        let selection = selectRoute(
+            sourceCodec: .hevcWithAlpha,
+            outputCodec: .hevc,
+            profile: .softwareOnly
+        )
+
+        XCTAssertEqual(selection.support, .planned)
+        XCTAssertFalse(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .planned)
+        XCTAssertEqual(selection.decodeBackend, .ffmpegFamily)
+        XCTAssertEqual(selection.encodeBackend, .ffmpegFamily)
+    }
+
+    func testProResRawToHEVCStaysSampleGatedEvenWhenHardwarePathExists() {
+        let selection = selectRoute(
+            sourceCodec: .proResRaw,
+            outputCodec: .hevc,
+            profile: appleProfile("apple_a19pro_av1_decode_prores_raw")
+        )
+
+        XCTAssertEqual(selection.support, .planned)
+        XCTAssertFalse(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .planned)
+        XCTAssertEqual(selection.decodeBackend, .appleAVAssetExport)
+        XCTAssertEqual(selection.encodeBackend, .appleVideoToolbox)
+        XCTAssertTrue(selection.reason.contains("real-world sample proof"))
+        XCTAssertTrue(selection.reason.contains("runtime verification"))
+    }
+
+    func testProResRawToHEVCExplainsSampleGateWithoutHardwarePath() {
+        let selection = selectRoute(
+            sourceCodec: .proResRaw,
+            outputCodec: .hevc,
+            profile: .softwareOnly
+        )
+
+        XCTAssertEqual(selection.support, .planned)
+        XCTAssertFalse(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .planned)
+        XCTAssertEqual(selection.decodeBackend, .ffmpegFamily)
+        XCTAssertEqual(selection.encodeBackend, .ffmpegFamily)
+        XCTAssertTrue(selection.reason.contains("real-world sample proof"))
+        XCTAssertFalse(selection.reason.contains("runtime verification"))
+    }
+
     func testPlannedUniversalRoutesRemainVisibleButNotEncodable() {
         let h264ToAV1 = selectRoute(
             sourceCodec: .h264,
@@ -552,6 +642,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         let modes = Set(descriptors.map(\.mode))
         let h264Route = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .hevc)
         let h264Descriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: h264Route)
+        let alphaRoute = TaptionCodecRoute(sourceCodec: .hevcWithAlpha, outputCodec: .hevc)
+        let alphaDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: alphaRoute)
+        let dolbyRoute = TaptionCodecRoute(sourceCodec: .dolbyVisionHEVC, outputCodec: .hevc)
+        let dolbyDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: dolbyRoute)
 
         XCTAssertEqual(descriptors.count, 2)
         XCTAssertTrue(modes.contains(.hardware))
@@ -559,6 +653,12 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(h264Descriptors.count, 1)
         XCTAssertEqual(h264Descriptors.first?.mode, .hardware)
         XCTAssertEqual(h264Descriptors.first?.backend, .appleVideoToolbox)
+        XCTAssertEqual(alphaDescriptors.count, 1)
+        XCTAssertEqual(alphaDescriptors.first?.mode, .hardware)
+        XCTAssertEqual(alphaDescriptors.first?.backend, .appleVideoToolbox)
+        XCTAssertEqual(dolbyDescriptors.count, 1)
+        XCTAssertEqual(dolbyDescriptors.first?.mode, .hardware)
+        XCTAssertEqual(dolbyDescriptors.first?.backend, .appleVideoToolbox)
     }
 
     func testLiveTranscodingRegistryPrefersHardwareForHardwareExecution() {
@@ -2279,6 +2379,24 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(blocked.detail.contains("Apple ProRes RAW has no selected software video encoder"))
     }
 
+    func testLoadedVideoPathInfoExplainsProResRawSampleGate() {
+        let planned = LoadedVideoPathInfo.make(
+            sourceCodec: .proResRaw,
+            routeSelection: selectRoute(
+                sourceCodec: .proResRaw,
+                outputCodec: .hevc,
+                profile: appleProfile("apple_a19pro_av1_decode_prores_raw")
+            ),
+            outputSelection: TaptionOutputSelection(videoCodec: .hevc, container: .mp4)
+        )
+
+        XCTAssertEqual(planned.title, "Path Planned")
+        XCTAssertEqual(planned.outputSummary, "H.265 + AAC / MP4")
+        XCTAssertFalse(planned.isRouteEncodable)
+        XCTAssertTrue(planned.detail.contains("ProRes RAW to H.265 needs real-world sample proof"))
+        XCTAssertTrue(planned.detail.contains("runtime verification"))
+    }
+
     func testLoadedVideoPathInfoMarksAppleNativeHEVCHardwareRoutesReady() {
         for sourceCodec in TaptionCodecRegistry.appleNativeHEVCHardwareSourceCodecs {
             let routeSelection = selectRoute(
@@ -3463,6 +3581,94 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(result.temporaryOutputURL, outputURL)
         XCTAssertEqual(result.usedBackend, .ffmpegFamily)
         XCTAssertEqual(result.usedMode, .software)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+
+        try? FileManager.default.removeItem(at: outputURL)
+    }
+
+    func testEncoderServicePrefersDirectSoftwareAlgorithmOverPreparedCommandPlan() async throws {
+        let route = TaptionCodecRoute(sourceCodec: .vp9, outputCodec: .hevc)
+        let sourceURL = URL(fileURLWithPath: "/tmp/direct-software-source.webm")
+        let outputURL = temporaryTestURL(fileName: "direct-software-vp9-to-hevc.mp4")
+        try? FileManager.default.removeItem(at: outputURL)
+
+        let directDescriptor = TaptionCodecAlgorithmDescriptor(
+            route: route,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "direct vp9->hevc"
+        )
+        let registry = TaptionCodecTranscodingRegistry(
+            algorithms: [
+                TaptionCodecTranscodingAlgorithmEntry(
+                    descriptor: directDescriptor,
+                    transcode: { request, progress in
+                        progress(TaptionEncodingProgress(stage: .preparing, fractionCompleted: 0))
+                        progress(TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.5))
+                        try FileManager.default.createDirectory(
+                            at: request.outputURL.deletingLastPathComponent(),
+                            withIntermediateDirectories: true
+                        )
+                        try Data("direct software output".utf8).write(to: request.outputURL)
+                        progress(TaptionEncodingProgress(stage: .completed, fractionCompleted: 1))
+                        return TaptionCodecTranscodeOutput(
+                            outputURL: request.outputURL,
+                            route: request.route,
+                            usedMode: .software,
+                            usedBackend: .softwareVLCDecoder,
+                            outputVideoCodec: .hevc,
+                            outputAudioTrackCount: 0
+                        )
+                    }
+                )
+            ]
+        )
+        let commandPlan = SW_FFmpegCommandPlan(
+            sourceURL: sourceURL,
+            outputURL: outputURL,
+            routeSummary: route.displayName,
+            arguments: ["-i", sourceURL.path, outputURL.path]
+        )
+        let plan = TaptionEncodingPlan(
+            input: TaptionEncodingInput(kind: .singleAsset),
+            outputPolicy: TaptionVideoOutputPolicy(
+                videoCodec: .hevc,
+                audioCodec: .aac,
+                container: .mp4
+            ),
+            codecRoute: route,
+            codecExecutionKind: .software,
+            videoCommandPlan: commandPlan,
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none),
+            encoderSelection: TaptionEncoderSelection(
+                requestedMode: .software,
+                backend: .customSoftware,
+                reason: "Direct software transcoder is available."
+            ),
+            sourceURL: sourceURL,
+            temporaryOutputURL: outputURL
+        )
+        let executor = SW_FFmpegCommandExecutor(
+            readinessReport: readyBroadSoftwareBackendReport(),
+            runner: FakeFFmpegCommandRunner { _ in
+                XCTFail("Prepared FFmpeg command plan should not run when a direct software algorithm exists.")
+                return SW_FFmpegCommandRunResult(exitCode: 0)
+            }
+        )
+        let service = AVFoundationHEVCEncoderService(
+            registry: registry,
+            softwareExecutor: executor
+        )
+        var progressStages: [TaptionEncodingStage] = []
+
+        let result = try await service.encode(plan: plan) { progress in
+            progressStages.append(progress.stage)
+        }
+
+        XCTAssertEqual(result.temporaryOutputURL, outputURL)
+        XCTAssertEqual(result.usedBackend, .softwareVLCDecoder)
+        XCTAssertEqual(result.usedMode, .software)
+        XCTAssertEqual(progressStages, [.preparing, .encoding, .completed])
         XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
 
         try? FileManager.default.removeItem(at: outputURL)

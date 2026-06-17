@@ -183,7 +183,7 @@ enum TaptionCodecRoutePlanner {
                 encodeBackend: plannedEncodeBackend(for: route.outputCodec, hardwareSupport: hardwareSupport),
                 executionKind: .planned,
                 support: support,
-                reason: "This route is planned for the universal codec update."
+                reason: plannedRouteReason(for: route, hardwareSupport: hardwareSupport)
             )
         case .unsupported:
             return unsupportedSelection(
@@ -381,5 +381,19 @@ enum TaptionCodecRoutePlanner {
 
     private static func softwareDecodeBackend(for codec: TaptionVideoCodec) -> TaptionEncodingBackend {
         SW_SoftwareCodecBackendRegistry.preferredVideoDecodeBackend(for: codec) ?? .customSoftware
+    }
+
+    private static func plannedRouteReason(
+        for route: TaptionCodecRoute,
+        hardwareSupport: TaptionCodecHardwareSupportProfile
+    ) -> String {
+        if route.requiresRealWorldRuntimeProofBeforeExecution {
+            if hardwareSupport.canHardwareDecode(.proResRaw),
+               hardwareSupport.canHardwareEncode(.hevc) {
+                return "ProRes RAW to H.265 needs real-world sample proof and runtime verification before this hardware path can be enabled."
+            }
+            return "ProRes RAW to H.265 needs real-world sample proof before software or hardware fallback can be enabled."
+        }
+        return "This route is planned for the universal codec update."
     }
 }

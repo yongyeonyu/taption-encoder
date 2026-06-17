@@ -1707,7 +1707,7 @@ final class HomeViewModel: ObservableObject {
         case .allowed:
             return "Rewarded ad complete. Saving can continue."
         case .unavailable:
-            return "Rewarded ad is still loading. Try Save again in a moment."
+            return "Rewarded ad is still loading or temporarily unavailable. The app will retry automatically. Try Save again in a moment."
         case .skipped:
             return "The rewarded ad was skipped. Watch the full ad to save."
         }

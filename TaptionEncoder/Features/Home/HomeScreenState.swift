@@ -618,6 +618,11 @@ struct LoadedVideoPathInfo: Equatable {
         routeImplementationState: TaptionOutputImplementationState,
         videoReadiness: TaptionVideoCodecExecutionReadinessItem
     ) -> String {
+        if routeSelection.route.requiresRealWorldRuntimeProofBeforeExecution,
+           !routeSelection.isEncodableNow {
+            return "Path Planned"
+        }
+
         switch routeImplementationState {
         case .implemented:
             return routeSelection.displayTitle

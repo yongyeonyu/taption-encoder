@@ -36,6 +36,7 @@ struct TaptionEncoderApp: App {
                 return
             }
             Task {
+                await AdMobBootstrapper.refreshOnActive()
                 await AdMobBootstrapper.showAppOpenAdIfAvailable()
             }
         }

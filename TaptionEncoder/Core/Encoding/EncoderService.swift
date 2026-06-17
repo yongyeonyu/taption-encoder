@@ -198,10 +198,25 @@ final class AVFoundationHEVCEncoderService: EncoderServicing {
 
     private func shouldUseSoftwareCommandPlan(for plan: TaptionEncodingPlan) -> Bool {
         guard let executionKind = plan.codecExecutionKind,
-              plan.videoCommandPlan != nil else {
+              let commandPlan = plan.videoCommandPlan else {
             return false
         }
-        return executionKind == .planned || executionKind == .software
+        if executionKind == .planned {
+            return true
+        }
+        guard executionKind == .software,
+              let route = plan.codecRoute else {
+            return false
+        }
+
+        guard let preferredDescriptor = registry.preferredDescriptor(
+            for: route,
+            executionKind: executionKind
+        ) else {
+            return true
+        }
+
+        return preferredDescriptor.backend == commandPlan.backend
     }
 
     private func executeSoftwareCodecRequest(

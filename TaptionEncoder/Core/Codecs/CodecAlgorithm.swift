@@ -44,6 +44,10 @@ struct TaptionCodecRoute: Codable, Hashable {
     var displayName: String {
         "\(sourceCodec.displayName) to \(outputCodec.displayName)"
     }
+
+    var requiresRealWorldRuntimeProofBeforeExecution: Bool {
+        sourceCodec == .proResRaw && outputCodec == .hevc
+    }
 }
 
 struct TaptionCodecAlgorithmDescriptor: Equatable {
@@ -285,6 +289,8 @@ enum TaptionCodecRegistry {
     static let appleNativeHEVCHardwareSourceCodecs: [TaptionVideoCodec] = [
         .h264,
         .hevc,
+        .hevcWithAlpha,
+        .dolbyVisionHEVC,
         .proRes
     ]
 

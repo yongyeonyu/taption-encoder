@@ -169,23 +169,17 @@ enum AdMobBootstrapper {
         AppLogger.info("AdMob bootstrap started", category: .ads)
         MobileAds.shared.start()
         Task { @MainActor in
-            let configuration = AdMobRuntimeConfiguration.current()
-            AppLogger.info(
-                "AdMob preload started",
-                category: .ads,
-                metadata: [
-                    "appOpen": configuration.appOpenAdUnitID,
-                    "banner": configuration.homeBannerAdUnitID,
-                    "rewarded": configuration.rewardedSaveAdUnitID,
-                    "interstitial": configuration.sessionEndInterstitialAdUnitID
-                ]
-            )
-            await AdMobAppOpenAdManager.shared.loadIfNeeded(adUnitID: configuration.appOpenAdUnitID)
-            _ = await AdMobInterstitialAdManager.shared.loadIfNeeded(adUnitID: configuration.sessionEndInterstitialAdUnitID)
-            _ = await AdMobRewardedAdManager.shared.loadIfNeeded(adUnitID: configuration.rewardedSaveAdUnitID)
+            await preloadAllPlacements()
         }
         #else
         AppLogger.warning("AdMob bootstrap skipped because GoogleMobileAds is not linked", category: .ads)
+        #endif
+    }
+
+    static func refreshOnActive() async {
+        #if canImport(GoogleMobileAds)
+        AppLogger.info("AdMob refresh requested for active scene", category: .ads)
+        await preloadAllPlacements()
         #endif
     }
 
@@ -196,6 +190,26 @@ enum AdMobBootstrapper {
         await AdMobAppOpenAdManager.shared.showIfAvailable(adUnitID: configuration.appOpenAdUnitID)
         #endif
     }
+
+    #if canImport(GoogleMobileAds)
+    @MainActor
+    private static func preloadAllPlacements() async {
+        let configuration = AdMobRuntimeConfiguration.current()
+        AppLogger.info(
+            "AdMob preload started",
+            category: .ads,
+            metadata: [
+                "appOpen": configuration.appOpenAdUnitID,
+                "banner": configuration.homeBannerAdUnitID,
+                "rewarded": configuration.rewardedSaveAdUnitID,
+                "interstitial": configuration.sessionEndInterstitialAdUnitID
+            ]
+        )
+        await AdMobAppOpenAdManager.shared.loadIfNeeded(adUnitID: configuration.appOpenAdUnitID)
+        _ = await AdMobInterstitialAdManager.shared.loadIfNeeded(adUnitID: configuration.sessionEndInterstitialAdUnitID)
+        _ = await AdMobRewardedAdManager.shared.loadIfNeeded(adUnitID: configuration.rewardedSaveAdUnitID)
+    }
+    #endif
 }
 
 struct AdMobBannerSlotView: View {
@@ -432,6 +446,9 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
     private var didEarnReward = false
     private var isLoading = false
     private var lastKnownState: AdLoadState = .idle
+    private var retryWorkItem: DispatchWorkItem?
+    private var retryCount = 0
+    private var isWaitingForRetry = false
 
     func currentState(adUnitID: String) async -> AdLoadState {
         guard !adUnitID.isEmpty else {
@@ -440,7 +457,7 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
         if preparedAd != nil, preparedAdUnitID == adUnitID {
             return .ready
         }
-        if isLoading {
+        if isLoading || isWaitingForRetry {
             return .loading
         }
         return lastKnownState
@@ -456,6 +473,11 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
             AppLogger.debug("Rewarded ad already ready", category: .ads)
             lastKnownState = .ready
             return .ready
+        }
+        if isWaitingForRetry {
+            AppLogger.debug("Rewarded ad retry already scheduled", category: .ads)
+            lastKnownState = .loading
+            return .loading
         }
         guard !isLoading else {
             AppLogger.debug("Rewarded ad already loading", category: .ads)
@@ -473,6 +495,10 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
                 with: adUnitID,
                 request: AdMobRequestFactory.makeRequest()
             )
+            retryWorkItem?.cancel()
+            retryWorkItem = nil
+            retryCount = 0
+            isWaitingForRetry = false
             ad.fullScreenContentDelegate = self
             preparedAd = ad
             preparedAdUnitID = adUnitID
@@ -488,6 +514,7 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
                 category: .ads,
                 metadata: ["error": error.localizedDescription]
             )
+            scheduleRetry(adUnitID: adUnitID)
             return .unavailable
         }
     }
@@ -522,6 +549,10 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
         }
 
         AppLogger.info("Rewarded ad presenting", category: .ads)
+        retryWorkItem?.cancel()
+        retryWorkItem = nil
+        retryCount = 0
+        isWaitingForRetry = false
         preparedAd = nil
         preparedAdUnitID = ""
         activeAd = ad
@@ -586,6 +617,37 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
             try? await Task.sleep(nanoseconds: 150_000_000)
         }
         return await currentState(adUnitID: adUnitID)
+    }
+
+    private func scheduleRetry(adUnitID: String) {
+        guard !adUnitID.isEmpty,
+              retryCount < 6 else {
+            return
+        }
+        retryWorkItem?.cancel()
+        retryCount += 1
+        isWaitingForRetry = true
+        lastKnownState = .loading
+        let delay = min(120, 15 * retryCount)
+        AppLogger.warning(
+            "Rewarded ad retry scheduled",
+            category: .ads,
+            metadata: [
+                "retry": "\(retryCount)",
+                "delaySeconds": "\(delay)",
+                "adUnit": adUnitID
+            ]
+        )
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.isWaitingForRetry = false
+                _ = await self.loadIfNeeded(adUnitID: adUnitID)
+            }
+        }
+        retryWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(delay), execute: workItem)
     }
 
     private func waitForTopViewController() async -> UIViewController? {

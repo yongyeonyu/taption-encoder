@@ -62,7 +62,7 @@ Current tests cover:
 The script verifies:
 
 - `AV1 -> H.265` is implemented and encodable.
-- Apple-native `H.264 -> H.265`, `H.265 -> H.265`, and `ProRes -> H.265` hardware routes are implemented only for profiles that can hardware-decode the source and hardware-encode H.265.
+- Apple-native `H.264 -> H.265`, `H.265 -> H.265`, `HEVC with Alpha -> H.265`, `Dolby Vision HEVC -> H.265`, and `ProRes -> H.265` hardware routes are implemented only for profiles that can hardware-decode the source and hardware-encode H.265.
 - Automatic route selection chooses `HW` when source hardware decode and output hardware encode are both present.
 - Automatic route selection chooses `HW/SW` when source decode needs software but output hardware encode exists.
 - Automatic route selection chooses `SW` when hardware encode is unavailable.
@@ -120,8 +120,8 @@ Result:
 - Routes per profile: 3,969.
 - Total route rows: 444,528.
 - Output file rows including header: 444,529.
-- Current-build encodable rows: 366.
-- Current-build path split: 284 `HW`, 77 `HW/SW`, 5 `SW`, and 444,162 `Planned`.
+- Current-build encodable rows: 802.
+- Current-build path split: 496 `HW`, 291 `HW/SW`, 15 `SW`, and 443,726 `Planned`.
 - Universal source/output route coverage: 3,969/3,969 pairs per profile, no unsupported route-map gaps.
 - Planned all-to-all routes still prefer hardware decode and hardware encode backends per codec side when a simulation profile exposes that capability.
 - `AV1 -> H.265` selected:
@@ -136,11 +136,18 @@ Result:
 - Apple-native H.265 hardware route coverage:
   - `H.264 -> H.265`: 107/112 profiles encodable now.
   - `H.265 -> H.265`: 107/112 profiles encodable now.
+  - `HEVC with Alpha -> H.265`: 106/112 profiles encodable now.
+  - `Dolby Vision HEVC -> H.265`: 106/112 profiles encodable now.
   - `ProRes -> H.265`: 40/112 profiles encodable now.
+- ProRes RAW remains sample-gated:
+  - `ProRes RAW -> H.265`: 0/112 profiles encodable now.
+  - 25 profiles expose a hardware decode + hardware encode path, but stay `Planned` until real-world sample proof and runtime verification are captured.
+  - 87 profiles remain sample-gated before any software or hardware fallback is enabled.
 
 ## Remaining Work
 
 - Continue reconciling the seeded per-model Apple device identifier matrix against real-device reports.
 - Capture real-device `HW_CodecCapabilityProbe` reports from representative iPhone and iPad generations.
+- Capture real-world ProRes RAW samples before enabling `ProRes RAW -> H.265` execution.
 - Add software fallbacks for the new Apple-native H.265 hardware routes and continue expanding executable routes beyond H.265 output.
 - Keep the current output codec/container selectors connected to route readiness while planned outputs stay disabled until bundled implementations exist.
