@@ -68,6 +68,21 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(selection.encodeBackend, .customSoftware)
     }
 
+    func testMPEG2ToHEVCUsesSoftwareWhenNoHardwareIsAvailable() {
+        let selection = selectRoute(
+            sourceCodec: .mpeg2,
+            outputCodec: .hevc,
+            profile: .softwareOnly
+        )
+
+        XCTAssertEqual(selection.support, .implemented)
+        XCTAssertTrue(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .software)
+        XCTAssertEqual(selection.selectedMode, .software)
+        XCTAssertEqual(selection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(selection.encodeBackend, .customSoftware)
+    }
+
     func testDolbyVisionHEVCToHEVCUsesHardwareWhenHardwarePathIsAvailable() {
         let selection = selectRoute(
             sourceCodec: .dolbyVisionHEVC,
@@ -646,6 +661,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         let alphaDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: alphaRoute)
         let dolbyRoute = TaptionCodecRoute(sourceCodec: .dolbyVisionHEVC, outputCodec: .hevc)
         let dolbyDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: dolbyRoute)
+        let mpeg2Route = TaptionCodecRoute(sourceCodec: .mpeg2, outputCodec: .hevc)
+        let mpeg2Descriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: mpeg2Route)
 
         XCTAssertEqual(descriptors.count, 2)
         XCTAssertTrue(modes.contains(.hardware))
@@ -659,6 +676,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(dolbyDescriptors.count, 1)
         XCTAssertEqual(dolbyDescriptors.first?.mode, .hardware)
         XCTAssertEqual(dolbyDescriptors.first?.backend, .appleVideoToolbox)
+        XCTAssertEqual(mpeg2Descriptors.count, 1)
+        XCTAssertEqual(mpeg2Descriptors.first?.mode, .software)
+        XCTAssertEqual(mpeg2Descriptors.first?.backend, .softwareVLCDecoder)
     }
 
     func testLiveTranscodingRegistryPrefersHardwareForHardwareExecution() {
@@ -1669,6 +1689,7 @@ final class CodecRoutePlannerTests: XCTestCase {
                 TaptionLaunchInputVideoSupportItem(codec: .av1, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .vp9, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .vp8, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .mpeg2, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableOnSupportedHardware),
                 TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableOnSupportedHardware),
                 TaptionLaunchInputVideoSupportItem(codec: .proRes, availability: .availableOnSupportedHardware)
@@ -1676,15 +1697,15 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputVideoSummary,
-            "AV1, VP9, VP8, H.264 / AVC, H.265 / HEVC, Apple ProRes"
+            "AV1, VP9, VP8, MPEG-2, H.264 / AVC, H.265 / HEVC, Apple ProRes"
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainers,
-            [.mp4, .mov, .m4v, .webm]
+            [.mp4, .mov, .m4v, .webm, .mxf, .mpegProgramStream]
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainerSummary,
-            "MP4, MOV, QT, M4V, WEBM"
+            "MP4, MOV, QT, M4V, WEBM, MXF, MPG, MPEG, MPE, VOB, MOD, DAT"
         )
         XCTAssertTrue(
             TaptionLaunchSupportCatalog.supportedInputVideoNote.contains("H.264 / AVC")
@@ -1697,7 +1718,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainerNote,
-            "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as WebM."
+            "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as WebM, MXF, and MPEG program streams."
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.diagnoseInput(container: .mp4, videoCodec: .av1),
@@ -1725,6 +1746,14 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.diagnoseInput(container: .webm, videoCodec: .vp8),
+            TaptionLaunchInputSupportDiagnosis(
+                state: .supported,
+                title: "Input Supported",
+                detail: "The current launch build can inspect this input container and codec."
+            )
+        )
+        XCTAssertEqual(
+            TaptionLaunchSupportCatalog.diagnoseInput(container: .mpegProgramStream, videoCodec: .mpeg2),
             TaptionLaunchInputSupportDiagnosis(
                 state: .supported,
                 title: "Input Supported",

@@ -38,7 +38,8 @@ struct TaptionCodecTranscodingRegistry: @unchecked Sendable {
             TaptionCodecTranscodingAlgorithmEntry(HW_AV1HEVCCodecAlgorithm.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_AV1HEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_VP9HEVCTranscoder.self),
-            TaptionCodecTranscodingAlgorithmEntry(SW_VP8HEVCTranscoder.self)
+            TaptionCodecTranscodingAlgorithmEntry(SW_VP8HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_MPEG2HEVCTranscoder.self)
         ] + HW_AppleHEVCCodecAlgorithm.nativeDescriptors.map { descriptor in
             TaptionCodecTranscodingAlgorithmEntry(
                 descriptor: descriptor,

@@ -283,7 +283,8 @@ enum TaptionCodecRegistry {
     static let softwareImplementedRoutes: Set<TaptionCodecRoute> = [
         TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .vp9, outputCodec: .hevc),
-        TaptionCodecRoute(sourceCodec: .vp8, outputCodec: .hevc)
+        TaptionCodecRoute(sourceCodec: .vp8, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .mpeg2, outputCodec: .hevc)
     ]
 
     static let appleNativeHEVCHardwareSourceCodecs: [TaptionVideoCodec] = [
@@ -349,6 +350,13 @@ enum TaptionCodecRegistry {
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "VP8 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .mpeg2,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "MPEG-2 to H.265 Software"
         )
         ] + appleNativeHEVCHardwareAlgorithmDescriptors
     }

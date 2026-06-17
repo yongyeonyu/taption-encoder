@@ -120,8 +120,8 @@ Result:
 - Routes per profile: 3,969.
 - Total route rows: 444,528.
 - Output file rows including header: 444,529.
-- Current-build encodable rows: 802.
-- Current-build path split: 496 `HW`, 291 `HW/SW`, 15 `SW`, and 443,726 `Planned`.
+- Current-build encodable rows: 914.
+- Current-build path split: 496 `HW`, 398 `HW/SW`, 20 `SW`, and 443,614 `Planned`.
 - Universal source/output route coverage: 3,969/3,969 pairs per profile, no unsupported route-map gaps.
 - Planned all-to-all routes still prefer hardware decode and hardware encode backends per codec side when a simulation profile exposes that capability.
 - `AV1 -> H.265` selected:
@@ -139,6 +139,9 @@ Result:
   - `HEVC with Alpha -> H.265`: 106/112 profiles encodable now.
   - `Dolby Vision HEVC -> H.265`: 106/112 profiles encodable now.
   - `ProRes -> H.265`: 40/112 profiles encodable now.
+- Software H.265 route coverage:
+  - `MPEG-2 -> H.265`: 112/112 profiles encodable now.
+  - Path split: 107 `HW/SW` and 5 `SW`.
 - ProRes RAW remains sample-gated:
   - `ProRes RAW -> H.265`: 0/112 profiles encodable now.
   - 25 profiles expose a hardware decode + hardware encode path, but stay `Planned` until real-world sample proof and runtime verification are captured.
