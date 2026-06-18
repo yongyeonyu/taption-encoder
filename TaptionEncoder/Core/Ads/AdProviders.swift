@@ -242,11 +242,16 @@ final class AdMobConsentManager {
 
     private var didRequestConsentInfo = false
     private var didStartMobileAds = false
+    private var isUpdatingConsentInfo = false
+    private var isPresentingConsentForm = false
+    private var shouldRetryConsentFormPresentation = false
 
     private init() {}
 
     func refreshConsentStatusIfNeeded() {
         guard !didRequestConsentInfo else {
+            retryConsentFormPresentationIfNeeded()
+            startMobileAdsIfAllowed()
             return
         }
         didRequestConsentInfo = true
@@ -255,6 +260,10 @@ final class AdMobConsentManager {
 
     func refreshConsentStatus() {
         #if canImport(UserMessagingPlatform)
+        guard !isUpdatingConsentInfo else {
+            return
+        }
+        isUpdatingConsentInfo = true
         lastErrorDescription = nil
         let parameters = RequestParameters()
         ConsentInformation.shared.requestConsentInfoUpdate(with: parameters) { [weak self] error in
@@ -262,9 +271,11 @@ final class AdMobConsentManager {
                 guard let self else {
                     return
                 }
+                self.isUpdatingConsentInfo = false
                 if let error {
                     self.lastErrorDescription = error.localizedDescription
                     self.canRequestAds = true
+                    self.shouldRetryConsentFormPresentation = false
                     AppLogger.warning(
                         "AdMob consent update failed; continuing ad startup",
                         category: .ads,
@@ -276,19 +287,7 @@ final class AdMobConsentManager {
 
                 self.updateConsentState()
                 self.startMobileAdsIfAllowed()
-
-                do {
-                    try await ConsentForm.loadAndPresentIfRequired(
-                        from: AdMobRootViewControllerProvider.topViewController()
-                    )
-                } catch {
-                    self.lastErrorDescription = error.localizedDescription
-                    AppLogger.warning(
-                        "AdMob consent form presentation failed",
-                        category: .ads,
-                        metadata: ["error": error.localizedDescription]
-                    )
-                }
+                await self.loadAndPresentConsentFormIfRequired()
                 self.updateConsentState()
                 self.startMobileAdsIfAllowed()
             }
@@ -308,6 +307,7 @@ final class AdMobConsentManager {
             if didStartMobileAds {
                 return true
             }
+            retryConsentFormPresentationIfNeeded()
             if canRequestAds {
                 startMobileAdsIfAllowed()
                 if didStartMobileAds {
@@ -323,6 +323,60 @@ final class AdMobConsentManager {
 
         startMobileAdsIfAllowed()
         return didStartMobileAds
+    }
+
+    private func loadAndPresentConsentFormIfRequired() async {
+        #if canImport(UserMessagingPlatform)
+        guard !isPresentingConsentForm else {
+            return
+        }
+        if !canRequestAds,
+           AdMobRootViewControllerProvider.topViewController() == nil {
+            shouldRetryConsentFormPresentation = true
+            AppLogger.warning("AdMob consent form root missing; will retry", category: .ads)
+            return
+        }
+
+        isPresentingConsentForm = true
+        defer { isPresentingConsentForm = false }
+
+        do {
+            try await ConsentForm.loadAndPresentIfRequired(
+                from: AdMobRootViewControllerProvider.topViewController()
+            )
+            shouldRetryConsentFormPresentation = false
+        } catch {
+            lastErrorDescription = error.localizedDescription
+            shouldRetryConsentFormPresentation = !ConsentInformation.shared.canRequestAds
+            AppLogger.warning(
+                "AdMob consent form presentation failed",
+                category: .ads,
+                metadata: [
+                    "canRequestAds": "\(ConsentInformation.shared.canRequestAds)",
+                    "error": error.localizedDescription
+                ]
+            )
+        }
+        #endif
+    }
+
+    private func retryConsentFormPresentationIfNeeded() {
+        #if canImport(UserMessagingPlatform)
+        guard shouldRetryConsentFormPresentation,
+              !canRequestAds,
+              !isPresentingConsentForm,
+              AdMobRootViewControllerProvider.topViewController() != nil else {
+            return
+        }
+        Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+            await self.loadAndPresentConsentFormIfRequired()
+            self.updateConsentState()
+            self.startMobileAdsIfAllowed()
+        }
+        #endif
     }
 
     private func updateConsentState() {
@@ -348,12 +402,6 @@ enum AdMobBootstrapper {
     static func start() {
         #if canImport(GoogleMobileAds)
         AppLogger.info("AdMob bootstrap started", category: .ads)
-        Task { @MainActor in
-            guard await ensureReadyForAds() else {
-                return
-            }
-            await preloadAllPlacements()
-        }
         #else
         AppLogger.warning("AdMob bootstrap skipped because GoogleMobileAds is not linked", category: .ads)
         #endif
@@ -383,7 +431,7 @@ enum AdMobBootstrapper {
 
     #if canImport(GoogleMobileAds)
     @MainActor
-    static func ensureReadyForAds(timeoutSeconds: TimeInterval = 2.5) async -> Bool {
+    static func ensureReadyForAds(timeoutSeconds: TimeInterval = 6.0) async -> Bool {
         AdMobConsentManager.shared.refreshConsentStatusIfNeeded()
         let isReady = await AdMobConsentManager.shared.waitForMobileAdsStartup(
             timeoutSeconds: timeoutSeconds
@@ -579,7 +627,12 @@ private struct AdMobBannerRepresentable: UIViewRepresentable {
         }
 
         private func scheduleRetry(for banner: BannerView, adUnitID: String) {
-            guard retryCount < 20 else {
+            guard retryCount < 60 else {
+                AppLogger.warning(
+                    "Banner ad load retry stopped while waiting for AdMob readiness",
+                    category: .ads,
+                    metadata: ["adUnit": adUnitID]
+                )
                 return
             }
             retryWorkItem?.cancel()

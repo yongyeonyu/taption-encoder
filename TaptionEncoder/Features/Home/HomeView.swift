@@ -315,6 +315,7 @@ struct HomeView: View {
             }
         }
         .task {
+            await AdMobBootstrapper.refreshOnActive()
             await viewModel.restorePendingSavesIfNeeded()
             await viewModel.refreshStarsIfNeeded()
         }
