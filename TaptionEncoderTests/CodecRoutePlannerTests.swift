@@ -1637,6 +1637,22 @@ final class CodecRoutePlannerTests: XCTestCase {
             encodeProbeStatus: nil,
             encoderIdentifier: nil
         )
+        let appSupportedSoftwareVideo = TaptionCodecHardwareCapability(
+            videoCodec: .av1,
+            coreMediaCodecType: "av01",
+            hardwareDecodeSupported: false,
+            hardwareEncodeSupported: false,
+            encodeProbeStatus: nil,
+            encoderIdentifier: nil
+        )
+        let deviceRequiredAppVideo = TaptionCodecHardwareCapability(
+            videoCodec: .h264,
+            coreMediaCodecType: "avc1",
+            hardwareDecodeSupported: false,
+            hardwareEncodeSupported: false,
+            encodeProbeStatus: nil,
+            encoderIdentifier: nil
+        )
         let supportedAudio = TaptionAudioCodecHardwareCapability(
             audioCodec: .aac,
             nativeDecodeSupported: true,
@@ -1645,7 +1661,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             movCopySupported: true
         )
         let unsupportedAudio = TaptionAudioCodecHardwareCapability(
-            audioCodec: .xheAAC,
+            audioCodec: .unknown,
             nativeDecodeSupported: false,
             nativeEncodeSupported: false,
             mp4CopySupported: false,
@@ -1656,6 +1672,18 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(unsupportedVideo.isSupportedOnInstalledDevice)
         XCTAssertTrue(supportedAudio.isSupportedOnInstalledDevice)
         XCTAssertFalse(unsupportedAudio.isSupportedOnInstalledDevice)
+
+        XCTAssertTrue(appSupportedSoftwareVideo.isInputSupportedByCurrentBuildOnInstalledDevice)
+        XCTAssertFalse(appSupportedSoftwareVideo.isSupportedOnInstalledDevice)
+        XCTAssertTrue(appSupportedSoftwareVideo.shouldHighlightInDeviceInfo)
+
+        XCTAssertFalse(deviceRequiredAppVideo.isInputSupportedByCurrentBuildOnInstalledDevice)
+        XCTAssertFalse(deviceRequiredAppVideo.shouldHighlightInDeviceInfo)
+
+        XCTAssertTrue(supportedAudio.isInputSupportedByCurrentBuild)
+        XCTAssertTrue(supportedAudio.shouldHighlightInDeviceInfo)
+        XCTAssertFalse(unsupportedAudio.isInputSupportedByCurrentBuild)
+        XCTAssertFalse(unsupportedAudio.shouldHighlightInDeviceInfo)
     }
 
     func testOutputReadinessCatalogReportSummarizesSelectorMatrix() {

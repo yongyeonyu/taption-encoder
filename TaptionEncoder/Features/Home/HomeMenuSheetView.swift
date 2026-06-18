@@ -317,7 +317,7 @@ private struct DeviceInfoSheetContentView: View {
                         .font(.headline)
                         .foregroundStyle(.white)
 
-                    Text("White rows prefer hardware on this device. Gray rows need software-only handling or are unavailable.")
+                    Text("App and Device badges are evaluated separately for this installed device.")
                         .font(.caption)
                         .foregroundStyle(TaptionTheme.mutedText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -346,7 +346,7 @@ private struct DeviceInfoSheetContentView: View {
                         .font(.headline)
                         .foregroundStyle(.white)
 
-                    Text("White rows can use native or copy paths on this device. Gray rows need software handling or are unavailable.")
+                    Text("App and Device badges are evaluated separately for this installed device.")
                         .font(.caption)
                         .foregroundStyle(TaptionTheme.mutedText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -381,8 +381,13 @@ private struct DeviceInfoSheetContentView: View {
 
     private var allVideoCapabilities: [TaptionCodecHardwareCapability] {
         report.videoCapabilities.sorted { lhs, rhs in
+            if lhs.isInputSupportedByCurrentBuildOnInstalledDevice != rhs.isInputSupportedByCurrentBuildOnInstalledDevice {
+                return lhs.isInputSupportedByCurrentBuildOnInstalledDevice
+                    && !rhs.isInputSupportedByCurrentBuildOnInstalledDevice
+            }
             if lhs.isSupportedOnInstalledDevice != rhs.isSupportedOnInstalledDevice {
-                return lhs.isSupportedOnInstalledDevice && !rhs.isSupportedOnInstalledDevice
+                return lhs.isSupportedOnInstalledDevice
+                    && !rhs.isSupportedOnInstalledDevice
             }
             return lhs.videoCodec.displayName < rhs.videoCodec.displayName
         }
@@ -390,8 +395,13 @@ private struct DeviceInfoSheetContentView: View {
 
     private var allAudioCapabilities: [TaptionAudioCodecHardwareCapability] {
         report.audioCapabilities.sorted { lhs, rhs in
+            if lhs.isInputSupportedByCurrentBuild != rhs.isInputSupportedByCurrentBuild {
+                return lhs.isInputSupportedByCurrentBuild
+                    && !rhs.isInputSupportedByCurrentBuild
+            }
             if lhs.isSupportedOnInstalledDevice != rhs.isSupportedOnInstalledDevice {
-                return lhs.isSupportedOnInstalledDevice && !rhs.isSupportedOnInstalledDevice
+                return lhs.isSupportedOnInstalledDevice
+                    && !rhs.isSupportedOnInstalledDevice
             }
             return lhs.audioCodec.displayName < rhs.audioCodec.displayName
         }
@@ -456,6 +466,19 @@ private struct DeviceVideoCodecCapabilityRow: View {
                     .foregroundStyle(titleColor)
                     .lineLimit(1)
 
+                HStack(spacing: 6) {
+                    CodecSupportPill(
+                        label: "App",
+                        text: appSupportText,
+                        isActive: capability.isInputSupportedByCurrentBuildOnInstalledDevice
+                    )
+                    CodecSupportPill(
+                        label: "Device",
+                        text: deviceSupportText,
+                        isActive: capability.isSupportedOnInstalledDevice
+                    )
+                }
+
                 Text(preferredPathSummary)
                     .font(.caption)
                     .foregroundStyle(detailColor)
@@ -473,36 +496,62 @@ private struct DeviceVideoCodecCapabilityRow: View {
     }
 
     private var preferredPathSummary: String {
+        if capability.isInputSupportedByCurrentBuildOnInstalledDevice {
+            switch capability.currentBuildInputAvailability {
+            case .availableNow:
+                return "Current app input: Supported now"
+            case .availableOnSupportedHardware:
+                return "Current app input: Supported by this device"
+            case .none:
+                break
+            }
+        }
+
         switch (capability.hardwareDecodeSupported, capability.hardwareEncodeSupported) {
         case (.some(true), .some(true)):
-            return "Preferred path: HW decode + HW encode"
+            return "Device path: HW decode + HW encode"
         case (.some(true), .some(false)):
-            return "Preferred path: HW decode + SW encode"
+            return "Device path: HW decode + SW encode"
         case (.some(false), .some(true)):
-            return "Preferred path: SW decode + HW encode"
+            return "Device path: SW decode + HW encode"
         case (.some(false), .some(false)):
-            return "Preferred path: SW only"
+            return "Device path: SW only"
         case (.some(true), .none):
-            return "Preferred path: HW decode. Encode probe unavailable"
+            return "Device path: HW decode. Encode probe unavailable"
         case (.none, .some(true)):
-            return "Preferred path: HW encode. Decode probe unavailable"
+            return "Device path: HW encode. Decode probe unavailable"
         default:
             return capability.coreMediaCodecType == nil
-                ? "Preferred path: Software catalog only"
-                : "Preferred path: Probe unavailable"
+                ? "Device path: Software catalog only"
+                : "Device path: Probe unavailable"
         }
     }
 
+    private var appSupportText: String {
+        switch capability.currentBuildInputAvailability {
+        case .availableNow:
+            return "Now"
+        case .availableOnSupportedHardware:
+            return capability.isInputSupportedByCurrentBuildOnInstalledDevice ? "Now" : "HW"
+        case .none:
+            return "No"
+        }
+    }
+
+    private var deviceSupportText: String {
+        capability.isSupportedOnInstalledDevice ? "HW" : "No HW"
+    }
+
     private var rowBackground: Color {
-        capability.isSupportedOnInstalledDevice ? Color.white.opacity(0.045) : Color.white.opacity(0.025)
+        capability.shouldHighlightInDeviceInfo ? Color.white.opacity(0.045) : Color.white.opacity(0.025)
     }
 
     private var titleColor: Color {
-        capability.isSupportedOnInstalledDevice ? .white : Color.white.opacity(0.42)
+        capability.shouldHighlightInDeviceInfo ? .white : Color.white.opacity(0.42)
     }
 
     private var detailColor: Color {
-        capability.isSupportedOnInstalledDevice ? Color.white.opacity(0.52) : Color.white.opacity(0.32)
+        capability.shouldHighlightInDeviceInfo ? Color.white.opacity(0.52) : Color.white.opacity(0.32)
     }
 }
 
@@ -516,6 +565,19 @@ private struct DeviceAudioCodecCapabilityRow: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(titleColor)
                     .lineLimit(1)
+
+                HStack(spacing: 6) {
+                    CodecSupportPill(
+                        label: "App",
+                        text: capability.isInputSupportedByCurrentBuild ? "Now" : "No",
+                        isActive: capability.isInputSupportedByCurrentBuild
+                    )
+                    CodecSupportPill(
+                        label: "Device",
+                        text: capability.isSupportedOnInstalledDevice ? "Native" : "No Native",
+                        isActive: capability.isSupportedOnInstalledDevice
+                    )
+                }
 
                 Text(preferredPathSummary)
                     .font(.caption)
@@ -544,19 +606,23 @@ private struct DeviceAudioCodecCapabilityRow: View {
     }
 
     private var preferredPathSummary: String {
+        if capability.isInputSupportedByCurrentBuild {
+            return "Current app input: Supported now"
+        }
+
         if capability.mp4CopySupported || capability.movCopySupported {
-            return "Preferred path: Copy \(copyTargets)"
+            return "Device path: Copy \(copyTargets)"
         }
         if capability.nativeDecodeSupported && capability.nativeEncodeSupported {
-            return "Preferred path: Native decode + Native encode"
+            return "Device path: Native decode + Native encode"
         }
         if capability.nativeDecodeSupported {
-            return "Preferred path: Native decode + SW encode"
+            return "Device path: Native decode + SW encode"
         }
         if capability.nativeEncodeSupported {
-            return "Preferred path: SW decode + Native encode"
+            return "Device path: SW decode + Native encode"
         }
-        return "Preferred path: SW only"
+        return "Device path: SW only"
     }
 
     private var copyTargets: String {
@@ -571,15 +637,31 @@ private struct DeviceAudioCodecCapabilityRow: View {
     }
 
     private var rowBackground: Color {
-        capability.isSupportedOnInstalledDevice ? Color.white.opacity(0.045) : Color.white.opacity(0.025)
+        capability.shouldHighlightInDeviceInfo ? Color.white.opacity(0.045) : Color.white.opacity(0.025)
     }
 
     private var titleColor: Color {
-        capability.isSupportedOnInstalledDevice ? .white : Color.white.opacity(0.42)
+        capability.shouldHighlightInDeviceInfo ? .white : Color.white.opacity(0.42)
     }
 
     private var detailColor: Color {
-        capability.isSupportedOnInstalledDevice ? Color.white.opacity(0.52) : Color.white.opacity(0.32)
+        capability.shouldHighlightInDeviceInfo ? Color.white.opacity(0.52) : Color.white.opacity(0.32)
+    }
+}
+
+private struct CodecSupportPill: View {
+    var label: String
+    var text: String
+    var isActive: Bool
+
+    var body: some View {
+        Text("\(label) \(text)")
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(isActive ? TaptionTheme.accent : Color.white.opacity(0.46))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(isActive ? TaptionTheme.accent.opacity(0.13) : Color.white.opacity(0.06))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
 

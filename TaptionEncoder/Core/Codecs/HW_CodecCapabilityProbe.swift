@@ -22,6 +22,27 @@ struct TaptionCodecHardwareCapability: Codable, Equatable, Identifiable {
     var isSupportedOnInstalledDevice: Bool {
         hardwareDecodeSupported == true || hardwareEncodeSupported == true
     }
+
+    var currentBuildInputAvailability: TaptionLaunchInputSupportAvailability? {
+        TaptionLaunchSupportCatalog.supportedInputVideoCodecs
+            .first { $0.codec == videoCodec }?
+            .availability
+    }
+
+    var isInputSupportedByCurrentBuildOnInstalledDevice: Bool {
+        switch currentBuildInputAvailability {
+        case .availableNow:
+            return true
+        case .availableOnSupportedHardware:
+            return hardwareDecodeSupported == true
+        case .none:
+            return false
+        }
+    }
+
+    var shouldHighlightInDeviceInfo: Bool {
+        isInputSupportedByCurrentBuildOnInstalledDevice || isSupportedOnInstalledDevice
+    }
 }
 
 struct TaptionAudioCodecHardwareCapability: Codable, Equatable, Identifiable {
@@ -37,6 +58,20 @@ struct TaptionAudioCodecHardwareCapability: Codable, Equatable, Identifiable {
             || nativeEncodeSupported
             || mp4CopySupported
             || movCopySupported
+    }
+
+    var isInputSupportedByCurrentBuild: Bool {
+        TaptionAudioCodecRoutePlanner
+            .selectRoute(
+                sourceCodec: audioCodec,
+                outputCodec: TaptionAudioCodecRoutePlanner.defaultOutputCodec,
+                outputContainer: TaptionLaunchSupportCatalog.supportedOutput.container
+            )
+            .isSupportedNow
+    }
+
+    var shouldHighlightInDeviceInfo: Bool {
+        isInputSupportedByCurrentBuild || isSupportedOnInstalledDevice
     }
 }
 
