@@ -131,7 +131,7 @@ final class AVFoundationHEVCEncoderService: EncoderServicing {
             }
 
             guard plan.outputPolicy.videoCodec == .hevc,
-                  plan.outputPolicy.container == .mp4 else {
+                  [.mp4, .mov].contains(plan.outputPolicy.container) else {
                 throw TaptionVideoCoreError.exportFailed(
                     "\(plan.outputPolicy.videoCodec.displayName) / \(plan.outputPolicy.container.defaultFileExtension.uppercased()) output is planned but not implemented in this build."
                 )

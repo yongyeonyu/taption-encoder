@@ -32,7 +32,14 @@ protocol BannerAdProviding {
 
 protocol RewardedAdProviding {
     func currentRewardedState() async -> AdLoadState
+    func preloadRewardedAd() async -> AdLoadState
     func showRewardedAd() async -> RewardedAdShowResult
+}
+
+extension RewardedAdProviding {
+    func preloadRewardedAd() async -> AdLoadState {
+        await currentRewardedState()
+    }
 }
 
 protocol SessionEndAdProviding {
@@ -140,6 +147,16 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
     func currentRewardedState() async -> AdLoadState {
         #if canImport(GoogleMobileAds)
         return await AdMobRewardedAdManager.shared.currentState(
+            adUnitID: configuration.rewardedSaveAdUnitID
+        )
+        #else
+        return .unavailable
+        #endif
+    }
+
+    func preloadRewardedAd() async -> AdLoadState {
+        #if canImport(GoogleMobileAds)
+        return await AdMobRewardedAdManager.shared.loadIfNeeded(
             adUnitID: configuration.rewardedSaveAdUnitID
         )
         #else

@@ -149,6 +149,7 @@ enum TaptionLaunchSupportCatalog {
         .mp4,
         .mov,
         .m4v,
+        .avi,
         .webm,
         .mxf,
         .mpegProgramStream
@@ -159,6 +160,7 @@ enum TaptionLaunchSupportCatalog {
         TaptionLaunchInputVideoSupportItem(codec: .vp9, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .vp8, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .mpeg2, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .mpeg4Visual, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableOnSupportedHardware),
         TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableOnSupportedHardware),
         TaptionLaunchInputVideoSupportItem(codec: .proRes, availability: .availableOnSupportedHardware)
@@ -196,7 +198,7 @@ enum TaptionLaunchSupportCatalog {
     }
 
     static var supportedInputContainerNote: String {
-        "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as WebM, MXF, and MPEG program streams."
+        "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as WebM, AVI, MXF, and MPEG program streams."
     }
 
     static func diagnoseInput(
@@ -245,7 +247,7 @@ enum TaptionCodecOutputCatalog {
             return .unsupported
         }
 
-        if videoCodec == .hevc && container == .mp4 {
+        if videoCodec == .hevc && [.mp4, .mov].contains(container) {
             return .implemented
         }
 
@@ -372,7 +374,7 @@ enum TaptionAudioCodecOutputCatalog {
         }
 
         if audioCodec == TaptionAudioCodecRoutePlanner.defaultOutputCodec,
-           container == .mp4 {
+           [.mp4, .mov].contains(container) {
             return .implemented
         }
 

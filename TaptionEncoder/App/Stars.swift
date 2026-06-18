@@ -105,7 +105,14 @@ protocol StarWalletManaging {
 
 protocol StarEarningServing {
     func currentAdState() async -> AdLoadState
+    func prepareNextAd() async -> AdLoadState
     func watchAdAndEarnStar() async throws -> StarEarningResult
+}
+
+extension StarEarningServing {
+    func prepareNextAd() async -> AdLoadState {
+        await currentAdState()
+    }
 }
 
 struct StarEarningResult: Equatable {
@@ -119,6 +126,10 @@ struct DefaultStarEarningService: StarEarningServing {
 
     func currentAdState() async -> AdLoadState {
         await rewardedAdProvider.currentRewardedState()
+    }
+
+    func prepareNextAd() async -> AdLoadState {
+        await rewardedAdProvider.preloadRewardedAd()
     }
 
     func watchAdAndEarnStar() async throws -> StarEarningResult {

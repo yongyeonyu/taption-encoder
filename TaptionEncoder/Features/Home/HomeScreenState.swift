@@ -77,11 +77,11 @@ struct LoadedVideoInfo: Equatable {
         case "Path HW/SW":
             return "HW/SW"
         case "Path SW Plan Ready":
-            return "SW"
+            return "SW Plan"
         case "Path SW Blocked":
-            return "SW"
+            return "SW Blocked"
         case "Path Planned":
-            return "SW"
+            return "Planned"
         case "Path Unsupported":
             return "Unsupported"
         default:
@@ -941,8 +941,8 @@ enum HomeScreenState: Equatable {
             return "Cancelling"
         case .waitingForReward:
             return "Ready to save"
-        case .pendingSave:
-            return "Pending save"
+        case .pendingSave(let job):
+            return job.state.requiresRewardedAd ? "Ready to save" : "Pending save"
         case .saving:
             return "Saving"
         case .completed:

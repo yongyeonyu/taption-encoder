@@ -1,6 +1,6 @@
 # Taption Encoder Release Action Items
 
-Status date: 2026-06-16
+Status date: 2026-06-18
 
 ## Current State
 
@@ -14,7 +14,7 @@ Status date: 2026-06-16
 - Detailed phase-by-phase implementation guide exists in `docs/DETAILED_DEVELOPMENT_PLAN.md`.
 - Phase 0 foundation is implemented: app environment, feature flags, Home feature shell, protocol boundaries, and Xcode project grouping exist.
 - Phase 1 UX/state machine is implemented: File, folder, and Photos sources can drive inspecting, storage checking, encoding progress, cancellation, rewarded-save waiting, pending-save recovery, and completed states.
-- Phase 2 first real encoder slice is partially implemented: File, folder, and selected Photos import now use AVFoundation media inspection, AV1-only validation, video-info review before Start, AVFoundation H.265 export, automatic software AV1 decode fallback, real export/fallback progress, codec-path reporting, security-scoped file/folder access, broad folder extension discovery, folder sequential processing, Photos output save, storage checks, cancellation cleanup, and `_taption.mp4` final save after the rewarded-save gate.
+- Phase 2 first real encoder slice is partially implemented: File, folder, and selected Photos import now use AVFoundation media inspection, AV1-only validation, video-info review before Start, AVFoundation H.265 export, automatic software AV1 decode fallback, real export/fallback progress, codec-path reporting, security-scoped file/folder access, broad folder extension discovery, folder sequential processing, Photos output save, storage checks, cancellation cleanup, and `_taption.mp4` final save after Star consumption or a zero-Star rewarded-save gate.
 - Development is planned as 9 execution phases, with version 1.0 launching after Phase 3 and final product completion after Phase 8.
 - Main screen is componentized with top/bottom banners, File, Folder, Photos, Reset, output codec/container selector, automatic codec-path info, video-info review, folder queue summary, output summary, status, progress, ETA, Start, Cancel, pending-save, and save completion surfaces.
 - Main screen now has a top-left menu with Help, Open Source Notices, and Device Info sheets.
@@ -24,14 +24,14 @@ Status date: 2026-06-16
 
 ## P0 Decisions Needed
 
-- [ ] Confirm whether final save must always require a rewarded ad, even if App Review asks for a fallback.
+- [ ] Confirm whether App Review requires a non-ad fallback for the Star or zero-Star rewarded-save flow.
 - [ ] Confirm merge MVP scope: trim, cut, split, shorten, reorder, and canvas position only.
 
 ## Confirmed Product Policies
 
 - [x] Product path is AV1 to H.265 first, broad inputs to H.265 next, universal codec-to-codec conversion final.
 - [x] Final codec direction is a symmetric all-to-all mesh: every supported universal input codec is also treated as a possible universal output codec unless deliberately excluded.
-- [x] MVP output container is `.mp4` with H.265 video.
+- [x] MVP default output container is `.mp4` with H.265 video, with `.mov` available as a selectable H.265/AAC output.
 - [x] Default quality prioritizes source-like visual quality over smallest file size.
 - [x] iOS/iPadOS 26 or later can offer user-selectable background encoding.
 - [x] Minimum OS is iOS/iPadOS 18.0 for the current SwiftVLC software fallback binary.
@@ -235,7 +235,7 @@ Status date: 2026-06-16
 
 ## P2 Advanced Controls
 
-- [ ] Add output container selector around H.265 video.
+- [x] Add output container selector around H.265 video.
 - [ ] Add output size/resolution controls.
 - [ ] Add frame-rate controls.
 - [ ] Add bitrate controls.
@@ -277,7 +277,7 @@ Status date: 2026-06-16
 - [x] Interstitial after completed save before returning to idle.
 - [x] Interstitial after cancelled/failed job acknowledgement.
 - [ ] Add frequency caps for start and session-end interstitials.
-- [ ] Rewarded ad before final save for every completed encoding job.
+- [x] Use one Star for ad-free final save, otherwise require a rewarded ad before final save.
 - [ ] No full-screen ad during active encoding, picker presentation, or cancellation.
 - [ ] No banner/native ad directly adjacent to primary buttons.
 
@@ -286,7 +286,7 @@ Status date: 2026-06-16
 - [ ] Add unit tests for output naming.
 - [ ] Add unit tests for storage estimation and insufficient-space blocking.
 - [ ] Add unit tests for home screen state transitions.
-- [ ] Add unit tests for rewarded-save gating.
+- [x] Add unit tests for rewarded-save gating.
 - [ ] Add unit tests for pending temporary output restoration after rewarded ad failure.
 - [ ] Add unit tests for ad placement eligibility and frequency caps.
 - [x] Add unit tests for source-preserving output policy.
@@ -356,14 +356,17 @@ Status date: 2026-06-16
 - [ ] Confirm category: Video.
 - [x] Archive release build.
 - [x] TestFlight upload.
+- [x] Upload TestFlight build 00.01.00 (7); App Store Connect accepted the package and started processing.
+- [x] Upload TestFlight build 00.01.01 (8); App Store Connect accepted the package and started processing.
 - [x] Create internal TestFlight group and attach build 00.01.00 (5).
 - [x] Add account owner/admin as internal tester for build 00.01.00 (5).
+- [ ] Attach build 00.01.01 (8) to the internal TestFlight group after App Store Connect processing completes.
 - [ ] TestFlight smoke test.
 - [ ] Submit for App Review.
 
 ## Policy Risks To Watch
 
-- Rewarded ad before final save is the core monetization strategy, but it needs clear disclosure and opt-in text.
+- Star consumption is the ad-free save path; zero-Star jobs use rewarded ad before final save and still need clear disclosure and opt-in text.
 - Aggressive interstitial timing can create invalid clicks or review rejection if users are surprised during active work.
 - Banners near primary controls can create accidental taps.
 - Personalized ads require correct consent, ATT handling, and App Store privacy answers.

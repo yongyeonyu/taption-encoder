@@ -1335,6 +1335,6 @@ Recommended exact next order:
 
 Current remaining decisions:
 
-- Whether final save must always require rewarded ad even if App Review asks for a fallback.
+- Whether App Review requires a non-ad fallback for the Star or zero-Star rewarded-save flow.
 - Whether merge MVP scope is exactly trim, cut, split, shorten, reorder, and canvas position.
 - Final software codec stack after licensing and App Store review analysis.

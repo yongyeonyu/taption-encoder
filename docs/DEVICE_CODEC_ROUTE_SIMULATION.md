@@ -140,8 +140,13 @@ Result:
   - `Dolby Vision HEVC -> H.265`: 106/112 profiles encodable now.
   - `ProRes -> H.265`: 40/112 profiles encodable now.
 - Software H.265 route coverage:
+  - `AV1 -> H.265`: 112/112 profiles encodable now.
+  - `VP9 -> H.265`: 112/112 profiles encodable now.
+  - `VP8 -> H.265`: 112/112 profiles encodable now.
   - `MPEG-2 -> H.265`: 112/112 profiles encodable now.
-  - Path split: 107 `HW/SW` and 5 `SW`.
+  - `MPEG-4 Visual -> H.265`: 112/112 profiles encodable now.
+  - Path split for VP9, VP8, MPEG-2, and MPEG-4 Visual: 107 `HW/SW` and 5 `SW`.
+  - Path split for AV1: 30 `HW`, 77 `HW/SW`, and 5 `SW`.
 - ProRes RAW remains sample-gated:
   - `ProRes RAW -> H.265`: 0/112 profiles encodable now.
   - 25 profiles expose a hardware decode + hardware encode path, but stay `Planned` until real-world sample proof and runtime verification are captured.

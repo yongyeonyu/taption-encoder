@@ -209,7 +209,7 @@ enum TaptionOpenSourceNoticeCatalog {
             TaptionOpenSourceNoticeEntry(
                 id: "swiftvlc-libvlc",
                 name: "SwiftVLC / libVLC",
-                summary: "Software AV1, VP9, VP8, and MPEG-2 media decoding fallback used by the current app build.",
+                summary: "Software AV1, VP9, VP8, MPEG-2, and MPEG-4 Visual media decoding fallback used by the current app build.",
                 category: .shippedComponent,
                 isShippedInCurrentBuild: true,
                 requiresFinalLicenseText: true,
@@ -317,14 +317,14 @@ enum SW_SoftwareCodecBackendRegistry {
     static let vlcSoftwareDecoder = TaptionSoftwareCodecBackendProfile(
         backend: .softwareVLCDecoder,
         displayName: "SwiftVLC Video Software Decoder",
-        videoDecodeCodecs: [.av1, .vp9, .vp8, .mpeg2],
+        videoDecodeCodecs: [.av1, .vp9, .vp8, .mpeg2, .mpeg4Visual],
         videoEncodeCodecs: [],
         audioDecodeCodecs: [],
         audioEncodeCodecs: [],
-        readableContainers: [.mp4, .mov, .m4v, .mkv, .webm, .mpegProgramStream, .mxf, .rawElementaryStream],
+        readableContainers: [.mp4, .mov, .m4v, .mkv, .webm, .avi, .mpegProgramStream, .mxf, .rawElementaryStream],
         writableContainers: [],
         requiresLicenseReview: true,
-        notes: "Current app fallback for AV1, VP9, VP8, and MPEG-2 decode. Output encoding is handled by the route-specific software-to-H.265 algorithms."
+        notes: "Current app fallback for AV1, VP9, VP8, MPEG-2, and MPEG-4 Visual decode. Output encoding is handled by the route-specific software-to-H.265 algorithms."
     )
 
     static let ffmpegFamilyCandidate = TaptionSoftwareCodecBackendProfile(

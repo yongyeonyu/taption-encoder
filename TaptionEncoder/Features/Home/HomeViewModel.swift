@@ -84,12 +84,16 @@ final class HomeViewModel: ObservableObject {
         guard let review = state.preparedEncodingReview else {
             return false
         }
-        return review.videoInfo.isRouteEncodable && starWalletSnapshot.balance > 0
+        return review.videoInfo.isRouteEncodable
     }
 
     var watchAdButtonTitle: String {
         if isWatchingStarAd {
             return "Watching Ad..."
+        }
+        if let pendingSaveJob = state.pendingSaveJob,
+           pendingSaveJob.state.requiresRewardedAd {
+            return rewardedAdState == .ready ? "Watch Ad to Save" : "Ad Loading"
         }
         switch rewardedAdState {
         case .ready:
@@ -97,24 +101,16 @@ final class HomeViewModel: ObservableObject {
         case .loading, .idle:
             return "Ad Loading"
         case .unavailable:
-            return "Ad Unavailable"
+            return "Find Ad"
         }
     }
 
     var canWatchAdForStar: Bool {
-        !state.isBusy && !isWatchingStarAd && rewardedAdState == .ready
+        !state.isBusy && !isWatchingStarAd
     }
 
     var progressDetailText: String {
-        if state.preparedEncodingReview != nil,
-           !canStartEncodingNow {
-            return needsStarMessage
-        }
         return state.detail
-    }
-
-    private var needsStarMessage: String {
-        "Watch a rewarded ad to earn 1 Star and continue."
     }
 
     var outputSummary: String {
@@ -299,6 +295,10 @@ final class HomeViewModel: ObservableObject {
     }
 
     var showsSaveAction: Bool {
+        if let pendingSaveJob = state.pendingSaveJob,
+           pendingSaveJob.state.requiresRewardedAd {
+            return false
+        }
         if state.completedTemporaryOutput != nil || state.pendingSaveJob != nil {
             return true
         }
@@ -621,12 +621,11 @@ final class HomeViewModel: ObservableObject {
                 isEnabled: true
             )]
         case .readyToStart(let review):
-            let needsStar = review.videoInfo.isRouteEncodable && starWalletSnapshot.balance == 0
             return [fileCard(
                 source: review.source,
                 videoInfo: review.videoInfo,
-                statusText: needsStar ? "Needs Star" : review.videoInfo.readinessStatusText,
-                detailText: needsStar ? needsStarMessage : review.videoInfo.readinessDetailText,
+                statusText: review.videoInfo.readinessStatusText,
+                detailText: review.videoInfo.readinessDetailText,
                 progress: nil,
                 isActive: true,
                 isSelected: true,
@@ -671,13 +670,18 @@ final class HomeViewModel: ObservableObject {
                 isEnabled: true
             )]
         case .pendingSave(let job):
+            let requiresRewardedAd = job.state.requiresRewardedAd
             return [fileCard(
                 sourceName: job.sourceName,
                 sourceKind: currentReview?.source.kind ?? .files,
                 videoInfo: currentReview?.videoInfo,
-                statusText: "Pending Save",
-                detailText: "This output can be saved without re-encoding.",
-                progress: completedProgressSnapshot(label: "Pending Save"),
+                statusText: requiresRewardedAd ? "Watch Ad to Save" : "Pending Save",
+                detailText: job.saveGateMessage ?? (
+                    requiresRewardedAd
+                        ? "Watch a rewarded ad to save this completed video."
+                        : "This output can be saved without re-encoding."
+                ),
+                progress: completedProgressSnapshot(label: requiresRewardedAd ? "Ready to Save" : "Pending Save"),
                 isActive: true,
                 isSelected: true,
                 isEnabled: true
@@ -734,9 +738,9 @@ final class HomeViewModel: ObservableObject {
 
         do {
             let pendingStates = try await environment.pendingSaveStore.loadPendingStates()
-            let saveReadyStates = await pendingStatesWithoutSaveAdRequirement(pendingStates)
-            beginRestoredPendingSaveAccessIfNeeded(for: saveReadyStates)
-            let jobs = saveReadyStates.map(makePendingSaveJob(from:))
+            let restorableStates = restorablePendingStates(pendingStates)
+            beginRestoredPendingSaveAccessIfNeeded(for: restorableStates)
+            let jobs = restorableStates.map(makePendingSaveJob(from:))
             guard let firstJob = jobs.first else {
                 AppLogger.info("No pending save found", category: .saving)
                 return
@@ -773,7 +777,13 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func refreshRewardedAdState(startPollingIfNeeded: Bool) async {
-        rewardedAdState = await environment.starEarningService.currentAdState()
+        let nextState: AdLoadState
+        if startPollingIfNeeded {
+            nextState = await environment.starEarningService.prepareNextAd()
+        } else {
+            nextState = await environment.starEarningService.currentAdState()
+        }
+        rewardedAdState = nextState
         if startPollingIfNeeded, rewardedAdState != .ready, !isWatchingStarAd {
             startRewardedAdStatePolling()
         } else if rewardedAdState == .ready {
@@ -789,7 +799,7 @@ final class HomeViewModel: ObservableObject {
                 return
             }
             while !Task.isCancelled {
-                let state = await environment.starEarningService.currentAdState()
+                let state = await environment.starEarningService.prepareNextAd()
                 rewardedAdState = state
                 if state == .ready || isWatchingStarAd {
                     break
@@ -1071,50 +1081,151 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
-        isWatchingStarAd = true
-        AppLogger.info("Watch ad for star requested", category: .ads)
-
         Task { @MainActor [weak self] in
             guard let self else {
                 return
             }
+            await handleRewardedAdButtonTap()
+        }
+    }
 
-            defer {
-                isWatchingStarAd = false
+    private func handleRewardedAdButtonTap() async {
+        guard !state.isBusy else {
+            return
+        }
+        guard !isWatchingStarAd else {
+            return
+        }
+
+        guard rewardedAdState == .ready else {
+            AppLogger.info(
+                "Rewarded ad requested while ad is not ready; continuing preload",
+                category: .ads,
+                metadata: ["state": rewardedAdState.rawValue]
+            )
+            await refreshRewardedAdState(startPollingIfNeeded: true)
+            return
+        }
+
+        if let job = pendingSaveJobRequiringRewardedAd {
+            await watchAdForPendingSave(job)
+            return
+        }
+
+        await watchAdAndEarnStar()
+    }
+
+    private func watchAdAndEarnStar() async {
+        isWatchingStarAd = true
+        AppLogger.info("Watch ad for star requested", category: .ads)
+
+        do {
+            let result = try await environment.starEarningService.watchAdAndEarnStar()
+            starWalletSnapshot = result.snapshot
+            isWatchingStarAd = false
+            await refreshRewardedAdState(startPollingIfNeeded: true)
+
+            guard result.adResult == .earnedReward else {
+                return
             }
 
-            do {
-                let result = try await environment.starEarningService.watchAdAndEarnStar()
-                starWalletSnapshot = result.snapshot
-                await refreshRewardedAdState(startPollingIfNeeded: true)
+            AppLogger.info(
+                "Star rewarded ad completed",
+                category: .ads,
+                metadata: ["balance": "\(result.snapshot.balance)"]
+            )
 
-                guard result.adResult == .earnedReward else {
-                    return
-                }
-
-                AppLogger.info(
-                    "Star rewarded ad completed",
-                    category: .ads,
-                    metadata: ["balance": "\(result.snapshot.balance)"]
+            if shouldAutoResumeBatchAfterStarEarn,
+               let review = state.preparedEncodingReview,
+               canStartEncodingNow {
+                shouldAutoResumeBatchAfterStarEarn = false
+                await attemptEncodingStart(
+                    for: review,
+                    autoResumeAfterStarEarn: true
                 )
+            }
+        } catch {
+            isWatchingStarAd = false
+            AppLogger.error(
+                "Watch ad for star failed",
+                category: .ads,
+                metadata: ["error": error.localizedDescription]
+            )
+            await refreshRewardedAdState(startPollingIfNeeded: true)
+        }
+    }
 
-                if shouldAutoResumeBatchAfterStarEarn,
-                   let review = state.preparedEncodingReview,
-                   canStartEncodingNow {
-                    shouldAutoResumeBatchAfterStarEarn = false
-                    await attemptEncodingStart(
-                        for: review,
-                        autoResumeAfterStarEarn: true
-                    )
-                }
+    private var pendingSaveJobRequiringRewardedAd: PendingSaveJob? {
+        if let job = state.pendingSaveJob,
+           job.state.requiresRewardedAd {
+            return job
+        }
+        if case .failed = state {
+            return pendingSaveQueue.first { $0.state.requiresRewardedAd }
+        }
+        return nil
+    }
+
+    private func watchAdForPendingSave(_ job: PendingSaveJob) async {
+        isWatchingStarAd = true
+        AppLogger.info(
+            "Watch ad for pending save requested",
+            category: .ads,
+            metadata: [
+                "source": job.sourceName,
+                "id": job.state.id.uuidString
+            ]
+        )
+
+        let result = await environment.rewardedAdProvider.showRewardedAd()
+        isWatchingStarAd = false
+
+        switch result {
+        case .earnedReward:
+            do {
+                let authorizedJob = try await clearRewardedAdRequirement(
+                    for: job,
+                    rewardedAdCompleted: true
+                )
+                AppLogger.info(
+                    "Pending save rewarded ad completed",
+                    category: .ads,
+                    metadata: [
+                        "source": authorizedJob.sourceName,
+                        "id": authorizedJob.state.id.uuidString
+                    ]
+                )
+                await refreshRewardedAdState(startPollingIfNeeded: true)
+                savePendingJob(authorizedJob)
             } catch {
                 AppLogger.error(
-                    "Watch ad for star failed",
+                    "Pending save rewarded ad completion failed",
                     category: .ads,
-                    metadata: ["error": error.localizedDescription]
+                    metadata: [
+                        "source": job.sourceName,
+                        "error": error.localizedDescription
+                    ]
                 )
+                pausePendingSaveForRewardedAd(job)
                 await refreshRewardedAdState(startPollingIfNeeded: true)
             }
+        case .closedWithoutReward:
+            AppLogger.warning(
+                "Pending save rewarded ad closed without reward",
+                category: .ads,
+                metadata: ["source": job.sourceName]
+            )
+            pausePendingSaveForRewardedAd(job)
+            await refreshRewardedAdState(startPollingIfNeeded: true)
+        case .unavailable:
+            AppLogger.warning(
+                "Pending save rewarded ad unavailable",
+                category: .ads,
+                metadata: ["source": job.sourceName]
+            )
+            rewardedAdState = .unavailable
+            pausePendingSaveForRewardedAd(job)
+            await refreshRewardedAdState(startPollingIfNeeded: true)
         }
     }
 
@@ -1917,6 +2028,12 @@ final class HomeViewModel: ObservableObject {
                 "rewardedAdRequired": "\(job.state.requiresRewardedAd)"
             ]
         )
+
+        guard !job.state.requiresRewardedAd else {
+            pausePendingSaveForRewardedAd(job)
+            return
+        }
+
         activeTask?.cancel()
         markCurrentSaveItem(
             statusText: "Saving",
@@ -1934,13 +2051,6 @@ final class HomeViewModel: ObservableObject {
 
             do {
                 try await Task.sleep(nanoseconds: 300_000_000)
-
-                if workingJob.state.requiresRewardedAd {
-                    workingJob = try await clearRewardedAdRequirement(
-                        for: workingJob,
-                        rewardedAdCompleted: false
-                    )
-                }
                 markCurrentSaveItem(
                     statusText: "Saving",
                     detailText: "Writing the output.",
@@ -1972,9 +2082,7 @@ final class HomeViewModel: ObservableObject {
                 )
                 markCurrentSaveItem(
                     statusText: "Pending Save",
-                    detailText: workingJob.state.requiresRewardedAd
-                        ? "The save was interrupted and can be retried without another ad."
-                        : "Save can be retried without another ad.",
+                    detailText: "Save can be retried without another ad.",
                     progress: completedProgressSnapshot(label: "Pending Save"),
                     isActive: true
                 )
@@ -2064,6 +2172,23 @@ final class HomeViewModel: ObservableObject {
                 ))
                 activeTask = nil
             }
+        }
+    }
+
+    private func pausePendingSaveForRewardedAd(_ job: PendingSaveJob) {
+        var waitingJob = job
+        waitingJob.saveGateMessage = "Watch a rewarded ad to save this completed video."
+        updatePendingSaveJob(waitingJob)
+        markCurrentSaveItem(
+            statusText: "Watch Ad to Save",
+            detailText: waitingJob.saveGateMessage,
+            progress: completedProgressSnapshot(label: "Ready to Save"),
+            isActive: true
+        )
+        state = .pendingSave(waitingJob)
+        activeTask = nil
+        Task { @MainActor [weak self] in
+            await self?.refreshRewardedAdState(startPollingIfNeeded: true)
         }
     }
 
@@ -2529,6 +2654,25 @@ final class HomeViewModel: ObservableObject {
             ]
         )
 
+        starWalletSnapshot = await environment.starWalletStore.currentSnapshot()
+        guard starWalletSnapshot.balance > 0 else {
+            AppLogger.info(
+                "Starting encoding without stars; rewarded ad will be required before final save",
+                category: .encoding,
+                metadata: [
+                    "name": review.source.displayName,
+                    "balance": "\(starWalletSnapshot.balance)"
+                ]
+            )
+            activeStarCharge = nil
+            shouldAutoResumeBatchAfterStarEarn = false
+            startEncoding(
+                review: reviewWithSaveGate(.rewardedAdBeforeFinalSave, for: review),
+                allowsBusyState: true
+            )
+            return
+        }
+
         do {
             starWalletSnapshot = try await environment.starWalletStore.consumeStar(
                 source: review.source.displayName
@@ -2538,21 +2682,27 @@ final class HomeViewModel: ObservableObject {
                 sourceName: review.source.displayName
             )
             shouldAutoResumeBatchAfterStarEarn = false
-            startEncoding(review: review, allowsBusyState: true)
+            startEncoding(
+                review: reviewWithSaveGate(.none, for: review),
+                allowsBusyState: true
+            )
         } catch let error as StarWalletError {
             if case .insufficientStars = error {
-                AppLogger.warning(
-                    "Start encoding blocked because no stars are available",
+                starWalletSnapshot = await environment.starWalletStore.currentSnapshot()
+                AppLogger.info(
+                    "Star balance changed before debit; continuing with rewarded save ad",
                     category: .encoding,
                     metadata: [
                         "name": review.source.displayName,
                         "balance": "\(starWalletSnapshot.balance)"
                     ]
                 )
-                if folderBatch != nil {
-                    shouldAutoResumeBatchAfterStarEarn = true
-                }
-                markNeedsStarState(for: review)
+                activeStarCharge = nil
+                shouldAutoResumeBatchAfterStarEarn = false
+                startEncoding(
+                    review: reviewWithSaveGate(.rewardedAdBeforeFinalSave, for: review),
+                    allowsBusyState: true
+                )
                 return
             }
 
@@ -2584,18 +2734,13 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    private func markNeedsStarState(for review: PreparedEncodingReview) {
-        currentReview = review
-        markBatchItem(
-            review.source.url,
-            asset: review.job.asset,
-            videoInfo: review.videoInfo,
-            statusText: "Needs Star",
-            detailText: needsStarMessage,
-            progress: nil,
-            isActive: false
-        )
-        state = .readyToStart(review)
+    private func reviewWithSaveGate(
+        _ saveGate: TaptionSaveGate,
+        for review: PreparedEncodingReview
+    ) -> PreparedEncodingReview {
+        var updatedReview = review
+        updatedReview.job.plan.savePolicy.saveGate = saveGate
+        return updatedReview
     }
 
     private func folderCompletionMessage(for batch: FolderEncodingBatch) -> String {
@@ -2720,6 +2865,9 @@ final class HomeViewModel: ObservableObject {
             if isSaving {
                 statusText = "Saving"
                 detailText = "Writing this video."
+            } else if job.state.requiresRewardedAd {
+                statusText = "Watch Ad to Save"
+                detailText = job.saveGateMessage ?? "Watch a rewarded ad to save this completed video."
             } else if isActive {
                 statusText = "Pending Save"
                 detailText = job.saveGateMessage ?? "Ready to save."
@@ -3653,39 +3801,10 @@ final class HomeViewModel: ObservableObject {
         return PendingSaveJob(sourceName: sourceName, state: state)
     }
 
-    private func pendingStatesWithoutSaveAdRequirement(
+    private func restorablePendingStates(
         _ states: [TaptionPendingSaveState]
-    ) async -> [TaptionPendingSaveState] {
-        var updatedStates: [TaptionPendingSaveState] = []
-        for state in states {
-            guard state.requiresRewardedAd else {
-                updatedStates.append(state)
-                continue
-            }
-
-            var updatedState = state
-            updatedState.requiresRewardedAd = false
-            updatedState.rewardedAdCompletedAt = nil
-            do {
-                try await environment.pendingSaveStore.savePendingState(updatedState)
-                AppLogger.info(
-                    "Restored pending save no longer requires save-time ad",
-                    category: .saving,
-                    metadata: ["id": updatedState.id.uuidString]
-                )
-            } catch {
-                AppLogger.warning(
-                    "Failed to persist save-time ad removal for restored pending save",
-                    category: .saving,
-                    metadata: [
-                        "id": updatedState.id.uuidString,
-                        "error": error.localizedDescription
-                    ]
-                )
-            }
-            updatedStates.append(updatedState)
-        }
-        return updatedStates
+    ) -> [TaptionPendingSaveState] {
+        states
     }
 
     private func pendingSaveStateWithAccessBookmark(

@@ -118,7 +118,7 @@ private struct SW_AV1NativeAudioEncodingConfiguration {
     ) -> SW_AV1NativeAudioEncodingConfiguration? {
         guard request.options.preserveAudioWhenPossible,
               request.options.outputPolicy.audioCodec == .aac,
-              request.options.outputPolicy.container == .mp4,
+              [.mp4, .mov].contains(request.options.outputPolicy.container),
               let sourceTrack = asset.audioTracks.first,
               SW_AudioCodecSupportCatalog.currentBuildBundledDecodeBackend(
                 for: sourceTrack.codec,
@@ -263,6 +263,28 @@ enum SW_MPEG2HEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
         return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
             request: request,
             sourceCodecLabel: "MPEG-2",
+            progress: progress
+        )
+    }
+}
+
+enum SW_MPEG4VisualHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .mpeg4Visual,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "MPEG-4 Visual to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .mpeg4Visual)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "MPEG-4 Visual",
             progress: progress
         )
     }
@@ -586,28 +608,28 @@ extension SW_AV1HEVCTranscoder {
 
             if state == libvlc_Error {
                 AppLogger.error(
-                    "Software AV1 decoder entered error state",
+                    "Software \(sourceCodecLabel) decoder entered error state",
                     category: .encoding,
                     metadata: ["source": sourceURL.lastPathComponent]
                 )
                 throw NSError(
                     domain: "TaptionEncoder",
                     code: -104,
-                    userInfo: [NSLocalizedDescriptionKey: "Software AV1 decoding failed."]
+                    userInfo: [NSLocalizedDescriptionKey: "Software \(sourceCodecLabel) decoding failed."]
                 )
             }
 
             if !sawAnyFrame,
                ProcessInfo.processInfo.systemUptime - startUptime > 12 {
                 AppLogger.error(
-                    "Software AV1 decoder produced no frames before timeout",
+                    "Software \(sourceCodecLabel) decoder produced no frames before timeout",
                     category: .encoding,
                     metadata: ["source": sourceURL.lastPathComponent]
                 )
                 throw NSError(
                     domain: "TaptionEncoder",
                     code: -105,
-                    userInfo: [NSLocalizedDescriptionKey: "Software AV1 decoding did not produce frames."]
+                    userInfo: [NSLocalizedDescriptionKey: "Software \(sourceCodecLabel) decoding did not produce frames."]
                 )
             }
 
@@ -616,7 +638,7 @@ extension SW_AV1HEVCTranscoder {
 
         if let error = context.snapshotError() {
             AppLogger.error(
-                "Software AV1 writer context reported error",
+                "Software \(sourceCodecLabel) writer context reported error",
                 category: .encoding,
                 metadata: ["error": error.localizedDescription]
             )
@@ -635,7 +657,7 @@ extension SW_AV1HEVCTranscoder {
         try audioContext?.finishAudioInput()
         try await finishWriter(writer)
         AppLogger.info(
-            "Software AV1 transcode pipeline completed",
+            "Software \(sourceCodecLabel) transcode pipeline completed",
             category: .encoding,
             metadata: [
                 "source": sourceURL.lastPathComponent,

@@ -1,3 +1,4 @@
+import AVFoundation
 import AudioToolbox
 import CoreMedia
 import SwiftVLC
@@ -71,6 +72,21 @@ final class CodecRoutePlannerTests: XCTestCase {
     func testMPEG2ToHEVCUsesSoftwareWhenNoHardwareIsAvailable() {
         let selection = selectRoute(
             sourceCodec: .mpeg2,
+            outputCodec: .hevc,
+            profile: .softwareOnly
+        )
+
+        XCTAssertEqual(selection.support, .implemented)
+        XCTAssertTrue(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .software)
+        XCTAssertEqual(selection.selectedMode, .software)
+        XCTAssertEqual(selection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(selection.encodeBackend, .customSoftware)
+    }
+
+    func testMPEG4VisualToHEVCUsesSoftwareWhenNoHardwareIsAvailable() {
+        let selection = selectRoute(
+            sourceCodec: .mpeg4Visual,
             outputCodec: .hevc,
             profile: .softwareOnly
         )
@@ -663,6 +679,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         let dolbyDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: dolbyRoute)
         let mpeg2Route = TaptionCodecRoute(sourceCodec: .mpeg2, outputCodec: .hevc)
         let mpeg2Descriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: mpeg2Route)
+        let mpeg4Route = TaptionCodecRoute(sourceCodec: .mpeg4Visual, outputCodec: .hevc)
+        let mpeg4Descriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: mpeg4Route)
 
         XCTAssertEqual(descriptors.count, 2)
         XCTAssertTrue(modes.contains(.hardware))
@@ -679,6 +697,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(mpeg2Descriptors.count, 1)
         XCTAssertEqual(mpeg2Descriptors.first?.mode, .software)
         XCTAssertEqual(mpeg2Descriptors.first?.backend, .softwareVLCDecoder)
+        XCTAssertEqual(mpeg4Descriptors.count, 1)
+        XCTAssertEqual(mpeg4Descriptors.first?.mode, .software)
+        XCTAssertEqual(mpeg4Descriptors.first?.backend, .softwareVLCDecoder)
     }
 
     func testLiveTranscodingRegistryPrefersHardwareForHardwareExecution() {
@@ -1283,9 +1304,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(SupportedVideoFileExtensions.contains(".mp4"))
         XCTAssertTrue(SupportedVideoFileExtensions.contains("qt"))
         XCTAssertTrue(SupportedVideoFileExtensions.contains("M4V"))
+        XCTAssertTrue(SupportedVideoFileExtensions.contains("avi"))
         XCTAssertTrue(SupportedVideoFileExtensions.contains("webm"))
+        XCTAssertTrue(SupportedVideoFileExtensions.contains("DAT"))
         XCTAssertFalse(SupportedVideoFileExtensions.contains(".m2t"))
-        XCTAssertFalse(SupportedVideoFileExtensions.contains("DAT"))
         XCTAssertFalse(SupportedVideoFileExtensions.contains("dif"))
         XCTAssertFalse(ImportableVideoTypes.fileExtensions.contains("lrf"))
         XCTAssertFalse(ImportableVideoTypes.fileExtensions.contains("dvr-ms"))
@@ -1425,7 +1447,7 @@ final class CodecRoutePlannerTests: XCTestCase {
 
     func testOutputSelectionOnlyMarksCurrentImplementedOutputAsRunnable() {
         XCTAssertTrue(TaptionOutputSelection(videoCodec: .hevc, container: .mp4).isImplementedNow)
-        XCTAssertFalse(TaptionOutputSelection(videoCodec: .hevc, container: .mov).isImplementedNow)
+        XCTAssertTrue(TaptionOutputSelection(videoCodec: .hevc, container: .mov).isImplementedNow)
         XCTAssertFalse(TaptionOutputSelection(videoCodec: .h264, container: .mp4).isImplementedNow)
         XCTAssertFalse(TaptionOutputSelection(videoCodec: .hevc, audioCodec: .opus, container: .mp4).isImplementedNow)
     }
@@ -1470,7 +1492,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionCodecOutputCatalog.implementationState(videoCodec: .hevc, container: .mov),
-            .commandPlanReady
+            .implemented
         )
         XCTAssertEqual(
             TaptionCodecOutputCatalog.implementationState(videoCodec: .proResRaw, container: .mkv),
@@ -1651,13 +1673,16 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(report.defaultOutputContainer, .mp4)
         XCTAssertEqual(report.defaultOutputState, .implemented)
         XCTAssertEqual(report.firstReleaseOutputCodecs, TaptionCodecRegistry.firstReleaseOutputCodecs)
-        XCTAssertEqual(report.implementedOutputSelectionCount, 1)
+        XCTAssertEqual(report.implementedOutputSelectionCount, 2)
         XCTAssertGreaterThan(report.commandPlanReadyOutputSelectionCount, 0)
         XCTAssertGreaterThan(report.plannedOutputSelectionCount, 0)
         XCTAssertEqual(report.unsupportedOutputSelectionCount, 0)
 
         let currentBuildItem = report.items.first {
             $0.videoCodec == .hevc && $0.container == .mp4
+        }
+        let movBuildItem = report.items.first {
+            $0.videoCodec == .hevc && $0.container == .mov
         }
         let commandPlanItem = report.items.first {
             $0.videoCodec == .h264 && $0.container == .mp4
@@ -1668,6 +1693,8 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertEqual(currentBuildItem?.state, .implemented)
         XCTAssertNil(currentBuildItem?.note)
+        XCTAssertEqual(movBuildItem?.state, .implemented)
+        XCTAssertNil(movBuildItem?.note)
         XCTAssertEqual(commandPlanItem?.state, .commandPlanReady)
         XCTAssertTrue(commandPlanItem?.note?.contains("software command plan") == true)
         XCTAssertEqual(plannedItem?.state, .planned)
@@ -1688,13 +1715,16 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(report.defaultOutputCodec, .aac)
         XCTAssertEqual(report.defaultOutputContainer, .mp4)
         XCTAssertEqual(report.defaultOutputState, .implemented)
-        XCTAssertEqual(report.implementedOutputSelectionCount, 1)
+        XCTAssertEqual(report.implementedOutputSelectionCount, 2)
         XCTAssertGreaterThan(report.commandPlanReadyOutputSelectionCount, 0)
         XCTAssertGreaterThan(report.plannedOutputSelectionCount, 0)
         XCTAssertEqual(report.unsupportedOutputSelectionCount, 0)
 
         let currentBuildItem = report.items.first {
             $0.audioCodec == .aac && $0.container == .mp4
+        }
+        let movBuildItem = report.items.first {
+            $0.audioCodec == .aac && $0.container == .mov
         }
         let commandPlanItem = report.items.first {
             $0.audioCodec == .opus && $0.container == .mkv
@@ -1705,6 +1735,8 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertEqual(currentBuildItem?.state, .implemented)
         XCTAssertNil(currentBuildItem?.note)
+        XCTAssertEqual(movBuildItem?.state, .implemented)
+        XCTAssertNil(movBuildItem?.note)
         XCTAssertEqual(commandPlanItem?.state, .commandPlanReady)
         XCTAssertTrue(commandPlanItem?.note?.contains("software command plan") == true)
         XCTAssertEqual(plannedItem?.state, .planned)
@@ -1719,6 +1751,7 @@ final class CodecRoutePlannerTests: XCTestCase {
                 TaptionLaunchInputVideoSupportItem(codec: .vp9, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .vp8, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .mpeg2, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .mpeg4Visual, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableOnSupportedHardware),
                 TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableOnSupportedHardware),
                 TaptionLaunchInputVideoSupportItem(codec: .proRes, availability: .availableOnSupportedHardware)
@@ -1726,15 +1759,15 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputVideoSummary,
-            "AV1, VP9, VP8, MPEG-2, H.264 / AVC, H.265 / HEVC, Apple ProRes"
+            "AV1, VP9, VP8, MPEG-2, MPEG-4 Visual, H.264 / AVC, H.265 / HEVC, Apple ProRes"
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainers,
-            [.mp4, .mov, .m4v, .webm, .mxf, .mpegProgramStream]
+            [.mp4, .mov, .m4v, .avi, .webm, .mxf, .mpegProgramStream]
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainerSummary,
-            "MP4, MOV, QT, M4V, WEBM, MXF, MPG, MPEG, MPE, VOB, MOD, DAT"
+            "MP4, MOV, QT, M4V, AVI, DIVX, WEBM, MXF, MPG, MPEG, MPE, VOB, MOD, DAT"
         )
         XCTAssertTrue(
             TaptionLaunchSupportCatalog.supportedInputVideoNote.contains("H.264 / AVC")
@@ -1747,7 +1780,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainerNote,
-            "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as WebM, MXF, and MPEG program streams."
+            "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as WebM, AVI, MXF, and MPEG program streams."
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.diagnoseInput(container: .mp4, videoCodec: .av1),
@@ -1758,11 +1791,11 @@ final class CodecRoutePlannerTests: XCTestCase {
             )
         )
         XCTAssertEqual(
-            TaptionLaunchSupportCatalog.diagnoseInput(container: .avi, videoCodec: .av1),
+            TaptionLaunchSupportCatalog.diagnoseInput(container: .avi, videoCodec: .mpeg4Visual),
             TaptionLaunchInputSupportDiagnosis(
-                state: .unsupportedContainer,
-                title: "Input Container Unsupported",
-                detail: "AVI input is not supported in the current launch build."
+                state: .supported,
+                title: "Input Supported",
+                detail: "The current launch build can inspect this input container and codec."
             )
         )
         XCTAssertEqual(
@@ -1826,7 +1859,7 @@ final class CodecRoutePlannerTests: XCTestCase {
                 outputCodec: .hevc,
                 container: .mov
             ),
-            .commandPlanReady
+            .implemented
         )
         XCTAssertEqual(
             TaptionCodecOutputCatalog.routeImplementationState(
@@ -1892,6 +1925,46 @@ final class CodecRoutePlannerTests: XCTestCase {
             try SW_FFmpegCodecCommandPlanner.makeSingleAssetCommandPlan(plan: plan),
             plan.videoCommandPlan
         )
+    }
+
+    func testCurrentHEVCMOVSelectionKeepsMOVOutputURLsAndAudioPlan() throws {
+        let asset = makeAsset(sourceCodec: .av1)
+        let sourceURL = URL(fileURLWithPath: "/tmp/input.mp4")
+        let temporaryURL = URL(fileURLWithPath: "/tmp/output.mov")
+        let outputPolicy = TaptionVideoOutputPolicy(
+            videoCodec: .hevc,
+            container: .mov
+        )
+
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: asset,
+            sourceURL: sourceURL,
+            temporaryOutputURL: temporaryURL,
+            outputPolicy: outputPolicy
+        )
+
+        XCTAssertEqual(plan.outputPolicy.videoCodec, .hevc)
+        XCTAssertEqual(plan.outputPolicy.audioCodec, .aac)
+        XCTAssertEqual(plan.outputPolicy.container, .mov)
+        XCTAssertEqual(plan.temporaryOutputURL?.path, "/tmp/output.mov")
+        XCTAssertEqual(plan.finalOutputURL?.path, "/tmp/input_taption.mov")
+        XCTAssertEqual(plan.audioPlan?.route, TaptionAudioCodecRoute(sourceCodec: .aac, outputCodec: .aac))
+        XCTAssertEqual(plan.audioPlan?.routeSelection.support, .copy)
+        XCTAssertTrue(plan.audioPlan?.isRunnableInCurrentBuild == true)
+    }
+
+    func testAV1SoftwareHEVCConfigurationUsesMOVFileTypeWhenSelected() throws {
+        let asset = makeAsset(sourceCodec: .av1)
+        let outputURL = URL(fileURLWithPath: "/tmp/output.mov")
+
+        let configuration = try SW_AV1HEVCTranscodeConfiguration.make(
+            asset: asset,
+            outputURL: outputURL,
+            options: .preservingSource(outputCodec: .hevc, container: .mov)
+        )
+
+        XCTAssertEqual(configuration.outputURL, outputURL)
+        XCTAssertEqual(configuration.outputFileType, .mov)
     }
 
     func testSingleAssetPlanUsesSelectedAudioOutputCodec() throws {
@@ -2131,7 +2204,8 @@ final class CodecRoutePlannerTests: XCTestCase {
     func testUnsupportedSourceCodecErrorSeparatesCurrentBuildFromUniversalRoadmap() {
         let message = TaptionVideoCoreError.unsupportedSourceCodec(.h264).localizedDescription
 
-        XCTAssertTrue(message.contains("AV1, VP9, and VP8 with software fallback"))
+        XCTAssertTrue(message.contains("H.265 / MP4 or MOV output"))
+        XCTAssertTrue(message.contains("AV1, VP9, VP8, MPEG-2, and MPEG-4 Visual with software fallback"))
         XCTAssertTrue(message.contains("H.264, H.265, or ProRes"))
         XCTAssertTrue(message.contains("H.264 / AVC"))
         XCTAssertTrue(message.contains("universal codec roadmap"))
@@ -2550,10 +2624,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(info.readinessStatusText, "Not supported yet")
 
         info.isInputSupportedNow = false
-        info.inputSupportDetail = "AVI input is not supported in the current launch build."
+        info.inputSupportDetail = "Unknown input codec is not supported in the current launch build."
         XCTAssertEqual(
             info.readinessDetailText,
-            "Not supported yet. AVI input is not supported in the current launch build."
+            "Not supported yet. Unknown input codec is not supported in the current launch build."
         )
 
         info.isRouteEncodable = true
@@ -4678,7 +4752,68 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testStartPreparedEncodingRequiresStarAndConsumesOneWithoutShowingStartOrSaveAds() async throws {
+    func testWatchAdForStarReloadsRewardedAdAfterEachEarnedReward() async throws {
+        let rewardedAdProvider = CyclingRewardedAdProvider(
+            states: [.ready, .loading, .ready, .loading, .ready]
+        )
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                rewardedAdProvider: rewardedAdProvider
+            )
+        )
+
+        await viewModel.refreshStarsIfNeeded()
+
+        XCTAssertTrue(viewModel.canWatchAdForStar)
+
+        viewModel.watchAdForStar()
+        try await waitForCondition(timeout: 2) {
+            viewModel.starWalletSnapshot.balance == 1
+                && viewModel.canWatchAdForStar
+                && viewModel.rewardedAdState == .ready
+        }
+
+        viewModel.watchAdForStar()
+        try await waitForCondition(timeout: 2) {
+            viewModel.starWalletSnapshot.balance == 2
+                && viewModel.canWatchAdForStar
+                && viewModel.rewardedAdState == .ready
+        }
+
+        let showCallCount = await rewardedAdProvider.recordedShowCallCount()
+        XCTAssertEqual(showCallCount, 2)
+    }
+
+    @MainActor
+    func testWatchAdButtonRemainsEnabledWhileRewardedAdKeepsLoading() async throws {
+        let rewardedAdProvider = CyclingRewardedAdProvider(
+            states: [.loading, .loading, .ready]
+        )
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                rewardedAdProvider: rewardedAdProvider
+            )
+        )
+
+        await viewModel.refreshStarsIfNeeded()
+
+        XCTAssertEqual(viewModel.rewardedAdState, .loading)
+        XCTAssertTrue(viewModel.canWatchAdForStar)
+        XCTAssertEqual(viewModel.watchAdButtonTitle, "Ad Loading")
+
+        viewModel.watchAdForStar()
+        try await waitForCondition(timeout: 2) {
+            viewModel.rewardedAdState == .ready && viewModel.canWatchAdForStar
+        }
+
+        let showCallCount = await rewardedAdProvider.recordedShowCallCount()
+        XCTAssertEqual(showCallCount, 0)
+    }
+
+    @MainActor
+    func testStartPreparedEncodingWithoutStarsEncodesBeforeRewardedSaveAd() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -4704,16 +4839,25 @@ final class CodecRoutePlannerTests: XCTestCase {
         viewModel.startFilesFlow(url: sourceURL)
         try await waitForReadyToStartState(in: viewModel)
 
-        XCTAssertFalse(viewModel.canStartEncodingNow)
-        XCTAssertEqual(viewModel.progressDetailText, "Watch a rewarded ad to earn 1 Star and continue.")
-        XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Needs Star")
-
-        viewModel.watchAdForStar()
-        try await waitForCondition(timeout: 2) {
-            viewModel.starWalletSnapshot.balance == 1 && viewModel.canStartEncodingNow
-        }
+        XCTAssertTrue(viewModel.canStartEncodingNow)
+        XCTAssertEqual(viewModel.starWalletSnapshot.balance, 0)
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Ready")
 
         viewModel.startPreparedEncoding()
+        try await waitForCondition(timeout: 2) {
+            viewModel.state.pendingSaveJob?.state.requiresRewardedAd == true
+                && viewModel.canWatchAdForStar
+        }
+
+        XCTAssertEqual(viewModel.state.title, "Ready to save")
+        XCTAssertEqual(viewModel.watchAdButtonTitle, "Watch Ad to Save")
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("source_taption.mp4").path
+        ))
+        let showCallCountBeforeSaveAd = await rewardedAdProvider.recordedShowCallCount()
+        XCTAssertEqual(showCallCountBeforeSaveAd, 0)
+
+        viewModel.watchAdForStar()
         try await waitForCompletedSave(in: viewModel)
         let showCallCount = await rewardedAdProvider.recordedShowCallCount()
         let sessionReasons = await sessionEndAdProvider.recordedReasons()
@@ -4721,6 +4865,39 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(viewModel.starWalletSnapshot.balance, 0)
         XCTAssertEqual(showCallCount, 1)
         XCTAssertTrue(sessionReasons.isEmpty)
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+    }
+
+    @MainActor
+    func testStartPreparedEncodingWithStarConsumesOneAndSavesWithoutRewardedAd() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let sourceURL = directoryURL.appendingPathComponent("source.mp4")
+        try Data("source".utf8).write(to: sourceURL)
+
+        let rewardedAdProvider = RecordingRewardedAdProvider(showResult: .earnedReward)
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 1))
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
+                rewardedAdProvider: rewardedAdProvider,
+                starWalletStore: walletStore
+            )
+        )
+
+        await viewModel.refreshStarsIfNeeded()
+        viewModel.startFilesFlow(url: sourceURL)
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.startPreparedEncoding()
+        try await waitForCompletedSave(in: viewModel)
+
+        XCTAssertEqual(viewModel.starWalletSnapshot.balance, 0)
+        let showCallCount = await rewardedAdProvider.recordedShowCallCount()
+        XCTAssertEqual(showCallCount, 0)
         XCTAssertEqual(viewModel.state.title, "Save Complete")
     }
 
@@ -4796,7 +4973,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testFolderBatchStopsAtNeedsStarWhenBalanceRunsOut() async throws {
+    func testFolderBatchEncodesNextItemThenWaitsForRewardedSaveAdWhenBalanceRunsOut() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -4812,10 +4989,12 @@ final class CodecRoutePlannerTests: XCTestCase {
         }
 
         let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 2))
+        let rewardedAdProvider = RecordingRewardedAdProvider(showResult: .earnedReward)
         let viewModel = HomeViewModel(
             environment: makeHomeViewModelTestEnvironment(
                 pendingSaveStore: FakePendingSaveStore(),
                 encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
+                rewardedAdProvider: rewardedAdProvider,
                 starWalletStore: walletStore
             )
         )
@@ -4825,11 +5004,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         viewModel.startPreparedEncoding()
 
         try await waitForCondition(timeout: 3) {
-            guard let review = viewModel.state.preparedEncodingReview else {
-                return false
-            }
-            return review.source.displayName == "c.mp4"
-                && viewModel.fileCardSnapshots.last?.statusText == "Needs Star"
+            viewModel.state.pendingSaveJob?.sourceName == "c.mp4"
+                && viewModel.state.pendingSaveJob?.state.requiresRewardedAd == true
+                && viewModel.fileCardSnapshots.last?.statusText == "Watch Ad to Save"
                 && viewModel.starWalletSnapshot.balance == 0
         }
 
@@ -4838,7 +5015,16 @@ final class CodecRoutePlannerTests: XCTestCase {
         })
         XCTAssertEqual(statuses[fileURLs[0].absoluteString], "Save Complete")
         XCTAssertEqual(statuses[fileURLs[1].absoluteString], "Save Complete")
-        XCTAssertEqual(statuses[fileURLs[2].absoluteString], "Needs Star")
+        XCTAssertEqual(statuses[fileURLs[2].absoluteString], "Watch Ad to Save")
+        let showCallCountBeforeSaveAd = await rewardedAdProvider.recordedShowCallCount()
+        XCTAssertEqual(showCallCountBeforeSaveAd, 0)
+
+        viewModel.watchAdForStar()
+        try await waitForCompletedSave(in: viewModel)
+
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+        let showCallCountAfterSaveAd = await rewardedAdProvider.recordedShowCallCount()
+        XCTAssertEqual(showCallCountAfterSaveAd, 1)
     }
 
     private struct FakeFFmpegCommandRunner: SW_FFmpegCommandRunning {
@@ -4894,6 +5080,39 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         func recordedShowCallCount() -> Int {
             showCallCount
+        }
+    }
+
+    private actor CyclingRewardedAdProvider: RewardedAdProviding {
+        private var states: [AdLoadState]
+        private var showCallCount = 0
+
+        init(states: [AdLoadState]) {
+            self.states = states
+        }
+
+        func currentRewardedState() async -> AdLoadState {
+            nextState()
+        }
+
+        func preloadRewardedAd() async -> AdLoadState {
+            nextState()
+        }
+
+        func showRewardedAd() async -> RewardedAdShowResult {
+            showCallCount += 1
+            return .earnedReward
+        }
+
+        func recordedShowCallCount() -> Int {
+            showCallCount
+        }
+
+        private func nextState() -> AdLoadState {
+            guard !states.isEmpty else {
+                return .ready
+            }
+            return states.removeFirst()
         }
     }
 
