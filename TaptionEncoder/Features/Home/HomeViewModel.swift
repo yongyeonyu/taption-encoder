@@ -93,7 +93,14 @@ final class HomeViewModel: ObservableObject {
         }
         if let pendingSaveJob = state.pendingSaveJob,
            pendingSaveJob.state.requiresRewardedAd {
-            return rewardedAdState == .ready ? "Watch Ad to Save" : "Ad Loading"
+            switch rewardedAdState {
+            case .ready:
+                return "Watch Ad to Save"
+            case .loading, .idle:
+                return "Ad Loading"
+            case .unavailable:
+                return "Find Ad"
+            }
         }
         switch rewardedAdState {
         case .ready:
@@ -783,10 +790,17 @@ final class HomeViewModel: ObservableObject {
         } else {
             nextState = await environment.starEarningService.currentAdState()
         }
+        applyRewardedAdState(nextState, startPollingIfNeeded: startPollingIfNeeded)
+    }
+
+    private func applyRewardedAdState(
+        _ nextState: AdLoadState,
+        startPollingIfNeeded: Bool
+    ) {
         rewardedAdState = nextState
-        if startPollingIfNeeded, rewardedAdState != .ready, !isWatchingStarAd {
+        if startPollingIfNeeded, nextState != .ready, !isWatchingStarAd {
             startRewardedAdStatePolling()
-        } else if rewardedAdState == .ready {
+        } else if nextState == .ready {
             rewardedAdStatePollingTask?.cancel()
             rewardedAdStatePollingTask = nil
         }
@@ -1103,7 +1117,13 @@ final class HomeViewModel: ObservableObject {
                 category: .ads,
                 metadata: ["state": rewardedAdState.rawValue]
             )
-            await refreshRewardedAdState(startPollingIfNeeded: true)
+            let nextState: AdLoadState
+            if rewardedAdState == .unavailable {
+                nextState = await environment.starEarningService.retryNextAdNow()
+            } else {
+                nextState = await environment.starEarningService.prepareNextAd()
+            }
+            applyRewardedAdState(nextState, startPollingIfNeeded: true)
             return
         }
 

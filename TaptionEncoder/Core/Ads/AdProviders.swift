@@ -33,12 +33,17 @@ protocol BannerAdProviding {
 protocol RewardedAdProviding {
     func currentRewardedState() async -> AdLoadState
     func preloadRewardedAd() async -> AdLoadState
+    func retryRewardedAdNow() async -> AdLoadState
     func showRewardedAd() async -> RewardedAdShowResult
 }
 
 extension RewardedAdProviding {
     func preloadRewardedAd() async -> AdLoadState {
         await currentRewardedState()
+    }
+
+    func retryRewardedAdNow() async -> AdLoadState {
+        await preloadRewardedAd()
     }
 }
 
@@ -158,6 +163,17 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
         #if canImport(GoogleMobileAds)
         return await AdMobRewardedAdManager.shared.loadIfNeeded(
             adUnitID: configuration.rewardedSaveAdUnitID
+        )
+        #else
+        return .unavailable
+        #endif
+    }
+
+    func retryRewardedAdNow() async -> AdLoadState {
+        #if canImport(GoogleMobileAds)
+        return await AdMobRewardedAdManager.shared.loadIfNeeded(
+            adUnitID: configuration.rewardedSaveAdUnitID,
+            bypassScheduledRetry: true
         )
         #else
         return .unavailable
@@ -492,13 +508,19 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
         if preparedAd != nil, preparedAdUnitID == adUnitID {
             return .ready
         }
-        if isLoading || isWaitingForRetry {
+        if isLoading {
             return .loading
+        }
+        if isWaitingForRetry {
+            return lastKnownState == .loading ? .unavailable : lastKnownState
         }
         return lastKnownState
     }
 
-    func loadIfNeeded(adUnitID: String) async -> AdLoadState {
+    func loadIfNeeded(
+        adUnitID: String,
+        bypassScheduledRetry: Bool = false
+    ) async -> AdLoadState {
         guard !adUnitID.isEmpty else {
             AppLogger.warning("Rewarded ad load skipped because ad unit is empty", category: .ads)
             lastKnownState = .unavailable
@@ -510,9 +532,14 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
             return .ready
         }
         if isWaitingForRetry {
-            AppLogger.debug("Rewarded ad retry already scheduled", category: .ads)
-            lastKnownState = .loading
-            return .loading
+            guard bypassScheduledRetry else {
+                AppLogger.debug("Rewarded ad retry already scheduled", category: .ads)
+                return lastKnownState == .loading ? .unavailable : lastKnownState
+            }
+            AppLogger.info("Rewarded ad retry requested immediately", category: .ads)
+            retryWorkItem?.cancel()
+            retryWorkItem = nil
+            isWaitingForRetry = false
         }
         guard !isLoading else {
             AppLogger.debug("Rewarded ad already loading", category: .ads)
@@ -662,7 +689,6 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
         retryWorkItem?.cancel()
         retryCount += 1
         isWaitingForRetry = true
-        lastKnownState = .loading
         let delay = min(120, 15 * retryCount)
         AppLogger.warning(
             "Rewarded ad retry scheduled",

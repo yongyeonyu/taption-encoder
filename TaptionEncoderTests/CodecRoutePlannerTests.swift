@@ -4813,6 +4813,51 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
+    func testPendingSaveRewardedAdUnavailableShowsFindAdAndTapRetriesLoad() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let sourceURL = directoryURL.appendingPathComponent("source.mp4")
+        try Data("source".utf8).write(to: sourceURL)
+
+        let rewardedAdProvider = RetryingRewardedAdProvider()
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
+                rewardedAdProvider: rewardedAdProvider
+            )
+        )
+
+        await viewModel.refreshStarsIfNeeded()
+        viewModel.startFilesFlow(url: sourceURL)
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.startPreparedEncoding()
+
+        try await waitForCondition(timeout: 2) {
+            viewModel.state.pendingSaveJob?.state.requiresRewardedAd == true
+                && viewModel.rewardedAdState == .unavailable
+                && viewModel.canWatchAdForStar
+        }
+
+        XCTAssertEqual(viewModel.watchAdButtonTitle, "Find Ad")
+
+        viewModel.watchAdForStar()
+        try await waitForCondition(timeout: 2) {
+            viewModel.rewardedAdState == .ready
+                && viewModel.watchAdButtonTitle == "Watch Ad to Save"
+                && viewModel.canWatchAdForStar
+        }
+
+        let retryCallCount = await rewardedAdProvider.recordedRetryCallCount()
+        let showCallCount = await rewardedAdProvider.recordedShowCallCount()
+        XCTAssertEqual(retryCallCount, 1)
+        XCTAssertEqual(showCallCount, 0)
+    }
+
+    @MainActor
     func testStartPreparedEncodingWithoutStarsEncodesBeforeRewardedSaveAd() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
@@ -5113,6 +5158,43 @@ final class CodecRoutePlannerTests: XCTestCase {
                 return .ready
             }
             return states.removeFirst()
+        }
+    }
+
+    private actor RetryingRewardedAdProvider: RewardedAdProviding {
+        private var currentState: AdLoadState
+        private var retryCallCount = 0
+        private var showCallCount = 0
+
+        init(initialState: AdLoadState = .unavailable) {
+            self.currentState = initialState
+        }
+
+        func currentRewardedState() async -> AdLoadState {
+            currentState
+        }
+
+        func preloadRewardedAd() async -> AdLoadState {
+            currentState
+        }
+
+        func retryRewardedAdNow() async -> AdLoadState {
+            retryCallCount += 1
+            currentState = .ready
+            return currentState
+        }
+
+        func showRewardedAd() async -> RewardedAdShowResult {
+            showCallCount += 1
+            return currentState == .ready ? .earnedReward : .unavailable
+        }
+
+        func recordedRetryCallCount() -> Int {
+            retryCallCount
+        }
+
+        func recordedShowCallCount() -> Int {
+            showCallCount
         }
     }
 
