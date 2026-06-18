@@ -60,6 +60,12 @@ struct AdMobRuntimeConfiguration: Equatable, Sendable {
     static let infoDictionaryHomeBannerAdUnitIDKey = "TaptionHomeBannerAdUnitID"
     static let infoDictionaryRewardedSaveAdUnitIDKey = "TaptionRewardedSaveAdUnitID"
     static let infoDictionarySessionEndInterstitialAdUnitIDKey = "TaptionSessionEndInterstitialAdUnitID"
+    static let googleDemoAdUnitPrefix = "ca-app-pub-3940256099942544/"
+
+    private static let productionAppOpenAdUnitID = "ca-app-pub-9754025737691277/9568683076"
+    private static let productionHomeBannerAdUnitID = "ca-app-pub-9754025737691277/6794641076"
+    private static let productionRewardedSaveAdUnitID = "ca-app-pub-9754025737691277/2855396062"
+    private static let productionSessionEndInterstitialAdUnitID = "ca-app-pub-9754025737691277/6942519738"
 
     let appOpenAdUnitID: String
     let homeBannerAdUnitID: String
@@ -75,21 +81,47 @@ struct AdMobRuntimeConfiguration: Equatable, Sendable {
             sessionEndInterstitialAdUnitID: "ca-app-pub-3940256099942544/4411468910"
         )
         #else
-        AdMobRuntimeConfiguration(
-            appOpenAdUnitID: normalizedString(
-                bundle.object(forInfoDictionaryKey: infoDictionaryAppOpenAdUnitIDKey) as? String
-            ) ?? "ca-app-pub-9754025737691277/9568683076",
-            homeBannerAdUnitID: normalizedString(
-                bundle.object(forInfoDictionaryKey: infoDictionaryHomeBannerAdUnitIDKey) as? String
-            ) ?? "ca-app-pub-9754025737691277/6794641076",
-            rewardedSaveAdUnitID: normalizedString(
-                bundle.object(forInfoDictionaryKey: infoDictionaryRewardedSaveAdUnitIDKey) as? String
-            ) ?? "ca-app-pub-9754025737691277/2855396062",
-            sessionEndInterstitialAdUnitID: normalizedString(
-                bundle.object(forInfoDictionaryKey: infoDictionarySessionEndInterstitialAdUnitIDKey) as? String
-            ) ?? "ca-app-pub-9754025737691277/6942519738"
+        productionConfiguration(
+            appOpenAdUnitID: bundle.object(forInfoDictionaryKey: infoDictionaryAppOpenAdUnitIDKey) as? String,
+            homeBannerAdUnitID: bundle.object(forInfoDictionaryKey: infoDictionaryHomeBannerAdUnitIDKey) as? String,
+            rewardedSaveAdUnitID: bundle.object(forInfoDictionaryKey: infoDictionaryRewardedSaveAdUnitIDKey) as? String,
+            sessionEndInterstitialAdUnitID: bundle.object(forInfoDictionaryKey: infoDictionarySessionEndInterstitialAdUnitIDKey) as? String
         )
         #endif
+    }
+
+    static func productionConfiguration(
+        appOpenAdUnitID: String?,
+        homeBannerAdUnitID: String?,
+        rewardedSaveAdUnitID: String?,
+        sessionEndInterstitialAdUnitID: String?
+    ) -> AdMobRuntimeConfiguration {
+        AdMobRuntimeConfiguration(
+            appOpenAdUnitID: productionAdUnitID(
+                appOpenAdUnitID,
+                fallback: productionAppOpenAdUnitID
+            ),
+            homeBannerAdUnitID: productionAdUnitID(
+                homeBannerAdUnitID,
+                fallback: productionHomeBannerAdUnitID
+            ),
+            rewardedSaveAdUnitID: productionAdUnitID(
+                rewardedSaveAdUnitID,
+                fallback: productionRewardedSaveAdUnitID
+            ),
+            sessionEndInterstitialAdUnitID: productionAdUnitID(
+                sessionEndInterstitialAdUnitID,
+                fallback: productionSessionEndInterstitialAdUnitID
+            )
+        )
+    }
+
+    private static func productionAdUnitID(_ value: String?, fallback: String) -> String {
+        guard let normalized = normalizedString(value),
+              !normalized.hasPrefix(googleDemoAdUnitPrefix) else {
+            return fallback
+        }
+        return normalized
     }
 
     private static func normalizedString(_ value: String?) -> String? {

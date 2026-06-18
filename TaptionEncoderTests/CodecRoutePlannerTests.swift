@@ -6,6 +6,27 @@ import XCTest
 @testable import Taption_Encoder
 
 final class CodecRoutePlannerTests: XCTestCase {
+    func testProductionAdMobConfigurationRejectsGoogleDemoAdUnitIDs() {
+        let configuration = AdMobRuntimeConfiguration.productionConfiguration(
+            appOpenAdUnitID: "ca-app-pub-3940256099942544/5575463023",
+            homeBannerAdUnitID: " ca-app-pub-3940256099942544/2934735716 ",
+            rewardedSaveAdUnitID: nil,
+            sessionEndInterstitialAdUnitID: "ca-app-pub-3940256099942544/4411468910"
+        )
+        let adUnitIDs = [
+            configuration.appOpenAdUnitID,
+            configuration.homeBannerAdUnitID,
+            configuration.rewardedSaveAdUnitID,
+            configuration.sessionEndInterstitialAdUnitID
+        ]
+
+        XCTAssertEqual(configuration.appOpenAdUnitID, "ca-app-pub-9754025737691277/9568683076")
+        XCTAssertEqual(configuration.homeBannerAdUnitID, "ca-app-pub-9754025737691277/6794641076")
+        XCTAssertEqual(configuration.rewardedSaveAdUnitID, "ca-app-pub-9754025737691277/2855396062")
+        XCTAssertEqual(configuration.sessionEndInterstitialAdUnitID, "ca-app-pub-9754025737691277/6942519738")
+        XCTAssertFalse(adUnitIDs.contains { $0.hasPrefix(AdMobRuntimeConfiguration.googleDemoAdUnitPrefix) })
+    }
+
     func testAV1ToHEVCUsesSoftwareWhenNoHardwareIsAvailable() {
         let selection = selectAV1ToHEVC(profile: .softwareOnly)
 

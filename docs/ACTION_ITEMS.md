@@ -364,9 +364,11 @@ Status date: 2026-06-18
 - [x] Upload TestFlight build 00.01.01 (12); App Store Connect accepted the package and started processing.
 - [x] Upload TestFlight build 00.01.01 (13); App Store Connect accepted the package and started processing.
 - [x] Upload TestFlight build 00.01.01 (14); App Store Connect accepted the package and started processing.
+- [x] Release iPhone ad ID smoke for 01.00.00 (15); Release log showed production publisher `ca-app-pub-9754025737691277` and zero Google demo IDs after launch.
+- [x] Upload TestFlight build 01.00.00 (15); App Store Connect accepted the package and started processing.
 - [x] Create internal TestFlight group and attach build 00.01.00 (5).
 - [x] Add account owner/admin as internal tester for build 00.01.00 (5).
-- [ ] Attach build 00.01.01 (14) to the internal TestFlight group after App Store Connect processing completes.
+- [ ] Attach build 01.00.00 (15) to the internal TestFlight group after App Store Connect processing completes.
 - [ ] TestFlight smoke test.
 - [ ] Submit for App Review.
 
