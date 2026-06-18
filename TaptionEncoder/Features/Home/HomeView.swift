@@ -9,6 +9,7 @@ struct HomeView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var activeMenuSheet: HomeMenuSheet?
     @State private var isOutputSizePopoverPresented = false
+    @State private var outputSizeDraftMB: Double?
     @State private var pendingSaveAsFileName = ""
 
     init(environment: AppEnvironment = .phase0) {
@@ -516,6 +517,7 @@ struct HomeView: View {
                         .font(.headline.weight(.semibold))
                     Spacer()
                     Button {
+                        outputSizeDraftMB = nil
                         viewModel.selectOutputSize(.manual)
                     } label: {
                         Text("Custom")
@@ -530,8 +532,9 @@ struct HomeView: View {
                 }
 
                 HStack(spacing: 8 * metrics.contentScale) {
-                    ForEach([TaptionOutputSizePreset.low, .auto, .high], id: \.self) { preset in
+                    ForEach([TaptionOutputSizePreset.auto, .low, .medium, .high], id: \.self) { preset in
                         Button {
+                            outputSizeDraftMB = nil
                             viewModel.selectOutputSize(preset)
                         } label: {
                             Text(preset.menuTitle)
@@ -546,7 +549,7 @@ struct HomeView: View {
                     }
                 }
 
-                Text(viewModel.selectedOutputTargetSizeText)
+                Text(outputSizeDraftText(fallback: viewModel.selectedOutputTargetSizeText))
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(Color.white.opacity(0.92))
 
@@ -574,13 +577,20 @@ struct HomeView: View {
 
                 Slider(
                     value: Binding(
-                        get: { viewModel.selectedOutputTargetSizeValueMB },
+                        get: { outputSizeDraftMB ?? viewModel.selectedOutputTargetSizeValueMB },
                         set: { newValue in
-                            viewModel.updateOutputTargetSizeMB(newValue)
+                            outputSizeDraftMB = min(max(newValue, range.lowerBound), range.upperBound)
                         }
                     ),
                     in: range,
-                    step: 1
+                    step: 1,
+                    onEditingChanged: { isEditing in
+                        if isEditing {
+                            outputSizeDraftMB = outputSizeDraftMB ?? viewModel.selectedOutputTargetSizeValueMB
+                        } else {
+                            commitOutputSizeDraft(range: range)
+                        }
+                    }
                 )
                 .tint(TaptionTheme.accent)
 
@@ -597,7 +607,29 @@ struct HomeView: View {
             .frame(width: 280)
             .background(TaptionTheme.elevatedSurface)
             .presentationCompactAdaptation(.popover)
+            .onAppear {
+                outputSizeDraftMB = nil
+            }
+            .onDisappear {
+                commitOutputSizeDraft(range: range)
+            }
         }
+    }
+
+    private func outputSizeDraftText(fallback: String) -> String {
+        guard let outputSizeDraftMB else {
+            return fallback
+        }
+        return "\(Int(outputSizeDraftMB.rounded())) MB"
+    }
+
+    private func commitOutputSizeDraft(range: ClosedRange<Double>) {
+        guard let outputSizeDraftMB else {
+            return
+        }
+        let clamped = min(max(outputSizeDraftMB, range.lowerBound), range.upperBound)
+        self.outputSizeDraftMB = nil
+        viewModel.updateOutputTargetSizeMB(clamped)
     }
 
     private func outputMenu<Content: View>(

@@ -4021,7 +4021,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         viewModel.startFilesFlow(url: sourceURL)
         try await waitForReadyToStartState(in: viewModel)
 
-        XCTAssertEqual(viewModel.outputSizeDisplayText, "Medium")
+        XCTAssertEqual(viewModel.outputSizeDisplayText, "Auto")
         XCTAssertEqual(viewModel.outputSizeSecondaryText, "~72 MB")
         XCTAssertEqual(viewModel.selectedOutputTargetSizeText, "72 MB")
         XCTAssertEqual(viewModel.outputSizeStatusMessage, "Estimated output: 72 MB.")
@@ -4031,7 +4031,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         viewModel.selectOutputResolution(.hd720)
         try await waitForReadyToStartState(in: viewModel)
 
-        XCTAssertEqual(viewModel.outputSizeDisplayText, "Medium")
+        XCTAssertEqual(viewModel.outputSizeDisplayText, "Auto")
         XCTAssertEqual(viewModel.outputSizeSecondaryText, "~34 MB")
         XCTAssertEqual(viewModel.selectedOutputTargetSizeText, "34 MB")
     }
@@ -4584,7 +4584,7 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         let requiredText = ByteCountFormatter.string(fromByteCount: requiredBytes, countStyle: .file)
         let availableText = ByteCountFormatter.string(fromByteCount: availableBytes, countStyle: .file)
-        XCTAssertEqual(viewModel.outputSizeDisplayText, "Medium")
+        XCTAssertEqual(viewModel.outputSizeDisplayText, "Auto")
         XCTAssertEqual(viewModel.outputSizeSecondaryText, "Low Space")
         XCTAssertTrue(viewModel.outputSizeShowsWarning)
         XCTAssertEqual(

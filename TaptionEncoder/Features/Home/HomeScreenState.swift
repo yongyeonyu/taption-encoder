@@ -287,16 +287,19 @@ enum TaptionOutputResolutionPreset: String, Codable, Equatable, CaseIterable {
 }
 
 enum TaptionOutputSizePreset: String, Codable, Equatable, CaseIterable {
-    case low
     case auto
+    case low
+    case medium
     case high
     case manual
 
     var menuTitle: String {
         switch self {
+        case .auto:
+            return "Auto"
         case .low:
             return "Low"
-        case .auto:
+        case .medium:
             return "Medium"
         case .high:
             return "High"
@@ -307,9 +310,11 @@ enum TaptionOutputSizePreset: String, Codable, Equatable, CaseIterable {
 
     var qualityBitsPerPixel: Double? {
         switch self {
+        case .auto:
+            return 0.075
         case .low:
             return 0.045
-        case .auto:
+        case .medium:
             return 0.075
         case .high:
             return 0.115
@@ -561,7 +566,7 @@ struct TaptionOutputSelection: Identifiable, Equatable {
             let audioBitrate = estimatedAudioBitrate(for: asset)
             let targetBitrate = Int((Double(totalBitBudget) / duration).rounded()) - audioBitrate
             return max(targetBitrate, 300_000)
-        case .low, .auto, .high:
+        case .auto, .low, .medium, .high:
             return estimatedVideoBitrate(for: asset, preset: sizePreset)
         }
     }
@@ -644,7 +649,7 @@ struct TaptionOutputSelection: Identifiable, Equatable {
         switch preset {
         case .low:
             multiplier = 0.45
-        case .auto:
+        case .auto, .medium:
             multiplier = 0.70
         case .high:
             multiplier = 1.0

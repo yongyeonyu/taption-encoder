@@ -528,6 +528,32 @@ private enum AdMobRequestFactory {
     }
 }
 
+private enum AdMobErrorMetadata {
+    static func make(error: Error, adUnitID: String? = nil) -> [String: String] {
+        let nsError = error as NSError
+        var metadata: [String: String] = [
+            "error": error.localizedDescription,
+            "domain": nsError.domain,
+            "code": "\(nsError.code)"
+        ]
+        if let adUnitID, !adUnitID.isEmpty {
+            metadata["adUnit"] = adUnitID
+        }
+        if !nsError.userInfo.isEmpty {
+            metadata["userInfoKeys"] = nsError.userInfo.keys
+                .map { String(describing: $0) }
+                .sorted()
+                .joined(separator: ",")
+        }
+        if let underlyingError = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+            metadata["underlyingDomain"] = underlyingError.domain
+            metadata["underlyingCode"] = "\(underlyingError.code)"
+            metadata["underlyingError"] = underlyingError.localizedDescription
+        }
+        return metadata
+    }
+}
+
 private enum AdMobRootViewControllerProvider {
     @MainActor
     static func topViewController() -> UIViewController? {
@@ -681,12 +707,12 @@ private struct AdMobBannerRepresentable: UIViewRepresentable {
         }
 
         func bannerView(_ bannerView: BannerView, didFailToReceiveAdWithError error: Error) {
+            let adUnitID = loadedAdUnitID
             AppLogger.error(
                 "Banner ad failed to load",
                 category: .ads,
-                metadata: ["error": error.localizedDescription]
+                metadata: AdMobErrorMetadata.make(error: error, adUnitID: adUnitID)
             )
-            let adUnitID = loadedAdUnitID
             loadedAdUnitID = ""
             scheduleFillRetry(for: bannerView, adUnitID: adUnitID)
         }
@@ -781,7 +807,7 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
             AppLogger.error(
                 "Rewarded ad failed to load",
                 category: .ads,
-                metadata: ["error": error.localizedDescription]
+                metadata: AdMobErrorMetadata.make(error: error, adUnitID: adUnitID)
             )
             scheduleRetry(adUnitID: adUnitID)
             return .unavailable
@@ -976,7 +1002,7 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
         AppLogger.error(
             "Rewarded ad failed to present",
             category: .ads,
-            metadata: ["error": error.localizedDescription]
+            metadata: AdMobErrorMetadata.make(error: error)
         )
         lastKnownState = .unavailable
         finishCurrentPresentation(allowed: false)
@@ -1029,7 +1055,7 @@ final class AdMobInterstitialAdManager: NSObject, FullScreenContentDelegate {
             AppLogger.error(
                 "Interstitial ad failed to load",
                 category: .ads,
-                metadata: ["error": error.localizedDescription]
+                metadata: AdMobErrorMetadata.make(error: error, adUnitID: adUnitID)
             )
             return .unavailable
         }
@@ -1084,7 +1110,7 @@ final class AdMobInterstitialAdManager: NSObject, FullScreenContentDelegate {
         AppLogger.error(
             "Interstitial ad failed to present",
             category: .ads,
-            metadata: ["error": error.localizedDescription]
+            metadata: AdMobErrorMetadata.make(error: error)
         )
         isShowing = false
         preparedAd = nil
@@ -1135,7 +1161,7 @@ final class AdMobAppOpenAdManager: NSObject, FullScreenContentDelegate {
             AppLogger.error(
                 "App open ad failed to load",
                 category: .ads,
-                metadata: ["error": error.localizedDescription]
+                metadata: AdMobErrorMetadata.make(error: error, adUnitID: adUnitID)
             )
         }
     }
@@ -1203,7 +1229,7 @@ final class AdMobAppOpenAdManager: NSObject, FullScreenContentDelegate {
         AppLogger.error(
             "App open ad failed to present",
             category: .ads,
-            metadata: ["error": error.localizedDescription]
+            metadata: AdMobErrorMetadata.make(error: error)
         )
         isShowing = false
         Task { @MainActor in
