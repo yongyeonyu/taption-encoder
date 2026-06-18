@@ -512,41 +512,18 @@ struct HomeView: View {
         .disabled(!viewModel.canChangeOutputSizeSelection)
         .popover(isPresented: $isOutputSizePopoverPresented) {
             VStack(alignment: .leading, spacing: 12 * metrics.contentScale) {
-                HStack {
-                    Text("Size")
-                        .font(.headline.weight(.semibold))
-                    Spacer()
-                    Button {
-                        outputSizeDraftMB = nil
-                        viewModel.selectOutputSize(.manual)
-                    } label: {
-                        Text("Custom")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(viewModel.selectedOutput.sizePreset == .manual ? Color.black : Color.white.opacity(0.86))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(viewModel.selectedOutput.sizePreset == .manual ? Color.white : Color.white.opacity(0.10))
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
+                Text("Size")
+                    .font(.headline.weight(.semibold))
+
+                HStack(spacing: 8 * metrics.contentScale) {
+                    sizePresetButton(.auto)
+                    sizePresetButton(.manual)
                 }
 
                 HStack(spacing: 8 * metrics.contentScale) {
-                    ForEach([TaptionOutputSizePreset.auto, .low, .medium, .high], id: \.self) { preset in
-                        Button {
-                            outputSizeDraftMB = nil
-                            viewModel.selectOutputSize(preset)
-                        } label: {
-                            Text(preset.menuTitle)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(viewModel.selectedOutput.sizePreset == preset ? Color.black : Color.white.opacity(0.86))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 7)
-                                .background(viewModel.selectedOutput.sizePreset == preset ? Color.white : Color.white.opacity(0.10))
-                                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    sizePresetButton(.high)
+                    sizePresetButton(.medium)
+                    sizePresetButton(.low)
                 }
 
                 Text(outputSizeDraftText(fallback: viewModel.selectedOutputTargetSizeText))
@@ -614,6 +591,22 @@ struct HomeView: View {
                 commitOutputSizeDraft(range: range)
             }
         }
+    }
+
+    private func sizePresetButton(_ preset: TaptionOutputSizePreset) -> some View {
+        Button {
+            outputSizeDraftMB = nil
+            viewModel.selectOutputSize(preset)
+        } label: {
+            Text(preset.menuTitle)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(viewModel.selectedOutput.sizePreset == preset ? Color.black : Color.white.opacity(0.86))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .background(viewModel.selectedOutput.sizePreset == preset ? Color.white : Color.white.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 
     private func outputSizeDraftText(fallback: String) -> String {

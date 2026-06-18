@@ -300,7 +300,7 @@ enum TaptionOutputSizePreset: String, Codable, Equatable, CaseIterable {
         case .low:
             return "Low"
         case .medium:
-            return "Medium"
+            return "Mid"
         case .high:
             return "High"
         case .manual:
