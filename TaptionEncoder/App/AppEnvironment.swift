@@ -12,6 +12,9 @@ struct AppEnvironment {
     var adGate: AdGate
     var bannerAdProvider: BannerAdProviding
     var rewardedAdProvider: RewardedAdProviding
+    var starWalletStore: StarWalletManaging
+    var starEarningService: StarEarningServing
+    var starPurchaseProvider: StarPurchaseProviding
     var sessionEndAdProvider: SessionEndAdProviding
     var backgroundCoordinator: BackgroundEncodingCoordinating
     var projectDocumentStore: ProjectDocumentStoring
@@ -28,6 +31,9 @@ struct AppEnvironment {
         adGate: AdGate,
         bannerAdProvider: BannerAdProviding,
         rewardedAdProvider: RewardedAdProviding,
+        starWalletStore: StarWalletManaging,
+        starEarningService: StarEarningServing,
+        starPurchaseProvider: StarPurchaseProviding,
         sessionEndAdProvider: SessionEndAdProviding,
         backgroundCoordinator: BackgroundEncodingCoordinating,
         projectDocumentStore: ProjectDocumentStoring
@@ -43,6 +49,9 @@ struct AppEnvironment {
         self.adGate = adGate
         self.bannerAdProvider = bannerAdProvider
         self.rewardedAdProvider = rewardedAdProvider
+        self.starWalletStore = starWalletStore
+        self.starEarningService = starEarningService
+        self.starPurchaseProvider = starPurchaseProvider
         self.sessionEndAdProvider = sessionEndAdProvider
         self.backgroundCoordinator = backgroundCoordinator
         self.projectDocumentStore = projectDocumentStore
@@ -53,6 +62,8 @@ struct AppEnvironment {
         let pendingSaveStore = FilePendingSaveStore.shared
         let adMobConfiguration = AdMobRuntimeConfiguration.current()
         let adGate = AdMobRewardedSaveAdGate(configuration: adMobConfiguration)
+        let rewardedAdProvider = AdMobRewardedAdProvider(configuration: adMobConfiguration)
+        let starWalletStore = StarWalletStore()
         return AppEnvironment(
             configuration: configuration,
             featureFlags: .phase0,
@@ -64,7 +75,15 @@ struct AppEnvironment {
             pendingSaveStore: pendingSaveStore,
             adGate: adGate,
             bannerAdProvider: AdMobBannerAdProvider(configuration: adMobConfiguration),
-            rewardedAdProvider: AdMobRewardedAdProvider(configuration: adMobConfiguration),
+            rewardedAdProvider: rewardedAdProvider,
+            starWalletStore: starWalletStore,
+            starEarningService: DefaultStarEarningService(
+                walletStore: starWalletStore,
+                rewardedAdProvider: rewardedAdProvider
+            ),
+            starPurchaseProvider: ConfiguredStarPurchaseProvider(
+                products: configuration.starPurchaseProducts
+            ),
             sessionEndAdProvider: AdMobSessionEndAdProvider(configuration: adMobConfiguration),
             backgroundCoordinator: UIApplicationBackgroundEncodingCoordinator(),
             projectDocumentStore: FCPXMLProjectDocumentStore()

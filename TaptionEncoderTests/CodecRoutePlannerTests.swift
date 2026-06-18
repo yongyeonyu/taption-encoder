@@ -1442,6 +1442,23 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(policy.advancedOptions.resizeTo, TaptionPixelSize(width: 1280, height: 720))
     }
 
+    func testOutputSelectionResolutionPresetPreservesPortraitOrientation() {
+        let selection = TaptionOutputSelection(
+            videoCodec: .hevc,
+            container: .mp4,
+            resolutionPreset: .hd720
+        )
+
+        let policy = selection.outputPolicy(
+            for: makeAsset(
+                sourceCodec: .h264,
+                displaySize: TaptionPixelSize(width: 1080, height: 1920)
+            )
+        )
+
+        XCTAssertEqual(policy.advancedOptions.resizeTo, TaptionPixelSize(width: 720, height: 1280))
+    }
+
     func testOutputCatalogSeparatesImplementedCommandPlanReadyPlannedAndUnsupportedOutputs() {
         XCTAssertEqual(
             TaptionCodecOutputCatalog.implementationState(videoCodec: .hevc, container: .mp4),
@@ -3818,6 +3835,431 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
+    func testResolutionAvailabilityUsesSourceOrientation() {
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: FakePendingSaveStore())
+        )
+        let portraitAsset = makeAsset(
+            sourceCodec: .h264,
+            displaySize: TaptionPixelSize(width: 1080, height: 1920)
+        )
+
+        XCTAssertTrue(viewModel.resolutionPresetIsAvailable(TaptionOutputResolutionPreset.fullHD, for: portraitAsset))
+        XCTAssertTrue(viewModel.resolutionPresetIsAvailable(TaptionOutputResolutionPreset.hd720, for: portraitAsset))
+        XCTAssertFalse(viewModel.resolutionPresetIsAvailable(TaptionOutputResolutionPreset.qhd1440, for: portraitAsset))
+    }
+
+    @MainActor
+    func testRecoverFolderAccessStillSavesAfterPromptWasDismissed() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
+        let finalURL = directoryURL.appendingPathComponent("clip_taption.mp4")
+        let pickedFileURL = directoryURL.appendingPathComponent("picked.mp4")
+        try Data("new output".utf8).write(to: temporaryURL)
+        try Data("picked".utf8).write(to: pickedFileURL)
+
+        let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
+        let state = TaptionPendingSaveState(
+            planID: UUID(),
+            temporaryOutputURL: temporaryURL,
+            finalOutputURL: finalURL,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: false
+        )
+        try await store.savePendingState(state)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: store)
+        )
+
+        await viewModel.restorePendingSavesIfNeeded()
+        XCTAssertNil(viewModel.folderAccessPrompt)
+
+        viewModel.recoverFolderAccessForPendingSave(url: pickedFileURL)
+        try await waitForCompletedSave(in: viewModel)
+
+        XCTAssertEqual(try String(contentsOf: finalURL, encoding: .utf8), "new output")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
+        let states = try await store.loadPendingStates()
+        XCTAssertTrue(states.isEmpty)
+    }
+
+    @MainActor
+    func testPendingSaveRestoreShowsEncodedOutputSizeInSizeTile() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let temporaryContents = Data("new output".utf8)
+        let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
+        let finalURL = directoryURL.appendingPathComponent("clip_taption.mp4")
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try temporaryContents.write(to: temporaryURL)
+
+        let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
+        let state = TaptionPendingSaveState(
+            planID: UUID(),
+            temporaryOutputURL: temporaryURL,
+            finalOutputURL: finalURL,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: false
+        )
+        try await store.savePendingState(state)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: store)
+        )
+
+        await viewModel.restorePendingSavesIfNeeded()
+
+        let expectedSize = ByteCountFormatter.string(
+            fromByteCount: Int64(temporaryContents.count),
+            countStyle: .file
+        )
+        XCTAssertEqual(viewModel.outputSizeDisplayText, expectedSize)
+        XCTAssertEqual(viewModel.outputSizeSecondaryText, "Encoded")
+        XCTAssertEqual(viewModel.outputSizeStatusMessage, "Encoded output: \(expectedSize).")
+    }
+
+    @MainActor
+    func testAutoSizeShowsEstimatedOutputInMainTileAndPopoverValue() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let sourceURL = directoryURL.appendingPathComponent("source.mp4")
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try Data("source".utf8).write(to: sourceURL)
+        let asset = makeAsset(sourceCodec: .av1, fileSize: 400_000_000)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: asset)
+            )
+        )
+
+        viewModel.startFilesFlow(url: sourceURL)
+        try await waitForReadyToStartState(in: viewModel)
+
+        XCTAssertEqual(viewModel.outputSizeDisplayText, "Auto")
+        XCTAssertEqual(viewModel.outputSizeSecondaryText, "400 MB")
+        XCTAssertEqual(viewModel.selectedOutputTargetSizeText, "400 MB")
+        XCTAssertNil(viewModel.outputSizeStatusMessage)
+        XCTAssertEqual(viewModel.outputTargetSizeRangeMB.lowerBound, 100)
+        XCTAssertEqual(viewModel.outputTargetSizeRangeMB.upperBound, 400)
+    }
+
+    @MainActor
+    func testManualSizeUsesChosenValueAndClampsToAutoMaximum() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let sourceURL = directoryURL.appendingPathComponent("source.mp4")
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try Data("source".utf8).write(to: sourceURL)
+        let asset = makeAsset(sourceCodec: .av1, fileSize: 400_000_000)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: asset)
+            )
+        )
+
+        viewModel.startFilesFlow(url: sourceURL)
+        try await waitForReadyToStartState(in: viewModel)
+
+        viewModel.selectOutputSize(.manual)
+        XCTAssertEqual(viewModel.outputSizeDisplayText, "400 MB")
+        XCTAssertNil(viewModel.outputSizeSecondaryText)
+
+        viewModel.updateOutputTargetSizeMB(250)
+        XCTAssertEqual(viewModel.outputSizeDisplayText, "250 MB")
+        XCTAssertEqual(viewModel.selectedOutputTargetSizeText, "250 MB")
+        XCTAssertNil(viewModel.outputSizeSecondaryText)
+
+        viewModel.updateOutputTargetSizeMB(450)
+        XCTAssertEqual(viewModel.outputSizeDisplayText, "400 MB")
+        XCTAssertEqual(viewModel.selectedOutputTargetSizeText, "400 MB")
+        XCTAssertEqual(viewModel.selectedOutputTargetSizeValueMB, 400)
+    }
+
+    @MainActor
+    func testRestoredPendingSaveDoesNotAutoPromptForFolderAccess() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
+        let finalURL = directoryURL.appendingPathComponent("clip_taption.mp4")
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try Data("new output".utf8).write(to: temporaryURL)
+
+        let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
+        let state = TaptionPendingSaveState(
+            planID: UUID(),
+            temporaryOutputURL: temporaryURL,
+            finalOutputURL: finalURL,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: false
+        )
+        try await store.savePendingState(state)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: store)
+        )
+
+        await viewModel.restorePendingSavesIfNeeded()
+
+        XCTAssertNil(viewModel.folderAccessPrompt)
+        XCTAssertNil(viewModel.pendingSaveExportPrompt)
+        XCTAssertNotNil(viewModel.pendingSaveRecoveryJob)
+    }
+
+    @MainActor
+    func testPermissionDeniedPendingSaveRequestsExportPrompt() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            chmod(directoryURL.path, 0o755)
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let readOnlyDirectoryURL = directoryURL.appendingPathComponent("ReadOnly", isDirectory: true)
+        let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
+        let finalURL = readOnlyDirectoryURL.appendingPathComponent("clip_taption.mp4")
+        try FileManager.default.createDirectory(at: readOnlyDirectoryURL, withIntermediateDirectories: true)
+        try Data("new output".utf8).write(to: temporaryURL)
+        chmod(readOnlyDirectoryURL.path, 0o555)
+
+        let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
+        let state = TaptionPendingSaveState(
+            planID: UUID(),
+            temporaryOutputURL: temporaryURL,
+            finalOutputURL: finalURL,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: false
+        )
+        try await store.savePendingState(state)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: store)
+        )
+
+        await viewModel.restorePendingSavesIfNeeded()
+        viewModel.retryPendingSave()
+        try await waitForCondition(timeout: 2) {
+            viewModel.pendingSaveExportPrompt != nil
+        }
+
+        XCTAssertNil(viewModel.folderAccessPrompt)
+        XCTAssertEqual(viewModel.pendingSaveExportPrompt?.job.id, state.id)
+        XCTAssertEqual(
+            viewModel.pendingSaveExportPrompt?.exportPresentationURL.lastPathComponent,
+            finalURL.lastPathComponent
+        )
+        XCTAssertNotEqual(
+            viewModel.pendingSaveExportPrompt?.exportPresentationURL.lastPathComponent,
+            temporaryURL.lastPathComponent
+        )
+    }
+
+    @MainActor
+    func testPermissionDeniedPendingSaveExportCompletesAfterPromptDismissalRace() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            chmod(directoryURL.path, 0o755)
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let readOnlyDirectoryURL = directoryURL.appendingPathComponent("ReadOnly", isDirectory: true)
+        let exportDirectoryURL = directoryURL.appendingPathComponent("Recovered", isDirectory: true)
+        let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
+        let finalURL = readOnlyDirectoryURL.appendingPathComponent("clip_taption.mp4")
+        let exportURL = exportDirectoryURL.appendingPathComponent("clip_taption.mp4")
+        try FileManager.default.createDirectory(at: readOnlyDirectoryURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: exportDirectoryURL, withIntermediateDirectories: true)
+        try Data("new output".utf8).write(to: temporaryURL)
+        chmod(readOnlyDirectoryURL.path, 0o555)
+
+        let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
+        let state = TaptionPendingSaveState(
+            planID: UUID(),
+            temporaryOutputURL: temporaryURL,
+            finalOutputURL: finalURL,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: false
+        )
+        try await store.savePendingState(state)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: store)
+        )
+
+        await viewModel.restorePendingSavesIfNeeded()
+        viewModel.retryPendingSave()
+        try await waitForPendingSaveExportPrompt(in: viewModel)
+
+        let prompt = try XCTUnwrap(viewModel.pendingSaveExportPrompt)
+        try FileManager.default.copyItem(at: prompt.exportPresentationURL, to: exportURL)
+
+        viewModel.dismissPendingSaveExportPrompt()
+        viewModel.completePendingSaveExport(prompt: prompt, destinationURL: exportURL)
+        try await waitForCompletedSave(in: viewModel)
+
+        XCTAssertNil(viewModel.pendingSaveExportPrompt)
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+        XCTAssertEqual(
+            viewModel.state.detail,
+            expectedCompletedSaveDetail(
+                url: exportURL,
+                fileByteCount: Data("new output".utf8).count
+            )
+        )
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Save Complete")
+        XCTAssertNil(viewModel.fileCardSnapshots.first?.detailText)
+        XCTAssertEqual(try String(contentsOf: exportURL, encoding: .utf8), "new output")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
+        let states = try await store.loadPendingStates()
+        XCTAssertTrue(states.isEmpty)
+    }
+
+    @MainActor
+    func testPermissionDeniedPendingSaveExportCancelKeepsPendingState() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            chmod(directoryURL.path, 0o755)
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let readOnlyDirectoryURL = directoryURL.appendingPathComponent("ReadOnly", isDirectory: true)
+        let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
+        let finalURL = readOnlyDirectoryURL.appendingPathComponent("clip_taption.mp4")
+        try FileManager.default.createDirectory(at: readOnlyDirectoryURL, withIntermediateDirectories: true)
+        try Data("new output".utf8).write(to: temporaryURL)
+        chmod(readOnlyDirectoryURL.path, 0o555)
+
+        let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
+        let state = TaptionPendingSaveState(
+            planID: UUID(),
+            temporaryOutputURL: temporaryURL,
+            finalOutputURL: finalURL,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: false
+        )
+        try await store.savePendingState(state)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: store)
+        )
+
+        await viewModel.restorePendingSavesIfNeeded()
+        viewModel.retryPendingSave()
+        try await waitForPendingSaveExportPrompt(in: viewModel)
+
+        viewModel.dismissPendingSaveExportPrompt()
+
+        XCTAssertNil(viewModel.pendingSaveExportPrompt)
+        XCTAssertEqual(viewModel.pendingSaveRecoveryJob?.id, state.id)
+        XCTAssertEqual(viewModel.state.title, "Pending save")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: temporaryURL.path))
+        let states = try await store.loadPendingStates()
+        XCTAssertEqual(states.map(\.id), [state.id])
+    }
+
+    @MainActor
+    func testExportRecoveryKeepsSaveCompleteVisibleWhileAnotherPendingSaveRemainsQueued() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            chmod(directoryURL.path, 0o755)
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        let readOnlyDirectoryURL = directoryURL.appendingPathComponent("ReadOnly", isDirectory: true)
+        let recoveredDirectoryURL = directoryURL.appendingPathComponent("Recovered", isDirectory: true)
+        let firstTemporaryURL = directoryURL.appendingPathComponent("first-encoded.mp4")
+        let firstFinalURL = readOnlyDirectoryURL.appendingPathComponent("first_taption.mp4")
+        let recoveredFirstURL = recoveredDirectoryURL.appendingPathComponent("first_taption.mp4")
+        let secondTemporaryURL = directoryURL.appendingPathComponent("second-encoded.mp4")
+        let secondFinalURL = directoryURL.appendingPathComponent("second_taption.mp4")
+        try FileManager.default.createDirectory(at: readOnlyDirectoryURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: recoveredDirectoryURL, withIntermediateDirectories: true)
+        try Data("first output".utf8).write(to: firstTemporaryURL)
+        try Data("second output".utf8).write(to: secondTemporaryURL)
+        chmod(readOnlyDirectoryURL.path, 0o555)
+
+        let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
+        let firstState = TaptionPendingSaveState(
+            planID: UUID(),
+            temporaryOutputURL: firstTemporaryURL,
+            finalOutputURL: firstFinalURL,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: false,
+            createdAt: Date(timeIntervalSince1970: 1)
+        )
+        let secondState = TaptionPendingSaveState(
+            planID: UUID(),
+            temporaryOutputURL: secondTemporaryURL,
+            finalOutputURL: secondFinalURL,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: false,
+            createdAt: Date(timeIntervalSince1970: 2)
+        )
+        try await store.savePendingState(firstState)
+        try await store.savePendingState(secondState)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: store)
+        )
+
+        await viewModel.restorePendingSavesIfNeeded()
+        viewModel.retryPendingSave()
+        try await waitForPendingSaveExportPrompt(in: viewModel)
+
+        let prompt = try XCTUnwrap(viewModel.pendingSaveExportPrompt)
+        try FileManager.default.copyItem(at: prompt.exportPresentationURL, to: recoveredFirstURL)
+
+        viewModel.completePendingSaveExport(prompt: prompt, destinationURL: recoveredFirstURL)
+        try await waitForCondition(timeout: 2) {
+            if case .completed = viewModel.state {
+                return viewModel.state.detail == self.expectedCompletedSaveDetail(
+                    url: recoveredFirstURL,
+                    fileByteCount: Data("first output".utf8).count
+                )
+                    && viewModel.showsSaveAction
+                    && viewModel.saveActionTitle == "Save Next"
+            }
+            return false
+        }
+
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Save Complete")
+        XCTAssertNil(viewModel.fileCardSnapshots.first?.detailText)
+        XCTAssertEqual(try String(contentsOf: recoveredFirstURL, encoding: .utf8), "first output")
+
+        viewModel.saveCurrentPendingOutput()
+        try await waitForCondition(timeout: 2) {
+            if case .completed = viewModel.state {
+                return viewModel.state.detail == self.expectedCompletedSaveDetail(
+                    url: secondFinalURL,
+                    fileByteCount: Data("second output".utf8).count
+                )
+                    && !viewModel.showsSaveAction
+            }
+            return false
+        }
+
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+        XCTAssertEqual(try String(contentsOf: secondFinalURL, encoding: .utf8), "second output")
+        let states = try await store.loadPendingStates()
+        XCTAssertTrue(states.isEmpty)
+    }
+
+    @MainActor
     func testPendingSaveOverwriteChoiceReplacesExistingOutputWithoutAnotherAd() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
@@ -3851,12 +4293,28 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertNil(viewModel.saveConflictPrompt)
         XCTAssertEqual(try String(contentsOf: finalURL, encoding: .utf8), "new output")
         XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
+        let expectedSize = ByteCountFormatter.string(
+            fromByteCount: Int64(Data("new output".utf8).count),
+            countStyle: .file
+        )
+        XCTAssertEqual(viewModel.outputSizeDisplayText, expectedSize)
+        XCTAssertEqual(viewModel.outputSizeSecondaryText, "Encoded")
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+        XCTAssertEqual(
+            viewModel.state.detail,
+            expectedCompletedSaveDetail(
+                url: finalURL,
+                fileByteCount: Data("new output".utf8).count
+            )
+        )
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Save Complete")
+        XCTAssertNil(viewModel.fileCardSnapshots.first?.detailText)
         let states = try await store.loadPendingStates()
         XCTAssertTrue(states.isEmpty)
     }
 
     @MainActor
-    func testPendingSaveSaveAsChoiceKeepsExistingOutputAndWritesUniqueFile() async throws {
+    func testPendingSaveSaveAsChoicePromptsForFileNameAndWritesCustomFile() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -3883,14 +4341,105 @@ final class CodecRoutePlannerTests: XCTestCase {
         await viewModel.restorePendingSavesIfNeeded()
         viewModel.retryPendingSave()
         try await waitForSaveConflictPrompt(in: viewModel)
-        let suggestedURL = try XCTUnwrap(viewModel.saveConflictPrompt?.suggestedURL)
         viewModel.savePendingOutputAsNewFile()
+        let renamePrompt = try XCTUnwrap(viewModel.pendingSaveRenamePrompt)
+        XCTAssertEqual(renamePrompt.suggestedFileName, "clip_taption 2.mp4")
+        let customURL = directoryURL.appendingPathComponent("clip_taption_custom.mp4")
+        viewModel.confirmPendingSaveAsNewFile(named: "clip_taption_custom")
         try await waitForCompletedSave(in: viewModel)
 
         XCTAssertNil(viewModel.saveConflictPrompt)
+        XCTAssertNil(viewModel.pendingSaveRenamePrompt)
         XCTAssertEqual(try String(contentsOf: finalURL, encoding: .utf8), "existing output")
-        XCTAssertEqual(try String(contentsOf: suggestedURL, encoding: .utf8), "new output")
+        XCTAssertEqual(try String(contentsOf: customURL, encoding: .utf8), "new output")
         XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+        XCTAssertEqual(
+            viewModel.state.detail,
+            expectedCompletedSaveDetail(
+                url: customURL,
+                fileByteCount: Data("new output".utf8).count
+            )
+        )
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Save Complete")
+        XCTAssertNil(viewModel.fileCardSnapshots.first?.detailText)
+        let states = try await store.loadPendingStates()
+        XCTAssertTrue(states.isEmpty)
+    }
+
+    @MainActor
+    func testCompletedSaveStaysVisibleWhileAnotherPendingSaveRemainsQueued() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        let firstTemporaryURL = directoryURL.appendingPathComponent("first-encoded.mp4")
+        let firstFinalURL = directoryURL.appendingPathComponent("first_taption.mp4")
+        let secondTemporaryURL = directoryURL.appendingPathComponent("second-encoded.mp4")
+        let secondFinalURL = directoryURL.appendingPathComponent("second_taption.mp4")
+        try Data("first output".utf8).write(to: firstTemporaryURL)
+        try Data("second output".utf8).write(to: secondTemporaryURL)
+
+        let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
+        let firstState = TaptionPendingSaveState(
+            planID: UUID(),
+            temporaryOutputURL: firstTemporaryURL,
+            finalOutputURL: firstFinalURL,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: false,
+            createdAt: Date(timeIntervalSince1970: 1)
+        )
+        let secondState = TaptionPendingSaveState(
+            planID: UUID(),
+            temporaryOutputURL: secondTemporaryURL,
+            finalOutputURL: secondFinalURL,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: false,
+            createdAt: Date(timeIntervalSince1970: 2)
+        )
+        try await store.savePendingState(firstState)
+        try await store.savePendingState(secondState)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: store)
+        )
+
+        await viewModel.restorePendingSavesIfNeeded()
+        viewModel.retryPendingSave()
+        try await waitForCondition(timeout: 2) {
+            if case .completed = viewModel.state {
+                return viewModel.state.detail == self.expectedCompletedSaveDetail(
+                    url: firstFinalURL,
+                    fileByteCount: Data("first output".utf8).count
+                )
+                    && viewModel.showsSaveAction
+                    && viewModel.saveActionTitle == "Save Next"
+            }
+            return false
+        }
+
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Save Complete")
+        XCTAssertNil(viewModel.fileCardSnapshots.first?.detailText)
+        XCTAssertNil(viewModel.pendingSaveRecoveryJob)
+        XCTAssertEqual(try String(contentsOf: firstFinalURL, encoding: .utf8), "first output")
+
+        viewModel.saveCurrentPendingOutput()
+        try await waitForCondition(timeout: 2) {
+            if case .completed = viewModel.state {
+                return viewModel.state.detail == self.expectedCompletedSaveDetail(
+                    url: secondFinalURL,
+                    fileByteCount: Data("second output".utf8).count
+                )
+                    && !viewModel.showsSaveAction
+            }
+            return false
+        }
+
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+        XCTAssertEqual(try String(contentsOf: secondFinalURL, encoding: .utf8), "second output")
         let states = try await store.loadPendingStates()
         XCTAssertTrue(states.isEmpty)
     }
@@ -3923,11 +4472,527 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(presentation.action.contains("Retry will save without another ad"))
     }
 
+    @MainActor
+    func testStorageBlockedShowsLowSpaceWarningInSizeTile() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let sourceURL = directoryURL.appendingPathComponent("source.mp4")
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try Data("source".utf8).write(to: sourceURL)
+
+        let requiredBytes = Int64(800 * 1024 * 1024)
+        let availableBytes = Int64(200 * 1024 * 1024)
+        let storageChecker = FixedStorageChecker(
+            requirement: TaptionStorageRequirement(
+                estimatedOutputBytes: 400 * 1024 * 1024,
+                requiredWorkingBytes: requiredBytes,
+                availableBytes: availableBytes
+            )
+        )
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                storageChecker: storageChecker
+            )
+        )
+
+        viewModel.startFilesFlow(url: sourceURL)
+        try await waitForStorageBlockedState(in: viewModel)
+
+        let requiredText = ByteCountFormatter.string(fromByteCount: requiredBytes, countStyle: .file)
+        let availableText = ByteCountFormatter.string(fromByteCount: availableBytes, countStyle: .file)
+        XCTAssertEqual(viewModel.outputSizeDisplayText, "Auto")
+        XCTAssertEqual(viewModel.outputSizeSecondaryText, "Low Space")
+        XCTAssertTrue(viewModel.outputSizeShowsWarning)
+        XCTAssertEqual(
+            viewModel.outputSizeStatusMessage,
+            "Low space. Need \(requiredText) free. Available \(availableText)."
+        )
+    }
+
+    func testTaptionSavePolicyDefaultsToNoRewardedSaveGate() {
+        XCTAssertEqual(TaptionSavePolicy().saveGate, .none)
+    }
+
+    func testStarWalletBadgeTextUsesFixedWidthFormatting() {
+        XCTAssertEqual(makeStarWalletSnapshot(balance: 0).badgeText, "000")
+        XCTAssertEqual(makeStarWalletSnapshot(balance: 7).badgeText, "007")
+        XCTAssertEqual(makeStarWalletSnapshot(balance: 123).badgeText, "123")
+        XCTAssertEqual(makeStarWalletSnapshot(balance: 1_200).badgeText, "999+")
+    }
+
+    func testStarWalletStoreRoundTripsEncryptedSnapshot() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        let secureStore = TestStarWalletSecureStore()
+        let walletFileURL = directoryURL.appendingPathComponent("stars.enc")
+        let quarantineURL = directoryURL.appendingPathComponent("quarantine", isDirectory: true)
+        let store = StarWalletStore(
+            fileURL: walletFileURL,
+            quarantineDirectoryURL: quarantineURL,
+            secureStore: secureStore
+        )
+
+        _ = try await store.earnStar(source: "rewarded_ad")
+        let expectedSnapshot = try await store.recordPurchase(
+            StarPurchaseProduct(
+                productID: "stars.10",
+                starCount: 10,
+                displayName: "10 Stars"
+            )
+        )
+
+        let reloadedStore = StarWalletStore(
+            fileURL: walletFileURL,
+            quarantineDirectoryURL: quarantineURL,
+            secureStore: secureStore
+        )
+        let reloadedSnapshot = await reloadedStore.currentSnapshot()
+
+        XCTAssertEqual(reloadedSnapshot.balance, expectedSnapshot.balance)
+        XCTAssertEqual(reloadedSnapshot.sequence, expectedSnapshot.sequence)
+        XCTAssertEqual(reloadedSnapshot.totalEarned, expectedSnapshot.totalEarned)
+        XCTAssertEqual(reloadedSnapshot.totalSpent, expectedSnapshot.totalSpent)
+        XCTAssertEqual(reloadedSnapshot.totalPurchased, expectedSnapshot.totalPurchased)
+        XCTAssertEqual(reloadedSnapshot.events.map(\.kind), expectedSnapshot.events.map(\.kind))
+        XCTAssertEqual(reloadedSnapshot.events.map(\.note), expectedSnapshot.events.map(\.note))
+        XCTAssertEqual(reloadedSnapshot.totalPurchased, 10)
+        XCTAssertFalse(try Data(contentsOf: walletFileURL).isEmpty)
+    }
+
+    func testStarWalletStoreResetsWhenCiphertextIsTampered() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        let secureStore = TestStarWalletSecureStore()
+        let walletFileURL = directoryURL.appendingPathComponent("stars.enc")
+        let quarantineURL = directoryURL.appendingPathComponent("quarantine", isDirectory: true)
+        let store = StarWalletStore(
+            fileURL: walletFileURL,
+            quarantineDirectoryURL: quarantineURL,
+            secureStore: secureStore
+        )
+
+        _ = try await store.earnStar(source: "rewarded_ad")
+
+        var ciphertext = try Data(contentsOf: walletFileURL)
+        XCTAssertFalse(ciphertext.isEmpty)
+        ciphertext[0] ^= 0xFF
+        try ciphertext.write(to: walletFileURL, options: [.atomic])
+
+        let reloadedStore = StarWalletStore(
+            fileURL: walletFileURL,
+            quarantineDirectoryURL: quarantineURL,
+            secureStore: secureStore
+        )
+        let snapshot = await reloadedStore.currentSnapshot()
+
+        XCTAssertEqual(snapshot, .empty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: walletFileURL.path))
+        let quarantinedFiles = try FileManager.default.contentsOfDirectory(
+            at: quarantineURL,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertEqual(quarantinedFiles.count, 1)
+    }
+
+    func testStarWalletStoreRejectsRollbackPayload() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        let secureStore = TestStarWalletSecureStore()
+        let walletFileURL = directoryURL.appendingPathComponent("stars.enc")
+        let quarantineURL = directoryURL.appendingPathComponent("quarantine", isDirectory: true)
+        let store = StarWalletStore(
+            fileURL: walletFileURL,
+            quarantineDirectoryURL: quarantineURL,
+            secureStore: secureStore
+        )
+
+        _ = try await store.earnStar(source: "first_reward")
+        let rollbackCiphertext = try Data(contentsOf: walletFileURL)
+        _ = try await store.earnStar(source: "second_reward")
+
+        try rollbackCiphertext.write(to: walletFileURL, options: [.atomic])
+
+        let reloadedStore = StarWalletStore(
+            fileURL: walletFileURL,
+            quarantineDirectoryURL: quarantineURL,
+            secureStore: secureStore
+        )
+        let snapshot = await reloadedStore.currentSnapshot()
+
+        XCTAssertEqual(snapshot, .empty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: walletFileURL.path))
+        let quarantinedFiles = try FileManager.default.contentsOfDirectory(
+            at: quarantineURL,
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertEqual(quarantinedFiles.count, 1)
+    }
+
+    func testDefaultStarEarningServiceCreditsOneStarOnlyWhenRewardIsEarned() async throws {
+        let walletStore = FakeStarWalletStore()
+        let rewardedAdProvider = RecordingRewardedAdProvider(showResult: .earnedReward)
+        let service = DefaultStarEarningService(
+            walletStore: walletStore,
+            rewardedAdProvider: rewardedAdProvider
+        )
+
+        let result = try await service.watchAdAndEarnStar()
+        let showCallCount = await rewardedAdProvider.recordedShowCallCount()
+
+        XCTAssertEqual(result.adResult, .earnedReward)
+        XCTAssertEqual(result.snapshot.balance, 1)
+        XCTAssertEqual(result.snapshot.totalEarned, 1)
+        XCTAssertEqual(showCallCount, 1)
+    }
+
+    func testDefaultStarEarningServiceLeavesBalanceUnchangedWithoutReward() async throws {
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 2))
+        let rewardedAdProvider = RecordingRewardedAdProvider(showResult: .closedWithoutReward)
+        let service = DefaultStarEarningService(
+            walletStore: walletStore,
+            rewardedAdProvider: rewardedAdProvider
+        )
+
+        let result = try await service.watchAdAndEarnStar()
+        let showCallCount = await rewardedAdProvider.recordedShowCallCount()
+
+        XCTAssertEqual(result.adResult, .closedWithoutReward)
+        XCTAssertEqual(result.snapshot.balance, 2)
+        XCTAssertEqual(result.snapshot.totalEarned, 2)
+        XCTAssertEqual(showCallCount, 1)
+    }
+
+    @MainActor
+    func testStartPreparedEncodingRequiresStarAndConsumesOneWithoutShowingStartOrSaveAds() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let sourceURL = directoryURL.appendingPathComponent("source.mp4")
+        try Data("source".utf8).write(to: sourceURL)
+
+        let rewardedAdProvider = RecordingRewardedAdProvider(showResult: .earnedReward)
+        let sessionEndAdProvider = RecordingSessionEndAdProvider()
+        let walletStore = FakeStarWalletStore()
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
+                rewardedAdProvider: rewardedAdProvider,
+                sessionEndAdProvider: sessionEndAdProvider,
+                starWalletStore: walletStore
+            )
+        )
+
+        await viewModel.refreshStarsIfNeeded()
+        viewModel.startFilesFlow(url: sourceURL)
+        try await waitForReadyToStartState(in: viewModel)
+
+        XCTAssertFalse(viewModel.canStartEncodingNow)
+        XCTAssertEqual(viewModel.progressDetailText, "Watch a rewarded ad to earn 1 Star and continue.")
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Needs Star")
+
+        viewModel.watchAdForStar()
+        try await waitForCondition(timeout: 2) {
+            viewModel.starWalletSnapshot.balance == 1 && viewModel.canStartEncodingNow
+        }
+
+        viewModel.startPreparedEncoding()
+        try await waitForCompletedSave(in: viewModel)
+        let showCallCount = await rewardedAdProvider.recordedShowCallCount()
+        let sessionReasons = await sessionEndAdProvider.recordedReasons()
+
+        XCTAssertEqual(viewModel.starWalletSnapshot.balance, 0)
+        XCTAssertEqual(showCallCount, 1)
+        XCTAssertTrue(sessionReasons.isEmpty)
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+    }
+
+    @MainActor
+    func testEncodingFailureRefundsConsumedStar() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let sourceURL = directoryURL.appendingPathComponent("source.mp4")
+        try Data("source".utf8).write(to: sourceURL)
+
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 1))
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                encoderService: FailingEncoderService(),
+                starWalletStore: walletStore
+            )
+        )
+
+        viewModel.startFilesFlow(url: sourceURL)
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.startPreparedEncoding()
+
+        try await waitForCondition(timeout: 2) {
+            if case .failed = viewModel.state {
+                return viewModel.starWalletSnapshot.balance == 1
+            }
+            return false
+        }
+
+        XCTAssertEqual(viewModel.starWalletSnapshot.balance, 1)
+        XCTAssertEqual(viewModel.state.title, "Encoding failed")
+    }
+
+    @MainActor
+    func testCancelledEncodingDoesNotRefundConsumedStar() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let sourceURL = directoryURL.appendingPathComponent("source.mp4")
+        try Data("source".utf8).write(to: sourceURL)
+
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 1))
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                encoderService: CancellableEncoderService(),
+                starWalletStore: walletStore
+            )
+        )
+
+        viewModel.startFilesFlow(url: sourceURL)
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.startPreparedEncoding()
+        try await waitForCondition(timeout: 2) {
+            viewModel.state.canCancel
+        }
+
+        viewModel.cancel()
+        try await waitForCondition(timeout: 2) {
+            if case .cancelled = viewModel.state {
+                return true
+            }
+            return false
+        }
+
+        XCTAssertEqual(viewModel.starWalletSnapshot.balance, 0)
+    }
+
+    @MainActor
+    func testFolderBatchStopsAtNeedsStarWhenBalanceRunsOut() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let fileURLs = [
+            directoryURL.appendingPathComponent("a.mp4"),
+            directoryURL.appendingPathComponent("b.mp4"),
+            directoryURL.appendingPathComponent("c.mp4")
+        ]
+        for url in fileURLs {
+            try Data("source".utf8).write(to: url)
+        }
+
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 2))
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
+                starWalletStore: walletStore
+            )
+        )
+
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.startPreparedEncoding()
+
+        try await waitForCondition(timeout: 3) {
+            guard let review = viewModel.state.preparedEncodingReview else {
+                return false
+            }
+            return review.source.displayName == "c.mp4"
+                && viewModel.fileCardSnapshots.last?.statusText == "Needs Star"
+                && viewModel.starWalletSnapshot.balance == 0
+        }
+
+        let statuses = Dictionary(uniqueKeysWithValues: viewModel.fileCardSnapshots.map {
+            ($0.id, $0.statusText)
+        })
+        XCTAssertEqual(statuses[fileURLs[0].absoluteString], "Save Complete")
+        XCTAssertEqual(statuses[fileURLs[1].absoluteString], "Save Complete")
+        XCTAssertEqual(statuses[fileURLs[2].absoluteString], "Needs Star")
+    }
+
     private struct FakeFFmpegCommandRunner: SW_FFmpegCommandRunning {
         var runBlock: @Sendable (SW_FFmpegCommandPlan) async throws -> SW_FFmpegCommandRunResult
 
         func run(commandPlan: SW_FFmpegCommandPlan) async throws -> SW_FFmpegCommandRunResult {
             try await runBlock(commandPlan)
+        }
+    }
+
+    private final class TestStarWalletSecureStore: @unchecked Sendable, StarWalletSecureStoring {
+        private var encryptionKeyData = Data((0..<32).map(UInt8.init))
+        private var integrityMetadata: StarWalletIntegrityMetadata?
+
+        func loadOrCreateEncryptionKeyData() throws -> Data {
+            encryptionKeyData
+        }
+
+        func loadIntegrityMetadata() throws -> StarWalletIntegrityMetadata? {
+            integrityMetadata
+        }
+
+        func saveIntegrityMetadata(_ metadata: StarWalletIntegrityMetadata) throws {
+            integrityMetadata = metadata
+        }
+
+        func clearIntegrityMetadata() throws {
+            integrityMetadata = nil
+        }
+    }
+
+    private actor RecordingRewardedAdProvider: RewardedAdProviding {
+        private let currentStateValue: AdLoadState
+        private let showResultValue: RewardedAdShowResult
+        private var showCallCount = 0
+
+        init(
+            currentState: AdLoadState = .ready,
+            showResult: RewardedAdShowResult = .earnedReward
+        ) {
+            self.currentStateValue = currentState
+            self.showResultValue = showResult
+        }
+
+        func currentRewardedState() async -> AdLoadState {
+            currentStateValue
+        }
+
+        func showRewardedAd() async -> RewardedAdShowResult {
+            showCallCount += 1
+            return showResultValue
+        }
+
+        func recordedShowCallCount() -> Int {
+            showCallCount
+        }
+    }
+
+    private actor RecordingSessionEndAdProvider: SessionEndAdProviding {
+        private var reasons: [SessionEndAdReason] = []
+        private var preloadCount = 0
+
+        func preloadSessionEndAd() async {
+            preloadCount += 1
+        }
+
+        func showSessionEndAd(reason: SessionEndAdReason) async {
+            reasons.append(reason)
+        }
+
+        func recordedReasons() -> [SessionEndAdReason] {
+            reasons
+        }
+
+        func recordedPreloadCount() -> Int {
+            preloadCount
+        }
+    }
+
+    private struct ImmediateEncoderService: EncoderServicing {
+        var outputData: Data
+
+        func encode(
+            plan: TaptionEncodingPlan,
+            progress: @escaping (TaptionEncodingProgress) -> Void
+        ) async throws -> TaptionEncodingResult {
+            guard let temporaryOutputURL = plan.temporaryOutputURL else {
+                throw TaptionVideoCoreError.missingTemporaryOutputURL
+            }
+
+            progress(TaptionEncodingProgress(stage: .preparing, fractionCompleted: 0))
+            progress(TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.5, elapsedTime: 0.1))
+            try FileManager.default.createDirectory(
+                at: temporaryOutputURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try outputData.write(to: temporaryOutputURL)
+            progress(TaptionEncodingProgress(stage: .waitingForSaveGate, fractionCompleted: 1, elapsedTime: 0.2))
+
+            return TaptionEncodingResult(
+                planID: plan.id,
+                temporaryOutputURL: temporaryOutputURL,
+                finalOutputURL: plan.finalOutputURL,
+                usedBackend: .customSoftware,
+                usedMode: .software
+            )
+        }
+
+        func cancelEncoding(planID: UUID) async {}
+    }
+
+    private struct FailingEncoderService: EncoderServicing {
+        func encode(
+            plan: TaptionEncodingPlan,
+            progress: @escaping (TaptionEncodingProgress) -> Void
+        ) async throws -> TaptionEncodingResult {
+            progress(TaptionEncodingProgress(stage: .preparing, fractionCompleted: 0))
+            throw TaptionVideoCoreError.exportFailed("Synthetic encoding failure.")
+        }
+
+        func cancelEncoding(planID: UUID) async {}
+    }
+
+    private struct CancellableEncoderService: EncoderServicing {
+        func encode(
+            plan: TaptionEncodingPlan,
+            progress: @escaping (TaptionEncodingProgress) -> Void
+        ) async throws -> TaptionEncodingResult {
+            progress(TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.1))
+            while true {
+                try Task.checkCancellation()
+                try await Task.sleep(nanoseconds: 20_000_000)
+            }
+        }
+
+        func cancelEncoding(planID: UUID) async {}
+    }
+
+    private struct FixedStorageChecker: StorageChecking {
+        var requirement: TaptionStorageRequirement
+
+        func storageRequirement(for plan: TaptionEncodingPlan) async throws -> TaptionStorageRequirement {
+            requirement
+        }
+    }
+
+    private struct StubMediaInspector: MediaInspecting {
+        var asset: TaptionVideoAsset
+
+        func inspectVideo(at url: URL) async throws -> TaptionVideoAsset {
+            var inspectedAsset = asset
+            inspectedAsset.displayName = url.lastPathComponent
+            inspectedAsset.location = TaptionVideoAssetLocation(kind: .file, url: url)
+            return inspectedAsset
         }
     }
 
@@ -3943,16 +5008,63 @@ final class CodecRoutePlannerTests: XCTestCase {
             .appendingPathComponent("TaptionEncoderTests-\(UUID().uuidString)", isDirectory: true)
     }
 
+    private func makeStarWalletSnapshot(
+        balance: Int,
+        totalEarned: Int? = nil,
+        totalSpent: Int = 0,
+        totalPurchased: Int = 0,
+        sequence: Int64 = 0
+    ) -> StarWalletSnapshot {
+        StarWalletSnapshot(
+            balance: balance,
+            totalEarned: totalEarned ?? balance,
+            totalSpent: totalSpent,
+            totalPurchased: totalPurchased,
+            sequence: sequence,
+            lastUpdatedAt: Date(timeIntervalSince1970: 0),
+            events: []
+        )
+    }
+
+    private func expectedCompletedSaveDetail(
+        url: URL,
+        fileByteCount: Int,
+        duration: String = "Unknown"
+    ) -> String {
+        let format = url.pathExtension.isEmpty ? "Unknown" : url.pathExtension.uppercased()
+        let size = ByteCountFormatter.string(
+            fromByteCount: Int64(fileByteCount),
+            countStyle: .file
+        )
+        return [
+            "File: \(url.lastPathComponent)",
+            "Format: \(format)",
+            "Size: \(size)",
+            "Time: \(duration)",
+            "Path: \(url.path)"
+        ].joined(separator: "\n")
+    }
+
     private func makeHomeViewModelTestEnvironment(
-        pendingSaveStore: PendingSaveStoring
+        pendingSaveStore: PendingSaveStoring,
+        mediaInspector: MediaInspecting = FakeMediaInspector(),
+        encoderService: EncoderServicing = FakeEncoderService(),
+        storageChecker: StorageChecking = FakeStorageChecker(),
+        rewardedAdProvider: RewardedAdProviding = FakeRewardedAdProvider(),
+        sessionEndAdProvider: SessionEndAdProviding = FakeSessionEndAdProvider(),
+        starWalletStore: StarWalletManaging = FakeStarWalletStore()
     ) -> AppEnvironment {
         let configuration = AppConfiguration()
+        let starEarningService = DefaultStarEarningService(
+            walletStore: starWalletStore,
+            rewardedAdProvider: rewardedAdProvider
+        )
         return AppEnvironment(
             configuration: configuration,
             featureFlags: .phase0,
-            mediaInspector: FakeMediaInspector(),
-            encoderService: FakeEncoderService(),
-            storageChecker: FakeStorageChecker(),
+            mediaInspector: mediaInspector,
+            encoderService: encoderService,
+            storageChecker: storageChecker,
             sourceOpener: FakeSourceOpener(),
             outputResolver: DefaultOutputResolver(
                 namingPolicy: TaptionOutputNamingPolicy(suffix: configuration.outputSuffix)
@@ -3960,8 +5072,13 @@ final class CodecRoutePlannerTests: XCTestCase {
             pendingSaveStore: pendingSaveStore,
             adGate: FakeAdGate(),
             bannerAdProvider: FakeBannerAdProvider(),
-            rewardedAdProvider: FakeRewardedAdProvider(),
-            sessionEndAdProvider: FakeSessionEndAdProvider(),
+            rewardedAdProvider: rewardedAdProvider,
+            starWalletStore: starWalletStore,
+            starEarningService: starEarningService,
+            starPurchaseProvider: FakeStarPurchaseProvider(
+                products: configuration.starPurchaseProducts
+            ),
+            sessionEndAdProvider: sessionEndAdProvider,
             backgroundCoordinator: FakeBackgroundEncodingCoordinator(),
             projectDocumentStore: FakeProjectFileStore()
         )
@@ -3978,12 +5095,48 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
+    private func waitForPendingSaveExportPrompt(
+        in viewModel: HomeViewModel,
+        timeout: TimeInterval = 2
+    ) async throws {
+        try await waitForCondition(timeout: timeout) {
+            viewModel.pendingSaveExportPrompt != nil
+        }
+    }
+
+    @MainActor
     private func waitForCompletedSave(
         in viewModel: HomeViewModel,
         timeout: TimeInterval = 2
     ) async throws {
         try await waitForCondition(timeout: timeout) {
             if case .completed = viewModel.state {
+                return true
+            }
+            return false
+        }
+    }
+
+    @MainActor
+    private func waitForStorageBlockedState(
+        in viewModel: HomeViewModel,
+        timeout: TimeInterval = 2
+    ) async throws {
+        try await waitForCondition(timeout: timeout) {
+            if case .storageBlocked = viewModel.state {
+                return true
+            }
+            return false
+        }
+    }
+
+    @MainActor
+    private func waitForReadyToStartState(
+        in viewModel: HomeViewModel,
+        timeout: TimeInterval = 2
+    ) async throws {
+        try await waitForCondition(timeout: timeout) {
+            if case .readyToStart = viewModel.state {
                 return true
             }
             return false
@@ -4044,7 +5197,11 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
     }
 
-    private func makeAsset(sourceCodec: TaptionVideoCodec) -> TaptionVideoAsset {
+    private func makeAsset(
+        sourceCodec: TaptionVideoCodec,
+        displaySize: TaptionPixelSize = TaptionPixelSize(width: 1920, height: 1080),
+        fileSize: Int64 = 1_000_000
+    ) -> TaptionVideoAsset {
         TaptionVideoAsset(
             displayName: "\(sourceCodec.rawValue).mp4",
             location: TaptionVideoAssetLocation(kind: .file),
@@ -4052,8 +5209,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             duration: 1,
             videoTrack: TaptionVideoTrackInfo(
                 codec: sourceCodec,
-                naturalSize: TaptionPixelSize(width: 1920, height: 1080),
-                displaySize: TaptionPixelSize(width: 1920, height: 1080),
+                naturalSize: displaySize,
+                displaySize: displaySize,
                 nominalFrameRate: TaptionRationalFrameRate(numerator: 30)
             ),
             audioTracks: [
@@ -4063,7 +5220,7 @@ final class CodecRoutePlannerTests: XCTestCase {
                     sampleRate: 48_000
                 )
             ],
-            fingerprint: TaptionMediaFingerprint(fileSize: 1_000_000)
+            fingerprint: TaptionMediaFingerprint(fileSize: fileSize)
         )
     }
 

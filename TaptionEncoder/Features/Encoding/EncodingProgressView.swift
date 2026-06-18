@@ -2,11 +2,18 @@ import SwiftUI
 
 struct EncodingProgressView: View {
     var state: HomeScreenState
+    var displayDetail: String? = nil
+    var canStartEncoding: Bool? = nil
+    var showsSaveAction: Bool = false
+    var saveActionTitle: String = "Save"
+    var watchAdButtonTitle: String = "Watch Ad (+1 Star)"
+    var canWatchAd: Bool = false
     var controlHeight: CGFloat = 44
     var contentScale: CGFloat = 1
     var reservesFailureLogArea: Bool = false
     var onStart: () -> Void
     var onSave: () -> Void
+    var onWatchAd: () -> Void
     var onCancel: () -> Void
 
     var body: some View {
@@ -23,8 +30,11 @@ struct EncodingProgressView: View {
                     Spacer(minLength: 0)
                 }
 
-                if !usesExpandedFailureLog {
-                    actionButton
+                VStack(spacing: 8 * contentScale) {
+                    if showsPrimaryAction {
+                        actionButton
+                    }
+                    watchAdButton
                 }
             }
             .frame(maxHeight: usesExpandedFailureLog ? .infinity : nil, alignment: .top)
@@ -52,14 +62,25 @@ struct EncodingProgressView: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(TaptionTheme.border, lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else if isCompletedState {
+            Text(resolvedDetailText)
+                .font(contentScale < 0.9 ? .caption2 : .caption)
+                .foregroundStyle(TaptionTheme.mutedText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
         } else {
-            Text(state.detail)
+            Text(resolvedDetailText)
                 .font(contentScale < 0.9 ? .caption : .subheadline)
                 .foregroundStyle(TaptionTheme.mutedText)
                 .lineLimit(2)
                 .minimumScaleFactor(0.9)
         }
+    }
+
+    private var resolvedDetailText: String {
+        displayDetail ?? state.detail
     }
 
     private var usesExpandedFailureLog: Bool {
@@ -73,9 +94,27 @@ struct EncodingProgressView: View {
         return false
     }
 
+    private var isCompletedState: Bool {
+        if case .completed = state {
+            return true
+        }
+        return false
+    }
+
+    private var resolvedCanStartEncoding: Bool {
+        canStartEncoding ?? state.canStartEncoding
+    }
+
+    private var showsPrimaryAction: Bool {
+        resolvedCanStartEncoding
+            || showsSaveAction
+            || state.preparedEncodingReview != nil
+            || state.canCancel
+    }
+
     @ViewBuilder
     private var actionButton: some View {
-        if state.canStartEncoding {
+        if resolvedCanStartEncoding {
             Button {
                 onStart()
             } label: {
@@ -92,11 +131,11 @@ struct EncodingProgressView: View {
                     .stroke(TaptionTheme.accent.opacity(0.65), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        } else if state.completedTemporaryOutput != nil || state.pendingSaveJob != nil {
+        } else if showsSaveAction {
             Button {
                 onSave()
             } label: {
-                Label("Save", systemImage: "square.and.arrow.down")
+                Label(saveActionTitle, systemImage: "square.and.arrow.down")
                     .font(contentScale < 0.9 ? .caption.weight(.semibold) : .body.weight(.semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
@@ -148,4 +187,24 @@ struct EncodingProgressView: View {
         }
     }
 
+    private var watchAdButton: some View {
+        Button {
+            onWatchAd()
+        } label: {
+            Label(watchAdButtonTitle, systemImage: "star.fill")
+                .font(contentScale < 0.9 ? .caption.weight(.semibold) : .body.weight(.semibold))
+                .foregroundStyle(canWatchAd ? TaptionTheme.accent : TaptionTheme.disabledText)
+                .frame(maxWidth: .infinity)
+                .frame(height: controlHeight)
+        }
+        .buttonStyle(.plain)
+        .background(TaptionTheme.elevatedSurface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(canWatchAd ? TaptionTheme.border : Color.white.opacity(0.06), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .disabled(!canWatchAd)
+        .opacity(canWatchAd ? 1 : 0.58)
+    }
 }

@@ -137,7 +137,7 @@ struct TaptionSavePolicy: Codable, Equatable {
 
     init(
         destination: TaptionSaveDestinationKind = .sourceFolder,
-        saveGate: TaptionSaveGate = .rewardedAdBeforeFinalSave,
+        saveGate: TaptionSaveGate = .none,
         namingPolicy: TaptionOutputNamingPolicy = TaptionOutputNamingPolicy(),
         shouldRestorePendingSaveOnLaunch: Bool = true
     ) {

@@ -274,6 +274,16 @@ enum TaptionOutputResolutionPreset: String, Codable, Equatable, CaseIterable {
             return TaptionPixelSize(width: 854, height: 480)
         }
     }
+
+    func alignedReferenceSize(for sourceSize: TaptionPixelSize) -> TaptionPixelSize? {
+        guard let referenceSize else {
+            return nil
+        }
+        guard sourceSize.isPortrait != referenceSize.isPortrait else {
+            return referenceSize
+        }
+        return TaptionPixelSize(width: referenceSize.height, height: referenceSize.width)
+    }
 }
 
 enum TaptionOutputSizePreset: String, Codable, Equatable, CaseIterable {
@@ -472,7 +482,7 @@ struct TaptionOutputSelection: Identifiable, Equatable {
             }
             return fittedSize(
                 sourceSize: track.displaySize,
-                boundingSize: referenceSize
+                boundingSize: resolutionPreset.alignedReferenceSize(for: track.displaySize) ?? referenceSize
             )
         }
 
@@ -535,8 +545,11 @@ struct TaptionOutputSelection: Identifiable, Equatable {
 
     func normalizedTargetSizeMB(for asset: TaptionVideoAsset?) -> Double {
         let range = targetSizeRangeMB(for: asset)
-        let suggested = targetSizeMB ?? suggestedTargetSizeMB(for: asset)
-        return min(max(suggested, range.lowerBound), range.upperBound)
+        if sizePreset == .auto {
+            return range.upperBound
+        }
+        let selectedValue = targetSizeMB ?? range.upperBound
+        return min(max(selectedValue, range.lowerBound), range.upperBound)
     }
 
     func suggestedTargetSizeMB(for asset: TaptionVideoAsset?) -> Double {
@@ -558,9 +571,9 @@ struct TaptionOutputSelection: Identifiable, Equatable {
     }
 
     func targetSizeRangeMB(for asset: TaptionVideoAsset?) -> ClosedRange<Double> {
-        let suggested = suggestedTargetSizeMB(for: asset)
-        let minimum = max(1, floor(suggested * 0.25))
-        let maximum = max(minimum + 1, ceil(suggested * 1.75))
+        let autoTarget = roundedAutoTargetSizeMB(for: asset)
+        let minimum = max(1, floor(autoTarget * 0.25))
+        let maximum = max(minimum, autoTarget)
         return minimum...maximum
     }
 
@@ -568,6 +581,16 @@ struct TaptionOutputSelection: Identifiable, Equatable {
         asset.audioTracks
             .compactMap(\.estimatedBitrate)
             .reduce(0, +)
+    }
+
+    private func roundedAutoTargetSizeMB(for asset: TaptionVideoAsset?) -> Double {
+        max(1, Double(Int(suggestedTargetSizeMB(for: asset).rounded())))
+    }
+}
+
+private extension TaptionPixelSize {
+    var isPortrait: Bool {
+        height > width
     }
 }
 
@@ -804,7 +827,25 @@ struct PendingSaveConflictPrompt: Identifiable, Equatable {
     var suggestedURL: URL
 
     var message: String {
-        "A file named \(existingURL.lastPathComponent) already exists. Overwrite it or save this output as \(suggestedURL.lastPathComponent)."
+        "A file named \(existingURL.lastPathComponent) already exists. Overwrite it or choose Save As to enter a new file name."
+    }
+}
+
+struct PendingSaveRenamePrompt: Identifiable, Equatable {
+    var id: UUID {
+        job.id
+    }
+
+    var job: PendingSaveJob
+    var existingURL: URL
+    var suggestedURL: URL
+
+    var suggestedFileName: String {
+        suggestedURL.lastPathComponent
+    }
+
+    var message: String {
+        "Enter a new file name for this output."
     }
 }
 
@@ -819,19 +860,43 @@ struct PendingFolderAccessPrompt: Identifiable, Equatable {
     }
 }
 
+struct PendingSaveExportPrompt: Identifiable, Equatable {
+    var id: UUID {
+        job.id
+    }
+
+    var job: PendingSaveJob
+    var exportPresentationURL: URL
+
+    var suggestedFileName: String {
+        exportPresentationURL.lastPathComponent
+    }
+
+    var suggestedDirectoryURL: URL? {
+        job.state.finalOutputURL?.deletingLastPathComponent()
+    }
+
+    var message: String {
+        "Choose where to save \(suggestedFileName)."
+    }
+}
+
 struct SavedOutput: Equatable {
     var displayName: String
     var destinationDescription: String
     var detailOverride: String?
+    var fileSizeBytes: Int64?
 
     init(
         displayName: String,
         destinationDescription: String,
-        detailOverride: String? = nil
+        detailOverride: String? = nil,
+        fileSizeBytes: Int64? = nil
     ) {
         self.displayName = displayName
         self.destinationDescription = destinationDescription
         self.detailOverride = detailOverride
+        self.fileSizeBytes = fileSizeBytes
     }
 }
 
@@ -881,7 +946,7 @@ enum HomeScreenState: Equatable {
         case .saving:
             return "Saving"
         case .completed:
-            return "Complete"
+            return "Save Complete"
         case .failed(let error):
             return error.title
         case .cancelled:
@@ -929,7 +994,7 @@ enum HomeScreenState: Equatable {
             if let detailOverride = output.detailOverride {
                 return detailOverride
             }
-            return "\(output.displayName) saved to \(output.destinationDescription)."
+            return "Save completed successfully. Path: \(output.destinationDescription)"
         case .failed(let error):
             return error.message
         case .cancelled:

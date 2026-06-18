@@ -9,6 +9,7 @@ struct HomeView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var activeMenuSheet: HomeMenuSheet?
     @State private var isOutputSizePopoverPresented = false
+    @State private var pendingSaveAsFileName = ""
 
     init(environment: AppEnvironment = .phase0) {
         _viewModel = StateObject(wrappedValue: HomeViewModel(environment: environment))
@@ -71,11 +72,18 @@ struct HomeView: View {
 
                     EncodingProgressView(
                         state: viewModel.state,
+                        displayDetail: viewModel.progressDetailText,
+                        canStartEncoding: viewModel.canStartEncodingNow,
+                        showsSaveAction: viewModel.showsSaveAction,
+                        saveActionTitle: viewModel.saveActionTitle,
+                        watchAdButtonTitle: viewModel.watchAdButtonTitle,
+                        canWatchAd: viewModel.canWatchAdForStar,
                         controlHeight: metrics.controlHeight,
                         contentScale: metrics.contentScale,
                         reservesFailureLogArea: reservesFailureLogArea,
                         onStart: { viewModel.startPreparedEncoding() },
                         onSave: { viewModel.saveCurrentPendingOutput() },
+                        onWatchAd: { viewModel.watchAdForStar() },
                         onCancel: { viewModel.cancel() }
                     )
 
@@ -122,6 +130,41 @@ struct HomeView: View {
         .sheet(item: $activeMenuSheet) { sheet in
             HomeMenuSheetView(sheet: sheet)
         }
+        .sheet(
+            item: Binding(
+                get: { viewModel.pendingSaveExportPrompt },
+                set: { prompt in
+                    if prompt == nil {
+                        viewModel.dismissPendingSaveExportPrompt()
+                    }
+                }
+            )
+        ) { prompt in
+            PendingSaveExportPicker(
+                exportPresentationURL: prompt.exportPresentationURL,
+                suggestedDirectoryURL: prompt.suggestedDirectoryURL,
+                onPick: { urls in
+                    AppLogger.info(
+                        "Pending save export picker returned selection",
+                        category: .saving,
+                        metadata: [
+                            "count": "\(urls.count)",
+                            "names": urls.map(\.lastPathComponent).joined(separator: "|")
+                        ]
+                    )
+                    if let url = urls.first {
+                        viewModel.completePendingSaveExport(prompt: prompt, destinationURL: url)
+                    } else {
+                        viewModel.dismissPendingSaveExportPrompt()
+                    }
+                },
+                onCancel: {
+                    AppLogger.info("Pending save export picker cancelled", category: .saving)
+                    viewModel.dismissPendingSaveExportPrompt()
+                }
+            )
+            .ignoresSafeArea()
+        }
         .confirmationDialog(
             "File already exists",
             isPresented: Binding(
@@ -145,6 +188,28 @@ struct HomeView: View {
             }
         } message: { prompt in
             Text(prompt.message)
+        }
+        .alert(
+            "Save As",
+            isPresented: Binding(
+                get: { viewModel.pendingSaveRenamePrompt != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.dismissPendingSaveRenamePrompt()
+                    }
+                }
+            )
+        ) {
+            TextField("File name", text: $pendingSaveAsFileName)
+            Button("Save") {
+                viewModel.confirmPendingSaveAsNewFile(named: pendingSaveAsFileName)
+            }
+            .disabled(pendingSaveAsFileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Button("Cancel", role: .cancel) {
+                viewModel.dismissPendingSaveRenamePrompt()
+            }
+        } message: {
+            Text(viewModel.pendingSaveRenamePrompt?.message ?? "")
         }
         .fileImporter(
             isPresented: $isFolderImporterPresented,
@@ -176,11 +241,7 @@ struct HomeView: View {
         .fileImporter(
             isPresented: Binding(
                 get: { viewModel.folderAccessPrompt != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        viewModel.dismissFolderAccessRecoveryPrompt()
-                    }
-                }
+                set: { _ in }
             ),
             allowedContentTypes: [.folder],
             allowsMultipleSelection: false
@@ -255,6 +316,10 @@ struct HomeView: View {
         }
         .task {
             await viewModel.restorePendingSavesIfNeeded()
+            await viewModel.refreshStarsIfNeeded()
+        }
+        .onChange(of: viewModel.pendingSaveRenamePrompt?.id) { _, _ in
+            pendingSaveAsFileName = viewModel.pendingSaveRenamePrompt?.suggestedFileName ?? ""
         }
     }
 
@@ -308,10 +373,32 @@ struct HomeView: View {
             }
             .frame(maxWidth: .infinity, alignment: .center)
 
-            Color.clear
-                .frame(width: 34 * metrics.contentScale, height: 34 * metrics.contentScale)
+            starBadge(metrics: metrics)
         }
         .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    private func starBadge(metrics: HomeLayoutMetrics) -> some View {
+        HStack(spacing: 6 * metrics.contentScale) {
+            Image(systemName: "star.fill")
+                .font(.system(size: max(13, metrics.headerIconSize - 3), weight: .semibold))
+                .foregroundStyle(Color.yellow.opacity(0.95))
+
+            Text(viewModel.starBalanceDisplayText)
+                .font((metrics.contentScale < 0.84 ? Font.caption : Font.subheadline).monospacedDigit().weight(.semibold))
+                .foregroundStyle(Color.white.opacity(0.92))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(.horizontal, 10 * metrics.contentScale)
+        .frame(height: 34 * metrics.contentScale)
+        .background(TaptionTheme.elevatedSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(TaptionTheme.border, lineWidth: 1)
+        )
+        .accessibilityLabel("Stars \(viewModel.starBalanceDisplayText)")
     }
 
     private func outputSelector(metrics: HomeLayoutMetrics) -> some View {
@@ -409,15 +496,18 @@ struct HomeView: View {
         } label: {
             outputControlLabel(
                 title: "Size",
-                value: viewModel.selectedOutputTargetSizeText,
-                secondaryValue: nil,
+                value: viewModel.outputSizeDisplayText,
+                secondaryValue: viewModel.outputSizeSecondaryText,
                 systemImage: "internaldrive",
-                isEnabled: viewModel.canChangeOutputSelection,
+                isEnabled: viewModel.canChangeOutputSizeSelection,
+                secondaryValueColor: viewModel.outputSizeShowsWarning ? Color.orange.opacity(0.95) : nil,
+                trailingStatusSystemImage: viewModel.outputSizeShowsWarning ? "exclamationmark.triangle.fill" : nil,
+                trailingStatusColor: viewModel.outputSizeShowsWarning ? Color.orange.opacity(0.95) : nil,
                 metrics: metrics
             )
         }
         .buttonStyle(.plain)
-        .disabled(!viewModel.canChangeOutputSelection)
+        .disabled(!viewModel.canChangeOutputSizeSelection)
         .popover(isPresented: $isOutputSizePopoverPresented) {
             VStack(alignment: .leading, spacing: 12 * metrics.contentScale) {
                 HStack {
@@ -441,6 +531,28 @@ struct HomeView: View {
                 Text(viewModel.selectedOutputTargetSizeText)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(Color.white.opacity(0.92))
+
+                if let statusMessage = viewModel.outputSizeStatusMessage {
+                    HStack(alignment: .top, spacing: 8 * metrics.contentScale) {
+                        Image(systemName: viewModel.outputSizeShowsWarning ? "exclamationmark.triangle.fill" : "externaldrive")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(
+                                viewModel.outputSizeShowsWarning
+                                    ? Color.orange.opacity(0.95)
+                                    : TaptionTheme.mutedText
+                            )
+                            .frame(width: 14 * metrics.contentScale, alignment: .top)
+
+                        Text(statusMessage)
+                            .font(.caption)
+                            .foregroundStyle(
+                                viewModel.outputSizeShowsWarning
+                                    ? Color.orange.opacity(0.95)
+                                    : TaptionTheme.mutedText
+                            )
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
 
                 Slider(
                     value: Binding(
@@ -500,6 +612,9 @@ struct HomeView: View {
         secondaryValue: String?,
         systemImage: String,
         isEnabled: Bool,
+        secondaryValueColor: Color? = nil,
+        trailingStatusSystemImage: String? = nil,
+        trailingStatusColor: Color? = nil,
         metrics: HomeLayoutMetrics
     ) -> some View {
         HStack(spacing: 7 * metrics.contentScale) {
@@ -520,10 +635,16 @@ struct HomeView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
 
+                    if let trailingStatusSystemImage {
+                        Image(systemName: trailingStatusSystemImage)
+                            .font(.system(size: 10 * metrics.contentScale, weight: .bold))
+                            .foregroundStyle(trailingStatusColor ?? TaptionTheme.mutedText)
+                    }
+
                     if let secondaryValue {
                         Text(secondaryValue)
                             .font(Font.caption2.weight(.semibold))
-                            .foregroundStyle(TaptionTheme.mutedText)
+                            .foregroundStyle(secondaryValueColor ?? TaptionTheme.mutedText)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                     }

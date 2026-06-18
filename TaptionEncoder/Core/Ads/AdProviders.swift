@@ -32,6 +32,7 @@ protocol BannerAdProviding {
 
 protocol RewardedAdProviding {
     func currentRewardedState() async -> AdLoadState
+    func showRewardedAd() async -> RewardedAdShowResult
 }
 
 protocol SessionEndAdProviding {
@@ -96,8 +97,15 @@ struct FakeBannerAdProvider: BannerAdProviding {
 }
 
 struct FakeRewardedAdProvider: RewardedAdProviding {
+    var currentState: AdLoadState = .ready
+    var showResult: RewardedAdShowResult = .earnedReward
+
     func currentRewardedState() async -> AdLoadState {
-        .ready
+        currentState
+    }
+
+    func showRewardedAd() async -> RewardedAdShowResult {
+        showResult
     }
 }
 
@@ -132,6 +140,16 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
     func currentRewardedState() async -> AdLoadState {
         #if canImport(GoogleMobileAds)
         return await AdMobRewardedAdManager.shared.currentState(
+            adUnitID: configuration.rewardedSaveAdUnitID
+        )
+        #else
+        return .unavailable
+        #endif
+    }
+
+    func showRewardedAd() async -> RewardedAdShowResult {
+        #if canImport(GoogleMobileAds)
+        return await AdMobRewardedAdManager.shared.show(
             adUnitID: configuration.rewardedSaveAdUnitID
         )
         #else

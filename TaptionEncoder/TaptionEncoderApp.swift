@@ -8,6 +8,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> UIInterfaceOrientationMask {
         .portrait
     }
+
+    func applicationDidBecomeActive(_ application: UIApplication) {
+        application.isIdleTimerDisabled = true
+        AppLogger.info("Idle timer disabled while app is active", category: .app)
+    }
+
+    func applicationWillResignActive(_ application: UIApplication) {
+        application.isIdleTimerDisabled = false
+        AppLogger.info("Idle timer restored because app is no longer active", category: .app)
+    }
 }
 
 @main

@@ -7,12 +7,22 @@ private enum PendingSaveConflictResolution: Equatable {
     case saveAsUnique
 }
 
+private struct ActiveStarCharge: Equatable {
+    var sourceURL: URL
+    var sourceName: String
+}
+
 @MainActor
 final class HomeViewModel: ObservableObject {
     @Published private(set) var state: HomeScreenState
     @Published private(set) var selectedOutput: TaptionOutputSelection
     @Published private(set) var saveConflictPrompt: PendingSaveConflictPrompt?
+    @Published private(set) var pendingSaveRenamePrompt: PendingSaveRenamePrompt?
     @Published private(set) var folderAccessPrompt: PendingFolderAccessPrompt?
+    @Published private(set) var pendingSaveExportPrompt: PendingSaveExportPrompt?
+    @Published private(set) var starWalletSnapshot: StarWalletSnapshot
+    @Published private(set) var rewardedAdState: AdLoadState
+    @Published private(set) var isWatchingStarAd: Bool
 
     private let environment: AppEnvironment
     private var activeTask: Task<Void, Never>?
@@ -22,7 +32,14 @@ final class HomeViewModel: ObservableObject {
     private var lastBatchFileCards: [EncodingFileCardSnapshot] = []
     private var selectionInspectionTask: Task<Void, Never>?
     private var hasRestoredPendingSaves = false
+    private var hasLoadedStarWallet = false
+    private var pendingSaveAccessURLs: [UUID: URL] = [:]
     private var securityScopedURLs: [URL] = []
+    private var activeStarCharge: ActiveStarCharge?
+    private var shouldAutoResumeBatchAfterStarEarn = false
+    private var rewardedAdStatePollingTask: Task<Void, Never>?
+    private let pendingSaveExportStagingRootDirectoryURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent("TaptionEncoderPendingSaveExports", isDirectory: true)
 
     init(environment: AppEnvironment = .phase0) {
         self.environment = environment
@@ -32,7 +49,12 @@ final class HomeViewModel: ObservableObject {
         )
         self.state = .idle
         self.saveConflictPrompt = nil
+        self.pendingSaveRenamePrompt = nil
         self.folderAccessPrompt = nil
+        self.pendingSaveExportPrompt = nil
+        self.starWalletSnapshot = .empty
+        self.rewardedAdState = .idle
+        self.isWatchingStarAd = false
         AppLogger.info(
             "HomeViewModel initialized",
             category: .app,
@@ -43,6 +65,7 @@ final class HomeViewModel: ObservableObject {
     deinit {
         AppLogger.info("HomeViewModel deinitialized", category: .app)
         activeTask?.cancel()
+        rewardedAdStatePollingTask?.cancel()
     }
 
     var appName: String {
@@ -51,6 +74,47 @@ final class HomeViewModel: ObservableObject {
 
     var subtitle: String {
         "Taption Encoder"
+    }
+
+    var starBalanceDisplayText: String {
+        starWalletSnapshot.badgeText
+    }
+
+    var canStartEncodingNow: Bool {
+        guard let review = state.preparedEncodingReview else {
+            return false
+        }
+        return review.videoInfo.isRouteEncodable && starWalletSnapshot.balance > 0
+    }
+
+    var watchAdButtonTitle: String {
+        if isWatchingStarAd {
+            return "Watching Ad..."
+        }
+        switch rewardedAdState {
+        case .ready:
+            return "Watch Ad (+1 Star)"
+        case .loading, .idle:
+            return "Ad Loading"
+        case .unavailable:
+            return "Ad Unavailable"
+        }
+    }
+
+    var canWatchAdForStar: Bool {
+        !state.isBusy && !isWatchingStarAd && rewardedAdState == .ready
+    }
+
+    var progressDetailText: String {
+        if state.preparedEncodingReview != nil,
+           !canStartEncodingNow {
+            return needsStarMessage
+        }
+        return state.detail
+    }
+
+    private var needsStarMessage: String {
+        "Watch a rewarded ad to earn 1 Star and continue."
     }
 
     var outputSummary: String {
@@ -115,10 +179,6 @@ final class HomeViewModel: ObservableObject {
     }
 
     var selectedOutputTargetSizeText: String {
-        guard selectedOutput.sizePreset == .manual else {
-            return "Auto"
-        }
-
         let value = selectedOutput.normalizedTargetSizeMB(for: selectedAssetForOutputConfiguration)
         return "\(Int(value.rounded())) MB"
     }
@@ -142,6 +202,46 @@ final class HomeViewModel: ObservableObject {
         selectedOutput.normalizedTargetSizeMB(for: selectedAssetForOutputConfiguration)
     }
 
+    var outputSizeDisplayText: String {
+        if let encodedOutputSizeText {
+            return encodedOutputSizeText
+        }
+        if selectedOutput.sizePreset == .auto {
+            return "Auto"
+        }
+        return selectedOutputTargetSizeText
+    }
+
+    var outputSizeSecondaryText: String? {
+        if outputSizeShowsWarning {
+            return "Low Space"
+        }
+        if encodedOutputSizeText != nil {
+            return "Encoded"
+        }
+        if selectedOutput.sizePreset == .auto {
+            return selectedOutputTargetSizeText
+        }
+        return nil
+    }
+
+    var outputSizeShowsWarning: Bool {
+        currentStorageIssue != nil
+    }
+
+    var outputSizeStatusMessage: String? {
+        if let issue = currentStorageIssue {
+            return storageWarningMessage(
+                requiredBytes: issue.requiredBytes,
+                availableBytes: issue.availableBytes
+            )
+        }
+        if let encodedOutputSizeText {
+            return "Encoded output: \(encodedOutputSizeText)."
+        }
+        return nil
+    }
+
     var selectedOutputStatusText: String {
         selectedOutput.implementationState.shortDisplayName
     }
@@ -156,6 +256,11 @@ final class HomeViewModel: ObservableObject {
 
     var canChangeOutputSelection: Bool {
         !state.isBusy && pendingSaveQueue.isEmpty
+    }
+
+    var canChangeOutputSizeSelection: Bool {
+        pendingSaveQueue.isEmpty
+            && (!state.isBusy || isRefreshingPreparedSourceForOutputChange)
     }
 
     var encoderPathTitle: String {
@@ -193,8 +298,53 @@ final class HomeViewModel: ObservableObject {
         "Encoding keeps the device awake. If the screen is locked manually, iOS grants limited background time."
     }
 
+    var showsSaveAction: Bool {
+        if state.completedTemporaryOutput != nil || state.pendingSaveJob != nil {
+            return true
+        }
+        if case .completed = state,
+           !pendingSaveQueue.isEmpty {
+            return true
+        }
+        return false
+    }
+
+    var saveActionTitle: String {
+        if case .completed = state,
+           !pendingSaveQueue.isEmpty {
+            return "Save Next"
+        }
+        return "Save"
+    }
+
     var bannerAdUnitID: String {
         environment.bannerAdProvider.bannerAdUnitID
+    }
+
+    private var currentStorageIssue: StorageIssue? {
+        if case .storageBlocked(let issue) = state {
+            return issue
+        }
+        return nil
+    }
+
+    private var encodedOutputSizeText: String? {
+        currentEncodedOutputSizeBytes.map(formattedByteCount)
+    }
+
+    private var currentEncodedOutputSizeBytes: Int64? {
+        if case .completed(let output) = state,
+           let fileSizeBytes = output.fileSizeBytes {
+            return fileSizeBytes
+        }
+
+        let pendingState = state.pendingSaveJob?.state
+            ?? state.completedTemporaryOutput?.pendingSaveState
+            ?? pendingSaveRecoveryJob?.state
+        guard let pendingState else {
+            return nil
+        }
+        return fileSizeInBytes(at: pendingState.temporaryOutputURL)
     }
 
     func selectOutputCodec(_ codec: TaptionVideoCodec) {
@@ -298,7 +448,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func selectOutputSize(_ preset: TaptionOutputSizePreset) {
-        guard canChangeOutputSelection else {
+        guard canChangeOutputSizeSelection else {
             AppLogger.warning(
                 "Output size change ignored while flow is busy",
                 category: .ui,
@@ -312,7 +462,7 @@ final class HomeViewModel: ObservableObject {
 
         selectedOutput.sizePreset = preset
         if preset == .manual, selectedOutput.targetSizeMB == nil {
-            selectedOutput.targetSizeMB = selectedOutput.suggestedTargetSizeMB(
+            selectedOutput.targetSizeMB = selectedOutput.normalizedTargetSizeMB(
                 for: selectedAssetForOutputConfiguration
             )
         }
@@ -325,7 +475,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func updateOutputTargetSizeMB(_ value: Double) {
-        guard canChangeOutputSelection else {
+        guard canChangeOutputSizeSelection else {
             return
         }
 
@@ -410,7 +560,7 @@ final class HomeViewModel: ObservableObject {
         for asset: TaptionVideoAsset? = nil
     ) -> Bool {
         guard let sourceSize = asset?.videoTrack?.displaySize,
-              let referenceSize = preset.referenceSize else {
+              let referenceSize = preset.alignedReferenceSize(for: sourceSize) else {
             return true
         }
         return referenceSize.width <= sourceSize.width
@@ -471,11 +621,12 @@ final class HomeViewModel: ObservableObject {
                 isEnabled: true
             )]
         case .readyToStart(let review):
+            let needsStar = review.videoInfo.isRouteEncodable && starWalletSnapshot.balance == 0
             return [fileCard(
                 source: review.source,
                 videoInfo: review.videoInfo,
-                statusText: review.videoInfo.readinessStatusText,
-                detailText: review.videoInfo.readinessDetailText,
+                statusText: needsStar ? "Needs Star" : review.videoInfo.readinessStatusText,
+                detailText: needsStar ? needsStarMessage : review.videoInfo.readinessDetailText,
                 progress: nil,
                 isActive: true,
                 isSelected: true,
@@ -536,9 +687,9 @@ final class HomeViewModel: ObservableObject {
                 sourceName: output.displayName,
                 sourceKind: .files,
                 videoInfo: nil,
-                statusText: "Saved",
-                detailText: output.detailOverride ?? output.destinationDescription,
-                progress: completedProgressSnapshot(label: "Saved"),
+                statusText: "Save Complete",
+                detailText: nil,
+                progress: completedProgressSnapshot(label: "Save Complete"),
                 isActive: false,
                 isSelected: true,
                 isEnabled: true
@@ -579,6 +730,7 @@ final class HomeViewModel: ObservableObject {
         hasRestoredPendingSaves = true
         AppLogger.info("Restore pending saves requested", category: .saving)
         await environment.sessionEndAdProvider.preloadSessionEndAd()
+        await refreshStarsIfNeeded()
 
         do {
             let pendingStates = try await environment.pendingSaveStore.loadPendingStates()
@@ -599,7 +751,6 @@ final class HomeViewModel: ObservableObject {
                 ]
             )
             state = .pendingSave(firstJob)
-            requestFolderAccessRecoveryIfNeeded(for: firstJob)
         } catch {
             AppLogger.error(
                 "Restore pending saves failed",
@@ -610,6 +761,84 @@ final class HomeViewModel: ObservableObject {
                 title: "Restore failed",
                 message: error.localizedDescription
             ))
+        }
+    }
+
+    func refreshStarsIfNeeded() async {
+        if !hasLoadedStarWallet {
+            hasLoadedStarWallet = true
+        }
+        starWalletSnapshot = await environment.starWalletStore.currentSnapshot()
+        await refreshRewardedAdState(startPollingIfNeeded: true)
+    }
+
+    private func refreshRewardedAdState(startPollingIfNeeded: Bool) async {
+        rewardedAdState = await environment.starEarningService.currentAdState()
+        if startPollingIfNeeded, rewardedAdState != .ready, !isWatchingStarAd {
+            startRewardedAdStatePolling()
+        } else if rewardedAdState == .ready {
+            rewardedAdStatePollingTask?.cancel()
+            rewardedAdStatePollingTask = nil
+        }
+    }
+
+    private func startRewardedAdStatePolling() {
+        rewardedAdStatePollingTask?.cancel()
+        rewardedAdStatePollingTask = Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+            while !Task.isCancelled {
+                let state = await environment.starEarningService.currentAdState()
+                rewardedAdState = state
+                if state == .ready || isWatchingStarAd {
+                    break
+                }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+            rewardedAdStatePollingTask = nil
+        }
+    }
+
+    private func clearActiveStarCharge(for source: HomeSelectedSource) {
+        guard activeStarCharge?.sourceURL == source.url else {
+            return
+        }
+        activeStarCharge = nil
+    }
+
+    private func refundActiveStarChargeIfNeeded(for source: HomeSelectedSource) {
+        guard activeStarCharge?.sourceURL == source.url else {
+            return
+        }
+        let chargedSource = activeStarCharge
+        activeStarCharge = nil
+        Task { @MainActor [weak self] in
+            guard let self, let chargedSource else {
+                return
+            }
+            do {
+                starWalletSnapshot = try await environment.starWalletStore.refundStar(
+                    source: chargedSource.sourceName
+                )
+                AppLogger.info(
+                    "Consumed star refunded after terminal encoding failure",
+                    category: .encoding,
+                    metadata: [
+                        "source": chargedSource.sourceName,
+                        "balance": "\(starWalletSnapshot.balance)"
+                    ]
+                )
+            } catch {
+                AppLogger.error(
+                    "Consumed star refund failed after terminal encoding failure",
+                    category: .encoding,
+                    metadata: [
+                        "source": chargedSource.sourceName,
+                        "error": error.localizedDescription
+                    ]
+                )
+            }
         }
     }
 
@@ -825,43 +1054,77 @@ final class HomeViewModel: ObservableObject {
             )
             return
         }
+        Task { @MainActor [weak self] in
+            await self?.attemptEncodingStart(
+                for: review,
+                autoResumeAfterStarEarn: false
+            )
+        }
+    }
 
-        AppLogger.info(
-            "Start encoding requested",
-            category: .encoding,
-            metadata: [
-                "name": review.source.displayName,
-                "plan": review.job.plan.id.uuidString
-            ]
-        )
-        activeTask?.cancel()
-        state = .encoding(startingProgressSnapshot(for: review))
+    func watchAdForStar() {
+        guard !state.isBusy else {
+            AppLogger.info("Watch ad ignored because state is busy", category: .ads)
+            return
+        }
+        guard !isWatchingStarAd else {
+            return
+        }
 
-        activeTask = Task { @MainActor [weak self] in
+        isWatchingStarAd = true
+        AppLogger.info("Watch ad for star requested", category: .ads)
+
+        Task { @MainActor [weak self] in
             guard let self else {
                 return
             }
 
-            await environment.sessionEndAdProvider.showSessionEndAd(reason: .startingEncoding)
+            defer {
+                isWatchingStarAd = false
+            }
 
             do {
-                try Task.checkCancellation()
-                startEncoding(review: review, allowsBusyState: true)
+                let result = try await environment.starEarningService.watchAdAndEarnStar()
+                starWalletSnapshot = result.snapshot
+                await refreshRewardedAdState(startPollingIfNeeded: true)
+
+                guard result.adResult == .earnedReward else {
+                    return
+                }
+
+                AppLogger.info(
+                    "Star rewarded ad completed",
+                    category: .ads,
+                    metadata: ["balance": "\(result.snapshot.balance)"]
+                )
+
+                if shouldAutoResumeBatchAfterStarEarn,
+                   let review = state.preparedEncodingReview,
+                   canStartEncodingNow {
+                    shouldAutoResumeBatchAfterStarEarn = false
+                    await attemptEncodingStart(
+                        for: review,
+                        autoResumeAfterStarEarn: true
+                    )
+                }
             } catch {
-                state = .cancelled
-                activeTask = nil
-                folderBatch = nil
-                stopSecurityScopedAccess()
-                requestSessionEndAd(reason: .cancelledEncoding)
+                AppLogger.error(
+                    "Watch ad for star failed",
+                    category: .ads,
+                    metadata: ["error": error.localizedDescription]
+                )
+                await refreshRewardedAdState(startPollingIfNeeded: true)
             }
         }
     }
 
     func retryPendingSave() {
-        guard let job = pendingSaveRecoveryJob else {
+        guard let job = nextPendingSaveJobForAction else {
             return
         }
         saveConflictPrompt = nil
+        pendingSaveRenamePrompt = nil
+        clearPendingSaveExportPrompt()
         savePendingJob(job)
     }
 
@@ -913,19 +1176,19 @@ final class HomeViewModel: ObservableObject {
             return
         }
         saveConflictPrompt = nil
-        var state = prompt.job.state
-        state.finalOutputURL = prompt.suggestedURL
-        var job = PendingSaveJob(sourceName: prompt.job.sourceName, state: state)
-        job.saveGateMessage = "Saving as \(prompt.suggestedURL.lastPathComponent)."
         AppLogger.info(
-            "User chose to save pending output as a new file",
+            "User chose Save As for pending output",
             category: .saving,
             metadata: [
-                "source": job.sourceName,
-                "destination": prompt.suggestedURL.lastPathComponent
+                "source": prompt.job.sourceName,
+                "suggested": prompt.suggestedURL.lastPathComponent
             ]
         )
-        savePendingJob(job, conflictResolution: .saveAsUnique)
+        pendingSaveRenamePrompt = PendingSaveRenamePrompt(
+            job: prompt.job,
+            existingURL: prompt.existingURL,
+            suggestedURL: prompt.suggestedURL
+        )
     }
 
     func dismissSaveConflictPrompt() {
@@ -936,24 +1199,59 @@ final class HomeViewModel: ObservableObject {
         saveConflictPrompt = nil
     }
 
-    func recoverFolderAccessForPendingSave(url: URL) {
-        guard let prompt = folderAccessPrompt else {
+    func confirmPendingSaveAsNewFile(named requestedFileName: String) {
+        guard let prompt = pendingSaveRenamePrompt,
+              let destinationURL = pendingSaveAsDestinationURL(
+                from: prompt,
+                requestedFileName: requestedFileName
+              ) else {
             return
         }
-        folderAccessPrompt = nil
-        beginSecurityScopedAccessIfNeeded(for: url)
 
-        var updatedState = prompt.job.state
-        updatedState.accessBookmarkData = makeSecurityScopedBookmarkData(for: url)
-        var job = PendingSaveJob(sourceName: prompt.job.sourceName, state: updatedState)
+        pendingSaveRenamePrompt = nil
+        var state = prompt.job.state
+        state.finalOutputURL = destinationURL
+        var job = PendingSaveJob(sourceName: prompt.job.sourceName, state: state)
+        job.saveGateMessage = "Saving as \(destinationURL.lastPathComponent)."
+        AppLogger.info(
+            "Pending save Save As confirmed",
+            category: .saving,
+            metadata: [
+                "source": job.sourceName,
+                "destination": destinationURL.lastPathComponent
+            ]
+        )
+        savePendingJob(job)
+    }
+
+    func dismissPendingSaveRenamePrompt() {
+        guard pendingSaveRenamePrompt != nil else {
+            return
+        }
+        AppLogger.info("Pending save rename prompt dismissed", category: .saving)
+        pendingSaveRenamePrompt = nil
+    }
+
+    func recoverFolderAccessForPendingSave(url: URL) {
+        guard let jobToRecover = folderAccessPrompt?.job ?? pendingSaveRecoveryJob else {
+            return
+        }
+        let recoveryURL = normalizedFolderRecoveryURL(for: url)
+        folderAccessPrompt = nil
+        beginSecurityScopedAccessIfNeeded(for: recoveryURL)
+
+        var updatedState = jobToRecover.state
+        updatedState.accessBookmarkData = makeSecurityScopedBookmarkData(for: recoveryURL)
+        var job = PendingSaveJob(sourceName: jobToRecover.sourceName, state: updatedState)
         job.saveGateMessage = "Folder access restored. Saving again."
+        pendingSaveAccessURLs[job.id] = recoveryURL
 
         AppLogger.info(
             "Folder access recovery selected",
             category: .saving,
             metadata: [
                 "source": job.sourceName,
-                "folder": url.lastPathComponent
+                "folder": recoveryURL.lastPathComponent
             ]
         )
 
@@ -976,6 +1274,48 @@ final class HomeViewModel: ObservableObject {
         folderAccessPrompt = nil
     }
 
+    func dismissPendingSaveExportPrompt() {
+        guard pendingSaveExportPrompt != nil else {
+            return
+        }
+        AppLogger.info("Pending save export prompt dismissed", category: .saving)
+        clearPendingSaveExportPrompt()
+    }
+
+    func completePendingSaveExport(prompt: PendingSaveExportPrompt, destinationURL: URL) {
+        if pendingSaveExportPrompt?.id == prompt.id {
+            clearPendingSaveExportPrompt(cleanupPresentationFile: false)
+        }
+        var recoveredState = prompt.job.state
+        recoveredState.finalOutputURL = destinationURL
+        let job = PendingSaveJob(sourceName: prompt.job.sourceName, state: recoveredState)
+        AppLogger.info(
+            "Pending save export finalized",
+            category: .saving,
+            metadata: [
+                "source": job.sourceName,
+                "saved": destinationURL.lastPathComponent
+            ]
+        )
+        activeTask?.cancel()
+        activeTask = Task { [weak self] in
+            guard let self else {
+                return
+            }
+            await self.finishPendingSaveJob(job, savedURL: destinationURL)
+        }
+    }
+
+    private func clearPendingSaveExportPrompt(cleanupPresentationFile: Bool = true) {
+        let prompt = pendingSaveExportPrompt
+        pendingSaveExportPrompt = nil
+
+        guard cleanupPresentationFile, let prompt else {
+            return
+        }
+        cleanupPendingSaveExportPresentation(for: prompt.job.id)
+    }
+
     func reset() {
         guard state.canReset else {
             AppLogger.info("Reset ignored because state cannot reset", category: .ui)
@@ -988,13 +1328,21 @@ final class HomeViewModel: ObservableObject {
         selectionInspectionTask?.cancel()
         selectionInspectionTask = nil
         currentReview = nil
+        activeStarCharge = nil
+        shouldAutoResumeBatchAfterStarEarn = false
         saveConflictPrompt = nil
+        pendingSaveRenamePrompt = nil
         folderAccessPrompt = nil
+        clearPendingSaveExportPrompt()
         pendingSaveQueue = []
+        pendingSaveAccessURLs = [:]
         lastBatchFileCards = []
         folderBatch = nil
+        rewardedAdStatePollingTask?.cancel()
+        rewardedAdStatePollingTask = nil
         state = .idle
         stopSecurityScopedAccess()
+        cleanupAllPendingSaveExportPresentations()
 
         for pendingState in pendingStatesToReset {
             Task {
@@ -1029,6 +1377,8 @@ final class HomeViewModel: ObservableObject {
         selectionInspectionTask?.cancel()
         selectionInspectionTask = nil
         currentReview = nil
+        activeStarCharge = nil
+        shouldAutoResumeBatchAfterStarEarn = false
         lastBatchFileCards = []
         folderBatch = nil
         state = .failed(HomeEncodingError(title: "Import failed", message: message))
@@ -1179,23 +1529,27 @@ final class HomeViewModel: ObservableObject {
                             "available": job.storageRequirement.availableBytes.map(String.init) ?? "unknown"
                         ]
                     )
+                    let storageMessage = storageWarningMessage(
+                        requiredBytes: job.storageRequirement.requiredWorkingBytes,
+                        availableBytes: job.storageRequirement.availableBytes
+                    )
                     markBatchItem(
                         source.url,
                         statusText: "Blocked",
-                        detailText: "Free up storage before encoding this video.",
+                        detailText: storageMessage,
                         progress: nil,
                         isActive: false
                     )
                     if handleFolderItemFailure(
                         source: source,
-                        errorMessage: "Free up storage before encoding this video."
+                        errorMessage: storageMessage
                     ) {
                         return
                     }
                     state = .storageBlocked(StorageIssue(
                         requiredBytes: job.storageRequirement.requiredWorkingBytes,
                         availableBytes: job.storageRequirement.availableBytes,
-                        message: "Free up storage before encoding this video."
+                        message: storageMessage
                     ))
                     activeTask = nil
                     return
@@ -1228,7 +1582,10 @@ final class HomeViewModel: ObservableObject {
 
                 activeTask = nil
                 if autoStartAfterPrepare {
-                    startEncoding(review: review, allowsBusyState: true)
+                    await attemptEncodingStart(
+                        for: review,
+                        autoResumeAfterStarEarn: true
+                    )
                 } else {
                     state = .readyToStart(review)
                 }
@@ -1251,6 +1608,36 @@ final class HomeViewModel: ObservableObject {
                 folderBatch = nil
                 stopSecurityScopedAccess()
                 requestSessionEndAd(reason: .cancelledEncoding)
+            } catch TaptionVideoCoreError.insufficientStorage(let requiredBytes, let availableBytes) {
+                let storageMessage = storageWarningMessage(
+                    requiredBytes: requiredBytes,
+                    availableBytes: availableBytes
+                )
+                AppLogger.error(
+                    "Prepare encoding blocked due to insufficient storage",
+                    category: .storage,
+                    metadata: [
+                        "name": source.displayName,
+                        "required": "\(requiredBytes)",
+                        "available": availableBytes.map(String.init) ?? "unknown"
+                    ]
+                )
+                markBatchItem(
+                    source.url,
+                    statusText: "Blocked",
+                    detailText: storageMessage,
+                    progress: nil,
+                    isActive: false
+                )
+                if handleFolderItemFailure(source: source, errorMessage: storageMessage) {
+                    return
+                }
+                state = .storageBlocked(StorageIssue(
+                    requiredBytes: requiredBytes,
+                    availableBytes: availableBytes,
+                    message: storageMessage
+                ))
+                activeTask = nil
             } catch let error as TaptionVideoCoreError {
                 AppLogger.error(
                     "Prepare encoding failed with TaptionVideoCoreError",
@@ -1409,6 +1796,7 @@ final class HomeViewModel: ObservableObject {
                         "temporary": result.temporaryOutputURL.lastPathComponent
                     ]
                 )
+                clearActiveStarCharge(for: review.source)
                 let pendingJob = PendingSaveJob(
                     sourceName: review.source.displayName,
                     state: restorablePendingState
@@ -1431,6 +1819,7 @@ final class HomeViewModel: ObservableObject {
                     category: .encoding,
                     metadata: ["name": review.source.displayName]
                 )
+                clearActiveStarCharge(for: review.source)
                 markBatchItem(
                     review.source.url,
                     videoInfo: review.videoInfo,
@@ -1454,6 +1843,7 @@ final class HomeViewModel: ObservableObject {
                         "error": error.localizedDescription
                     ]
                 )
+                refundActiveStarChargeIfNeeded(for: review.source)
                 markBatchItem(
                     review.source.url,
                     videoInfo: review.videoInfo,
@@ -1481,6 +1871,7 @@ final class HomeViewModel: ObservableObject {
                         "error": error.localizedDescription
                     ]
                 )
+                refundActiveStarChargeIfNeeded(for: review.source)
                 markBatchItem(
                     review.source.url,
                     videoInfo: review.videoInfo,
@@ -1569,40 +1960,7 @@ final class HomeViewModel: ObservableObject {
                     for: workingJob.state,
                     conflictResolution: conflictResolution
                 )
-                try await environment.pendingSaveStore.removePendingState(id: workingJob.state.id)
-                try? removeTemporaryOutput(for: workingJob.state)
-                removePendingSaveJob(id: workingJob.id)
-                AppLogger.info(
-                    "Final save completed",
-                    category: .saving,
-                    metadata: [
-                        "source": workingJob.sourceName,
-                        "saved": savedURL.lastPathComponent
-                    ]
-                )
-                markCurrentSaveItem(
-                    statusText: "Saved",
-                    detailText: savedURL.lastPathComponent,
-                    progress: completedProgressSnapshot(label: "Saved"),
-                    isActive: false
-                )
-
-                if folderBatch != nil,
-                   handleFolderItemEncoded() {
-                    return
-                }
-
-                if showNextPendingSaveIfNeeded(afterSaving: workingJob) {
-                    return
-                }
-                let displayName = savedURL.lastPathComponent
-                let destination = destinationDescription(for: workingJob.state)
-                state = .completed(SavedOutput(
-                    displayName: displayName,
-                    destinationDescription: destination
-                ))
-                stopSecurityScopedAccess()
-                activeTask = nil
+                await finishPendingSaveJob(workingJob, savedURL: savedURL)
             } catch is CancellationError {
                 AppLogger.warning(
                     "Save pending job cancelled; pending state retained",
@@ -1655,11 +2013,12 @@ final class HomeViewModel: ObservableObject {
             } catch {
                 if workingJob.state.saveDestination == .sourceFolder,
                    isFileProviderWritePermissionDenied(error) {
-                    workingJob.saveGateMessage = "Choose the original folder again so iOS can grant write access, then the save will continue."
+                    workingJob.saveGateMessage = "Choose where to save the encoded video, then the export will continue."
                     updatePendingSaveJob(workingJob)
-                    folderAccessPrompt = PendingFolderAccessPrompt(job: workingJob)
+                    clearPendingSaveExportPrompt()
+                    pendingSaveExportPrompt = makePendingSaveExportPrompt(for: workingJob)
                     AppLogger.warning(
-                        "Final save needs folder access recovery",
+                        "Final save needs export picker recovery",
                         category: .saving,
                         metadata: [
                             "source": workingJob.sourceName,
@@ -1667,7 +2026,7 @@ final class HomeViewModel: ObservableObject {
                         ]
                     )
                     markCurrentSaveItem(
-                        statusText: "Needs Folder Access",
+                        statusText: "Needs Save Location",
                         detailText: workingJob.saveGateMessage,
                         progress: completedProgressSnapshot(label: "Pending Save"),
                         isActive: true
@@ -1730,6 +2089,70 @@ final class HomeViewModel: ObservableObject {
             try? await Task.sleep(nanoseconds: 500_000_000)
             await environment.sessionEndAdProvider.showSessionEndAd(reason: reason)
         }
+    }
+
+    private func finishPendingSaveJob(
+        _ job: PendingSaveJob,
+        savedURL: URL
+    ) async {
+        let completedOutputURL = finalizedOutputURL(savedURL: savedURL, for: job.state)
+        let metadataURL: URL
+        if FileManager.default.fileExists(atPath: job.state.temporaryOutputURL.path) {
+            metadataURL = job.state.temporaryOutputURL
+        } else {
+            metadataURL = completedOutputURL
+        }
+        let completedSaveDetail = await completedSaveDetailMessage(
+            savedURL: completedOutputURL,
+            metadataURL: metadataURL,
+            saveDestination: job.state.saveDestination
+        )
+
+        do {
+            try await environment.pendingSaveStore.removePendingState(id: job.state.id)
+        } catch {
+            AppLogger.error(
+                "Pending save state removal failed after save",
+                category: .saving,
+                metadata: [
+                    "source": job.sourceName,
+                    "error": error.localizedDescription
+                ]
+            )
+        }
+        try? removeTemporaryOutput(for: job.state)
+        removePendingSaveJob(id: job.id)
+        AppLogger.info(
+            "Final save completed",
+            category: .saving,
+            metadata: [
+                "source": job.sourceName,
+                "saved": savedURL.lastPathComponent
+            ]
+        )
+        markCurrentSaveItem(
+            statusText: "Save Complete",
+            detailText: nil,
+            progress: completedProgressSnapshot(label: "Save Complete"),
+            isActive: false
+        )
+
+        if folderBatch != nil,
+           handleFolderItemEncoded() {
+            activeTask = nil
+            return
+        }
+
+        let displayName = completedOutputURL.lastPathComponent
+        let destination = destinationDescription(for: job.state)
+        state = .completed(SavedOutput(
+            displayName: displayName,
+            destinationDescription: destination,
+            detailOverride: completedSaveDetail,
+            fileSizeBytes: fileSizeInBytes(at: completedOutputURL)
+        ))
+        stopSecurityScopedAccess()
+        activeTask = nil
     }
 
     private func saveGateMessage(for decision: AdGateDecision) -> String {
@@ -2092,6 +2515,89 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
+    private func attemptEncodingStart(
+        for review: PreparedEncodingReview,
+        autoResumeAfterStarEarn: Bool
+    ) async {
+        AppLogger.info(
+            "Start encoding requested",
+            category: .encoding,
+            metadata: [
+                "name": review.source.displayName,
+                "plan": review.job.plan.id.uuidString,
+                "autoResumeAfterStarEarn": "\(autoResumeAfterStarEarn)"
+            ]
+        )
+
+        do {
+            starWalletSnapshot = try await environment.starWalletStore.consumeStar(
+                source: review.source.displayName
+            )
+            activeStarCharge = ActiveStarCharge(
+                sourceURL: review.source.url,
+                sourceName: review.source.displayName
+            )
+            shouldAutoResumeBatchAfterStarEarn = false
+            startEncoding(review: review, allowsBusyState: true)
+        } catch let error as StarWalletError {
+            if case .insufficientStars = error {
+                AppLogger.warning(
+                    "Start encoding blocked because no stars are available",
+                    category: .encoding,
+                    metadata: [
+                        "name": review.source.displayName,
+                        "balance": "\(starWalletSnapshot.balance)"
+                    ]
+                )
+                if folderBatch != nil {
+                    shouldAutoResumeBatchAfterStarEarn = true
+                }
+                markNeedsStarState(for: review)
+                return
+            }
+
+            AppLogger.error(
+                "Unexpected star wallet error blocked encoding start",
+                category: .encoding,
+                metadata: [
+                    "name": review.source.displayName,
+                    "error": error.localizedDescription
+                ]
+            )
+            state = .failed(HomeEncodingError(
+                title: "Star error",
+                message: error.localizedDescription
+            ))
+        } catch {
+            AppLogger.error(
+                "Star debit failed before encoding start",
+                category: .encoding,
+                metadata: [
+                    "name": review.source.displayName,
+                    "error": error.localizedDescription
+                ]
+            )
+            state = .failed(HomeEncodingError(
+                title: "Star error",
+                message: error.localizedDescription
+            ))
+        }
+    }
+
+    private func markNeedsStarState(for review: PreparedEncodingReview) {
+        currentReview = review
+        markBatchItem(
+            review.source.url,
+            asset: review.job.asset,
+            videoInfo: review.videoInfo,
+            statusText: "Needs Star",
+            detailText: needsStarMessage,
+            progress: nil,
+            isActive: false
+        )
+        state = .readyToStart(review)
+    }
+
     private func folderCompletionMessage(for batch: FolderEncodingBatch) -> String {
         var message = "Folder encoding complete. \(batch.completedCount) of \(batch.totalCount) files were saved."
         if batch.failedCount > 0 {
@@ -2294,6 +2800,8 @@ final class HomeViewModel: ObservableObject {
 
     private func removePendingSaveJob(id: UUID) {
         pendingSaveQueue.removeAll { $0.id == id }
+        pendingSaveAccessURLs.removeValue(forKey: id)
+        cleanupPendingSaveExportPresentation(for: id)
     }
 
     private func showNextPendingSaveIfNeeded(afterSaving job: PendingSaveJob) -> Bool {
@@ -2302,7 +2810,7 @@ final class HomeViewModel: ObservableObject {
         }
 
         AppLogger.info(
-            "Advancing to next pending save job",
+            "Pending save remains queued after current save completed",
             category: .saving,
             metadata: [
                 "previous": job.sourceName,
@@ -2310,8 +2818,6 @@ final class HomeViewModel: ObservableObject {
                 "remaining": "\(pendingSaveQueue.count)"
             ]
         )
-        state = .pendingSave(nextJob)
-        activeTask = nil
         return true
     }
 
@@ -2580,7 +3086,43 @@ final class HomeViewModel: ObservableObject {
         guard let bytes else {
             return "Unknown size"
         }
-        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        return formattedByteCount(bytes)
+    }
+
+    private func formattedByteCount(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    private func finalizedOutputURL(
+        savedURL: URL,
+        for state: TaptionPendingSaveState
+    ) -> URL {
+        guard state.saveDestination == .sourceFolder,
+              let finalOutputURL = state.finalOutputURL else {
+            return savedURL
+        }
+        if savedURL.standardizedFileURL == finalOutputURL.standardizedFileURL
+            || savedURL.lastPathComponent == finalOutputURL.lastPathComponent {
+            return finalOutputURL
+        }
+        return savedURL
+    }
+
+    private func fileSizeInBytes(at url: URL) -> Int64? {
+        guard let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+              let fileSize = values.fileSize else {
+            return nil
+        }
+        return Int64(fileSize)
+    }
+
+    private func storageWarningMessage(
+        requiredBytes: Int64,
+        availableBytes: Int64?
+    ) -> String {
+        let requiredText = formattedByteCount(requiredBytes)
+        let availableText = availableBytes.map(formattedByteCount) ?? "unknown"
+        return "Low space. Need \(requiredText) free. Available \(availableText)."
     }
 
     private func videoFileURLs(in folderURL: URL) throws -> [URL] {
@@ -2647,6 +3189,198 @@ final class HomeViewModel: ObservableObject {
         return batch.itemStates[selectedURL]?.asset
     }
 
+    private var nextPendingSaveJobForAction: PendingSaveJob? {
+        if let job = state.pendingSaveJob {
+            return job
+        }
+        if case .failed = state {
+            return pendingSaveQueue.first
+        }
+        if case .completed = state {
+            return pendingSaveQueue.first
+        }
+        return nil
+    }
+
+    private func pendingSaveAsDestinationURL(
+        from prompt: PendingSaveRenamePrompt,
+        requestedFileName: String
+    ) -> URL? {
+        let trimmed = requestedFileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lastComponent = URL(fileURLWithPath: trimmed).lastPathComponent
+        let expectedExtension = prompt.suggestedURL.pathExtension
+        let baseName = URL(fileURLWithPath: lastComponent)
+            .deletingPathExtension()
+            .lastPathComponent
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !baseName.isEmpty else {
+            return nil
+        }
+        let fileName = expectedExtension.isEmpty
+            ? baseName
+            : "\(baseName).\(expectedExtension)"
+        return prompt.suggestedURL.deletingLastPathComponent().appendingPathComponent(fileName)
+    }
+
+    private func makePendingSaveExportPrompt(for job: PendingSaveJob) -> PendingSaveExportPrompt {
+        PendingSaveExportPrompt(
+            job: job,
+            exportPresentationURL: preparePendingSaveExportPresentationURL(for: job)
+        )
+    }
+
+    private func preparePendingSaveExportPresentationURL(for job: PendingSaveJob) -> URL {
+        let fileManager = FileManager.default
+        let stagingDirectoryURL = pendingSaveExportStagingDirectoryURL(for: job.id)
+        let stagingURL = stagingDirectoryURL.appendingPathComponent(
+            job.state.finalOutputURL?.lastPathComponent ?? job.sourceName
+        )
+
+        do {
+            if fileManager.fileExists(atPath: stagingDirectoryURL.path) {
+                try fileManager.removeItem(at: stagingDirectoryURL)
+            }
+            try fileManager.createDirectory(at: stagingDirectoryURL, withIntermediateDirectories: true)
+
+            do {
+                try fileManager.linkItem(at: job.state.temporaryOutputURL, to: stagingURL)
+                AppLogger.info(
+                    "Pending save export staging prepared with hard link",
+                    category: .saving,
+                    metadata: [
+                        "source": job.sourceName,
+                        "staging": stagingURL.lastPathComponent
+                    ]
+                )
+            } catch {
+                AppLogger.warning(
+                    "Pending save export hard link failed; copying staging file",
+                    category: .saving,
+                    metadata: [
+                        "source": job.sourceName,
+                        "staging": stagingURL.lastPathComponent,
+                        "error": error.localizedDescription
+                    ]
+                )
+                try fileManager.copyItem(at: job.state.temporaryOutputURL, to: stagingURL)
+                AppLogger.info(
+                    "Pending save export staging prepared with copy",
+                    category: .saving,
+                    metadata: [
+                        "source": job.sourceName,
+                        "staging": stagingURL.lastPathComponent
+                    ]
+                )
+            }
+
+            return stagingURL
+        } catch {
+            AppLogger.error(
+                "Pending save export staging preparation failed; using temporary output directly",
+                category: .saving,
+                metadata: [
+                    "source": job.sourceName,
+                    "error": error.localizedDescription
+                ]
+            )
+            return job.state.temporaryOutputURL
+        }
+    }
+
+    private func pendingSaveExportStagingDirectoryURL(for jobID: UUID) -> URL {
+        pendingSaveExportStagingRootDirectoryURL
+            .appendingPathComponent(jobID.uuidString, isDirectory: true)
+    }
+
+    private func cleanupPendingSaveExportPresentation(for jobID: UUID) {
+        let stagingDirectoryURL = pendingSaveExportStagingDirectoryURL(for: jobID)
+        guard FileManager.default.fileExists(atPath: stagingDirectoryURL.path) else {
+            return
+        }
+
+        do {
+            try FileManager.default.removeItem(at: stagingDirectoryURL)
+            AppLogger.info(
+                "Pending save export staging cleaned up",
+                category: .saving,
+                metadata: ["job": jobID.uuidString]
+            )
+        } catch {
+            AppLogger.warning(
+                "Pending save export staging cleanup failed",
+                category: .saving,
+                metadata: [
+                    "job": jobID.uuidString,
+                    "error": error.localizedDescription
+                ]
+            )
+        }
+    }
+
+    private func cleanupAllPendingSaveExportPresentations() {
+        guard FileManager.default.fileExists(atPath: pendingSaveExportStagingRootDirectoryURL.path) else {
+            return
+        }
+
+        do {
+            try FileManager.default.removeItem(at: pendingSaveExportStagingRootDirectoryURL)
+            AppLogger.info("All pending save export staging cleaned up", category: .saving)
+        } catch {
+            AppLogger.warning(
+                "Pending save export staging root cleanup failed",
+                category: .saving,
+                metadata: ["error": error.localizedDescription]
+            )
+        }
+    }
+
+    private func completedSaveDetailMessage(
+        savedURL: URL,
+        metadataURL: URL,
+        saveDestination: TaptionSaveDestinationKind
+    ) async -> String {
+        let fileSizeBytes = fileSizeInBytes(at: metadataURL) ?? fileSizeInBytes(at: savedURL)
+        let fileName = savedURL.lastPathComponent
+        let fileFormat = savedURL.pathExtension.isEmpty ? "Unknown" : savedURL.pathExtension.uppercased()
+        let durationValue: String
+        if let asset = try? await environment.mediaInspector.inspectVideo(at: metadataURL) {
+            durationValue = durationText(asset.duration)
+        } else {
+            durationValue = "Unknown"
+        }
+
+        let savePath: String
+        switch saveDestination {
+        case .sourceFolder:
+            savePath = savedURL.path
+        case .photosLibrary:
+            savePath = "Photos"
+        case .temporaryOnly:
+            savePath = "temporary storage"
+        }
+
+        return [
+            "File: \(fileName)",
+            "Format: \(fileFormat)",
+            "Size: \(fileSizeText(fileSizeBytes))",
+            "Time: \(durationValue)",
+            "Path: \(savePath)"
+        ].joined(separator: "\n")
+    }
+
+    private var isRefreshingPreparedSourceForOutputChange: Bool {
+        guard currentReview != nil else {
+            return false
+        }
+
+        switch state {
+        case .importing, .inspecting, .storageChecking:
+            return true
+        default:
+            return false
+        }
+    }
+
     private func greatestCommonDivisor(_ lhs: Int, _ rhs: Int) -> Int {
         var a = abs(lhs)
         var b = abs(rhs)
@@ -2678,8 +3412,12 @@ final class HomeViewModel: ObservableObject {
                 AppLogger.error("Final save failed because final output path is missing", category: .saving)
                 throw TaptionVideoCoreError.finalSaveFailed("The final output path is missing.")
             }
-            let securityScopedURL = resolveSecurityScopedAccessURL(from: state.accessBookmarkData)
-            let didStartSecurityScope = securityScopedURL?.startAccessingSecurityScopedResource() ?? false
+            let securityScopedURL = pendingSaveAccessURLs[state.id]
+                ?? resolveSecurityScopedAccessURL(from: state.accessBookmarkData)
+            let hasActiveSecurityScope = securityScopedURL.map(hasActiveSecurityScopedAccess(for:)) ?? false
+            let didStartSecurityScope = hasActiveSecurityScope
+                ? false
+                : (securityScopedURL?.startAccessingSecurityScopedResource() ?? false)
             defer {
                 if didStartSecurityScope {
                     securityScopedURL?.stopAccessingSecurityScopedResource()
@@ -2691,7 +3429,7 @@ final class HomeViewModel: ObservableObject {
                 metadata: [
                     "temporary": state.temporaryOutputURL.lastPathComponent,
                     "final": finalOutputURL.lastPathComponent,
-                    "securityScope": "\(didStartSecurityScope)"
+                    "securityScope": "\(hasActiveSecurityScope || didStartSecurityScope)"
                 ]
             )
             try fileManager.createDirectory(
@@ -3049,7 +3787,13 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func beginRestoredPendingSaveAccessIfNeeded(for states: [TaptionPendingSaveState]) {
-        let urls = states.compactMap { resolveSecurityScopedAccessURL(from: $0.accessBookmarkData) }
+        let recoveredAccessURLs = states.compactMap { state in
+            resolveSecurityScopedAccessURL(from: state.accessBookmarkData).map { (state.id, $0) }
+        }
+        for (id, url) in recoveredAccessURLs {
+            pendingSaveAccessURLs[id] = url
+        }
+        let urls = recoveredAccessURLs.map(\.1)
         guard !urls.isEmpty else {
             return
         }
@@ -3163,6 +3907,21 @@ final class HomeViewModel: ObservableObject {
             url.stopAccessingSecurityScopedResource()
         }
         securityScopedURLs = []
+    }
+
+    private func normalizedFolderRecoveryURL(for url: URL) -> URL {
+        guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey]),
+              values.isDirectory == false else {
+            return url
+        }
+        return url.deletingLastPathComponent()
+    }
+
+    private func hasActiveSecurityScopedAccess(for url: URL) -> Bool {
+        let standardizedURL = url.standardizedFileURL
+        return securityScopedURLs.contains { scopedURL in
+            scopedURL.standardizedFileURL == standardizedURL
+        }
     }
 
     private func destinationDescription(for state: TaptionPendingSaveState) -> String {

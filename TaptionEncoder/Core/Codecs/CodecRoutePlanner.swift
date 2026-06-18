@@ -298,6 +298,19 @@ enum TaptionCodecRoutePlanner {
             )
         }
 
+        if hardwareDecode {
+            return TaptionCodecRouteSelection(
+                route: route,
+                requestedMode: requestedMode,
+                selectedMode: .software,
+                decodeBackend: .appleAVAssetExport,
+                encodeBackend: .customSoftware,
+                executionKind: .mixed,
+                support: .implemented,
+                reason: "Hardware decode is available and feeds the software encoder."
+            )
+        }
+
         return softwareSelection(
             route: route,
             requestedMode: requestedMode,

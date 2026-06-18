@@ -1,0 +1,418 @@
+Command line invocation:
+    /Applications/Xcode.app/Contents/Developer/usr/bin/xcodebuild -project TaptionEncoder.xcodeproj -scheme TaptionEncoder -destination id=C44AF739-127D-572D-AD83-417C7E879045 build
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  GoogleUserMessagingPlatform: https://github.com/googleads/swift-package-manager-google-user-messaging-platform.git @ 3.1.0
+  GoogleMobileAds: https://github.com/googleads/swift-package-manager-google-mobile-ads.git @ 13.5.0
+  SwiftVLC: https://github.com/harflabs/SwiftVLC.git @ 0.10.0
+
+ComputePackagePrebuildTargetDependencyGraph
+
+Prepare packages
+
+CreateBuildRequest
+
+SendProjectDescription
+
+CreateBuildOperation
+
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (8 targets)
+    Target 'TaptionEncoder' in project 'TaptionEncoder'
+        ➜ Explicit dependency on target 'SwiftVLC' in project 'SwiftVLC'
+        ➜ Explicit dependency on target 'GoogleMobileAds' in project 'GoogleMobileAds'
+    Target 'GoogleMobileAds' in project 'GoogleMobileAds'
+        ➜ Explicit dependency on target 'GoogleMobileAdsTarget' in project 'GoogleMobileAds'
+        ➜ Explicit dependency on target 'GoogleUserMessagingPlatform' in project 'GoogleUserMessagingPlatform'
+    Target 'GoogleMobileAdsTarget' in project 'GoogleMobileAds'
+        ➜ Explicit dependency on target 'GoogleUserMessagingPlatform' in project 'GoogleUserMessagingPlatform'
+    Target 'GoogleUserMessagingPlatform' in project 'GoogleUserMessagingPlatform'
+        ➜ Explicit dependency on target 'UserMessagingPlatformTarget' in project 'GoogleUserMessagingPlatform'
+    Target 'UserMessagingPlatformTarget' in project 'GoogleUserMessagingPlatform' (no dependencies)
+    Target 'SwiftVLC' in project 'SwiftVLC'
+        ➜ Explicit dependency on target 'SwiftVLC' in project 'SwiftVLC'
+        ➜ Explicit dependency on target 'CLibVLC' in project 'SwiftVLC'
+    Target 'SwiftVLC' in project 'SwiftVLC'
+        ➜ Explicit dependency on target 'CLibVLC' in project 'SwiftVLC'
+    Target 'CLibVLC' in project 'SwiftVLC' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk -x objective-c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -arch arm64 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --print-asset-tag-combinations --output-format xml1 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Assets.xcassets
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/usr/bin/actool --version --output-format xml1
+
+ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+ReadFileContents /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/share/docc/features.json
+
+Build description signature: e167ed6372094968b6f8009ffdf1121c
+Build description path: /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/XCBuildData/e167ed6372094968b6f8009ffdf1121c.xcbuilddata
+ClangStatCache /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk /Users/u_mo_c/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphoneos26.5-23F73-32daed1954a7d5dd0789fcaf2a9bb78b.sdkstatcache
+    cd /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder.xcodeproj
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk -o /Users/u_mo_c/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphoneos26.5-23F73-32daed1954a7d5dd0789fcaf2a9bb78b.sdkstatcache
+
+GenerateAssetSymbols /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Assets.xcassets (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    /Applications/Xcode.app/Contents/Developer/usr/bin/actool /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Assets.xcassets --compile /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app --output-format human-readable-text --notices --warnings --export-dependency-info /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_dependencies --output-partial-info-plist /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_generated_info.plist --app-icon AppIcon --accent-color AccentColor --compress-pngs --enable-on-demand-resources YES --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 18.0 --platform iphoneos --bundle-identifier com.taption.encoder --generate-swift-asset-symbol-extensions NO --generate-swift-asset-symbols /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources/GeneratedAssetSymbols.swift --generate-objc-asset-symbols /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources/GeneratedAssetSymbols.h --generate-asset-symbol-index /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources/GeneratedAssetSymbols-Index.plist
+/* com.apple.actool.compilation-results */
+/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources/GeneratedAssetSymbols-Index.plist
+/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources/GeneratedAssetSymbols.h
+/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources/GeneratedAssetSymbols.swift
+
+
+CompileAssetCatalogVariant thinned /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Assets.xcassets (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    /Applications/Xcode.app/Contents/Developer/usr/bin/actool /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Assets.xcassets --compile /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_output/thinned --output-format human-readable-text --notices --warnings --export-dependency-info /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_dependencies_thinned --output-partial-info-plist /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_generated_info.plist_thinned --app-icon AppIcon --accent-color AccentColor --compress-pngs --enable-on-demand-resources YES --filter-for-thinning-device-configuration iPhone15,2 --filter-for-device-os-version 26.5 --development-region en --target-device iphone --target-device ipad --minimum-deployment-target 18.0 --platform iphoneos
+/* com.apple.actool.compilation-results */
+/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_generated_info.plist_thinned
+/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_output/thinned/AppIcon60x60@2x.png
+/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_output/thinned/AppIcon76x76@2x~ipad.png
+/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_output/thinned/Assets.car
+
+
+SwiftDriver TaptionEncoder normal arm64 com.apple.xcode.tools.swift.compiler (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    builtin-SwiftDriver -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name Taption_Encoder -Onone @/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption\ Encoder.SwiftFileList -DDEBUG -Xcc -fmodule-map-file\=/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/GeneratedModuleMaps-iphoneos/UserMessagingPlatformTarget.modulemap -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk -target arm64-apple-ios18.0 -g -module-cache-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos -F /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos -emit-localized-strings -emit-localized-strings-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/u_mo_c/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphoneos26.5-23F73-32daed1954a7d5dd0789fcaf2a9bb78b.sdkstatcache -output-file-map /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/TaptionEncoder-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption_Encoder.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/u_mo_c/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/TaptionEncoder_const_extract_protocols.json -Xcc -iquote -Xcc /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-generated-files.hmap -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-own-target-headers.hmap -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder-589887be3a1430f2033cea72a7b07d18-VFS-iphoneos/all-product-headers.yaml -Xcc -iquote -Xcc /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-project-headers.hmap -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/SourcePackages/checkouts/SwiftVLC/Sources/CLibVLC/include -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/SourcePackages/checkouts/swift-package-manager-google-user-messaging-platform/UserMessagingPlatformTarget/include -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/include -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources-normal/arm64 -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources/arm64 -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption_Encoder-Swift.h -working-directory /Users/u_mo_c/Documents/taption_encoder -experimental-emit-module-separately -disable-cmo
+
+SwiftEmitModule normal arm64 Emitting\ module\ for\ Taption_Encoder (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+EmitSwiftModule normal arm64 (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 Compiling\ GeneratedAssetSymbols.swift /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources/GeneratedAssetSymbols.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 Compiling\ HomeView.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Home/HomeView.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Home/HomeView.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 Compiling\ HomeScreenState.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Home/HomeScreenState.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Home/HomeScreenState.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 Compiling\ VideoDocumentPicker.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Home/VideoDocumentPicker.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Home/VideoDocumentPicker.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 Compiling\ HomeViewModel.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Home/HomeViewModel.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Home/HomeViewModel.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftDriverJobDiscovery normal arm64 Compiling GeneratedAssetSymbols.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftDriverJobDiscovery normal arm64 Compiling VideoDocumentPicker.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftDriverJobDiscovery normal arm64 Compiling HomeScreenState.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 Compiling\ HW_CodecCapabilityProbe.swift,\ HW_AppleHEVCCodecAlgorithm.swift,\ HW_AppleDeviceCodecProfiles.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/HW_CodecCapabilityProbe.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/HW_AppleHEVCCodecAlgorithm.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/HW_AppleDeviceCodecProfiles.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/HW_CodecCapabilityProbe.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/HW_AppleHEVCCodecAlgorithm.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+/Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/HW_AppleHEVCCodecAlgorithm.swift:48:54: warning: 'exportPresets(compatibleWith:)' was deprecated in iOS 16.0
+        let compatiblePresets = AVAssetExportSession.exportPresets(compatibleWith: asset)
+                                                     ^
+/Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/HW_AppleHEVCCodecAlgorithm.swift:314:17: warning: 'status' was deprecated in iOS 18.0: Use states(updateInterval:) instead
+        session.status
+                ^
+/Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/HW_AppleHEVCCodecAlgorithm.swift:318:17: warning: 'error' was deprecated in iOS 18.0: Use export(to:as:) async throws instead
+        session.error
+                ^
+/Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/HW_AppleHEVCCodecAlgorithm.swift:322:17: warning: 'exportAsynchronously(completionHandler:)' was deprecated in iOS 18.0
+        session.exportAsynchronously(completionHandler: completionHandler)
+                ^
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/HW_AppleDeviceCodecProfiles.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 Compiling\ FCPXMLProjectDocumentStore.swift,\ EncodingProgressView.swift,\ PendingSaveRecoveryView.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/ProjectDocuments/FCPXMLProjectDocumentStore.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Encoding/EncodingProgressView.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/PendingSave/PendingSaveRecoveryView.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/ProjectDocuments/FCPXMLProjectDocumentStore.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Encoding/EncodingProgressView.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/PendingSave/PendingSaveRecoveryView.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 Compiling\ CodecAlgorithm.swift,\ HW_AV1HEVCCodecAlgorithm.swift,\ SW_AV1HEVCCodecAlgorithm.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/CodecAlgorithm.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/AV1/HW_AV1HEVCCodecAlgorithm.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/AV1/SW_AV1HEVCCodecAlgorithm.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/CodecAlgorithm.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/AV1/HW_AV1HEVCCodecAlgorithm.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/AV1/SW_AV1HEVCCodecAlgorithm.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 Compiling\ LoadedFilesPanelView.swift,\ HomeQueueModels.swift,\ HomeMenuSheetView.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Home/LoadedFilesPanelView.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Home/HomeQueueModels.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Home/HomeMenuSheetView.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Home/LoadedFilesPanelView.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Home/HomeQueueModels.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Features/Home/HomeMenuSheetView.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 Compiling\ HW_DeviceCodecReportStore.swift,\ CodecRoutePlanner.swift,\ CodecTranscodingRegistry.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/HW_DeviceCodecReportStore.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/CodecRoutePlanner.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/CodecTranscodingRegistry.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/HW_DeviceCodecReportStore.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/CodecRoutePlanner.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/CodecTranscodingRegistry.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 Compiling\ StorageChecking.swift,\ BackgroundEncodingCoordinator.swift,\ ProjectDocumentStore.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Storage/StorageChecking.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Background/BackgroundEncodingCoordinator.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/ProjectDocuments/ProjectDocumentStore.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Storage/StorageChecking.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Background/BackgroundEncodingCoordinator.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/ProjectDocuments/ProjectDocumentStore.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 Compiling\ CodecFixtureEvidence.swift,\ SW_UniversalCodecTranscodeAlgorithm.swift,\ AudioCodecAlgorithm.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/CodecFixtureEvidence.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/SW_UniversalCodecTranscodeAlgorithm.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/Audio/AudioCodecAlgorithm.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/CodecFixtureEvidence.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/SW_UniversalCodecTranscodeAlgorithm.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/Audio/AudioCodecAlgorithm.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftDriverJobDiscovery normal arm64 Emitting module for Taption_Encoder (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftDriver\ Compilation\ Requirements TaptionEncoder normal arm64 com.apple.xcode.tools.swift.compiler (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    builtin-Swift-Compilation-Requirements -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name Taption_Encoder -Onone @/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption\ Encoder.SwiftFileList -DDEBUG -Xcc -fmodule-map-file\=/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/GeneratedModuleMaps-iphoneos/UserMessagingPlatformTarget.modulemap -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk -target arm64-apple-ios18.0 -g -module-cache-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos -F /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos -emit-localized-strings -emit-localized-strings-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/u_mo_c/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphoneos26.5-23F73-32daed1954a7d5dd0789fcaf2a9bb78b.sdkstatcache -output-file-map /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/TaptionEncoder-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption_Encoder.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/u_mo_c/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/TaptionEncoder_const_extract_protocols.json -Xcc -iquote -Xcc /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-generated-files.hmap -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-own-target-headers.hmap -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder-589887be3a1430f2033cea72a7b07d18-VFS-iphoneos/all-product-headers.yaml -Xcc -iquote -Xcc /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-project-headers.hmap -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/SourcePackages/checkouts/SwiftVLC/Sources/CLibVLC/include -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/SourcePackages/checkouts/swift-package-manager-google-user-messaging-platform/UserMessagingPlatformTarget/include -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/include -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources-normal/arm64 -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources/arm64 -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption_Encoder-Swift.h -working-directory /Users/u_mo_c/Documents/taption_encoder -experimental-emit-module-separately -disable-cmo
+
+SwiftDriverJobDiscovery normal arm64 Compiling StorageChecking.swift, BackgroundEncodingCoordinator.swift, ProjectDocumentStore.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 Compiling\ TaptionVideoCore.swift,\ EncoderService.swift,\ MediaInspector.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/VideoCore/TaptionVideoCore.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Encoding/EncoderService.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/MediaInspection/MediaInspector.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/VideoCore/TaptionVideoCore.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Encoding/EncoderService.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/MediaInspection/MediaInspector.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+Copy /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption_Encoder.swiftmodule/arm64-apple-ios.swiftmodule /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption_Encoder.swiftmodule (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption_Encoder.swiftmodule /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption_Encoder.swiftmodule/arm64-apple-ios.swiftmodule
+
+SwiftDriverJobDiscovery normal arm64 Compiling HW_DeviceCodecReportStore.swift, CodecRoutePlanner.swift, CodecTranscodingRegistry.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+Copy /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption_Encoder.swiftmodule/arm64-apple-ios.abi.json /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption_Encoder.abi.json (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption_Encoder.abi.json /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption_Encoder.swiftmodule/arm64-apple-ios.abi.json
+
+Copy /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption_Encoder.swiftmodule/Project/arm64-apple-ios.swiftsourceinfo /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption_Encoder.swiftsourceinfo (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -resolve-src-symlinks -rename /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption_Encoder.swiftsourceinfo /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption_Encoder.swiftmodule/Project/arm64-apple-ios.swiftsourceinfo
+
+SwiftCompile normal arm64 Compiling\ SW_FFmpegCodecCommandPlanner.swift,\ SW_FFmpegCommandExecutor.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/SW_FFmpegCodecCommandPlanner.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/SW_FFmpegCommandExecutor.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/SW_FFmpegCodecCommandPlanner.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/Codecs/SW_FFmpegCommandExecutor.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftDriverJobDiscovery normal arm64 Compiling HomeView.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 Compiling\ TaptionVideoCoreModels.swift,\ TaptionVideoEditingProject.swift,\ TaptionVideoEncodingPlan.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/VideoCore/TaptionVideoCoreModels.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/VideoCore/TaptionVideoEditingProject.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/VideoCore/TaptionVideoEncodingPlan.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/VideoCore/TaptionVideoCoreModels.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/VideoCore/TaptionVideoEditingProject.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Core/VideoCore/TaptionVideoEncodingPlan.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftCompile normal arm64 Compiling\ ContentView.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/ContentView.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/ContentView.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftDriverJobDiscovery normal arm64 Compiling HomeViewModel.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 Compiling\ TaptionEncoderApp.swift /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/TaptionEncoderApp.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftCompile normal arm64 /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/TaptionEncoderApp.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+
+SwiftDriverJobDiscovery normal arm64 Compiling FCPXMLProjectDocumentStore.swift, EncodingProgressView.swift, PendingSaveRecoveryView.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftDriverJobDiscovery normal arm64 Compiling ContentView.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftDriverJobDiscovery normal arm64 Compiling TaptionEncoderApp.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftDriverJobDiscovery normal arm64 Compiling TaptionVideoCore.swift, EncoderService.swift, MediaInspector.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftDriverJobDiscovery normal arm64 Compiling LoadedFilesPanelView.swift, HomeQueueModels.swift, HomeMenuSheetView.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftDriverJobDiscovery normal arm64 Compiling HW_CodecCapabilityProbe.swift, HW_AppleHEVCCodecAlgorithm.swift, HW_AppleDeviceCodecProfiles.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftDriverJobDiscovery normal arm64 Compiling CodecAlgorithm.swift, HW_AV1HEVCCodecAlgorithm.swift, SW_AV1HEVCCodecAlgorithm.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftDriverJobDiscovery normal arm64 Compiling SW_FFmpegCodecCommandPlanner.swift, SW_FFmpegCommandExecutor.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftDriverJobDiscovery normal arm64 Compiling CodecFixtureEvidence.swift, SW_UniversalCodecTranscodeAlgorithm.swift, AudioCodecAlgorithm.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftDriverJobDiscovery normal arm64 Compiling TaptionVideoCoreModels.swift, TaptionVideoEditingProject.swift, TaptionVideoEncodingPlan.swift (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+SwiftDriver\ Compilation TaptionEncoder normal arm64 com.apple.xcode.tools.swift.compiler (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    builtin-Swift-Compilation -- /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc -module-name Taption_Encoder -Onone @/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption\ Encoder.SwiftFileList -DDEBUG -Xcc -fmodule-map-file\=/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/GeneratedModuleMaps-iphoneos/UserMessagingPlatformTarget.modulemap -enable-bare-slash-regex -enable-experimental-feature DebugDescriptionMacro -sdk /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk -target arm64-apple-ios18.0 -g -module-cache-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -Xfrontend -serialize-debugging-options -enable-testing -index-store-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Index.noindex/DataStore -Xcc -D_LIBCPP_HARDENING_MODE\=_LIBCPP_HARDENING_MODE_DEBUG -swift-version 5 -I /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos -F /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos -emit-localized-strings -emit-localized-strings-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64 -c -j10 -enable-batch-mode -incremental -Xcc -ivfsstatcache -Xcc /Users/u_mo_c/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphoneos26.5-23F73-32daed1954a7d5dd0789fcaf2a9bb78b.sdkstatcache -output-file-map /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/TaptionEncoder-OutputFileMap.json -use-frontend-parseable-output -save-temps -no-color-diagnostics -explicit-module-build -module-cache-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules -clang-scanner-module-cache-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -sdk-module-cache-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/ModuleCache.noindex -serialize-diagnostics -emit-dependencies -emit-module -emit-module-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption_Encoder.swiftmodule -validate-clang-modules-once -clang-build-session-file /Users/u_mo_c/Library/Developer/Xcode/DerivedData/ModuleCache.noindex/Session.modulevalidation -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/swift-overrides.hmap -emit-const-values -Xfrontend -const-gather-protocols-file -Xfrontend /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/TaptionEncoder_const_extract_protocols.json -Xcc -iquote -Xcc /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-generated-files.hmap -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-own-target-headers.hmap -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-all-non-framework-target-headers.hmap -Xcc -ivfsoverlay -Xcc /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder-589887be3a1430f2033cea72a7b07d18-VFS-iphoneos/all-product-headers.yaml -Xcc -iquote -Xcc /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-project-headers.hmap -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/SourcePackages/checkouts/SwiftVLC/Sources/CLibVLC/include -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/SourcePackages/checkouts/swift-package-manager-google-user-messaging-platform/UserMessagingPlatformTarget/include -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/include -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources-normal/arm64 -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources/arm64 -Xcc -I/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/DerivedSources -Xcc -DDEBUG\=1 -emit-objc-header -emit-objc-header-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption_Encoder-Swift.h -working-directory /Users/u_mo_c/Documents/taption_encoder -experimental-emit-module-separately -disable-cmo
+
+Ld /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Taption\ Encoder.debug.dylib normal (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios18.0 -dynamiclib -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk -O0 -L/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphoneos -L/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos -F/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/EagerLinkingTBDs/Debug-iphoneos -F/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos -filelist /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption\ Encoder.LinkFileList -install_name @rpath/Taption\ Encoder.debug.dylib -Xlinker -rpath -Xlinker /usr/lib/swift -Xlinker -rpath -Xlinker /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -Xlinker -dead_strip -Xlinker -object_path_lto -Xlinker /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption\ Encoder_lto.o -rdynamic -Xlinker -no_deduplicate -Xlinker -dependency_info -Xlinker /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption\ Encoder_dependency_info.dat -fobjc-link-runtime -L/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/iphoneos -L/usr/lib/swift -Xlinker -add_ast_path -Xlinker /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption_Encoder.swiftmodule @/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption_Encoder-linker-args.resp -Wl,-no_warn_duplicate_libraries -Wl,-no_warn_duplicate_libraries -Wl,-no_warn_duplicate_libraries -Wl,-no_warn_duplicate_libraries -framework WebKit -framework AudioToolbox -framework AVFoundation -framework AVKit -framework CoreAudio -framework CoreFoundation -framework CoreGraphics -framework CoreImage -framework CoreMedia -framework CoreServices -framework CoreText -framework CoreVideo -framework Foundation -framework IOSurface -framework QuartzCore -framework Security -framework SystemConfiguration -framework VideoToolbox -lbz2 -lc++ -liconv -lresolv -lsqlite3 -lxml2 -lz -framework OpenGLES -Xlinker -alias -Xlinker _main -Xlinker ___debug_main_executable_dylib_entry_point -lvlc -framework GoogleMobileAds -framework UserMessagingPlatform -Xlinker -no_adhoc_codesign -o /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Taption\ Encoder.debug.dylib -Xlinker -add_ast_path -Xlinker /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/SwiftVLC.build/Debug-iphoneos/SwiftVLC.build/Objects-normal/arm64/SwiftVLC.swiftmodule @/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/SwiftVLC.build/Debug-iphoneos/SwiftVLC.build/Objects-normal/arm64/SwiftVLC-linker-args.resp -Xlinker -add_ast_path -Xlinker /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/GoogleMobileAds.build/Debug-iphoneos/GoogleMobileAdsTarget.build/Objects-normal/arm64/GoogleMobileAdsTarget.swiftmodule @/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/GoogleMobileAds.build/Debug-iphoneos/GoogleMobileAdsTarget.build/Objects-normal/arm64/GoogleMobileAdsTarget-linker-args.resp
+
+ConstructStubExecutorLinkFileList /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-ExecutorLinkFileList-normal-arm64.txt (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    construct-stub-executor-link-file-list /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Taption\ Encoder.debug.dylib /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/libPreviewsJITStubExecutor_no_swift_entry_point.a /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/usr/lib/libPreviewsJITStubExecutor.a --output /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-ExecutorLinkFileList-normal-arm64.txt
+note: Using stub executor library with Swift entry point. (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+Ld /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Taption\ Encoder normal (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -Xlinker -reproducible -target arm64-apple-ios18.0 -isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk -O0 -L/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos -F/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -F/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos -Xlinker -rpath -Xlinker @executable_path -Xlinker -rpath -Xlinker /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/PackageFrameworks -Xlinker -rpath -Xlinker @executable_path/Frameworks -rdynamic -Xlinker -no_deduplicate -e ___debug_blank_executor_main -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_dylib -Xlinker /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-DebugDylibPath-normal-arm64.txt -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __debug_instlnm -Xlinker /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-DebugDylibInstallName-normal-arm64.txt -Xlinker -filelist -Xlinker /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder-ExecutorLinkFileList-normal-arm64.txt /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Taption\ Encoder.debug.dylib -Xlinker -no_adhoc_codesign -o /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Taption\ Encoder
+
+LinkAssetCatalog /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Assets.xcassets (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    builtin-linkAssetCatalog --thinned /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_output/thinned --thinned-dependencies /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_dependencies_thinned --thinned-info-plist-content /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_generated_info.plist_thinned --unthinned /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_output/unthinned --unthinned-dependencies /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_dependencies_unthinned --unthinned-info-plist-content /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_generated_info.plist_unthinned --output /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app --plist-output /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_generated_info.plist
+note: Emplaced /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption Encoder.app/AppIcon76x76@2x~ipad.png (in target 'TaptionEncoder' from project 'TaptionEncoder')
+note: Emplaced /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption Encoder.app/Assets.car (in target 'TaptionEncoder' from project 'TaptionEncoder')
+note: Emplaced /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption Encoder.app/AppIcon60x60@2x.png (in target 'TaptionEncoder' from project 'TaptionEncoder')
+
+ProcessInfoPlistFile /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Info.plist /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Info.plist (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    builtin-infoPlistUtility /Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/PkgInfo -expandbuildsettings -format binary -platform iphoneos -additionalcontentfile /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/assetcatalog_generated_info.plist -scanforprivacyfile /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Frameworks/GoogleMobileAds.framework -scanforprivacyfile /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Frameworks/UserMessagingPlatform.framework -requiredArchitecture arm64 -o /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Info.plist
+
+CopySwiftLibs /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    builtin-swiftStdLibTool --copy --verbose --sign 7DFFAD8D7C6D6E3250D375A303498C569275B412 --scan-executable /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Taption\ Encoder.debug.dylib --scan-folder /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Frameworks --scan-folder /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/PlugIns --scan-folder /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/SystemExtensions --scan-folder /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Extensions --platform iphoneos --toolchain /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os
+
+ExtractAppIntentsMetadata (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsmetadataprocessor --toolchain-dir /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --module-name Taption_Encoder --sdk-root /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.5.sdk --xcode-version 17F42 --platform-family iOS --deployment-target 18.0 --bundle-identifier com.taption.encoder --output /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app --target-triple arm64-apple-ios18.0 --binary-file /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Taption\ Encoder --dependency-file /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption\ Encoder_dependency_info.dat --stringsdata-file /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption\ Encoder.SwiftFileList --metadata-file-list /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder.DependencyMetadataFileList --static-metadata-file-list /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder.DependencyStaticMetadataFileList --swift-const-vals-list /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Objects-normal/arm64/Taption\ Encoder.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization
+2026-06-18 00:36:29.404 appintentsmetadataprocessor[91663:21975944] Starting appintentsmetadataprocessor export
+2026-06-18 00:36:29.408 appintentsmetadataprocessor[91663:21975944] warning: Metadata extraction skipped. No AppIntents.framework dependency found.
+
+AppIntentsSSUTraining (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/appintentsnltrainingprocessor --infoplist-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Info.plist --temp-dir-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/ssu --bundle-id com.taption.encoder --product-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app --extracted-metadata-path /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Metadata.appintents --metadata-file-list /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder.DependencyMetadataFileList --source-file /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Info.plist --archive-ssu-assets
+2026-06-18 00:36:29.424 appintentsnltrainingprocessor[91664:21975945] Parsing options for appintentsnltrainingprocessor
+2026-06-18 00:36:29.424 appintentsnltrainingprocessor[91664:21975945] Starting AppIntents SSU YAML Generation
+2026-06-18 00:36:29.426 appintentsnltrainingprocessor[91664:21975945] No AppShortcuts found - Skipping.
+
+CodeSign /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Taption\ Encoder.debug.dylib (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+    Signing Identity:     "Apple Development: axony99@gmail.com (5M6F7NN5SW)"
+    Provisioning Profile: "iOS Team Provisioning Profile: *"
+                          (a630ece4-ed79-41eb-8cf8-76084520fa20)
+    
+    /usr/bin/codesign --force --sign 7DFFAD8D7C6D6E3250D375A303498C569275B412 --timestamp\=none --generate-entitlement-der /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/Taption\ Encoder.debug.dylib
+
+CodeSign /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/__preview.dylib (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+    Signing Identity:     "Apple Development: axony99@gmail.com (5M6F7NN5SW)"
+    Provisioning Profile: "iOS Team Provisioning Profile: *"
+                          (a630ece4-ed79-41eb-8cf8-76084520fa20)
+    
+    /usr/bin/codesign --force --sign 7DFFAD8D7C6D6E3250D375A303498C569275B412 --timestamp\=none --generate-entitlement-der /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app/__preview.dylib
+/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption Encoder.app/__preview.dylib: replacing existing signature
+
+CodeSign /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    
+    Signing Identity:     "Apple Development: axony99@gmail.com (5M6F7NN5SW)"
+    Provisioning Profile: "iOS Team Provisioning Profile: *"
+                          (a630ece4-ed79-41eb-8cf8-76084520fa20)
+    
+    /usr/bin/codesign --force --sign 7DFFAD8D7C6D6E3250D375A303498C569275B412 --entitlements /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Intermediates.noindex/TaptionEncoder.build/Debug-iphoneos/TaptionEncoder.build/Taption\ Encoder.app.xcent --timestamp\=none --generate-entitlement-der /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app
+
+Validate /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app (in target 'TaptionEncoder' from project 'TaptionEncoder')
+    cd /Users/u_mo_c/Documents/taption_encoder
+    builtin-validationUtility /Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq/Build/Products/Debug-iphoneos/Taption\ Encoder.app -shallow-bundle -infoplist-subpath Info.plist
+
+** BUILD SUCCEEDED **
+

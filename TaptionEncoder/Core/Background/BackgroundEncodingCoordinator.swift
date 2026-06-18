@@ -35,7 +35,6 @@ final class UIApplicationBackgroundEncodingCoordinator: BackgroundEncodingCoordi
         }
 
         activePlanIDs.insert(plan.id)
-        application.isIdleTimerDisabled = true
 
         var taskID: UIBackgroundTaskIdentifier = .invalid
         taskID = application.beginBackgroundTask(withName: "Taption Encoding") { [weak self] in
@@ -72,10 +71,6 @@ final class UIApplicationBackgroundEncodingCoordinator: BackgroundEncodingCoordi
                 category: .encoding,
                 metadata: ["plan": planID.uuidString]
             )
-        }
-
-        if activePlanIDs.isEmpty {
-            application.isIdleTimerDisabled = false
         }
     }
 
