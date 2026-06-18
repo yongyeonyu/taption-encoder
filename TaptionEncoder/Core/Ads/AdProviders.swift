@@ -78,16 +78,16 @@ struct AdMobRuntimeConfiguration: Equatable, Sendable {
         AdMobRuntimeConfiguration(
             appOpenAdUnitID: normalizedString(
                 bundle.object(forInfoDictionaryKey: infoDictionaryAppOpenAdUnitIDKey) as? String
-            ) ?? "",
+            ) ?? "ca-app-pub-9754025737691277/9568683076",
             homeBannerAdUnitID: normalizedString(
                 bundle.object(forInfoDictionaryKey: infoDictionaryHomeBannerAdUnitIDKey) as? String
-            ) ?? "ca-app-pub-9754025737691277/7833620535",
+            ) ?? "ca-app-pub-9754025737691277/6794641076",
             rewardedSaveAdUnitID: normalizedString(
                 bundle.object(forInfoDictionaryKey: infoDictionaryRewardedSaveAdUnitIDKey) as? String
-            ) ?? "ca-app-pub-9754025737691277/3925169268",
+            ) ?? "ca-app-pub-9754025737691277/2855396062",
             sessionEndInterstitialAdUnitID: normalizedString(
                 bundle.object(forInfoDictionaryKey: infoDictionarySessionEndInterstitialAdUnitIDKey) as? String
-            ) ?? "ca-app-pub-9754025737691277/7130602860"
+            ) ?? "ca-app-pub-9754025737691277/6942519738"
         )
         #endif
     }

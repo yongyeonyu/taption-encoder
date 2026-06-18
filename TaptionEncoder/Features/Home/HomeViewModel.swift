@@ -209,8 +209,8 @@ final class HomeViewModel: ObservableObject {
         if let encodedOutputSizeText {
             return encodedOutputSizeText
         }
-        if selectedOutput.sizePreset == .auto {
-            return "Auto"
+        if selectedOutput.sizePreset != .manual {
+            return selectedOutput.sizePreset.menuTitle
         }
         return selectedOutputTargetSizeText
     }
@@ -222,8 +222,8 @@ final class HomeViewModel: ObservableObject {
         if encodedOutputSizeText != nil {
             return "Encoded"
         }
-        if selectedOutput.sizePreset == .auto {
-            return selectedOutputTargetSizeText
+        if selectedOutput.sizePreset != .manual {
+            return "~\(selectedOutputTargetSizeText)"
         }
         return nil
     }
@@ -242,7 +242,7 @@ final class HomeViewModel: ObservableObject {
         if let encodedOutputSizeText {
             return "Encoded output: \(encodedOutputSizeText)."
         }
-        return nil
+        return "Estimated output: \(selectedOutputTargetSizeText)."
     }
 
     var selectedOutputStatusText: String {

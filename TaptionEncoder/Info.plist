@@ -43,7 +43,7 @@
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-9754025737691277~3682622535</string>
+	<string>ca-app-pub-9754025737691277~7872753173</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSApplicationCategoryType</key>
@@ -62,13 +62,13 @@
 		</dict>
 	</array>
 	<key>TaptionAppOpenAdUnitID</key>
-	<string></string>
+	<string>ca-app-pub-9754025737691277/9568683076</string>
 	<key>TaptionHomeBannerAdUnitID</key>
-	<string>ca-app-pub-9754025737691277/7833620535</string>
+	<string>ca-app-pub-9754025737691277/6794641076</string>
 	<key>TaptionRewardedSaveAdUnitID</key>
-	<string>ca-app-pub-9754025737691277/3925169268</string>
+	<string>ca-app-pub-9754025737691277/2855396062</string>
 	<key>TaptionSessionEndInterstitialAdUnitID</key>
-	<string>ca-app-pub-9754025737691277/7130602860</string>
+	<string>ca-app-pub-9754025737691277/6942519738</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

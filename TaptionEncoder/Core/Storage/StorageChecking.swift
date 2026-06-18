@@ -15,8 +15,11 @@ struct FakeStorageChecker: StorageChecking {
 struct FileSystemStorageChecker: StorageChecking {
     func storageRequirement(for plan: TaptionEncodingPlan) async throws -> TaptionStorageRequirement {
         let sourceBytes = plan.sourceURL.flatMap(fileSize) ?? 512 * 1024 * 1024
-        let estimatedOutputBytes = max(sourceBytes, 32 * 1024 * 1024)
-        let requiredWorkingBytes = max(sourceBytes * 2, estimatedOutputBytes + 256 * 1024 * 1024)
+        let estimatedOutputBytes = max(plan.estimatedOutputBytes ?? sourceBytes, 16 * 1024 * 1024)
+        let requiredWorkingBytes = max(
+            sourceBytes + estimatedOutputBytes,
+            estimatedOutputBytes + 256 * 1024 * 1024
+        )
         let capacityURL = plan.temporaryOutputURL?.deletingLastPathComponent()
             ?? FileManager.default.temporaryDirectory
         let availableBytes = availableCapacity(at: capacityURL)

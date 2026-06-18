@@ -186,6 +186,7 @@ struct TaptionEncodingPlan: Identifiable, Codable, Equatable {
     var audioPlan: TaptionAudioTranscodePlan?
     var savePolicy: TaptionSavePolicy
     var encoderSelection: TaptionEncoderSelection
+    var estimatedOutputBytes: Int64?
     var sourceURL: URL?
     var temporaryOutputURL: URL?
     var finalOutputURL: URL?
@@ -200,6 +201,7 @@ struct TaptionEncodingPlan: Identifiable, Codable, Equatable {
         audioPlan: TaptionAudioTranscodePlan? = nil,
         savePolicy: TaptionSavePolicy = TaptionSavePolicy(),
         encoderSelection: TaptionEncoderSelection = TaptionEncoderSelection(),
+        estimatedOutputBytes: Int64? = nil,
         sourceURL: URL? = nil,
         temporaryOutputURL: URL? = nil,
         finalOutputURL: URL? = nil
@@ -213,6 +215,7 @@ struct TaptionEncodingPlan: Identifiable, Codable, Equatable {
         self.audioPlan = audioPlan
         self.savePolicy = savePolicy
         self.encoderSelection = encoderSelection
+        self.estimatedOutputBytes = estimatedOutputBytes
         self.sourceURL = sourceURL
         self.temporaryOutputURL = temporaryOutputURL
         self.finalOutputURL = finalOutputURL
@@ -395,10 +398,45 @@ enum TaptionEncodingPlanner {
             audioPlan: audioPlan,
             savePolicy: savePolicy,
             encoderSelection: routeSelection.encoderSelection,
+            estimatedOutputBytes: estimatedOutputBytes(
+                asset: asset,
+                outputPolicy: resolvedOutputPolicy
+            ),
             sourceURL: sourceURL,
             temporaryOutputURL: temporaryOutputURL,
             finalOutputURL: finalURL
         )
+    }
+
+    private static func estimatedOutputBytes(
+        asset: TaptionVideoAsset,
+        outputPolicy: TaptionVideoOutputPolicy
+    ) -> Int64? {
+        guard let duration = asset.duration,
+              duration.isFinite,
+              duration > 0 else {
+            return asset.fingerprint.fileSize
+        }
+
+        let videoBitrate = outputPolicy.advancedOptions.targetBitrate
+            ?? asset.videoTrack?.estimatedBitrate
+            ?? 4_000_000
+        let audioBitrate = estimatedAudioBitrate(for: asset)
+        let estimatedBytes = ((Double(videoBitrate + audioBitrate) * duration) / 8.0).rounded()
+        guard estimatedBytes.isFinite, estimatedBytes > 0 else {
+            return asset.fingerprint.fileSize
+        }
+        return Int64(max(estimatedBytes, 1_000_000))
+    }
+
+    private static func estimatedAudioBitrate(for asset: TaptionVideoAsset) -> Int {
+        let measuredBitrate = asset.audioTracks
+            .compactMap(\.estimatedBitrate)
+            .reduce(0, +)
+        if measuredBitrate > 0 {
+            return measuredBitrate
+        }
+        return asset.audioTracks.isEmpty ? 0 : min(max(asset.audioTracks.count * 160_000, 96_000), 512_000)
     }
 
     private static func makeVideoCommandPlanIfAvailable(

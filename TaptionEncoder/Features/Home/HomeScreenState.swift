@@ -287,15 +287,34 @@ enum TaptionOutputResolutionPreset: String, Codable, Equatable, CaseIterable {
 }
 
 enum TaptionOutputSizePreset: String, Codable, Equatable, CaseIterable {
+    case low
     case auto
+    case high
     case manual
 
     var menuTitle: String {
         switch self {
+        case .low:
+            return "Low"
         case .auto:
-            return "Auto"
+            return "Medium"
+        case .high:
+            return "High"
         case .manual:
-            return "Manual"
+            return "Custom"
+        }
+    }
+
+    var qualityBitsPerPixel: Double? {
+        switch self {
+        case .low:
+            return 0.045
+        case .auto:
+            return 0.075
+        case .high:
+            return 0.115
+        case .manual:
+            return nil
         }
     }
 }
@@ -528,63 +547,111 @@ struct TaptionOutputSelection: Identifiable, Equatable {
     }
 
     private func resolvedTargetBitrate(for asset: TaptionVideoAsset?) -> Int? {
-        guard sizePreset == .manual,
-              let asset,
+        guard let asset,
               let duration = asset.duration,
               duration.isFinite,
               duration > 0 else {
-            return nil
+            return estimatedVideoBitrate(for: asset, preset: sizePreset)
         }
 
-        let targetSizeMB = normalizedTargetSizeMB(for: asset)
-        let totalBitBudget = Int((targetSizeMB * 8_000_000).rounded())
-        let audioBitrate = estimatedAudioBitrate(for: asset)
-        let targetBitrate = Int((Double(totalBitBudget) / duration).rounded()) - audioBitrate
-        return max(targetBitrate, 300_000)
+        switch sizePreset {
+        case .manual:
+            let targetSizeMB = normalizedTargetSizeMB(for: asset)
+            let totalBitBudget = Int((targetSizeMB * 8_000_000).rounded())
+            let audioBitrate = estimatedAudioBitrate(for: asset)
+            let targetBitrate = Int((Double(totalBitBudget) / duration).rounded()) - audioBitrate
+            return max(targetBitrate, 300_000)
+        case .low, .auto, .high:
+            return estimatedVideoBitrate(for: asset, preset: sizePreset)
+        }
     }
 
     func normalizedTargetSizeMB(for asset: TaptionVideoAsset?) -> Double {
-        let range = targetSizeRangeMB(for: asset)
-        if sizePreset == .auto {
-            return range.upperBound
+        if sizePreset != .manual {
+            return estimatedTargetSizeMB(for: asset, preset: sizePreset)
         }
+
+        let range = targetSizeRangeMB(for: asset)
         let selectedValue = targetSizeMB ?? range.upperBound
         return min(max(selectedValue, range.lowerBound), range.upperBound)
     }
 
     func suggestedTargetSizeMB(for asset: TaptionVideoAsset?) -> Double {
-        if let fileSize = asset?.fingerprint.fileSize,
-           fileSize > 0 {
-            return max(1, Double(fileSize) / 1_000_000)
-        }
+        estimatedTargetSizeMB(for: asset, preset: .auto)
+    }
 
+    func estimatedTargetSizeMB(
+        for asset: TaptionVideoAsset?,
+        preset: TaptionOutputSizePreset? = nil
+    ) -> Double {
+        let effectivePreset = preset ?? sizePreset
         guard let asset,
               let duration = asset.duration,
               duration.isFinite,
               duration > 0 else {
-            return 100
+            return fallbackTargetSizeMB(for: asset, preset: effectivePreset)
         }
 
-        let videoBitrate = Double(asset.videoTrack?.estimatedBitrate ?? 4_000_000)
+        let videoBitrate = Double(estimatedVideoBitrate(for: asset, preset: effectivePreset) ?? 4_000_000)
         let audioBitrate = Double(estimatedAudioBitrate(for: asset))
         return max(1, ((videoBitrate + audioBitrate) * duration) / 8_000_000)
     }
 
     func targetSizeRangeMB(for asset: TaptionVideoAsset?) -> ClosedRange<Double> {
-        let autoTarget = roundedAutoTargetSizeMB(for: asset)
-        let minimum = max(1, floor(autoTarget * 0.25))
-        let maximum = max(minimum, autoTarget)
+        let mediumTarget = roundedAutoTargetSizeMB(for: asset)
+        let minimum = max(1, floor(mediumTarget * 0.35))
+        let maximum = max(minimum, ceil(mediumTarget * 1.8))
         return minimum...maximum
     }
 
+    private func estimatedVideoBitrate(
+        for asset: TaptionVideoAsset?,
+        preset: TaptionOutputSizePreset
+    ) -> Int? {
+        guard preset != .manual,
+              let bitsPerPixel = preset.qualityBitsPerPixel,
+              let track = asset?.videoTrack else {
+            return nil
+        }
+
+        let targetSize = resolvedResizeTarget(for: track) ?? track.displaySize
+        let pixels = max(1, targetSize.width * targetSize.height)
+        let fps = min(max(track.nominalFrameRate?.value ?? 30, 1), 120)
+        let estimated = Double(pixels) * fps * bitsPerPixel
+        return min(max(Int(estimated.rounded()), 300_000), 120_000_000)
+    }
+
     private func estimatedAudioBitrate(for asset: TaptionVideoAsset) -> Int {
-        asset.audioTracks
+        let bitrate = asset.audioTracks
             .compactMap(\.estimatedBitrate)
             .reduce(0, +)
+        if bitrate > 0 {
+            return bitrate
+        }
+        return asset.audioTracks.isEmpty ? 0 : min(max(asset.audioTracks.count * 160_000, 96_000), 512_000)
     }
 
     private func roundedAutoTargetSizeMB(for asset: TaptionVideoAsset?) -> Double {
         max(1, Double(Int(suggestedTargetSizeMB(for: asset).rounded())))
+    }
+
+    private func fallbackTargetSizeMB(
+        for asset: TaptionVideoAsset?,
+        preset: TaptionOutputSizePreset
+    ) -> Double {
+        let sourceMB = asset?.fingerprint.fileSize.map { max(1, Double($0) / 1_000_000) } ?? 100
+        let multiplier: Double
+        switch preset {
+        case .low:
+            multiplier = 0.45
+        case .auto:
+            multiplier = 0.70
+        case .high:
+            multiplier = 1.0
+        case .manual:
+            multiplier = 0.70
+        }
+        return max(1, sourceMB * multiplier)
     }
 }
 

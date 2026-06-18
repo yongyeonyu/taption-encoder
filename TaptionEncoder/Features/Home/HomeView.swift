@@ -516,17 +516,34 @@ struct HomeView: View {
                         .font(.headline.weight(.semibold))
                     Spacer()
                     Button {
-                        viewModel.selectOutputSize(.auto)
+                        viewModel.selectOutputSize(.manual)
                     } label: {
-                        Text("Auto")
+                        Text("Custom")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(viewModel.selectedOutput.sizePreset == .auto ? Color.black : Color.white.opacity(0.86))
+                            .foregroundStyle(viewModel.selectedOutput.sizePreset == .manual ? Color.black : Color.white.opacity(0.86))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
-                            .background(viewModel.selectedOutput.sizePreset == .auto ? Color.white : Color.white.opacity(0.10))
+                            .background(viewModel.selectedOutput.sizePreset == .manual ? Color.white : Color.white.opacity(0.10))
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
+                }
+
+                HStack(spacing: 8 * metrics.contentScale) {
+                    ForEach([TaptionOutputSizePreset.low, .auto, .high], id: \.self) { preset in
+                        Button {
+                            viewModel.selectOutputSize(preset)
+                        } label: {
+                            Text(preset.menuTitle)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(viewModel.selectedOutput.sizePreset == preset ? Color.black : Color.white.opacity(0.86))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 7)
+                                .background(viewModel.selectedOutput.sizePreset == preset ? Color.white : Color.white.opacity(0.10))
+                                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
 
                 Text(viewModel.selectedOutputTargetSizeText)

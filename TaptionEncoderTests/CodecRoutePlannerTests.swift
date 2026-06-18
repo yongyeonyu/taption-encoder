@@ -4009,7 +4009,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         let sourceURL = directoryURL.appendingPathComponent("source.mp4")
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         try Data("source".utf8).write(to: sourceURL)
-        let asset = makeAsset(sourceCodec: .av1, fileSize: 400_000_000)
+        let asset = makeAsset(sourceCodec: .av1, duration: 120, fileSize: 400_000_000)
 
         let viewModel = HomeViewModel(
             environment: makeHomeViewModelTestEnvironment(
@@ -4021,12 +4021,19 @@ final class CodecRoutePlannerTests: XCTestCase {
         viewModel.startFilesFlow(url: sourceURL)
         try await waitForReadyToStartState(in: viewModel)
 
-        XCTAssertEqual(viewModel.outputSizeDisplayText, "Auto")
-        XCTAssertEqual(viewModel.outputSizeSecondaryText, "400 MB")
-        XCTAssertEqual(viewModel.selectedOutputTargetSizeText, "400 MB")
-        XCTAssertNil(viewModel.outputSizeStatusMessage)
-        XCTAssertEqual(viewModel.outputTargetSizeRangeMB.lowerBound, 100)
-        XCTAssertEqual(viewModel.outputTargetSizeRangeMB.upperBound, 400)
+        XCTAssertEqual(viewModel.outputSizeDisplayText, "Medium")
+        XCTAssertEqual(viewModel.outputSizeSecondaryText, "~72 MB")
+        XCTAssertEqual(viewModel.selectedOutputTargetSizeText, "72 MB")
+        XCTAssertEqual(viewModel.outputSizeStatusMessage, "Estimated output: 72 MB.")
+        XCTAssertEqual(viewModel.outputTargetSizeRangeMB.lowerBound, 25)
+        XCTAssertEqual(viewModel.outputTargetSizeRangeMB.upperBound, 130)
+
+        viewModel.selectOutputResolution(.hd720)
+        try await waitForReadyToStartState(in: viewModel)
+
+        XCTAssertEqual(viewModel.outputSizeDisplayText, "Medium")
+        XCTAssertEqual(viewModel.outputSizeSecondaryText, "~34 MB")
+        XCTAssertEqual(viewModel.selectedOutputTargetSizeText, "34 MB")
     }
 
     @MainActor
@@ -4038,7 +4045,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         let sourceURL = directoryURL.appendingPathComponent("source.mp4")
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         try Data("source".utf8).write(to: sourceURL)
-        let asset = makeAsset(sourceCodec: .av1, fileSize: 400_000_000)
+        let asset = makeAsset(sourceCodec: .av1, duration: 120, fileSize: 400_000_000)
 
         let viewModel = HomeViewModel(
             environment: makeHomeViewModelTestEnvironment(
@@ -4051,18 +4058,18 @@ final class CodecRoutePlannerTests: XCTestCase {
         try await waitForReadyToStartState(in: viewModel)
 
         viewModel.selectOutputSize(.manual)
-        XCTAssertEqual(viewModel.outputSizeDisplayText, "400 MB")
+        XCTAssertEqual(viewModel.outputSizeDisplayText, "130 MB")
         XCTAssertNil(viewModel.outputSizeSecondaryText)
 
-        viewModel.updateOutputTargetSizeMB(250)
-        XCTAssertEqual(viewModel.outputSizeDisplayText, "250 MB")
-        XCTAssertEqual(viewModel.selectedOutputTargetSizeText, "250 MB")
+        viewModel.updateOutputTargetSizeMB(80)
+        XCTAssertEqual(viewModel.outputSizeDisplayText, "80 MB")
+        XCTAssertEqual(viewModel.selectedOutputTargetSizeText, "80 MB")
         XCTAssertNil(viewModel.outputSizeSecondaryText)
 
         viewModel.updateOutputTargetSizeMB(450)
-        XCTAssertEqual(viewModel.outputSizeDisplayText, "400 MB")
-        XCTAssertEqual(viewModel.selectedOutputTargetSizeText, "400 MB")
-        XCTAssertEqual(viewModel.selectedOutputTargetSizeValueMB, 400)
+        XCTAssertEqual(viewModel.outputSizeDisplayText, "130 MB")
+        XCTAssertEqual(viewModel.selectedOutputTargetSizeText, "130 MB")
+        XCTAssertEqual(viewModel.selectedOutputTargetSizeValueMB, 130)
     }
 
     @MainActor
@@ -4577,7 +4584,7 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         let requiredText = ByteCountFormatter.string(fromByteCount: requiredBytes, countStyle: .file)
         let availableText = ByteCountFormatter.string(fromByteCount: availableBytes, countStyle: .file)
-        XCTAssertEqual(viewModel.outputSizeDisplayText, "Auto")
+        XCTAssertEqual(viewModel.outputSizeDisplayText, "Medium")
         XCTAssertEqual(viewModel.outputSizeSecondaryText, "Low Space")
         XCTAssertTrue(viewModel.outputSizeShowsWarning)
         XCTAssertEqual(
@@ -5501,13 +5508,14 @@ final class CodecRoutePlannerTests: XCTestCase {
     private func makeAsset(
         sourceCodec: TaptionVideoCodec,
         displaySize: TaptionPixelSize = TaptionPixelSize(width: 1920, height: 1080),
+        duration: TimeInterval = 1,
         fileSize: Int64 = 1_000_000
     ) -> TaptionVideoAsset {
         TaptionVideoAsset(
             displayName: "\(sourceCodec.rawValue).mp4",
             location: TaptionVideoAssetLocation(kind: .file),
             container: .mp4,
-            duration: 1,
+            duration: duration,
             videoTrack: TaptionVideoTrackInfo(
                 codec: sourceCodec,
                 naturalSize: displaySize,
