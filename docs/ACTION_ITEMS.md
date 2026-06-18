@@ -359,9 +359,10 @@ Status date: 2026-06-18
 - [x] Upload TestFlight build 00.01.00 (7); App Store Connect accepted the package and started processing.
 - [x] Upload TestFlight build 00.01.01 (8); App Store Connect accepted the package and started processing.
 - [x] Upload TestFlight build 00.01.01 (9); App Store Connect accepted the package and started processing.
+- [x] Upload TestFlight build 00.01.01 (10); App Store Connect accepted the package and started processing.
 - [x] Create internal TestFlight group and attach build 00.01.00 (5).
 - [x] Add account owner/admin as internal tester for build 00.01.00 (5).
-- [ ] Attach build 00.01.01 (9) to the internal TestFlight group after App Store Connect processing completes.
+- [ ] Attach build 00.01.01 (10) to the internal TestFlight group after App Store Connect processing completes.
 - [ ] TestFlight smoke test.
 - [ ] Submit for App Review.
 

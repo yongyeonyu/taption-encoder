@@ -4,6 +4,9 @@ import SwiftUI
 import GoogleMobileAds
 import UIKit
 #endif
+#if canImport(UserMessagingPlatform)
+import UserMessagingPlatform
+#endif
 
 enum AdLoadState: String, Equatable {
     case idle
@@ -75,16 +78,16 @@ struct AdMobRuntimeConfiguration: Equatable, Sendable {
         AdMobRuntimeConfiguration(
             appOpenAdUnitID: normalizedString(
                 bundle.object(forInfoDictionaryKey: infoDictionaryAppOpenAdUnitIDKey) as? String
-            ) ?? "ca-app-pub-9754025737691277/9568683076",
+            ) ?? "",
             homeBannerAdUnitID: normalizedString(
                 bundle.object(forInfoDictionaryKey: infoDictionaryHomeBannerAdUnitIDKey) as? String
-            ) ?? "ca-app-pub-9754025737691277/6794641076",
+            ) ?? "ca-app-pub-9754025737691277/7833620535",
             rewardedSaveAdUnitID: normalizedString(
                 bundle.object(forInfoDictionaryKey: infoDictionaryRewardedSaveAdUnitIDKey) as? String
-            ) ?? "ca-app-pub-9754025737691277/2855396062",
+            ) ?? "ca-app-pub-9754025737691277/3925169268",
             sessionEndInterstitialAdUnitID: normalizedString(
                 bundle.object(forInfoDictionaryKey: infoDictionarySessionEndInterstitialAdUnitIDKey) as? String
-            ) ?? "ca-app-pub-9754025737691277/6942519738"
+            ) ?? "ca-app-pub-9754025737691277/7130602860"
         )
         #endif
     }
@@ -161,6 +164,9 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
 
     func preloadRewardedAd() async -> AdLoadState {
         #if canImport(GoogleMobileAds)
+        guard await AdMobBootstrapper.ensureReadyForAds() else {
+            return .unavailable
+        }
         return await AdMobRewardedAdManager.shared.loadIfNeeded(
             adUnitID: configuration.rewardedSaveAdUnitID
         )
@@ -171,6 +177,9 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
 
     func retryRewardedAdNow() async -> AdLoadState {
         #if canImport(GoogleMobileAds)
+        guard await AdMobBootstrapper.ensureReadyForAds() else {
+            return .unavailable
+        }
         return await AdMobRewardedAdManager.shared.loadIfNeeded(
             adUnitID: configuration.rewardedSaveAdUnitID,
             bypassScheduledRetry: true
@@ -182,6 +191,9 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
 
     func showRewardedAd() async -> RewardedAdShowResult {
         #if canImport(GoogleMobileAds)
+        guard await AdMobBootstrapper.ensureReadyForAds() else {
+            return .unavailable
+        }
         return await AdMobRewardedAdManager.shared.show(
             adUnitID: configuration.rewardedSaveAdUnitID
         )
@@ -200,12 +212,18 @@ struct AdMobSessionEndAdProvider: SessionEndAdProviding {
 
     func preloadSessionEndAd() async {
         #if canImport(GoogleMobileAds)
+        guard await AdMobBootstrapper.ensureReadyForAds() else {
+            return
+        }
         _ = await AdMobInterstitialAdManager.shared.loadIfNeeded(adUnitID: configuration.sessionEndInterstitialAdUnitID)
         #endif
     }
 
     func showSessionEndAd(reason: SessionEndAdReason) async {
         #if canImport(GoogleMobileAds)
+        guard await AdMobBootstrapper.ensureReadyForAds() else {
+            return
+        }
         await AdMobInterstitialAdManager.shared.showIfAvailable(
             adUnitID: configuration.sessionEndInterstitialAdUnitID,
             reason: reason
@@ -214,12 +232,126 @@ struct AdMobSessionEndAdProvider: SessionEndAdProviding {
     }
 }
 
+#if canImport(GoogleMobileAds)
+@MainActor
+final class AdMobConsentManager {
+    static let shared = AdMobConsentManager()
+
+    private(set) var canRequestAds = false
+    private(set) var lastErrorDescription: String?
+
+    private var didRequestConsentInfo = false
+    private var didStartMobileAds = false
+
+    private init() {}
+
+    func refreshConsentStatusIfNeeded() {
+        guard !didRequestConsentInfo else {
+            return
+        }
+        didRequestConsentInfo = true
+        refreshConsentStatus()
+    }
+
+    func refreshConsentStatus() {
+        #if canImport(UserMessagingPlatform)
+        lastErrorDescription = nil
+        let parameters = RequestParameters()
+        ConsentInformation.shared.requestConsentInfoUpdate(with: parameters) { [weak self] error in
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    return
+                }
+                if let error {
+                    self.lastErrorDescription = error.localizedDescription
+                    self.canRequestAds = true
+                    AppLogger.warning(
+                        "AdMob consent update failed; continuing ad startup",
+                        category: .ads,
+                        metadata: ["error": error.localizedDescription]
+                    )
+                    self.startMobileAdsIfAllowed()
+                    return
+                }
+
+                self.updateConsentState()
+                self.startMobileAdsIfAllowed()
+
+                do {
+                    try await ConsentForm.loadAndPresentIfRequired(
+                        from: AdMobRootViewControllerProvider.topViewController()
+                    )
+                } catch {
+                    self.lastErrorDescription = error.localizedDescription
+                    AppLogger.warning(
+                        "AdMob consent form presentation failed",
+                        category: .ads,
+                        metadata: ["error": error.localizedDescription]
+                    )
+                }
+                self.updateConsentState()
+                self.startMobileAdsIfAllowed()
+            }
+        }
+        #else
+        canRequestAds = true
+        startMobileAdsIfAllowed()
+        #endif
+    }
+
+    func waitForMobileAdsStartup(timeoutSeconds: TimeInterval = 2.5) async -> Bool {
+        refreshConsentStatusIfNeeded()
+        let deadline = Date().addingTimeInterval(max(0, timeoutSeconds))
+        let pollIntervalNanos: UInt64 = 100_000_000
+
+        while Date() < deadline {
+            if didStartMobileAds {
+                return true
+            }
+            if canRequestAds {
+                startMobileAdsIfAllowed()
+                if didStartMobileAds {
+                    return true
+                }
+            }
+            do {
+                try await Task.sleep(nanoseconds: pollIntervalNanos)
+            } catch {
+                break
+            }
+        }
+
+        startMobileAdsIfAllowed()
+        return didStartMobileAds
+    }
+
+    private func updateConsentState() {
+        #if canImport(UserMessagingPlatform)
+        canRequestAds = ConsentInformation.shared.canRequestAds
+        #else
+        canRequestAds = true
+        #endif
+    }
+
+    private func startMobileAdsIfAllowed() {
+        guard canRequestAds, !didStartMobileAds else {
+            return
+        }
+        didStartMobileAds = true
+        MobileAds.shared.start()
+        AppLogger.info("AdMob SDK started after consent gate", category: .ads)
+    }
+}
+#endif
+
 enum AdMobBootstrapper {
     static func start() {
         #if canImport(GoogleMobileAds)
         AppLogger.info("AdMob bootstrap started", category: .ads)
-        MobileAds.shared.start()
         Task { @MainActor in
+            guard await ensureReadyForAds() else {
+                return
+            }
             await preloadAllPlacements()
         }
         #else
@@ -230,6 +362,9 @@ enum AdMobBootstrapper {
     static func refreshOnActive() async {
         #if canImport(GoogleMobileAds)
         AppLogger.info("AdMob refresh requested for active scene", category: .ads)
+        guard await ensureReadyForAds() else {
+            return
+        }
         await preloadAllPlacements()
         #endif
     }
@@ -237,12 +372,28 @@ enum AdMobBootstrapper {
     static func showAppOpenAdIfAvailable() async {
         #if canImport(GoogleMobileAds)
         let configuration = AdMobRuntimeConfiguration.current()
+        guard !configuration.appOpenAdUnitID.isEmpty,
+              await ensureReadyForAds() else {
+            return
+        }
         AppLogger.info("App open ad show requested", category: .ads)
         await AdMobAppOpenAdManager.shared.showIfAvailable(adUnitID: configuration.appOpenAdUnitID)
         #endif
     }
 
     #if canImport(GoogleMobileAds)
+    @MainActor
+    static func ensureReadyForAds(timeoutSeconds: TimeInterval = 2.5) async -> Bool {
+        AdMobConsentManager.shared.refreshConsentStatusIfNeeded()
+        let isReady = await AdMobConsentManager.shared.waitForMobileAdsStartup(
+            timeoutSeconds: timeoutSeconds
+        )
+        if !isReady {
+            AppLogger.warning("AdMob startup gate timed out", category: .ads)
+        }
+        return isReady
+    }
+
     @MainActor
     private static func preloadAllPlacements() async {
         let configuration = AdMobRuntimeConfiguration.current()
@@ -256,7 +407,9 @@ enum AdMobBootstrapper {
                 "interstitial": configuration.sessionEndInterstitialAdUnitID
             ]
         )
-        await AdMobAppOpenAdManager.shared.loadIfNeeded(adUnitID: configuration.appOpenAdUnitID)
+        if !configuration.appOpenAdUnitID.isEmpty {
+            await AdMobAppOpenAdManager.shared.loadIfNeeded(adUnitID: configuration.appOpenAdUnitID)
+        }
         _ = await AdMobInterstitialAdManager.shared.loadIfNeeded(adUnitID: configuration.sessionEndInterstitialAdUnitID)
         _ = await AdMobRewardedAdManager.shared.loadIfNeeded(adUnitID: configuration.rewardedSaveAdUnitID)
     }
@@ -323,11 +476,7 @@ struct AdMobBannerSlotView: View {
 #if canImport(GoogleMobileAds)
 private enum AdMobRequestFactory {
     static func makeRequest() -> Request {
-        let request = Request()
-        let extras = Extras()
-        extras.additionalParameters = ["npa": "1"]
-        request.register(extras)
-        return request
+        Request()
     }
 }
 
@@ -397,6 +546,11 @@ private struct AdMobBannerRepresentable: UIViewRepresentable {
                 return
             }
 
+            guard AdMobConsentManager.shared.canRequestAds else {
+                scheduleRetry(for: banner, adUnitID: adUnitID)
+                return
+            }
+
             guard banner.rootViewController != nil else {
                 AppLogger.warning(
                     "Banner ad root view controller missing; scheduling retry",
@@ -425,7 +579,7 @@ private struct AdMobBannerRepresentable: UIViewRepresentable {
         }
 
         private func scheduleRetry(for banner: BannerView, adUnitID: String) {
-            guard retryCount < 8 else {
+            guard retryCount < 20 else {
                 return
             }
             retryWorkItem?.cancel()
@@ -435,7 +589,7 @@ private struct AdMobBannerRepresentable: UIViewRepresentable {
                 self.loadIfPossible(banner, adUnitID: adUnitID)
             }
             retryWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: workItem)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
         }
 
         private func scheduleFillRetry(for banner: BannerView, adUnitID: String) {
