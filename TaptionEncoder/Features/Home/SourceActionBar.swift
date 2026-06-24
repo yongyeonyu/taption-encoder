@@ -38,7 +38,7 @@ struct SourceActionBar: View {
                 PrimaryActionButton(
                     title: "Photos",
                     systemImage: "photo.on.rectangle",
-                    isProminent: false,
+                    isProminent: true,
                     isEnabled: canSelectSource,
                     height: controlHeight,
                     font: buttonFont,
