@@ -120,6 +120,21 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(selection.encodeBackend, .customSoftware)
     }
 
+    func testMotionJPEGToHEVCUsesSoftwareWhenNoHardwareIsAvailable() {
+        let selection = selectRoute(
+            sourceCodec: .motionJPEG,
+            outputCodec: .hevc,
+            profile: .softwareOnly
+        )
+
+        XCTAssertEqual(selection.support, .implemented)
+        XCTAssertTrue(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .software)
+        XCTAssertEqual(selection.selectedMode, .software)
+        XCTAssertEqual(selection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(selection.encodeBackend, .customSoftware)
+    }
+
     func testDolbyVisionHEVCToHEVCUsesHardwareWhenHardwarePathIsAvailable() {
         let selection = selectRoute(
             sourceCodec: .dolbyVisionHEVC,
@@ -708,6 +723,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         let mpeg4Descriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: mpeg4Route)
         let h263Route = TaptionCodecRoute(sourceCodec: .h263, outputCodec: .hevc)
         let h263Descriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: h263Route)
+        let motionJPEGRoute = TaptionCodecRoute(sourceCodec: .motionJPEG, outputCodec: .hevc)
+        let motionJPEGDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: motionJPEGRoute)
 
         XCTAssertEqual(descriptors.count, 2)
         XCTAssertTrue(modes.contains(.hardware))
@@ -733,6 +750,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(h263Descriptors.count, 1)
         XCTAssertEqual(h263Descriptors.first?.mode, .software)
         XCTAssertEqual(h263Descriptors.first?.backend, .softwareVLCDecoder)
+        XCTAssertEqual(motionJPEGDescriptors.count, 1)
+        XCTAssertEqual(motionJPEGDescriptors.first?.mode, .software)
+        XCTAssertEqual(motionJPEGDescriptors.first?.backend, .softwareVLCDecoder)
     }
 
     func testLiveTranscodingRegistryPrefersHardwareForHardwareExecution() {
@@ -1813,6 +1833,7 @@ final class CodecRoutePlannerTests: XCTestCase {
                 TaptionLaunchInputVideoSupportItem(codec: .mpeg2, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .mpeg4Visual, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .h263, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .motionJPEG, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableOnSupportedHardware),
                 TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableOnSupportedHardware),
                 TaptionLaunchInputVideoSupportItem(codec: .proRes, availability: .availableOnSupportedHardware)
@@ -1820,7 +1841,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputVideoSummary,
-            "AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.264 / AVC, H.265 / HEVC, Apple ProRes"
+            "AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, Motion JPEG, H.264 / AVC, H.265 / HEVC, Apple ProRes"
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainers,
@@ -1832,7 +1853,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.executableNowInputVideoCodecs,
-            [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263]
+            [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .motionJPEG]
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.hardwareGatedInputVideoCodecs,
@@ -1847,7 +1868,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.makeInputReadinessReport(),
             TaptionLaunchInputReadinessReport(
-                executableNowVideoCodecs: [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263],
+                executableNowVideoCodecs: [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .motionJPEG],
                 hardwareGatedVideoCodecs: [.h264, .hevc, .proRes],
                 plannedVideoCodecs: TaptionLaunchSupportCatalog.plannedInputVideoCodecs,
                 inputContainers: TaptionLaunchSupportCatalog.supportedInputContainers,
@@ -1921,6 +1942,14 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.diagnoseInput(container: .threeGP, videoCodec: .h263),
+            TaptionLaunchInputSupportDiagnosis(
+                state: .supported,
+                title: "Input Supported",
+                detail: "The current launch build can inspect this input and encode it to H.265 MP4 or MOV."
+            )
+        )
+        XCTAssertEqual(
+            TaptionLaunchSupportCatalog.diagnoseInput(container: .avi, videoCodec: .motionJPEG),
             TaptionLaunchInputSupportDiagnosis(
                 state: .supported,
                 title: "Input Supported",
@@ -2334,7 +2363,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         let message = TaptionVideoCoreError.unsupportedSourceCodec(.h264).localizedDescription
 
         XCTAssertTrue(message.contains("H.265 / MP4 or MOV output"))
-        XCTAssertTrue(message.contains("AV1, VP9, VP8, MPEG-2, and MPEG-4 Visual with software fallback"))
+        XCTAssertTrue(message.contains("AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, and Motion JPEG with software fallback"))
         XCTAssertTrue(message.contains("H.264, H.265, or ProRes"))
         XCTAssertTrue(message.contains("H.264 / AVC"))
         XCTAssertTrue(message.contains("universal codec roadmap"))
@@ -3059,6 +3088,14 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(implementedItem.isRunnableInCurrentBuild)
         XCTAssertTrue(implementedItem.hasCommandPlan)
 
+        let motionJPEGItem = TaptionVideoCodecExecutionReadinessReporter.item(
+            for: TaptionCodecRoute(sourceCodec: .motionJPEG, outputCodec: .hevc),
+            outputContainer: .mp4
+        )
+        XCTAssertEqual(motionJPEGItem.readiness, .implementedInCurrentBuild)
+        XCTAssertTrue(motionJPEGItem.isRunnableInCurrentBuild)
+        XCTAssertTrue(motionJPEGItem.hasCommandPlan)
+
         let commandOnlyItem = TaptionVideoCodecExecutionReadinessReporter.item(
             for: TaptionCodecRoute(sourceCodec: .h261, outputCodec: .hevc),
             outputContainer: .mp4
@@ -3069,13 +3106,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(commandOnlyItem.commandBackend, .ffmpegFamily)
 
         let unsupportedItem = TaptionVideoCodecExecutionReadinessReporter.item(
-            for: TaptionCodecRoute(sourceCodec: .h264, outputCodec: .proResRaw),
+            for: TaptionCodecRoute(sourceCodec: .unknown, outputCodec: .hevc),
             outputContainer: .mp4
         )
         XCTAssertEqual(unsupportedItem.readiness, .unsupported)
         XCTAssertFalse(unsupportedItem.isRunnableInCurrentBuild)
         XCTAssertFalse(unsupportedItem.hasCommandPlan)
-        XCTAssertTrue(unsupportedItem.blockingReason?.contains("not in the current product contract") == true)
+        XCTAssertTrue(unsupportedItem.blockingReason?.contains("not in the current support roadmap") == true)
     }
 
     func testVideoExecutionReadinessReportPromotesCommandPlansWhenBroadBackendShips() {

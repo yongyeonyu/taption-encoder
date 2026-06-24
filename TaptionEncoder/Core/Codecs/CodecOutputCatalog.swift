@@ -198,6 +198,7 @@ enum TaptionLaunchSupportCatalog {
         TaptionLaunchInputVideoSupportItem(codec: .mpeg2, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .mpeg4Visual, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .h263, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .motionJPEG, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableOnSupportedHardware),
         TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableOnSupportedHardware),
         TaptionLaunchInputVideoSupportItem(codec: .proRes, availability: .availableOnSupportedHardware)
