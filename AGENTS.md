@@ -20,8 +20,18 @@ This project is the standalone app shell for Taption's AV1 to H.265 conversion f
 - Output video codec is fixed to H.265. Do not add selectable output video codecs unless the company explicitly changes this policy.
 - Routes such as `H.264 -> AV1`, `AV1 -> H.264`, `VP9 -> AV1`, or same-codec re-encode as a non-H.265 output are out of product scope.
 - Source and output codec catalogs are intentionally not symmetric: source coverage expands broadly, output video codec remains H.265 only.
-- Advanced output work may add container, resolution, bitrate, quality, frame-rate, and color controls while keeping video output H.265.
+- Current implemented output file formats are MP4 and MOV only. Do not advertise or enable AVI, WebM, MKV, or other writable output containers unless the company explicitly changes this policy.
+- Advanced output work may add container, resolution, bitrate, quality, frame-rate, and color controls while keeping video output H.265 and the implemented output formats constrained to approved containers.
 - Codec implementations must stay route-based and portable through explicit `HW_` and `SW_` core files.
+- Non-H.265 video output routes, including `H.264 -> AV1`, `AV1 -> H.264`, `VP9 -> AV1`, and ProRes RAW as an output codec, are unsupported rather than planned.
+
+## Current Codec Implementation Rules
+
+- H.264 input to H.265 output is runnable in the current build. On devices with H.264 decode but without HEVC encode hardware, use the mixed path: hardware decode plus software HEVC encode.
+- H.265 / HEVC input to H.265 output is runnable in the current build. On the oldest supported devices without HEVC hardware, use the software fallback path.
+- Device-facing codec status must be based on the installed device's route selection, not just the static launch catalog.
+- Use the runtime labels `Now(HW)`, `Now(SW)`, `Now(HW/SW)`, `Needs HW`, `Planned`, and `No` consistently in Device Info and Help surfaces.
+- Broad FFmpeg-family command plans may remain visible for roadmap coverage, but they are not executable in the current app unless the backend is actually bundled, executable, and license-reviewed.
 
 ## Starting Rules
 
