@@ -16,8 +16,6 @@ private struct ActiveStarCharge: Equatable {
 final class HomeViewModel: ObservableObject {
     @Published private(set) var state: HomeScreenState
     @Published private(set) var selectedOutput: TaptionOutputSelection
-    @Published private(set) var saveConflictPrompt: PendingSaveConflictPrompt?
-    @Published private(set) var pendingSaveRenamePrompt: PendingSaveRenamePrompt?
     @Published private(set) var folderAccessPrompt: PendingFolderAccessPrompt?
     @Published private(set) var pendingSaveExportPrompt: PendingSaveExportPrompt?
     @Published private(set) var starWalletSnapshot: StarWalletSnapshot
@@ -48,8 +46,6 @@ final class HomeViewModel: ObservableObject {
             container: environment.configuration.defaultOutputContainer
         )
         self.state = .idle
-        self.saveConflictPrompt = nil
-        self.pendingSaveRenamePrompt = nil
         self.folderAccessPrompt = nil
         self.pendingSaveExportPrompt = nil
         self.starWalletSnapshot = .empty
@@ -1253,8 +1249,6 @@ final class HomeViewModel: ObservableObject {
         guard let job = nextPendingSaveJobForAction else {
             return
         }
-        saveConflictPrompt = nil
-        pendingSaveRenamePrompt = nil
         clearPendingSaveExportPrompt()
         savePendingJob(job)
     }
@@ -1282,85 +1276,6 @@ final class HomeViewModel: ObservableObject {
         )
         let job = PendingSaveJob(sourceName: output.sourceName, state: output.pendingSaveState)
         savePendingJob(job)
-    }
-
-    func overwriteExistingPendingSave() {
-        guard let prompt = saveConflictPrompt else {
-            return
-        }
-        saveConflictPrompt = nil
-        var job = prompt.job
-        job.saveGateMessage = nil
-        AppLogger.info(
-            "User chose to overwrite existing save destination",
-            category: .saving,
-            metadata: [
-                "source": job.sourceName,
-                "destination": prompt.existingURL.lastPathComponent
-            ]
-        )
-        savePendingJob(job, conflictResolution: .overwrite)
-    }
-
-    func savePendingOutputAsNewFile() {
-        guard let prompt = saveConflictPrompt else {
-            return
-        }
-        saveConflictPrompt = nil
-        AppLogger.info(
-            "User chose Save As for pending output",
-            category: .saving,
-            metadata: [
-                "source": prompt.job.sourceName,
-                "suggested": prompt.suggestedURL.lastPathComponent
-            ]
-        )
-        pendingSaveRenamePrompt = PendingSaveRenamePrompt(
-            job: prompt.job,
-            existingURL: prompt.existingURL,
-            suggestedURL: prompt.suggestedURL
-        )
-    }
-
-    func dismissSaveConflictPrompt() {
-        guard saveConflictPrompt != nil else {
-            return
-        }
-        AppLogger.info("Save conflict prompt dismissed", category: .saving)
-        saveConflictPrompt = nil
-    }
-
-    func confirmPendingSaveAsNewFile(named requestedFileName: String) {
-        guard let prompt = pendingSaveRenamePrompt,
-              let destinationURL = pendingSaveAsDestinationURL(
-                from: prompt,
-                requestedFileName: requestedFileName
-              ) else {
-            return
-        }
-
-        pendingSaveRenamePrompt = nil
-        var state = prompt.job.state
-        state.finalOutputURL = destinationURL
-        var job = PendingSaveJob(sourceName: prompt.job.sourceName, state: state)
-        job.saveGateMessage = "Saving as \(destinationURL.lastPathComponent)."
-        AppLogger.info(
-            "Pending save Save As confirmed",
-            category: .saving,
-            metadata: [
-                "source": job.sourceName,
-                "destination": destinationURL.lastPathComponent
-            ]
-        )
-        savePendingJob(job)
-    }
-
-    func dismissPendingSaveRenamePrompt() {
-        guard pendingSaveRenamePrompt != nil else {
-            return
-        }
-        AppLogger.info("Pending save rename prompt dismissed", category: .saving)
-        pendingSaveRenamePrompt = nil
     }
 
     func recoverFolderAccessForPendingSave(url: URL) {
@@ -1461,8 +1376,6 @@ final class HomeViewModel: ObservableObject {
         currentReview = nil
         activeStarCharge = nil
         shouldAutoResumeBatchAfterStarEarn = false
-        saveConflictPrompt = nil
-        pendingSaveRenamePrompt = nil
         folderAccessPrompt = nil
         clearPendingSaveExportPrompt()
         pendingSaveQueue = []
@@ -2109,30 +2022,22 @@ final class HomeViewModel: ObservableObject {
                 state = .pendingSave(workingJob)
                 activeTask = nil
             } catch TaptionFinalSaveConflictError.destinationAlreadyExists(let existingURL) {
-                let suggestedURL = uniqueDestinationURL(
-                    preferred: existingURL,
-                    fileManager: FileManager.default
-                )
-                workingJob.saveGateMessage = "A file named \(existingURL.lastPathComponent) already exists. Choose Overwrite or Save As."
+                workingJob.saveGateMessage = "Choose where to save the encoded video, then the export will continue."
                 updatePendingSaveJob(workingJob)
-                saveConflictPrompt = PendingSaveConflictPrompt(
-                    job: workingJob,
-                    existingURL: existingURL,
-                    suggestedURL: suggestedURL
-                )
+                clearPendingSaveExportPrompt()
+                pendingSaveExportPrompt = makePendingSaveExportPrompt(for: workingJob)
                 AppLogger.warning(
-                    "Final save paused because destination already exists",
+                    "Final save destination exists; opening export picker",
                     category: .saving,
                     metadata: [
                         "source": workingJob.sourceName,
                         "existing": existingURL.lastPathComponent,
-                        "suggested": suggestedURL.lastPathComponent,
                         "rewardedAdRequired": "\(workingJob.state.requiresRewardedAd)"
                     ]
                 )
                 markCurrentSaveItem(
-                    statusText: "Needs Choice",
-                    detailText: "A file named \(existingURL.lastPathComponent) already exists. Choose Overwrite or Save As.",
+                    statusText: "Needs Save Location",
+                    detailText: workingJob.saveGateMessage,
                     progress: completedProgressSnapshot(label: "Pending Save"),
                     isActive: true
                 )
@@ -3368,26 +3273,6 @@ final class HomeViewModel: ObservableObject {
             return pendingSaveQueue.first
         }
         return nil
-    }
-
-    private func pendingSaveAsDestinationURL(
-        from prompt: PendingSaveRenamePrompt,
-        requestedFileName: String
-    ) -> URL? {
-        let trimmed = requestedFileName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lastComponent = URL(fileURLWithPath: trimmed).lastPathComponent
-        let expectedExtension = prompt.suggestedURL.pathExtension
-        let baseName = URL(fileURLWithPath: lastComponent)
-            .deletingPathExtension()
-            .lastPathComponent
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !baseName.isEmpty else {
-            return nil
-        }
-        let fileName = expectedExtension.isEmpty
-            ? baseName
-            : "\(baseName).\(expectedExtension)"
-        return prompt.suggestedURL.deletingLastPathComponent().appendingPathComponent(fileName)
     }
 
     private func makePendingSaveExportPrompt(for job: PendingSaveJob) -> PendingSaveExportPrompt {

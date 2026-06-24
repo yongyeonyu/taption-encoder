@@ -82,7 +82,7 @@ enum TaptionSaveFailurePresenter {
             return SaveFailurePresentation(
                 summary: "Could not save the encoded video.",
                 cause: "A file named \(url.lastPathComponent) already exists.",
-                action: actionWithRewardNote("Choose Overwrite to replace it, or Save As to keep both files."),
+                action: actionWithRewardNote("Choose where to save the encoded video, then the export will continue."),
                 diagnostic: diagnostic
             )
         }
@@ -91,7 +91,7 @@ enum TaptionSaveFailurePresenter {
             return SaveFailurePresentation(
                 summary: "Could not save the encoded video.",
                 cause: "A file already exists at the save destination.",
-                action: actionWithRewardNote("Choose Overwrite to replace it, or Save As to keep both files."),
+                action: actionWithRewardNote("Choose where to save the encoded video, then the export will continue."),
                 diagnostic: diagnostic
             )
         }

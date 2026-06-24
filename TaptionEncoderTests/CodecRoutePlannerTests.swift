@@ -3999,7 +3999,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testPendingSaveConflictPromptsBeforeOverwritingExistingOutput() async throws {
+    func testPendingSaveConflictOpensExportPickerWithoutOverwritePrompt() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -4025,10 +4025,11 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         await viewModel.restorePendingSavesIfNeeded()
         viewModel.retryPendingSave()
-        try await waitForSaveConflictPrompt(in: viewModel)
+        try await waitForPendingSaveExportPrompt(in: viewModel)
 
-        XCTAssertEqual(viewModel.saveConflictPrompt?.existingURL, finalURL)
-        XCTAssertEqual(viewModel.saveConflictPrompt?.suggestedURL.lastPathComponent, "clip_taption 2.mp4")
+        let prompt = try XCTUnwrap(viewModel.pendingSaveExportPrompt)
+        XCTAssertEqual(prompt.suggestedDirectoryURL, directoryURL)
+        XCTAssertEqual(prompt.suggestedFileName, "clip_taption.mp4")
         XCTAssertEqual(try String(contentsOf: finalURL, encoding: .utf8), "existing output")
         XCTAssertEqual(try String(contentsOf: temporaryURL, encoding: .utf8), "new output")
 
@@ -4470,7 +4471,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testPendingSaveOverwriteChoiceReplacesExistingOutputWithoutAnotherAd() async throws {
+    func testPendingSaveConflictExportPickerCanReplaceExistingOutputWithoutAnotherAd() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -4496,11 +4497,14 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         await viewModel.restorePendingSavesIfNeeded()
         viewModel.retryPendingSave()
-        try await waitForSaveConflictPrompt(in: viewModel)
-        viewModel.overwriteExistingPendingSave()
+        try await waitForPendingSaveExportPrompt(in: viewModel)
+        let prompt = try XCTUnwrap(viewModel.pendingSaveExportPrompt)
+        try FileManager.default.removeItem(at: finalURL)
+        try FileManager.default.copyItem(at: prompt.exportPresentationURL, to: finalURL)
+        viewModel.completePendingSaveExport(prompt: prompt, destinationURL: finalURL)
         try await waitForCompletedSave(in: viewModel)
 
-        XCTAssertNil(viewModel.saveConflictPrompt)
+        XCTAssertNil(viewModel.pendingSaveExportPrompt)
         XCTAssertEqual(try String(contentsOf: finalURL, encoding: .utf8), "new output")
         XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
         let expectedSize = ByteCountFormatter.string(
@@ -4524,7 +4528,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testPendingSaveSaveAsChoicePromptsForFileNameAndWritesCustomFile() async throws {
+    func testPendingSaveConflictExportPickerCanSaveNewFileWithoutRenameAlert() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -4550,16 +4554,14 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         await viewModel.restorePendingSavesIfNeeded()
         viewModel.retryPendingSave()
-        try await waitForSaveConflictPrompt(in: viewModel)
-        viewModel.savePendingOutputAsNewFile()
-        let renamePrompt = try XCTUnwrap(viewModel.pendingSaveRenamePrompt)
-        XCTAssertEqual(renamePrompt.suggestedFileName, "clip_taption 2.mp4")
+        try await waitForPendingSaveExportPrompt(in: viewModel)
+        let prompt = try XCTUnwrap(viewModel.pendingSaveExportPrompt)
         let customURL = directoryURL.appendingPathComponent("clip_taption_custom.mp4")
-        viewModel.confirmPendingSaveAsNewFile(named: "clip_taption_custom")
+        try FileManager.default.copyItem(at: prompt.exportPresentationURL, to: customURL)
+        viewModel.completePendingSaveExport(prompt: prompt, destinationURL: customURL)
         try await waitForCompletedSave(in: viewModel)
 
-        XCTAssertNil(viewModel.saveConflictPrompt)
-        XCTAssertNil(viewModel.pendingSaveRenamePrompt)
+        XCTAssertNil(viewModel.pendingSaveExportPrompt)
         XCTAssertEqual(try String(contentsOf: finalURL, encoding: .utf8), "existing output")
         XCTAssertEqual(try String(contentsOf: customURL, encoding: .utf8), "new output")
         XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
@@ -4678,7 +4680,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         XCTAssertEqual(presentation.cause, "A file already exists at the save destination.")
-        XCTAssertTrue(presentation.action.contains("Choose Overwrite"))
+        XCTAssertTrue(presentation.action.contains("Choose where to save"))
         XCTAssertTrue(presentation.action.contains("Retry will save without another ad"))
     }
 
@@ -5519,16 +5521,6 @@ final class CodecRoutePlannerTests: XCTestCase {
             backgroundCoordinator: FakeBackgroundEncodingCoordinator(),
             projectDocumentStore: FakeProjectFileStore()
         )
-    }
-
-    @MainActor
-    private func waitForSaveConflictPrompt(
-        in viewModel: HomeViewModel,
-        timeout: TimeInterval = 2
-    ) async throws {
-        try await waitForCondition(timeout: timeout) {
-            viewModel.saveConflictPrompt != nil
-        }
     }
 
     @MainActor

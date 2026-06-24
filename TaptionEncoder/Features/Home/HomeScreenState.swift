@@ -889,38 +889,6 @@ struct PendingSaveJob: Identifiable, Equatable {
     }
 }
 
-struct PendingSaveConflictPrompt: Identifiable, Equatable {
-    var id: UUID {
-        job.id
-    }
-
-    var job: PendingSaveJob
-    var existingURL: URL
-    var suggestedURL: URL
-
-    var message: String {
-        "A file named \(existingURL.lastPathComponent) already exists. Overwrite it or choose Save As to enter a new file name."
-    }
-}
-
-struct PendingSaveRenamePrompt: Identifiable, Equatable {
-    var id: UUID {
-        job.id
-    }
-
-    var job: PendingSaveJob
-    var existingURL: URL
-    var suggestedURL: URL
-
-    var suggestedFileName: String {
-        suggestedURL.lastPathComponent
-    }
-
-    var message: String {
-        "Enter a new file name for this output."
-    }
-}
-
 struct PendingFolderAccessPrompt: Identifiable, Equatable {
     var id: UUID {
         job.id

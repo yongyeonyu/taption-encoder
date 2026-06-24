@@ -10,7 +10,6 @@ struct HomeView: View {
     @State private var activeMenuSheet: HomeMenuSheet?
     @State private var isOutputSizePopoverPresented = false
     @State private var outputSizeDraftMB: Double?
-    @State private var pendingSaveAsFileName = ""
 
     init(environment: AppEnvironment = .phase0) {
         _viewModel = StateObject(wrappedValue: HomeViewModel(environment: environment))
@@ -128,6 +127,31 @@ struct HomeView: View {
             )
             .ignoresSafeArea()
         }
+        .sheet(isPresented: $isFolderImporterPresented) {
+            VideoDocumentPicker(
+                contentTypes: [.folder],
+                allowsMultipleSelection: false,
+                onPick: { urls in
+                    AppLogger.info(
+                        "Folder picker returned folders",
+                        category: .folderImport,
+                        metadata: [
+                            "count": "\(urls.count)",
+                            "names": urls.map(\.lastPathComponent).joined(separator: "|")
+                        ]
+                    )
+                    isFolderImporterPresented = false
+                    if let url = urls.first {
+                        viewModel.startFolderFlow(url: url)
+                    }
+                },
+                onCancel: {
+                    AppLogger.info("Folder picker cancelled", category: .folderImport)
+                    isFolderImporterPresented = false
+                }
+            )
+            .ignoresSafeArea()
+        }
         .sheet(item: $activeMenuSheet) { sheet in
             HomeMenuSheetView(sheet: sheet)
         }
@@ -166,108 +190,40 @@ struct HomeView: View {
             )
             .ignoresSafeArea()
         }
-        .confirmationDialog(
-            "File already exists",
-            isPresented: Binding(
-                get: { viewModel.saveConflictPrompt != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        viewModel.dismissSaveConflictPrompt()
-                    }
-                }
-            ),
-            presenting: viewModel.saveConflictPrompt
-        ) { _ in
-            Button("Overwrite", role: .destructive) {
-                viewModel.overwriteExistingPendingSave()
-            }
-            Button("Save As") {
-                viewModel.savePendingOutputAsNewFile()
-            }
-            Button("Cancel", role: .cancel) {
-                viewModel.dismissSaveConflictPrompt()
-            }
-        } message: { prompt in
-            Text(prompt.message)
-        }
-        .alert(
-            "Save As",
-            isPresented: Binding(
-                get: { viewModel.pendingSaveRenamePrompt != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        viewModel.dismissPendingSaveRenamePrompt()
+        .sheet(
+            item: Binding(
+                get: { viewModel.folderAccessPrompt },
+                set: { prompt in
+                    if prompt == nil {
+                        viewModel.dismissFolderAccessRecoveryPrompt()
                     }
                 }
             )
-        ) {
-            TextField("File name", text: $pendingSaveAsFileName)
-            Button("Save") {
-                viewModel.confirmPendingSaveAsNewFile(named: pendingSaveAsFileName)
-            }
-            .disabled(pendingSaveAsFileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Button("Cancel", role: .cancel) {
-                viewModel.dismissPendingSaveRenamePrompt()
-            }
-        } message: {
-            Text(viewModel.pendingSaveRenamePrompt?.message ?? "")
-        }
-        .fileImporter(
-            isPresented: $isFolderImporterPresented,
-            allowedContentTypes: [.folder],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                AppLogger.info(
-                    "Folder picker returned folders",
-                    category: .folderImport,
-                    metadata: [
-                        "count": "\(urls.count)",
-                        "names": urls.map(\.lastPathComponent).joined(separator: "|")
-                    ]
-                )
-                if let url = urls.first {
-                    viewModel.startFolderFlow(url: url)
+        ) { _ in
+            VideoDocumentPicker(
+                contentTypes: [.folder],
+                allowsMultipleSelection: false,
+                onPick: { urls in
+                    AppLogger.info(
+                        "Folder access recovery picker returned folders",
+                        category: .saving,
+                        metadata: [
+                            "count": "\(urls.count)",
+                            "names": urls.map(\.lastPathComponent).joined(separator: "|")
+                        ]
+                    )
+                    if let url = urls.first {
+                        viewModel.recoverFolderAccessForPendingSave(url: url)
+                    } else {
+                        viewModel.dismissFolderAccessRecoveryPrompt()
+                    }
+                },
+                onCancel: {
+                    AppLogger.info("Folder access recovery picker cancelled", category: .saving)
+                    viewModel.dismissFolderAccessRecoveryPrompt()
                 }
-            case .failure(let error):
-                AppLogger.error(
-                    "Folder picker failed",
-                    category: .folderImport,
-                    metadata: ["error": error.localizedDescription]
-                )
-                viewModel.fail(message: error.localizedDescription)
-            }
-        }
-        .fileImporter(
-            isPresented: Binding(
-                get: { viewModel.folderAccessPrompt != nil },
-                set: { _ in }
-            ),
-            allowedContentTypes: [.folder],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                AppLogger.info(
-                    "Folder access recovery picker returned folders",
-                    category: .saving,
-                    metadata: [
-                        "count": "\(urls.count)",
-                        "names": urls.map(\.lastPathComponent).joined(separator: "|")
-                    ]
-                )
-                if let url = urls.first {
-                    viewModel.recoverFolderAccessForPendingSave(url: url)
-                }
-            case .failure(let error):
-                AppLogger.error(
-                    "Folder access recovery picker failed",
-                    category: .saving,
-                    metadata: ["error": error.localizedDescription]
-                )
-                viewModel.dismissFolderAccessRecoveryPrompt()
-            }
+            )
+            .ignoresSafeArea()
         }
         .photosPicker(
             isPresented: $isPhotosPickerPresented,
@@ -319,9 +275,6 @@ struct HomeView: View {
             await AdMobBootstrapper.refreshOnActive()
             await viewModel.restorePendingSavesIfNeeded()
             await viewModel.refreshStarsIfNeeded()
-        }
-        .onChange(of: viewModel.pendingSaveRenamePrompt?.id) { _, _ in
-            pendingSaveAsFileName = viewModel.pendingSaveRenamePrompt?.suggestedFileName ?? ""
         }
     }
 

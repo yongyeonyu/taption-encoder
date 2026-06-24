@@ -193,15 +193,15 @@ struct EncodingProgressView: View {
         } label: {
             Label(watchAdButtonTitle, systemImage: "star.fill")
                 .font(contentScale < 0.9 ? .caption.weight(.semibold) : .body.weight(.semibold))
-                .foregroundStyle(canWatchAd ? TaptionTheme.accent : TaptionTheme.disabledText)
+                .foregroundStyle(canWatchAd ? .white : TaptionTheme.disabledText)
                 .frame(maxWidth: .infinity)
                 .frame(height: controlHeight)
         }
         .buttonStyle(.plain)
-        .background(TaptionTheme.elevatedSurface)
+        .background(canWatchAd ? TaptionTheme.accent : TaptionTheme.elevatedSurface)
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(canWatchAd ? TaptionTheme.border : Color.white.opacity(0.06), lineWidth: 1)
+                .stroke(canWatchAd ? TaptionTheme.accent.opacity(0.65) : Color.white.opacity(0.06), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .disabled(!canWatchAd)
