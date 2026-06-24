@@ -58,13 +58,12 @@ struct HomeMenuSheetView: View {
 
 private struct HelpSheetContentView: View {
     private let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "00.00.00"
-    private let supportedVideoCodecs = Set(TaptionLaunchSupportCatalog.supportedInputVideoCodecs.map(\.codec))
 
     private var videoCodecEntries: [HelpCodecEntry] {
         let entries = TaptionCodecRegistry.universalSourceCodecs.map { codec in
             HelpCodecEntry(
                 name: codec.displayName,
-                isAvailableNow: supportedVideoCodecs.contains(codec)
+                state: videoEntryState(for: codec)
             )
         }
         return sort(entries: entries)
@@ -81,7 +80,7 @@ private struct HelpSheetContentView: View {
                 .isSupportedNow
             return HelpCodecEntry(
                 name: codec.displayName,
-                isAvailableNow: isAvailableNow
+                state: isAvailableNow ? .now : .planned
             )
         }
         return sort(entries: entries)
@@ -101,7 +100,7 @@ private struct HelpSheetContentView: View {
                     title: "Containers",
                     rows: [
                         ("Input", TaptionLaunchSupportCatalog.supportedInputContainerSummary),
-                        ("Output", TaptionVideoContainer.mp4.defaultFileExtension.uppercased())
+                        ("Output", TaptionLaunchSupportCatalog.supportedOutputContainerSummary)
                     ]
                 )
 
@@ -123,10 +122,21 @@ private struct HelpSheetContentView: View {
 
     private func sort(entries: [HelpCodecEntry]) -> [HelpCodecEntry] {
         entries.sorted { lhs, rhs in
-            if lhs.isAvailableNow != rhs.isAvailableNow {
-                return lhs.isAvailableNow && !rhs.isAvailableNow
+            if lhs.state.priority != rhs.state.priority {
+                return lhs.state.priority < rhs.state.priority
             }
             return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        }
+    }
+
+    private func videoEntryState(for codec: TaptionVideoCodec) -> HelpCodecEntryState {
+        switch TaptionLaunchSupportCatalog.inputAvailability(for: codec) {
+        case .availableNow:
+            return .now
+        case .availableOnSupportedHardware:
+            return .hardware
+        case .none:
+            return TaptionLaunchSupportCatalog.isPlannedInputVideoCodec(codec) ? .planned : .unsupported
         }
     }
 }
@@ -287,6 +297,16 @@ private struct DeviceInfoSheetContentView: View {
                     ]
                 )
 
+                SheetInfoCard(
+                    title: "Input Scope",
+                    rows: [
+                        ("Now", "\(TaptionLaunchSupportCatalog.executableNowInputVideoCodecs.count) video codecs"),
+                        ("HW", "\(TaptionLaunchSupportCatalog.hardwareGatedInputVideoCodecs.count) hardware-gated codecs"),
+                        ("Plan", "\(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.count) roadmap codecs"),
+                        ("Out", "H.265 / \(TaptionLaunchSupportCatalog.supportedOutputContainerSummary)")
+                    ]
+                )
+
                 Button {
                     saveDeviceReport()
                 } label: {
@@ -317,7 +337,7 @@ private struct DeviceInfoSheetContentView: View {
                         .font(.headline)
                         .foregroundStyle(.white)
 
-                    Text("App and Device badges are evaluated separately for this installed device.")
+                    Text("Now, hardware-gated, and roadmap-only input states are evaluated separately for this installed device.")
                         .font(.caption)
                         .foregroundStyle(TaptionTheme.mutedText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -370,7 +390,7 @@ private struct DeviceInfoSheetContentView: View {
                         .stroke(TaptionTheme.border, lineWidth: 1)
                 )
 
-                Text("This screen is focused on the installed device only. Use the path rows below to decide whether each codec should run with HW first or fall back to SW.")
+                Text("This screen is focused on the installed device only. Planned input rows are roadmap entries and should not be treated as runnable in this build.")
                     .font(.footnote)
                     .foregroundStyle(Color.white.opacity(0.58))
                     .fixedSize(horizontal: false, vertical: true)
@@ -507,6 +527,14 @@ private struct DeviceVideoCodecCapabilityRow: View {
             }
         }
 
+        if capability.currentBuildInputAvailability == .availableOnSupportedHardware {
+            return "Current app input: Needs Apple-native hardware for H.265 output on this device."
+        }
+
+        if capability.isInputPlannedByRoadmap {
+            return "Roadmap input: H.265 output planned, not executable in this build."
+        }
+
         switch (capability.hardwareDecodeSupported, capability.hardwareEncodeSupported) {
         case (.some(true), .some(true)):
             return "Device path: HW decode + HW encode"
@@ -532,9 +560,9 @@ private struct DeviceVideoCodecCapabilityRow: View {
         case .availableNow:
             return "Now"
         case .availableOnSupportedHardware:
-            return capability.isInputSupportedByCurrentBuildOnInstalledDevice ? "Now" : "HW"
+            return capability.isInputSupportedByCurrentBuildOnInstalledDevice ? "Now" : "Needs HW"
         case .none:
-            return "No"
+            return capability.isInputPlannedByRoadmap ? "Planned" : "No"
         }
     }
 
@@ -707,16 +735,75 @@ private struct CapabilityBadge: View {
     }
 }
 
+private enum HelpCodecEntryState {
+    case now
+    case hardware
+    case planned
+    case unsupported
+
+    var label: String {
+        switch self {
+        case .now:
+            return "Now"
+        case .hardware:
+            return "HW"
+        case .planned:
+            return "Planned"
+        case .unsupported:
+            return "No"
+        }
+    }
+
+    var priority: Int {
+        switch self {
+        case .now:
+            return 0
+        case .hardware:
+            return 1
+        case .planned:
+            return 2
+        case .unsupported:
+            return 3
+        }
+    }
+
+    var titleOpacity: Double {
+        switch self {
+        case .now:
+            return 0.92
+        case .hardware:
+            return 0.78
+        case .planned:
+            return 0.46
+        case .unsupported:
+            return 0.32
+        }
+    }
+
+    var labelOpacity: Double {
+        switch self {
+        case .now:
+            return 0.58
+        case .hardware:
+            return 0.50
+        case .planned:
+            return 0.34
+        case .unsupported:
+            return 0.28
+        }
+    }
+}
+
 private struct HelpCodecEntry: Identifiable {
     let id = UUID()
     var name: String
-    var isAvailableNow: Bool
+    var state: HelpCodecEntryState
 }
 
 private struct HelpLegendCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("White rows are available now. Gray rows are planned.")
+            Text("Now rows can run in this build. HW rows need installed device hardware. Planned rows are roadmap inputs.")
                 .font(.subheadline)
                 .foregroundStyle(Color.white.opacity(0.76))
                 .fixedSize(horizontal: false, vertical: true)
@@ -746,12 +833,12 @@ private struct HelpCodecSectionCard: View {
                 HStack(spacing: 10) {
                     Text(entry.name)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(entry.isAvailableNow ? Color.white.opacity(0.92) : Color.white.opacity(0.38))
+                        .foregroundStyle(Color.white.opacity(entry.state.titleOpacity))
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Text(entry.isAvailableNow ? "Now" : "Planned")
+                    Text(entry.state.label)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(entry.isAvailableNow ? Color.white.opacity(0.58) : Color.white.opacity(0.32))
+                        .foregroundStyle(Color.white.opacity(entry.state.labelOpacity))
                 }
                 .padding(.vertical, 2)
             }

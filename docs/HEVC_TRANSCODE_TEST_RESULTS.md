@@ -133,4 +133,4 @@ This is not yet proof that the iOS app has migrated every route. It is a repeata
 - Capture `HW_CodecCapabilityProbe` reports from representative Apple devices.
 - Add app-side objective audio signal checks after route tests move into the app/test target.
 - Add real-world samples for DJI `.lrf`, GoPro/Insta360/DJI originals, iPhone HDR/Dolby Vision, Cinematic, slow motion, and damaged/nonstandard metadata.
-- Expand from all-to-H.265 to implemented all-to-all output routes after output codec selection is implemented; the route planner already tracks every planned source/output codec pair.
+- Expand from the current implemented H.265 routes to broader input-to-H.265 execution. Do not add non-H.265 video output routes unless the product policy changes.

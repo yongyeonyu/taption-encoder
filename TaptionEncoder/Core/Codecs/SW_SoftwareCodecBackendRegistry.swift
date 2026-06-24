@@ -317,14 +317,14 @@ enum SW_SoftwareCodecBackendRegistry {
     static let vlcSoftwareDecoder = TaptionSoftwareCodecBackendProfile(
         backend: .softwareVLCDecoder,
         displayName: "SwiftVLC Video Software Decoder",
-        videoDecodeCodecs: [.av1, .vp9, .vp8, .mpeg2, .mpeg4Visual],
+        videoDecodeCodecs: [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263],
         videoEncodeCodecs: [],
         audioDecodeCodecs: [],
         audioEncodeCodecs: [],
-        readableContainers: [.mp4, .mov, .m4v, .mkv, .webm, .avi, .mpegProgramStream, .mxf, .rawElementaryStream],
+        readableContainers: [.mp4, .mov, .m4v, .mkv, .webm, .avi, .mpegProgramStream, .mxf, .threeGP, .threeGPP2, .rawElementaryStream],
         writableContainers: [],
         requiresLicenseReview: true,
-        notes: "Current app fallback for AV1, VP9, VP8, MPEG-2, and MPEG-4 Visual decode. Output encoding is handled by the route-specific software-to-H.265 algorithms."
+        notes: "Current app fallback for AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, and H.263 decode. Output encoding is handled by the route-specific software-to-H.265 algorithms."
     )
 
     static let ffmpegFamilyCandidate = TaptionSoftwareCodecBackendProfile(
@@ -337,7 +337,7 @@ enum SW_SoftwareCodecBackendRegistry {
         readableContainers: broadReadableContainers,
         writableContainers: broadWritableContainers,
         requiresLicenseReview: true,
-        notes: "Candidate backend for universal all-to-all conversion. Actual bundled implementation still needs App Store, license, binary-size, and performance review."
+        notes: "Candidate backend for broad input to H.265 MP4/MOV conversion. Actual bundled implementation still needs App Store, license, binary-size, and performance review."
     )
 
     static let profiles: [TaptionSoftwareCodecBackendProfile] = [
@@ -352,25 +352,7 @@ enum SW_SoftwareCodecBackendRegistry {
     static var broadWritableContainers: Set<TaptionVideoContainer> {
         [
             .mp4,
-            .mov,
-            .m4v,
-            .mkv,
-            .avi,
-            .webm,
-            .mxf,
-            .mpegTransportStream,
-            .mpegProgramStream,
-            .dv,
-            .ogg,
-            .flv,
-            .threeGP,
-            .threeGPP2,
-            .asf,
-            .wmv,
-            .nut,
-            .roq,
-            .realMedia,
-            .rawElementaryStream
+            .mov
         ]
     }
 

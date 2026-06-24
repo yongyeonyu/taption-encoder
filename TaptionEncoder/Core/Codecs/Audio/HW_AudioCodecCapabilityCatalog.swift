@@ -59,7 +59,7 @@ enum HW_AudioCodecCapabilityCatalog {
 
 enum HW_AudioCodecAlgorithmCatalog {
     static func descriptors(
-        outputContainer: TaptionVideoContainer = .mkv
+        outputContainer: TaptionVideoContainer = .mp4
     ) -> [TaptionAudioCodecAlgorithmDescriptor] {
         TaptionAudioCodecRoutePlanner.plannedUniversalRoutes
             .compactMap { descriptor(for: $0, outputContainer: outputContainer) }
@@ -73,7 +73,7 @@ enum HW_AudioCodecAlgorithmCatalog {
 
     static func descriptor(
         for route: TaptionAudioCodecRoute,
-        outputContainer: TaptionVideoContainer = .mkv
+        outputContainer: TaptionVideoContainer = .mp4
     ) -> TaptionAudioCodecAlgorithmDescriptor? {
         let selection = TaptionAudioCodecRoutePlanner.selectRoute(
             sourceCodec: route.sourceCodec,

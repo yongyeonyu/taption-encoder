@@ -29,8 +29,8 @@ Status date: 2026-06-18
 
 ## Confirmed Product Policies
 
-- [x] Product path is AV1 to H.265 first, broad inputs to H.265 next, universal codec-to-codec conversion final.
-- [x] Final codec direction is a symmetric all-to-all mesh: every supported universal input codec is also treated as a possible universal output codec unless deliberately excluded.
+- [x] Product path is AV1 to H.265 first, broad inputs to H.265 next, H.265-only video output final.
+- [x] Final codec direction is an asymmetric input-to-H.265 mesh: every supported input codec is treated as a source candidate for H.265 output only.
 - [x] MVP default output container is `.mp4` with H.265 video, with `.mov` available as a selectable H.265/AAC output.
 - [x] Default quality prioritizes source-like visual quality over smallest file size.
 - [x] iOS/iPadOS 26 or later can offer user-selectable background encoding.
@@ -50,8 +50,9 @@ Status date: 2026-06-18
 - [x] Software codec stack may evaluate FFmpeg-family technology and should pull broad support as far as App Store, licensing, and binary-size limits allow.
 - [x] FCPXML DTD/version should use the latest stable official version available at implementation time.
 - [x] MVP advanced output "format" means H.265 container choice only, such as `.mp4` and `.mov`.
-- [x] Long-term advanced output includes selectable output codecs for all-to-all conversion.
-- [x] H.265 remains the recommended default output, not a permanent architecture ceiling.
+- [x] Long-term advanced output includes selectable H.265 containers and encode settings, not alternate video output codecs.
+- [x] H.265 is the permanent video output codec.
+- [x] Help, Device Info, and saved codec reports separate current-build executable inputs, hardware-gated inputs, and roadmap-only H.265 input coverage.
 - [x] Production AdMob IDs, privacy policy, support URL, and `app-ads.txt` will be added to the existing account/site setup.
 
 ## P0 Release Blockers
@@ -95,11 +96,11 @@ Status date: 2026-06-18
 - [x] Add tests that require implemented routes to expose both HW and SW algorithm descriptors.
 - [x] Route live AV1-to-H.265 execution through a codec registry/dispatcher so HW and SW algorithms can be added without hardcoding service branches.
 - [x] Split the reusable Apple-native H.265 hardware algorithm into `HW_AppleHEVCCodecAlgorithm.swift`, leaving `HW_AV1HEVCCodecAlgorithm.swift` as the AV1-specific wrapper for future Taption migration.
-- [x] Add broad SW backend capability registry for future all-to-all video/audio decode, encode, and container read/write coverage.
+- [x] Add broad SW backend capability registry for future input decode, H.265 encode, audio encode, and container read/write coverage.
 - [x] Add `TaptionSoftwareCodecBackendReadinessReport` so the broad bundled SW backend cannot be treated as executable until license review, App Store policy review, binary-size budget, iOS packaging, open-source notice generation, fixture regression proof, audio-signal proof, and old-device performance proof are closed.
 - [x] Add planned `SW_UniversalCodecTranscodeAlgorithm` descriptors for every non-implemented universal route, with an explicit not-bundled execution error until the broad software backend ships.
 - [x] Add `SW_FFmpegCodecCommandPlanner` so function-style video/audio codec requests can produce explicit FFmpeg-family command plans before the broad backend is bundled.
-- [x] Add Xcode tests that every plannable FFmpeg-family video/audio output codec can generate command plans from every planned source codec, while unsupported output codecs fail explicitly.
+- [x] Add Xcode tests that every plannable FFmpeg-family H.265 video/audio output can generate command plans from planned source codecs, while unsupported outputs fail explicitly.
 - [x] Add shared video-container extension inference and command-plan tests for every declared readable input container and writable output container.
 - [x] Add representative legacy/raw import alias inference and command-plan tests for DivX, TP/TRP/TOD, MOD, OGM, DVR-MS, NUT, RoQ, RealMedia, AV1 elementary, H.263, MPEG elementary, and VC-1 files.
 - [x] Add codec/container/audio research matrix for Apple-native, software, generated fixture, and real-world sample targets.
@@ -123,14 +124,14 @@ Status date: 2026-06-18
 - [x] Attach first-track audio route, source-preserving audio options, readiness state, and FFmpeg-family command-plan evidence to single-asset encoding plans.
 - [x] Add gated FFmpeg-family video command execution wrapper with fake-runner tests so planned video routes can execute directly from function-style codec requests after broad-backend gates close.
 - [x] Add gated FFmpeg-family audio command execution wrapper with fake-runner tests so planned audio routes can use the same future broad-backend execution boundary as video.
-- [x] Attach planned video FFmpeg-family command plans to single-asset encoding plans when the selected all-to-all output route has a software encoder.
-- [x] Add single-asset FFmpeg-family A/V command planning so video all-to-all routes can carry audio copy/transcode decisions and source-preserving audio arguments.
+- [x] Attach planned video FFmpeg-family command plans to single-asset encoding plans when the selected H.265 output route has a software encoder.
+- [x] Add single-asset FFmpeg-family A/V command planning so input-to-H.265 routes can carry audio copy/transcode decisions and source-preserving audio arguments.
 - [x] Add gated FFmpeg-family command executor boundary with fake-runner tests so broad SW codec execution cannot run until all readiness gates close.
-- [x] Connect prepared video command plans to the app encoder service through `SW_FFmpegVideoCodecTranscodeExecutor` so a ready broad SW backend can execute planned all-to-all routes through the same function-style codec request contract.
+- [x] Connect prepared video command plans to the app encoder service through `SW_FFmpegVideoCodecTranscodeExecutor` so a ready broad SW backend can execute planned input-to-H.265 routes through the same function-style codec request contract.
 - [x] Add app-core fixture execution jobs that convert generated video/audio fixture rows into gated FFmpeg-family executor inputs.
 - [x] Run generated AAC/MP4 audio fixture execution jobs through `SW_FFmpegAudioCodecTranscodeExecutor` from function-style audio requests when broad SW backend gates are satisfied.
 - [x] Add app-scheme tests that match app-core fixture execution jobs against the latest SW/HW H.265 output and audio-signal evidence rows.
-- [x] Add app-scheme tests that build generated video/audio fixture command plans to every currently plannable all-to-all output codec.
+- [x] Add app-scheme tests that build generated video/audio fixture command plans to currently plannable H.265 output paths.
 - [x] Add video fixture catalog coverage reporting so every universal source codec is tracked as generated, conditional, real-world-sample-required, or planned.
 - [x] Enforce video fixture generation evidence so implemented targets pass generation and optional VC-1/Theora attempts keep concrete blocking reasons.
 - [x] Add video container fixture coverage reporting so every declared non-unknown container and extension alias is tracked by the sample plan.
@@ -141,12 +142,12 @@ Status date: 2026-06-18
 - [x] Add app-core video execution readiness reporting that separates current-build implemented routes, FFmpeg-family command-plan routes, and missing software video encoder gaps.
 - [x] Add app-core audio execution readiness reporting that separates current-build native/copy routes, FFmpeg-family command-plan routes, and missing software audio encoder gaps.
 - [x] Add `HW_AudioCodecAlgorithmCatalog` and `TaptionAudioCodecDescriptorRegistry` so audio routes expose preferred HW/SW descriptors before full audio execution lands.
-- [x] Add universal codec completion audit reporting so all-to-all planning, required bidirectional examples, command-plan gaps, and runtime gaps are visible as one core gate.
+- [x] Add codec completion audit reporting so H.265 route planning, command-plan gaps, and runtime gaps are visible as one core gate.
 - [ ] Implement the bundled software codec backend for broad input decode and fallback H.265 encode.
-- [x] Expand codec routing model from broad input to H.265 into all-to-all routes, including H.264 to AV1 and AV1 to H.264.
-- [x] Add unit-test and route-simulator guards that every planned source/output codec pair is covered by the universal route matrix, including reverse routes for every supported pair.
-- [x] Add a unit-test guard that universal source and output codec catalogs stay symmetric for the all-to-all product contract.
-- [x] Add `TaptionCodecMeshCoverageReport` so app-core tests can audit video/audio all-to-all route counts, missing reverse routes, executable route counts, command-planner gaps, and broad software backend license-review status from one source.
+- [x] Expand codec routing model around broad input to H.265 routes.
+- [x] Add unit-test and route-simulator guards that every supported input codec can be evaluated against H.265 output readiness.
+- [x] Add a unit-test guard that source and output codec catalogs remain intentionally asymmetric for the H.265-only product contract.
+- [x] Add `TaptionCodecMeshCoverageReport` so app-core tests can audit H.265 route counts, executable route counts, command-planner gaps, and broad software backend license-review status from one source.
 - [x] Add unit-test and route-simulator guards that every implemented or planned route prefers HW decode/encode backends per codec side when the simulated device profile supports them.
 - [x] Add app-side codec route planner that prioritizes HW, falls back to SW/mixed paths, and reports the planned path per imported file.
 - [x] Register first Apple-native H.265 HW routes for H.264, H.265, and ProRes input, while keeping software fallback as planned work on devices without the required hardware path.
@@ -166,13 +167,13 @@ Status date: 2026-06-18
 - [x] Show runtime HW decode/encode codec support in Device Info.
 - [x] Show Apple-native audio decode/encode and MP4/MOV copy compatibility in Device Info.
 - [x] Add capability-profile simulation for HW-first route selection.
-- [x] Add all-to-all output codec/container selector UI that shows planned routes while current execution remains limited to H.265 output: AV1 via HW/SW fallback, plus H.264/H.265/ProRes on hardware-capable profiles.
+- [x] Add H.265 output container selector UI that shows planned H.265 routes while current execution remains limited to H.265 output: AV1 via HW/SW fallback, plus H.264/H.265/ProRes on hardware-capable profiles.
 - [x] Add core output readiness catalog so UI and route planning share the same `Now`, `Plan Ready`, `Planned`, and `Blocked` output status.
 - [x] Include output selector readiness counts and item details in Device Info and saved device codec snapshots.
-- [x] Name the final route contract `All-to-All Universal Codec Mesh` and expose representative `H.264 -> AV1`, `AV1 -> H.264`, and same-codec re-encode routes from core.
+- [x] Name the final product contract as broad input to H.265 output; non-H.265 routes such as `H.264 -> AV1`, `AV1 -> H.264`, and same-codec non-H.265 re-encode are outside scope.
 - [x] Surface video route readiness details in file-card codec path text and Device Info mesh readiness summaries.
 - [x] Show audio Copy/HW/SW/Unsupported route details in loaded file cards alongside the video codec path.
-- [x] Show all-to-all video card route states as HW/SW, SW Plan Ready, or SW Blocked so planned universal routes are not confused with runnable launch routes.
+- [x] Show video card route states as HW/SW, SW Plan Ready, or SW Blocked so planned H.265 routes are not confused with runnable launch routes.
 - [x] Add tests that selected output policy is preserved by the generic single-asset encoding plan.
 - [x] Add Device Info save action and `HW_DeviceCodecReportStore` so real-device codec probe reports can be captured as JSON snapshots.
 - [x] Include the universal codec completion audit in Device Info and saved device codec snapshots.

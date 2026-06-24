@@ -50,8 +50,8 @@ Current tests cover:
 - `AV1 -> H.265` selects `SW` when no hardware exists.
 - `AV1 -> H.265` selects `HW/SW` when only H.265 hardware encode exists.
 - `AV1 -> H.265` selects `HW` when AV1 hardware decode and H.265 hardware encode both exist.
-- Planned universal routes such as `H.264 -> AV1` and `AV1 -> H.264` stay visible but not encodable.
-- The universal source/output codec matrix covers every planned pair, not only all-input-to-H.265 routes.
+- Non-H.265 output routes such as `H.264 -> AV1` and `AV1 -> H.264` are outside product scope.
+- The source-to-H.265 route matrix covers planned input expansion.
 - The latest route matrix TSV evidence covers every simulation profile and every planned route, and keeps hardware decode/encode preference when available.
 - Apple device-family profiles select the expected `SW`, `HW/SW`, or `HW` path for `AV1 -> H.265`.
 - Apple runtime model identifiers such as `iPhone16,1`, `iPhone17,3`, `iPad7,11`, and `iPad16,3` map to the expected family profile and route path.
@@ -68,12 +68,12 @@ The script verifies:
 - Automatic route selection chooses `SW` when hardware encode is unavailable.
 - Every implemented or planned route uses a hardware decode backend when the simulated device profile can hardware-decode the source codec.
 - Every implemented or planned route uses a hardware encode backend when the simulated device profile can hardware-encode the output codec.
-- `H.264 -> AV1` and `AV1 -> H.264` are present as planned universal routes.
-- Every `universalSourceCodecs x universalOutputCodecs` pair is present in the roadmap.
+- Non-H.265 output routes such as `H.264 -> AV1` and `AV1 -> H.264` are not roadmap requirements.
+- Every supported input source codec should be evaluated against H.265 output readiness.
 - The full internal route matrix is emitted for every simulation profile.
 - The Device Info menu can show the same app-core simulation summary instead of relying on separate script-only logic.
 - Saved Device Info reports include static matrix reconciliation so real-device probe snapshots can correct profile assumptions over time.
-- Saved Device Info reports also include the universal codec completion audit so physical-device evidence records both HW capability and the current all-to-all execution gap state.
+- Saved Device Info reports also include codec completion audit data so physical-device evidence records both HW capability and the current H.265 output execution gap state.
 - Saved report archives can be summarized into known, unknown, consistent, and divergent device groups before updating static HW codec assumptions.
 
 ## Current Simulation Profiles
@@ -116,14 +116,14 @@ Result:
 - Base generic + Apple family profiles: 19.
 - Total simulation profiles after adding model identifiers: 112.
 - Source codecs: 63.
-- Output codecs: 63.
-- Routes per profile: 3,969.
-- Total route rows: 444,528.
-- Output file rows including header: 444,529.
-- Current-build encodable rows: 914.
-- Current-build path split: 496 `HW`, 398 `HW/SW`, 20 `SW`, and 443,614 `Planned`.
-- Universal source/output route coverage: 3,969/3,969 pairs per profile, no unsupported route-map gaps.
-- Planned all-to-all routes still prefer hardware decode and hardware encode backends per codec side when a simulation profile exposes that capability.
+- Output codecs: 1 (`hevc`).
+- Routes per profile: 63.
+- Total route rows: 7,056.
+- Output file rows including header: 7,057.
+- Current-build encodable rows: 1,250.
+- Current-build path split: 496 `HW`, 719 `HW/SW`, 35 `SW`, and 5,806 `Planned`.
+- Universal source-to-H.265 route coverage: 63/63 pairs per profile, no unsupported route-map gaps.
+- Planned input-to-H.265 routes still prefer hardware decode and H.265 hardware encode backends when a simulation profile exposes that capability.
 - `AV1 -> H.265` selected:
   - `SW` for `software_only`.
   - `SW` for `h264_only_hw`.

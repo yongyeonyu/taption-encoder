@@ -71,7 +71,9 @@ enum SW_FFmpegCodecCommandPlannerError: LocalizedError, Equatable {
 
 enum SW_FFmpegCodecCommandPlanner {
     static var plannableVideoOutputCodecs: [TaptionVideoCodec] {
-        videoEncoderNames.keys.sorted { $0.rawValue < $1.rawValue }
+        videoEncoderNames.keys
+            .filter { TaptionCodecRegistry.universalOutputCodecs.contains($0) }
+            .sorted { $0.rawValue < $1.rawValue }
     }
 
     static var commandUnsupportedVideoOutputCodecs: [TaptionVideoCodec] {

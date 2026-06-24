@@ -302,7 +302,7 @@ struct TaptionAudioCodecExecutionReadinessReport: Codable, Equatable {
 
 enum TaptionAudioCodecExecutionReadinessReporter {
     static func makeReport(
-        outputContainer: TaptionVideoContainer = .mkv,
+        outputContainer: TaptionVideoContainer = .mp4,
         broadSoftwareBackendExecutable: Bool = false
     ) -> TaptionAudioCodecExecutionReadinessReport {
         let items = TaptionAudioCodecRoutePlanner.plannedUniversalRoutes
@@ -341,7 +341,7 @@ enum TaptionAudioCodecExecutionReadinessReporter {
 
     static func item(
         for route: TaptionAudioCodecRoute,
-        outputContainer: TaptionVideoContainer = .mkv,
+        outputContainer: TaptionVideoContainer = .mp4,
         broadSoftwareBackendExecutable: Bool = false
     ) -> TaptionAudioCodecExecutionReadinessItem {
         makeItem(
@@ -473,7 +473,7 @@ struct TaptionAudioCodecDescriptorRegistry: Equatable {
     var broadSoftwareBackendExecutable: Bool
 
     init(
-        outputContainer: TaptionVideoContainer = .mkv,
+        outputContainer: TaptionVideoContainer = .mp4,
         broadSoftwareBackendExecutable: Bool = false
     ) {
         self.outputContainer = outputContainer

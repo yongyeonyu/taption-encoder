@@ -16,10 +16,11 @@ This project is the standalone app shell for Taption's AV1 to H.265 conversion f
 
 - First release: AV1 to H.265.
 - Next milestone: broad practical video inputs to H.265.
-- Final direction: universal all-to-all codec conversion.
-- Treat routes such as `H.264 -> AV1` and `AV1 -> H.264` as equally valid planned routes.
-- Keep source and output codec catalogs symmetric unless a codec is intentionally excluded from the universal product contract.
-- H.265 is the recommended default output, not a permanent architecture limit.
+- Final direction: broad practical input coverage with H.265 / HEVC as the only video output codec.
+- Output video codec is fixed to H.265. Do not add selectable output video codecs unless the company explicitly changes this policy.
+- Routes such as `H.264 -> AV1`, `AV1 -> H.264`, `VP9 -> AV1`, or same-codec re-encode as a non-H.265 output are out of product scope.
+- Source and output codec catalogs are intentionally not symmetric: source coverage expands broadly, output video codec remains H.265 only.
+- Advanced output work may add container, resolution, bitrate, quality, frame-rate, and color controls while keeping video output H.265.
 - Codec implementations must stay route-based and portable through explicit `HW_` and `SW_` core files.
 
 ## Starting Rules

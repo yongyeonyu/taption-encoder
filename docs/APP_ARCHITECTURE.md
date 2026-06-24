@@ -2,15 +2,15 @@
 
 ## Product Direction
 
-Taption Encoder is a free, phone-first video encoder that makes conversion simple enough to run directly on iPhone or iPad. The first product milestone is AV1 to H.265, the next milestone is broad input to H.265, and the final product goal is a universal codec matrix: almost any practical user video codec can be converted to any other supported output codec through hardware, software, or mixed codec paths. The app must stay separate from the main Taption editor unless a file is intentionally ported.
+Taption Encoder is a free, phone-first video encoder that makes conversion simple enough to run directly on iPhone or iPad. The first product milestone is AV1 to H.265, the next milestone is broad input to H.265, and the final product goal is practical all-input-to-H.265 conversion through hardware, software, or mixed codec paths. H.265 / HEVC is the only video output codec. The app must stay separate from the main Taption editor unless a file is intentionally ported.
 
 The product core is convenience: choose one or more videos, keep the original look by default, encode with minimal setup, optionally do small edits, and get a saved output in the desired codec/container. Advertising supports the free business model; it should be dense enough to monetize the app, but it is not the product's purpose.
 
 Core value:
 
-- Product path: AV1 to H.265 first, broad inputs to H.265 next, universal codec-to-codec conversion final.
+- Product path: AV1 to H.265 first, broad inputs to H.265 next, H.265-only output final.
 - Convert many video formats without making the user understand codecs.
-- Final codec matrix includes examples like H.264 to AV1, AV1 to H.264, H.265 to VP9, VP9 to H.265, and same-codec re-encode for resize, bitrate, frame-rate, color, or quality changes.
+- Final codec matrix is many supported inputs to H.265 output. Non-H.265 video outputs such as H.264, AV1, VP9, VP8, ProRes, or same-codec re-encode outputs are out of product scope.
 - Preserve source-like resolution, timing, orientation, color, audio timing, and visual quality by default.
 - Combine multiple videos into one output, including videos from different cameras and formats.
 - Normalize sources for merge when needed, especially when codecs, containers, frame rates, color metadata, or audio layouts differ.
@@ -26,9 +26,9 @@ Primary constraints:
 - MVP input is AV1 video.
 - MVP output is fixed to H.265 video in an `.mp4` container.
 - Mid-term output remains H.265 video while broad input support is proven.
-- Long-term output codec becomes selectable from supported codecs; H.265 remains the recommended default for compatibility and size.
-- The core codec model is an all-to-all mesh, not an H.265-only pipeline: adding a codec to the universal input catalog also makes it a planned output codec unless intentionally removed from the final product contract.
-- `TaptionUniversalCodecCompletionAuditor` is the core gate for this contract. It distinguishes current launch-route execution from planning-locked all-to-all coverage, command-plan readiness, and fully executable universal conversion.
+- Long-term output video codec remains fixed to H.265 / HEVC. Output selection may expose containers and encode settings, not alternate video codecs.
+- The core codec model is an all-input-to-H.265 mesh: adding a codec to the input catalog does not make it a video output candidate.
+- `TaptionUniversalCodecCompletionAuditor` and related readiness reports must distinguish current launch-route execution from broader all-input-to-H.265 coverage. They must not treat all-to-all output coverage as a product requirement.
 - Default output should preserve the source video's resolution, frame rate, orientation, aspect ratio, and color characteristics whenever technically possible.
 - Default quality should target visually source-like output, not aggressive compression.
 - Hardware encoding is preferred automatically when supported.
@@ -115,7 +115,7 @@ Implementation status, 2026-06-15:
 
 ### Phase 3: Broad Input And Legacy Device Support
 
-Output remains H.265 while input format support expands. This phase adds a backend strategy for "almost any practical user video" and older-device fallback. This is a milestone toward the final universal codec matrix, not the final ceiling.
+Output remains H.265 while input format support expands. This phase adds a backend strategy for "almost any practical user video" and older-device fallback. This is the product direction, not a temporary step toward alternate video output codecs.
 
 Current baseline artifacts:
 
@@ -125,15 +125,15 @@ Current baseline artifacts:
 - `Scripts/simulate_codec_route_planner.sh` verifies HW-first, HW/SW mixed, and SW fallback selection across simulated capability profiles.
 - `Core/Codecs/HW_CodecCapabilityProbe.swift` probes runtime VideoToolbox hardware support for the future Device Info menu.
 - `Core/Codecs/SW_CodecSupportCatalog.swift` tracks software decode and fixture targets.
-- `Core/Codecs/SW_UniversalCodecTranscodeAlgorithm.swift` tracks planned software descriptors for non-implemented all-to-all routes while the bundled broad software backend is still pending.
+- `Core/Codecs/SW_UniversalCodecTranscodeAlgorithm.swift` may still contain older broad-route scaffolding while the bundled broad software backend is pending, but product readiness is measured against source-to-H.265 routes only.
 - `SW_FFmpegVideoCodecTranscodeExecutor` can execute a planned video command from a function-style codec request through the gated FFmpeg-family executor once the broad software backend is bundled, license-reviewed, and injected with a runner.
 - `Core/Codecs/Audio/AudioCodecAlgorithm.swift` defines function-style audio transcode request, options, progress, and output contracts.
 - `Core/Codecs/Audio/SW_UniversalAudioCodecTranscodeAlgorithm.swift` tracks planned software descriptors for every universal audio source/output pair while the bundled broad software backend is still pending.
 - `SW_FFmpegAudioCodecTranscodeExecutor` can execute a planned audio command through the same gated FFmpeg-family executor used by video once the broad software backend is bundled, license-reviewed, and injected with a runner.
 - Generated AAC/MP4 audio fixture jobs now prove that fixture metadata can rebuild a function-style audio request, reproduce the planned FFmpeg-family command, and pass through the software audio executor boundary when backend readiness gates are closed.
-- `TaptionEncodingPlan` carries a planned FFmpeg-family video command plan when the selected all-to-all output route has a software encoder, and carries the first-track audio command plan separately.
+- `TaptionEncodingPlan` carries a planned FFmpeg-family video command plan for H.265 output routes when the selected input can be planned, and carries the first-track audio command plan separately.
 - `AVFoundationHEVCEncoderService` keeps the launch AV1-to-H.265 registry path, but dispatches prepared planned routes through `SW_FFmpegVideoCodecTranscodeExecutor` when the broad SW backend is executable and a runner is injected.
-- `Core/Codecs/CodecOutputCatalog.swift` centralizes output readiness as `Now`, `Plan Ready`, `Planned`, or `Blocked` for the Home selector UI, route/card status display, Device Info, and saved device codec reports. `Plan Ready` means the broad software command can be built, but the backend is not bundled for runtime execution yet. File cards expose the user-facing codec path as `Path HW`, `Path SW`, `Path HW/SW`, `Path SW Plan Ready`, or `Path SW Blocked` so the all-to-all matrix remains visible before every route is runnable.
+- `Core/Codecs/CodecOutputCatalog.swift` centralizes output readiness as `Now`, `Plan Ready`, `Planned`, or `Blocked` for the Home selector UI, route/card status display, Device Info, and saved device codec reports. `Plan Ready` means the broad software command can be built, but the backend is not bundled for runtime execution yet. File cards expose the user-facing codec path as `Path HW`, `Path SW`, `Path HW/SW`, `Path SW Plan Ready`, or `Path SW Blocked` for H.265 output routes.
 - `Features/Home/HomeMenuSheetView.swift` exposes Help, Open Source Notices, and Device Info from the top-left home menu.
 
 - H.264 / AVC
@@ -217,15 +217,15 @@ Expose options that are represented in the architecture from the beginning:
 - Output container presets while still using H.265 video
 - Color-map, tone-map, and HDR/SDR conversion controls
 
-### Phase 5B: Universal Codec Matrix
+### Phase 5B: H.265 Output Codec Matrix
 
-After broad input to H.265 is reliable, expand output codecs so the encoder becomes an all-to-all codec tool.
+After broad input to H.265 is reliable, keep expanding input coverage and H.265 output controls. Do not expand video output codecs.
 
-This is not an all-input-to-H.265-only roadmap. The long-term contract is every supported source codec to every supported output codec, including both directions such as `H.264 -> AV1` and `AV1 -> H.264`.
+This is an all-input-to-H.265-only roadmap. The long-term contract is every supported practical source codec to H.265 / HEVC output. Reverse pairs such as `H.264 -> AV1` and `AV1 -> H.264` are not product routes.
 
-Core code names this final contract `All-to-All Universal Codec Mesh`. The product rule is simple: every codec admitted into the universal list becomes both an input and an output candidate, every pair is visible as a planned route, and same-codec routes remain valid for re-encode workflows such as resizing, frame-rate changes, bitrate changes, quality adjustment, and color mapping.
+Core planning uses the `All Inputs to H.265 Codec Mesh` contract: every codec admitted into the input list is a candidate source for H.265 output only. Same-codec non-H.265 re-encode routes are not product routes. Resize, frame-rate changes, bitrate changes, quality adjustment, and color mapping must still output H.265 video.
 
-Initial universal matrix codecs:
+Initial input matrix codecs:
 
 - AV1
 - H.265 / HEVC
@@ -241,19 +241,19 @@ Initial universal matrix codecs:
 Routing rules:
 
 - Model each conversion as `sourceCodec -> outputCodec`, not as a special one-off feature.
-- Keep `TaptionCodecRegistry.universalSourceCodecs` and `TaptionCodecRegistry.universalOutputCodecs` as the authoritative all-to-all route lists.
-- Treat the matrix as symmetric by contract: if a codec pair exists, both `A -> B` and `B -> A` must be visible as routes unless one side is explicitly removed from the universal codec list.
+- Keep `TaptionCodecRegistry.universalSourceCodecs` as the authoritative input list. Output video codec must resolve to H.265.
+- Treat the matrix as asymmetric by contract: input coverage expands broadly, output video codec remains H.265 only.
 - Implement each concrete codec route as a function-style algorithm that accepts `TaptionCodecTranscodeRequest`, honors `TaptionCodecTranscodeOptions`, reports `TaptionEncodingProgress`, and returns `TaptionCodecTranscodeOutput`.
 - Keep route implementations in explicit `HW_` and `SW_` files so they can be ported back into Taption without dragging UI or ad dependencies.
-- Include same-codec re-encode routes such as `H.264 -> H.264` for resize, bitrate, frame-rate, quality, or color conversion.
+- Do not include same-codec non-H.265 re-encode routes such as `H.264 -> H.264`; resize, bitrate, frame-rate, quality, and color conversion still output H.265.
 - Use `TaptionCodecRegistry` for the route matrix and `CodecRoutePlanner` for runtime route selection.
 - Store plannable SW command output on `TaptionEncodingPlan` so the future executor can run a prepared job without rebuilding route decisions from UI state.
 - Keep broad SW execution behind `TaptionSoftwareCodecBackendReadinessReport`; runner injection and closed readiness gates are both required before planned routes can execute.
 - Prefer hardware decode and hardware encode when both sides are supported.
 - Use mixed routes when only one side has hardware support, such as software decode plus hardware encode.
-- Use software decode and software encode when hardware support is unavailable or when the selected output codec is not supported by VideoToolbox.
+- Use software decode and software H.265 encode when hardware support is unavailable or when H.265 settings are not supported by VideoToolbox.
 - Route audio separately from video: copy compatible audio when the output container allows it, otherwise decode through Apple-native or software paths and encode to the selected output audio codec. The MVP default is AAC in MP4.
-- Keep the UI simple by recommending a default output codec while exposing advanced output codec selection later.
+- Keep the UI simple by fixing the video output codec to H.265 while exposing only container and encode-setting choices later.
 - Treat codec support as a runtime capability matrix because older devices, simulators, iOS versions, and App Store-safe bundled codec libraries differ.
 
 ### Phase 6: Advanced Workflows

@@ -212,7 +212,7 @@ enum TaptionCodecFixtureExecutionPlanner {
         fixtureDirectoryURL: URL,
         outputDirectoryURL: URL,
         outputCodec: TaptionVideoCodec,
-        outputContainer: TaptionVideoContainer = .mkv,
+        outputContainer: TaptionVideoContainer = .mp4,
         kind: TaptionCodecFixtureExecutionKind = .videoCodecTranscode,
         backendReadiness: TaptionSoftwareCodecBackendReadinessReport = SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport()
     ) throws -> [TaptionCodecFixtureExecutionJob] {
@@ -272,7 +272,7 @@ enum TaptionCodecFixtureExecutionPlanner {
         fixtureDirectoryURL: URL,
         outputDirectoryURL: URL,
         outputCodec: TaptionAudioCodec,
-        outputContainer: TaptionVideoContainer = .mkv,
+        outputContainer: TaptionVideoContainer = .mp4,
         kind: TaptionCodecFixtureExecutionKind = .audioCodecTranscode,
         backendReadiness: TaptionSoftwareCodecBackendReadinessReport = SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport()
     ) throws -> [TaptionCodecFixtureExecutionJob] {
@@ -428,7 +428,7 @@ struct TaptionVideoCodecExecutionReadinessReport: Codable, Equatable {
 
 enum TaptionVideoCodecExecutionReadinessReporter {
     static func makeReport(
-        outputContainer: TaptionVideoContainer = .mkv,
+        outputContainer: TaptionVideoContainer = .mp4,
         hardwareSupport: TaptionCodecHardwareSupportProfile = .softwareOnly,
         broadSoftwareBackendExecutable: Bool = false
     ) -> TaptionVideoCodecExecutionReadinessReport {
@@ -468,7 +468,7 @@ enum TaptionVideoCodecExecutionReadinessReporter {
 
     static func item(
         for route: TaptionCodecRoute,
-        outputContainer: TaptionVideoContainer = .mkv,
+        outputContainer: TaptionVideoContainer = .mp4,
         hardwareSupport: TaptionCodecHardwareSupportProfile = .softwareOnly,
         broadSoftwareBackendExecutable: Bool = false
     ) -> TaptionVideoCodecExecutionReadinessItem {

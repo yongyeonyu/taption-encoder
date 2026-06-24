@@ -130,6 +130,7 @@ struct TaptionLaunchOutputSupport: Codable, Equatable {
 
 enum TaptionLaunchInputSupportState: String, Codable, Equatable {
     case supported
+    case plannedCodec
     case unsupportedContainer
     case unsupportedCodec
 }
@@ -142,6 +143,37 @@ struct TaptionLaunchInputSupportDiagnosis: Codable, Equatable {
     var isSupportedNow: Bool {
         state == .supported
     }
+
+    var isPlannedOnly: Bool {
+        state == .plannedCodec
+    }
+}
+
+struct TaptionLaunchInputReadinessReport: Codable, Equatable {
+    var executableNowVideoCodecs: [TaptionVideoCodec]
+    var hardwareGatedVideoCodecs: [TaptionVideoCodec]
+    var plannedVideoCodecs: [TaptionVideoCodec]
+    var inputContainers: [TaptionVideoContainer]
+    var outputVideoCodec: TaptionVideoCodec
+    var outputContainers: [TaptionVideoContainer]
+
+    var executableNowVideoCodecCount: Int {
+        executableNowVideoCodecs.count
+    }
+
+    var hardwareGatedVideoCodecCount: Int {
+        hardwareGatedVideoCodecs.count
+    }
+
+    var plannedVideoCodecCount: Int {
+        plannedVideoCodecs.count
+    }
+
+    var roadmapVideoCodecCount: Int {
+        executableNowVideoCodecCount
+            + hardwareGatedVideoCodecCount
+            + plannedVideoCodecCount
+    }
 }
 
 enum TaptionLaunchSupportCatalog {
@@ -152,15 +184,20 @@ enum TaptionLaunchSupportCatalog {
         .avi,
         .webm,
         .mxf,
-        .mpegProgramStream
+        .mpegProgramStream,
+        .threeGP,
+        .threeGPP2,
+        .rawElementaryStream
     ]
 
     static let supportedInputVideoCodecs: [TaptionLaunchInputVideoSupportItem] = [
         TaptionLaunchInputVideoSupportItem(codec: .av1, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .vp9, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .vp8, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .mpeg1, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .mpeg2, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .mpeg4Visual, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .h263, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableOnSupportedHardware),
         TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableOnSupportedHardware),
         TaptionLaunchInputVideoSupportItem(codec: .proRes, availability: .availableOnSupportedHardware)
@@ -172,6 +209,29 @@ enum TaptionLaunchSupportCatalog {
         container: .mp4
     )
 
+    static var executableNowInputVideoCodecs: [TaptionVideoCodec] {
+        supportedInputVideoCodecs
+            .filter { $0.availability == .availableNow }
+            .map(\.codec)
+    }
+
+    static var hardwareGatedInputVideoCodecs: [TaptionVideoCodec] {
+        supportedInputVideoCodecs
+            .filter { $0.availability == .availableOnSupportedHardware }
+            .map(\.codec)
+    }
+
+    static var plannedInputVideoCodecs: [TaptionVideoCodec] {
+        let currentBuildCodecs = Set(supportedInputVideoCodecs.map(\.codec))
+        return TaptionCodecRegistry.universalSourceCodecs.filter {
+            !currentBuildCodecs.contains($0)
+        }
+    }
+
+    static var supportedOutputContainers: [TaptionVideoContainer] {
+        TaptionCodecOutputCatalog.selectableContainers
+    }
+
     static var supportedInputVideoSummary: String {
         supportedInputVideoCodecs
             .map { $0.codec.displayName }
@@ -182,6 +242,12 @@ enum TaptionLaunchSupportCatalog {
         supportedInputContainers
             .flatMap(\.supportedFileExtensions)
             .map { $0.uppercased() }
+            .joined(separator: ", ")
+    }
+
+    static var supportedOutputContainerSummary: String {
+        supportedOutputContainers
+            .map { $0.defaultFileExtension.uppercased() }
             .joined(separator: ", ")
     }
 
@@ -197,8 +263,37 @@ enum TaptionLaunchSupportCatalog {
         return "\(deviceLimited.joined(separator: ", ")) input requires Apple-native hardware routes on the current device."
     }
 
+    static var plannedInputVideoNote: String {
+        guard !plannedInputVideoCodecs.isEmpty else {
+            return "There are no roadmap-only input codecs outside the current launch build."
+        }
+
+        return "\(plannedInputVideoCodecs.count) roadmap input codecs are tracked for future H.265 output, but are not executable in this build."
+    }
+
     static var supportedInputContainerNote: String {
-        "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as WebM, AVI, MXF, and MPEG program streams."
+        "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as WebM, AVI, MXF, MPEG program streams, 3GP, 3G2, and raw elementary streams."
+    }
+
+    static func inputAvailability(for codec: TaptionVideoCodec) -> TaptionLaunchInputSupportAvailability? {
+        supportedInputVideoCodecs
+            .first { $0.codec == codec }?
+            .availability
+    }
+
+    static func isPlannedInputVideoCodec(_ codec: TaptionVideoCodec) -> Bool {
+        plannedInputVideoCodecs.contains(codec)
+    }
+
+    static func makeInputReadinessReport() -> TaptionLaunchInputReadinessReport {
+        TaptionLaunchInputReadinessReport(
+            executableNowVideoCodecs: executableNowInputVideoCodecs,
+            hardwareGatedVideoCodecs: hardwareGatedInputVideoCodecs,
+            plannedVideoCodecs: plannedInputVideoCodecs,
+            inputContainers: supportedInputContainers,
+            outputVideoCodec: supportedOutput.videoCodec,
+            outputContainers: supportedOutputContainers
+        )
     }
 
     static func diagnoseInput(
@@ -213,7 +308,15 @@ enum TaptionLaunchSupportCatalog {
             )
         }
 
-        guard supportedInputVideoCodecs.contains(where: { $0.codec == videoCodec }) else {
+        guard let availability = inputAvailability(for: videoCodec) else {
+            if isPlannedInputVideoCodec(videoCodec) {
+                return TaptionLaunchInputSupportDiagnosis(
+                    state: .plannedCodec,
+                    title: "Input Planned",
+                    detail: "\(videoCodec.displayName) input is in the H.265 roadmap, but is not executable in this build."
+                )
+            }
+
             return TaptionLaunchInputSupportDiagnosis(
                 state: .unsupportedCodec,
                 title: "Input Codec Unsupported",
@@ -221,10 +324,18 @@ enum TaptionLaunchSupportCatalog {
             )
         }
 
+        let detail: String
+        switch availability {
+        case .availableNow:
+            detail = "The current launch build can inspect this input and encode it to H.265 MP4 or MOV."
+        case .availableOnSupportedHardware:
+            detail = "\(videoCodec.displayName) input can encode to H.265 only on devices with the required Apple-native hardware path."
+        }
+
         return TaptionLaunchInputSupportDiagnosis(
             state: .supported,
             title: "Input Supported",
-            detail: "The current launch build can inspect this input container and codec."
+            detail: detail
         )
     }
 }
@@ -235,7 +346,7 @@ enum TaptionCodecOutputCatalog {
     }
 
     static var selectableContainers: [TaptionVideoContainer] {
-        TaptionVideoContainer.allCases.filter { $0 != .unknown }
+        [.mp4, .mov]
     }
 
     static func implementationState(
@@ -247,16 +358,7 @@ enum TaptionCodecOutputCatalog {
             return .unsupported
         }
 
-        if videoCodec == .hevc && [.mp4, .mov].contains(container) {
-            return .implemented
-        }
-
-        if SW_FFmpegCodecCommandPlanner.videoEncoderName(for: videoCodec) != nil,
-           SW_SoftwareCodecBackendRegistry.ffmpegFamilyCandidate.canWriteContainer(container) {
-            return .commandPlanReady
-        }
-
-        return .planned
+        return .implemented
     }
 
     static func makeReadinessReport() -> TaptionOutputReadinessCatalogReport {

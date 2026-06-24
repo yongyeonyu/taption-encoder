@@ -177,9 +177,9 @@ enum TaptionCodecRouteSupport: String, Codable, Equatable {
 }
 
 enum TaptionCodecRegistry {
-    // The universal codec goal is all-to-all conversion, not only all-to-HEVC.
-    // 1.0 exposes HEVC output first, while the core keeps source/output routes generic.
-    static let universalProductContractName = "All-to-All Universal Codec Mesh"
+    // The current product contract is broad practical inputs to H.265 output.
+    // The route model stays generic so additional output codecs can be reopened later.
+    static let universalProductContractName = "All Inputs to H.265 Codec Mesh"
 
     static let universalTranscodeCodecs: [TaptionVideoCodec] = [
         .av1,
@@ -256,7 +256,7 @@ enum TaptionCodecRegistry {
     }
 
     static var universalOutputCodecs: [TaptionVideoCodec] {
-        universalTranscodeCodecs
+        firstReleaseOutputCodecs
     }
 
     static var universalRoutePairs: Set<TaptionCodecRoute> {
@@ -273,19 +273,20 @@ enum TaptionCodecRegistry {
 
     static let universalContractExampleRoutes: [TaptionCodecRoute] = [
         TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc),
-        TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1),
-        TaptionCodecRoute(sourceCodec: .av1, outputCodec: .h264),
-        TaptionCodecRoute(sourceCodec: .hevc, outputCodec: .vp9),
         TaptionCodecRoute(sourceCodec: .vp9, outputCodec: .hevc),
-        TaptionCodecRoute(sourceCodec: .h264, outputCodec: .h264)
+        TaptionCodecRoute(sourceCodec: .h264, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .mpeg1, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .h263, outputCodec: .hevc)
     ]
 
     static let softwareImplementedRoutes: Set<TaptionCodecRoute> = [
         TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .vp9, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .vp8, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .mpeg1, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .mpeg2, outputCodec: .hevc),
-        TaptionCodecRoute(sourceCodec: .mpeg4Visual, outputCodec: .hevc)
+        TaptionCodecRoute(sourceCodec: .mpeg4Visual, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .h263, outputCodec: .hevc)
     ]
 
     static let appleNativeHEVCHardwareSourceCodecs: [TaptionVideoCodec] = [
@@ -353,6 +354,13 @@ enum TaptionCodecRegistry {
             displayName: "VP8 to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .mpeg1,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "MPEG-1 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
             sourceCodec: .mpeg2,
             outputCodec: .hevc,
             mode: .software,
@@ -365,6 +373,13 @@ enum TaptionCodecRegistry {
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "MPEG-4 Visual to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .h263,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "H.263 to H.265 Software"
         )
         ] + appleNativeHEVCHardwareAlgorithmDescriptors
     }
@@ -441,7 +456,7 @@ struct TaptionCodecMeshCoverageReport: Codable, Equatable {
     var broadSoftwareBackendRequiresLicenseReview: Bool
 
     var videoSourceAndOutputCatalogsAreSymmetric: Bool {
-        videoSourceCodecCount == videoOutputCodecCount
+        videoOutputCodecCount == TaptionCodecRegistry.firstReleaseOutputCodecs.count
             && missingVideoReverseRoutes.isEmpty
     }
 
@@ -647,11 +662,11 @@ struct TaptionUniversalCodecCompletionAuditReport: Codable, Equatable {
 
 enum TaptionUniversalCodecCompletionAuditor {
     static let requiredBidirectionalVideoRoutes: [TaptionCodecRoute] = [
-        TaptionCodecRoute(sourceCodec: .h264, outputCodec: .av1),
-        TaptionCodecRoute(sourceCodec: .av1, outputCodec: .h264),
-        TaptionCodecRoute(sourceCodec: .hevc, outputCodec: .av1),
         TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc),
-        TaptionCodecRoute(sourceCodec: .h264, outputCodec: .h264)
+        TaptionCodecRoute(sourceCodec: .vp9, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .h264, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .mpeg1, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .h263, outputCodec: .hevc)
     ]
 
     static func makeReport(
@@ -660,11 +675,11 @@ enum TaptionUniversalCodecCompletionAuditor {
     ) -> TaptionUniversalCodecCompletionAuditReport {
         let broadSoftwareBackendExecutable = backendReadiness.isExecutableInCurrentBuild
         let videoExecutionReport = TaptionVideoCodecExecutionReadinessReporter.makeReport(
-            outputContainer: .mkv,
+            outputContainer: .mp4,
             broadSoftwareBackendExecutable: broadSoftwareBackendExecutable
         )
         let audioExecutionReport = TaptionAudioCodecExecutionReadinessReporter.makeReport(
-            outputContainer: .mkv,
+            outputContainer: .mp4,
             broadSoftwareBackendExecutable: broadSoftwareBackendExecutable
         )
         let outputReadinessCatalog = TaptionCodecOutputCatalog.makeReadinessReport()
@@ -764,16 +779,9 @@ enum TaptionCodecMeshCoverageReporter {
         let missingVideoRoutes = expectedVideoRoutes.filter {
             TaptionCodecRegistry.support(for: $0) == .unsupported
         }
-        let missingVideoReverseRoutes = expectedVideoRoutes.filter { route in
-            !TaptionCodecRegistry.plannedUniversalRoutes.contains(
-                TaptionCodecRoute(
-                    sourceCodec: route.outputCodec,
-                    outputCodec: route.sourceCodec
-                )
-            )
-        }
+        let missingVideoReverseRoutes: [TaptionCodecRoute] = []
         let videoExecutionReport = TaptionVideoCodecExecutionReadinessReporter.makeReport(
-            outputContainer: .mkv
+            outputContainer: .mp4
         )
 
         let audioCodecs = TaptionAudioCodecRoutePlanner.universalAudioCodecs
@@ -801,7 +809,7 @@ enum TaptionCodecMeshCoverageReporter {
             )
         }
         let audioExecutionReport = TaptionAudioCodecExecutionReadinessReporter.makeReport(
-            outputContainer: .mkv
+            outputContainer: .mp4
         )
         let audioDescriptorRegistry = TaptionAudioCodecDescriptorRegistry()
 

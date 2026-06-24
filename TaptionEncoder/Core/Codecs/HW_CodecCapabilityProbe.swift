@@ -24,9 +24,11 @@ struct TaptionCodecHardwareCapability: Codable, Equatable, Identifiable {
     }
 
     var currentBuildInputAvailability: TaptionLaunchInputSupportAvailability? {
-        TaptionLaunchSupportCatalog.supportedInputVideoCodecs
-            .first { $0.codec == videoCodec }?
-            .availability
+        TaptionLaunchSupportCatalog.inputAvailability(for: videoCodec)
+    }
+
+    var isInputPlannedByRoadmap: Bool {
+        TaptionLaunchSupportCatalog.isPlannedInputVideoCodec(videoCodec)
     }
 
     var isInputSupportedByCurrentBuildOnInstalledDevice: Bool {
@@ -41,7 +43,8 @@ struct TaptionCodecHardwareCapability: Codable, Equatable, Identifiable {
     }
 
     var shouldHighlightInDeviceInfo: Bool {
-        isInputSupportedByCurrentBuildOnInstalledDevice || isSupportedOnInstalledDevice
+        isInputSupportedByCurrentBuildOnInstalledDevice
+            || isSupportedOnInstalledDevice
     }
 }
 

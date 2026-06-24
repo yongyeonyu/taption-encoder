@@ -114,10 +114,10 @@ Current output:
 - Static model identifier rows: 93.
 - Total simulation profiles after adding model identifiers: 112.
 - Source codecs: 63.
-- Output codecs: 63.
-- Routes per profile: 3,969.
-- Total route rows: 444,528.
-- Output file rows including header: 444,529.
+- Output codecs: 1 (`hevc`).
+- Routes per profile: 63.
+- Total route rows: 7,056.
+- Output file rows including header: 7,057.
 
 Static model coverage report:
 
@@ -131,7 +131,7 @@ Static model coverage report:
 
 The simulator fails if:
 
-- Any planned source/output pair is missing.
+- Any planned source-to-H.265 pair is missing.
 - Any implemented route reports `Planned` or `Unsupported`.
 - Any implemented route with both HW decode and HW encode support fails to prefer `HW`.
 

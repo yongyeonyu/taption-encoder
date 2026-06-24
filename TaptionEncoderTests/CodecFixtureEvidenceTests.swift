@@ -269,7 +269,7 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         }
     }
 
-    func testGeneratedVideoFixturesCanBuildAllToAllPlannableOutputCommandPlans() throws {
+    func testGeneratedVideoFixturesCanBuildH265MP4CommandPlans() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -284,37 +284,7 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         let sourceCodecs = Set(rows.map(\.videoCodec))
 
         XCTAssertGreaterThanOrEqual(rows.count, 90)
-        XCTAssertTrue(outputCodecs.contains(.av1))
-        XCTAssertTrue(outputCodecs.contains(.h264))
-        XCTAssertTrue(outputCodecs.contains(.hevc))
-        XCTAssertTrue(outputCodecs.contains(.vp9))
-        XCTAssertTrue(outputCodecs.contains(.proRes))
-        XCTAssertTrue(outputCodecs.contains(.ffv1))
-        XCTAssertTrue(outputCodecs.contains(.huffYUV))
-        XCTAssertTrue(outputCodecs.contains(.utVideo))
-        XCTAssertTrue(outputCodecs.contains(.magicYUV))
-        XCTAssertTrue(outputCodecs.contains(.cineForm))
-        XCTAssertTrue(outputCodecs.contains(.dnxhd))
-        XCTAssertTrue(outputCodecs.contains(.pngVideo))
-        XCTAssertTrue(outputCodecs.contains(.r10k))
-        XCTAssertTrue(outputCodecs.contains(.v210))
-        XCTAssertTrue(outputCodecs.contains(.r210))
-        XCTAssertTrue(outputCodecs.contains(.v410))
-        XCTAssertTrue(outputCodecs.contains(.y41p))
-        XCTAssertTrue(outputCodecs.contains(.microsoftRLE))
-        XCTAssertTrue(outputCodecs.contains(.quickTimeGraphics))
-        XCTAssertTrue(outputCodecs.contains(.v308))
-        XCTAssertTrue(outputCodecs.contains(.v408))
-        XCTAssertTrue(outputCodecs.contains(.yuv4))
-        XCTAssertTrue(outputCodecs.contains(.flashVideo))
-        XCTAssertTrue(outputCodecs.contains(.microsoftMPEG4V2))
-        XCTAssertTrue(outputCodecs.contains(.microsoftMPEG4V3))
-        XCTAssertTrue(outputCodecs.contains(.quickTimeVideo))
-        XCTAssertTrue(outputCodecs.contains(.realVideo1))
-        XCTAssertTrue(outputCodecs.contains(.jpeg2000))
-        XCTAssertTrue(outputCodecs.contains(.jpegLS))
-        XCTAssertTrue(outputCodecs.contains(.losslessJPEG))
-        XCTAssertTrue(outputCodecs.contains(.rawVideo))
+        XCTAssertEqual(outputCodecs, [.hevc])
 
         var plannedRoutes = Set<TaptionCodecRoute>()
         var allJobs: [TaptionCodecFixtureExecutionJob] = []
@@ -324,14 +294,14 @@ final class CodecFixtureEvidenceTests: XCTestCase {
                 fixtureDirectoryURL: fixtureDirectoryURL,
                 outputDirectoryURL: outputDirectoryURL,
                 outputCodec: outputCodec,
-                outputContainer: .mkv
+                outputContainer: .mp4
             )
             allJobs += jobs
 
             XCTAssertEqual(jobs.count, rows.count, outputCodec.rawValue)
             XCTAssertTrue(jobs.allSatisfy { $0.kind == .videoCodecTranscode }, outputCodec.rawValue)
             XCTAssertTrue(jobs.allSatisfy { $0.outputVideoCodec == outputCodec }, outputCodec.rawValue)
-            XCTAssertTrue(jobs.allSatisfy { $0.outputURL.pathExtension == TaptionVideoContainer.mkv.defaultFileExtension }, outputCodec.rawValue)
+            XCTAssertTrue(jobs.allSatisfy { $0.outputURL.pathExtension == TaptionVideoContainer.mp4.defaultFileExtension }, outputCodec.rawValue)
 
             for job in jobs {
                 let sourceCodec = try XCTUnwrap(job.sourceVideoCodec, job.fixtureName)
@@ -366,11 +336,11 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         })
         XCTAssertEqual(plannedRoutes, expectedRoutes)
 
-        let summary = TaptionCodecFixtureEvidence.verifyVideoFixtureAllToAllCommandPlanCoverage(
+        let summary = TaptionCodecFixtureEvidence.verifyVideoFixtureInputToHEVCCommandPlanCoverage(
             jobs: allJobs,
             sourceRows: rows,
             outputCodecs: outputCodecs,
-            outputContainer: .mkv
+            outputContainer: .mp4
         )
         XCTAssertTrue(summary.isPassing, summary.failures.joined(separator: "\n"))
         XCTAssertTrue(summary.isComplete)
@@ -595,7 +565,7 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         XCTAssertEqual(plannedSourceCodecs, SW_AudioCodecSupportCatalog.fixtureCoveredCodecs)
     }
 
-    func testGeneratedAudioFixturesCanBuildAllToAllPlannableOutputCommandPlans() throws {
+    func testGeneratedAudioFixturesCanBuildPlannableMP4CommandPlans() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -633,14 +603,14 @@ final class CodecFixtureEvidenceTests: XCTestCase {
                 fixtureDirectoryURL: fixtureDirectoryURL,
                 outputDirectoryURL: outputDirectoryURL,
                 outputCodec: outputCodec,
-                outputContainer: .mkv
+                outputContainer: .mp4
             )
             allJobs += jobs
 
             XCTAssertEqual(jobs.count, generatedRows.count, outputCodec.rawValue)
             XCTAssertTrue(jobs.allSatisfy { $0.kind == .audioCodecTranscode }, outputCodec.rawValue)
             XCTAssertTrue(jobs.allSatisfy { $0.outputAudioCodec == outputCodec }, outputCodec.rawValue)
-            XCTAssertTrue(jobs.allSatisfy { $0.outputURL.pathExtension == TaptionVideoContainer.mkv.defaultFileExtension }, outputCodec.rawValue)
+            XCTAssertTrue(jobs.allSatisfy { $0.outputURL.pathExtension == TaptionVideoContainer.mp4.defaultFileExtension }, outputCodec.rawValue)
 
             for job in jobs {
                 let sourceCodec = try XCTUnwrap(job.sourceAudioCodec, job.fixtureName)
@@ -653,6 +623,10 @@ final class CodecFixtureEvidenceTests: XCTestCase {
                 XCTAssertTrue(job.commandPlan.arguments.contains("0:a:0?"), job.fixtureName)
                 XCTAssertTrue(job.commandPlan.arguments.contains("-c:a"), job.fixtureName)
                 let expectedEncoderArgument = sourceCodec == outputCodec
+                    && HW_AudioCodecCapabilityCatalog.canCopyWithoutTranscode(
+                        codec: sourceCodec,
+                        into: .mp4
+                    )
                     ? "copy"
                     : try XCTUnwrap(SW_FFmpegCodecCommandPlanner.audioEncoderName(for: outputCodec))
                 XCTAssertTrue(
@@ -669,11 +643,11 @@ final class CodecFixtureEvidenceTests: XCTestCase {
         })
         XCTAssertEqual(plannedRoutes, expectedRoutes)
 
-        let summary = TaptionCodecFixtureEvidence.verifyAudioFixtureAllToAllCommandPlanCoverage(
+        let summary = TaptionCodecFixtureEvidence.verifyAudioFixturePlannableCommandPlanCoverage(
             jobs: allJobs,
             sourceRows: rows,
             outputCodecs: outputCodecs,
-            outputContainer: .mkv
+            outputContainer: .mp4
         )
         XCTAssertTrue(summary.isPassing, summary.failures.joined(separator: "\n"))
         XCTAssertTrue(summary.isComplete)

@@ -71,7 +71,7 @@ struct TaptionCodecFixtureExecutionEvidenceSummary: Codable, Equatable {
     }
 }
 
-struct TaptionVideoFixtureAllToAllCommandPlanCoverageSummary: Codable, Equatable {
+struct TaptionVideoFixtureInputToHEVCCommandPlanCoverageSummary: Codable, Equatable {
     var sourceFixtureCount: Int
     var sourceCodecCount: Int
     var outputCodecCount: Int
@@ -96,7 +96,7 @@ struct TaptionVideoFixtureAllToAllCommandPlanCoverageSummary: Codable, Equatable
     }
 }
 
-struct TaptionAudioFixtureAllToAllCommandPlanCoverageSummary: Codable, Equatable {
+struct TaptionAudioFixturePlannableCommandPlanCoverageSummary: Codable, Equatable {
     var sourceFixtureCount: Int
     var sourceCodecCount: Int
     var outputCodecCount: Int
@@ -822,12 +822,12 @@ enum TaptionCodecFixtureEvidence {
         )
     }
 
-    static func verifyVideoFixtureAllToAllCommandPlanCoverage(
+    static func verifyVideoFixtureInputToHEVCCommandPlanCoverage(
         jobs: [TaptionCodecFixtureExecutionJob],
         sourceRows: [TaptionVideoFixtureManifestRow],
         outputCodecs: [TaptionVideoCodec] = SW_FFmpegCodecCommandPlanner.plannableVideoOutputCodecs,
-        outputContainer: TaptionVideoContainer = .mkv
-    ) -> TaptionVideoFixtureAllToAllCommandPlanCoverageSummary {
+        outputContainer: TaptionVideoContainer = .mp4
+    ) -> TaptionVideoFixtureInputToHEVCCommandPlanCoverageSummary {
         let sourceCodecs = Set(sourceRows.map(\.videoCodec))
         let expectedRoutes = Set(sourceCodecs.flatMap { sourceCodec in
             outputCodecs.map { outputCodec in
@@ -853,21 +853,21 @@ enum TaptionCodecFixtureEvidence {
         }
         if jobs.count != sourceRows.count * outputCodecs.count {
             failures.append(
-                "Expected \(sourceRows.count * outputCodecs.count) video all-to-all command-plan jobs, got \(jobs.count)."
+                "Expected \(sourceRows.count * outputCodecs.count) video input-to-H.265 command-plan jobs, got \(jobs.count)."
             )
         }
         if !duplicateJobIDs.isEmpty {
-            failures.append("Video all-to-all command-plan jobs have duplicate IDs: \(duplicateJobIDs.joined(separator: ", "))")
+            failures.append("Video input-to-H.265 command-plan jobs have duplicate IDs: \(duplicateJobIDs.joined(separator: ", "))")
         }
         if !missingRoutes.isEmpty {
             failures.append(
-                "Video all-to-all command plans are missing routes: \(sortRoutes(missingRoutes).map(\.displayName).joined(separator: ", "))"
+                "Video input-to-H.265 command plans are missing routes: \(sortRoutes(missingRoutes).map(\.displayName).joined(separator: ", "))"
             )
         }
 
         for job in jobs {
             if job.kind != .videoCodecTranscode {
-                failures.append("\(job.id) is not a video all-to-all transcode job.")
+                failures.append("\(job.id) is not a video input-to-H.265 transcode job.")
             }
             guard let outputCodec = job.outputVideoCodec else {
                 failures.append("\(job.id) has no output video codec.")
@@ -889,7 +889,7 @@ enum TaptionCodecFixtureEvidence {
             }
         }
 
-        return TaptionVideoFixtureAllToAllCommandPlanCoverageSummary(
+        return TaptionVideoFixtureInputToHEVCCommandPlanCoverageSummary(
             sourceFixtureCount: sourceRows.count,
             sourceCodecCount: sourceCodecs.count,
             outputCodecCount: outputCodecs.count,
@@ -904,12 +904,12 @@ enum TaptionCodecFixtureEvidence {
         )
     }
 
-    static func verifyAudioFixtureAllToAllCommandPlanCoverage(
+    static func verifyAudioFixturePlannableCommandPlanCoverage(
         jobs: [TaptionCodecFixtureExecutionJob],
         sourceRows: [TaptionAudioFixtureGenerationRow],
         outputCodecs: [TaptionAudioCodec] = SW_FFmpegCodecCommandPlanner.plannableAudioOutputCodecs,
-        outputContainer: TaptionVideoContainer = .mkv
-    ) -> TaptionAudioFixtureAllToAllCommandPlanCoverageSummary {
+        outputContainer: TaptionVideoContainer = .mp4
+    ) -> TaptionAudioFixturePlannableCommandPlanCoverageSummary {
         let generatedRows = sourceRows.filter { $0.status == .pass }
         let sourceCodecs = Set(generatedRows.map(\.targetAudioCodec))
         let expectedRoutes = Set(sourceCodecs.flatMap { sourceCodec in
@@ -936,21 +936,21 @@ enum TaptionCodecFixtureEvidence {
         }
         if jobs.count != generatedRows.count * outputCodecs.count {
             failures.append(
-                "Expected \(generatedRows.count * outputCodecs.count) audio all-to-all command-plan jobs, got \(jobs.count)."
+                "Expected \(generatedRows.count * outputCodecs.count) audio command-plan jobs, got \(jobs.count)."
             )
         }
         if !duplicateJobIDs.isEmpty {
-            failures.append("Audio all-to-all command-plan jobs have duplicate IDs: \(duplicateJobIDs.joined(separator: ", "))")
+            failures.append("Audio command-plan jobs have duplicate IDs: \(duplicateJobIDs.joined(separator: ", "))")
         }
         if !missingRoutes.isEmpty {
             failures.append(
-                "Audio all-to-all command plans are missing routes: \(sortAudioRoutes(missingRoutes).map(\.displayName).joined(separator: ", "))"
+                "Audio command plans are missing routes: \(sortAudioRoutes(missingRoutes).map(\.displayName).joined(separator: ", "))"
             )
         }
 
         for job in jobs {
             if job.kind != .audioCodecTranscode {
-                failures.append("\(job.id) is not an audio all-to-all transcode job.")
+                failures.append("\(job.id) is not an audio transcode job.")
             }
             guard let sourceCodec = job.sourceAudioCodec,
                   let outputCodec = job.outputAudioCodec else {
@@ -965,6 +965,10 @@ enum TaptionCodecFixtureEvidence {
                 failures.append("\(job.id) output container expected \(outputContainer.defaultFileExtension), got \(job.outputURL.pathExtension).")
             }
             let expectedEncoder = sourceCodec == outputCodec
+                && HW_AudioCodecCapabilityCatalog.canCopyWithoutTranscode(
+                    codec: sourceCodec,
+                    into: outputContainer
+                )
                 ? "copy"
                 : SW_FFmpegCodecCommandPlanner.audioEncoderName(for: outputCodec)
             guard let expectedEncoder else {
@@ -976,7 +980,7 @@ enum TaptionCodecFixtureEvidence {
             }
         }
 
-        return TaptionAudioFixtureAllToAllCommandPlanCoverageSummary(
+        return TaptionAudioFixturePlannableCommandPlanCoverageSummary(
             sourceFixtureCount: generatedRows.count,
             sourceCodecCount: sourceCodecs.count,
             outputCodecCount: outputCodecs.count,
