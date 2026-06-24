@@ -135,6 +135,21 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(selection.encodeBackend, .customSoftware)
     }
 
+    func testWMVToHEVCUsesSoftwareWhenNoHardwareIsAvailable() {
+        let selection = selectRoute(
+            sourceCodec: .wmv,
+            outputCodec: .hevc,
+            profile: .softwareOnly
+        )
+
+        XCTAssertEqual(selection.support, .implemented)
+        XCTAssertTrue(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .software)
+        XCTAssertEqual(selection.selectedMode, .software)
+        XCTAssertEqual(selection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(selection.encodeBackend, .customSoftware)
+    }
+
     func testDolbyVisionHEVCToHEVCUsesHardwareWhenHardwarePathIsAvailable() {
         let selection = selectRoute(
             sourceCodec: .dolbyVisionHEVC,
@@ -725,6 +740,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         let h263Descriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: h263Route)
         let motionJPEGRoute = TaptionCodecRoute(sourceCodec: .motionJPEG, outputCodec: .hevc)
         let motionJPEGDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: motionJPEGRoute)
+        let wmvRoute = TaptionCodecRoute(sourceCodec: .wmv, outputCodec: .hevc)
+        let wmvDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: wmvRoute)
 
         XCTAssertEqual(descriptors.count, 2)
         XCTAssertTrue(modes.contains(.hardware))
@@ -753,6 +770,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(motionJPEGDescriptors.count, 1)
         XCTAssertEqual(motionJPEGDescriptors.first?.mode, .software)
         XCTAssertEqual(motionJPEGDescriptors.first?.backend, .softwareVLCDecoder)
+        XCTAssertEqual(wmvDescriptors.count, 1)
+        XCTAssertEqual(wmvDescriptors.first?.mode, .software)
+        XCTAssertEqual(wmvDescriptors.first?.backend, .softwareVLCDecoder)
     }
 
     func testLiveTranscodingRegistryPrefersHardwareForHardwareExecution() {
@@ -1834,6 +1854,7 @@ final class CodecRoutePlannerTests: XCTestCase {
                 TaptionLaunchInputVideoSupportItem(codec: .mpeg4Visual, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .h263, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .motionJPEG, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .wmv, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableOnSupportedHardware),
                 TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableOnSupportedHardware),
                 TaptionLaunchInputVideoSupportItem(codec: .proRes, availability: .availableOnSupportedHardware)
@@ -1841,19 +1862,19 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputVideoSummary,
-            "AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, Motion JPEG, H.264 / AVC, H.265 / HEVC, Apple ProRes"
+            "AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, Motion JPEG, Windows Media Video, H.264 / AVC, H.265 / HEVC, Apple ProRes"
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainers,
-            [.mp4, .mov, .m4v, .avi, .webm, .mxf, .mpegProgramStream, .threeGP, .threeGPP2, .rawElementaryStream]
+            [.mp4, .mov, .m4v, .avi, .webm, .mxf, .mpegProgramStream, .threeGP, .threeGPP2, .asf, .wmv, .rawElementaryStream]
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainerSummary,
-            "MP4, MOV, QT, M4V, AVI, DIVX, WEBM, MXF, MPG, MPEG, MPE, VOB, MOD, DAT, 3GP, 3GPP, 3G2, 3GPP2, H264, H265, HEVC, 264, 265, IVF, OBU, Y4M, AV1, H263, M1V, M2V, VC1"
+            "MP4, MOV, QT, M4V, AVI, DIVX, WEBM, MXF, MPG, MPEG, MPE, VOB, MOD, DAT, 3GP, 3GPP, 3G2, 3GPP2, ASF, DVR-MS, WMV, H264, H265, HEVC, 264, 265, IVF, OBU, Y4M, AV1, H263, M1V, M2V, VC1"
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.executableNowInputVideoCodecs,
-            [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .motionJPEG]
+            [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .motionJPEG, .wmv]
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.hardwareGatedInputVideoCodecs,
@@ -1868,7 +1889,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.makeInputReadinessReport(),
             TaptionLaunchInputReadinessReport(
-                executableNowVideoCodecs: [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .motionJPEG],
+                executableNowVideoCodecs: [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .motionJPEG, .wmv],
                 hardwareGatedVideoCodecs: [.h264, .hevc, .proRes],
                 plannedVideoCodecs: TaptionLaunchSupportCatalog.plannedInputVideoCodecs,
                 inputContainers: TaptionLaunchSupportCatalog.supportedInputContainers,
@@ -1887,7 +1908,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainerNote,
-            "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as WebM, AVI, MXF, MPEG program streams, 3GP, 3G2, and raw elementary streams."
+            "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as WebM, AVI, MXF, MPEG program streams, 3GP, 3G2, ASF/WMV, and raw elementary streams."
         )
         XCTAssertTrue(
             TaptionLaunchSupportCatalog.plannedInputVideoNote.contains("roadmap input codecs")
@@ -1950,6 +1971,14 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.diagnoseInput(container: .avi, videoCodec: .motionJPEG),
+            TaptionLaunchInputSupportDiagnosis(
+                state: .supported,
+                title: "Input Supported",
+                detail: "The current launch build can inspect this input and encode it to H.265 MP4 or MOV."
+            )
+        )
+        XCTAssertEqual(
+            TaptionLaunchSupportCatalog.diagnoseInput(container: .wmv, videoCodec: .wmv),
             TaptionLaunchInputSupportDiagnosis(
                 state: .supported,
                 title: "Input Supported",
@@ -2363,7 +2392,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         let message = TaptionVideoCoreError.unsupportedSourceCodec(.h264).localizedDescription
 
         XCTAssertTrue(message.contains("H.265 / MP4 or MOV output"))
-        XCTAssertTrue(message.contains("AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, and Motion JPEG with software fallback"))
+        XCTAssertTrue(message.contains("AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, Motion JPEG, and Windows Media Video with software fallback"))
         XCTAssertTrue(message.contains("H.264, H.265, or ProRes"))
         XCTAssertTrue(message.contains("H.264 / AVC"))
         XCTAssertTrue(message.contains("universal codec roadmap"))
@@ -3095,6 +3124,14 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(motionJPEGItem.readiness, .implementedInCurrentBuild)
         XCTAssertTrue(motionJPEGItem.isRunnableInCurrentBuild)
         XCTAssertTrue(motionJPEGItem.hasCommandPlan)
+
+        let wmvItem = TaptionVideoCodecExecutionReadinessReporter.item(
+            for: TaptionCodecRoute(sourceCodec: .wmv, outputCodec: .hevc),
+            outputContainer: .mp4
+        )
+        XCTAssertEqual(wmvItem.readiness, .implementedInCurrentBuild)
+        XCTAssertTrue(wmvItem.isRunnableInCurrentBuild)
+        XCTAssertTrue(wmvItem.hasCommandPlan)
 
         let commandOnlyItem = TaptionVideoCodecExecutionReadinessReporter.item(
             for: TaptionCodecRoute(sourceCodec: .h261, outputCodec: .hevc),

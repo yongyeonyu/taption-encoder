@@ -287,7 +287,8 @@ enum TaptionCodecRegistry {
         TaptionCodecRoute(sourceCodec: .mpeg2, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .mpeg4Visual, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .h263, outputCodec: .hevc),
-        TaptionCodecRoute(sourceCodec: .motionJPEG, outputCodec: .hevc)
+        TaptionCodecRoute(sourceCodec: .motionJPEG, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .wmv, outputCodec: .hevc)
     ]
 
     static let appleNativeHEVCHardwareSourceCodecs: [TaptionVideoCodec] = [
@@ -388,6 +389,13 @@ enum TaptionCodecRegistry {
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "Motion JPEG to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .wmv,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Windows Media Video to H.265 Software"
         )
         ] + appleNativeHEVCHardwareAlgorithmDescriptors
     }

@@ -203,7 +203,7 @@ extension TaptionVideoCoreError: LocalizedError {
         case .noVideoTrack:
             return "This file does not contain a readable video track."
         case .unsupportedSourceCodec(let codec):
-            return "This build can run H.265 / MP4 or MOV output for AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, and Motion JPEG with software fallback, and for H.264, H.265, or ProRes when this device has the required hardware path. \(codec.displayName) remains part of the universal codec roadmap, but this route is not executable on the selected device/output path yet."
+            return "This build can run H.265 / MP4 or MOV output for AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, Motion JPEG, and Windows Media Video with software fallback, and for H.264, H.265, or ProRes when this device has the required hardware path. \(codec.displayName) remains part of the universal codec roadmap, but this route is not executable on the selected device/output path yet."
         case .compatibleHEVCPresetUnavailable:
             return "This device cannot create a compatible H.265 export session for this file."
         case .exportFailed(let message):

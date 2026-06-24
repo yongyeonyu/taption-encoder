@@ -356,6 +356,28 @@ enum SW_MotionJPEGHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
     }
 }
 
+enum SW_WMVHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .wmv,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "Windows Media Video to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .wmv)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "Windows Media Video",
+            progress: progress
+        )
+    }
+}
+
 extension SW_AV1HEVCTranscoder {
     static func validate(
         request: TaptionCodecTranscodeRequest,

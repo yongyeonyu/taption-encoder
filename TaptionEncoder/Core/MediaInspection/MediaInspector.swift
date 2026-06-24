@@ -150,6 +150,8 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return .proRes
         case "aprn", "aprh":
             return .proResRaw
+        case "wmv1", "wmv2", "wmv3":
+            return .wmv
         default:
             return .unknown
         }
@@ -373,6 +375,8 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             return .proRes
         case "aprn", "aprh":
             return .proResRaw
+        case "wmv1", "wmv2", "wmv3":
+            return .wmv
         default:
             return .unknown
         }
