@@ -37,6 +37,8 @@ struct TaptionCodecTranscodingRegistry: @unchecked Sendable {
         var algorithms = [
             TaptionCodecTranscodingAlgorithmEntry(HW_AV1HEVCCodecAlgorithm.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_AV1HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_H264HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_HEVCHEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_VP9HEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_VP8HEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_MPEG1HEVCTranscoder.self),

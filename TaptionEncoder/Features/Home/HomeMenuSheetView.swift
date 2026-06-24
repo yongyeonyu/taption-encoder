@@ -58,6 +58,7 @@ struct HomeMenuSheetView: View {
 
 private struct HelpSheetContentView: View {
     private let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "00.00.00"
+    private let deviceReport = HW_CodecCapabilityProbe.makeReport()
 
     private var videoCodecEntries: [HelpCodecEntry] {
         let entries = TaptionCodecRegistry.universalSourceCodecs.map { codec in
@@ -130,13 +131,19 @@ private struct HelpSheetContentView: View {
     }
 
     private func videoEntryState(for codec: TaptionVideoCodec) -> HelpCodecEntryState {
-        switch TaptionLaunchSupportCatalog.inputAvailability(for: codec) {
-        case .availableNow:
-            return .now
-        case .availableOnSupportedHardware:
-            return .hardware
-        case .none:
-            return TaptionLaunchSupportCatalog.isPlannedInputVideoCodec(codec) ? .planned : .unsupported
+        switch deviceReport.runtimeAvailability(for: codec) {
+        case .nowHardware:
+            return .nowHardware
+        case .nowSoftware:
+            return .nowSoftware
+        case .nowMixed:
+            return .nowMixed
+        case .needsHardware:
+            return .needsHardware
+        case .planned:
+            return .planned
+        case .unsupported:
+            return .unsupported
         }
     }
 }
@@ -300,8 +307,10 @@ private struct DeviceInfoSheetContentView: View {
                 SheetInfoCard(
                     title: "Input Scope",
                     rows: [
-                        ("Now", "\(TaptionLaunchSupportCatalog.executableNowInputVideoCodecs.count) video codecs"),
-                        ("HW", "\(TaptionLaunchSupportCatalog.hardwareGatedInputVideoCodecs.count) hardware-gated codecs"),
+                        ("Now(HW)", "\(runtimeReadiness.nowHardwareVideoCodecs.count) video codecs"),
+                        ("Now(SW)", "\(runtimeReadiness.nowSoftwareVideoCodecs.count) video codecs"),
+                        ("Now(HW/SW)", "\(runtimeReadiness.nowMixedVideoCodecs.count) video codecs"),
+                        ("Needs HW", "\(runtimeReadiness.needsHardwareVideoCodecs.count) hardware-gated codecs"),
                         ("Plan", "\(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.count) roadmap codecs"),
                         ("Out", "H.265 / \(TaptionLaunchSupportCatalog.supportedOutputContainerSummary)")
                     ]
@@ -337,7 +346,7 @@ private struct DeviceInfoSheetContentView: View {
                         .font(.headline)
                         .foregroundStyle(.white)
 
-                    Text("Now, hardware-gated, and roadmap-only input states are evaluated separately for this installed device.")
+                    Text("Now(HW), Now(SW), mixed, hardware-gated, and roadmap-only input states are evaluated for this installed device.")
                         .font(.caption)
                         .foregroundStyle(TaptionTheme.mutedText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -349,7 +358,11 @@ private struct DeviceInfoSheetContentView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     } else {
                         ForEach(allVideoCapabilities) { capability in
-                            DeviceVideoCodecCapabilityRow(capability: capability)
+                            DeviceVideoCodecCapabilityRow(
+                                capability: capability,
+                                runtimeAvailability: report.runtimeAvailability(for: capability.videoCodec),
+                                routeSelection: report.routeSelection(for: capability.videoCodec)
+                            )
                         }
                     }
                 }
@@ -401,15 +414,37 @@ private struct DeviceInfoSheetContentView: View {
 
     private var allVideoCapabilities: [TaptionCodecHardwareCapability] {
         report.videoCapabilities.sorted { lhs, rhs in
-            if lhs.isInputSupportedByCurrentBuildOnInstalledDevice != rhs.isInputSupportedByCurrentBuildOnInstalledDevice {
-                return lhs.isInputSupportedByCurrentBuildOnInstalledDevice
-                    && !rhs.isInputSupportedByCurrentBuildOnInstalledDevice
+            let lhsPriority = videoSortPriority(lhs)
+            let rhsPriority = videoSortPriority(rhs)
+            if lhsPriority != rhsPriority {
+                return lhsPriority < rhsPriority
             }
             if lhs.isSupportedOnInstalledDevice != rhs.isSupportedOnInstalledDevice {
                 return lhs.isSupportedOnInstalledDevice
                     && !rhs.isSupportedOnInstalledDevice
             }
             return lhs.videoCodec.displayName < rhs.videoCodec.displayName
+        }
+    }
+
+    private var runtimeReadiness: TaptionLaunchInputRuntimeReadinessReport {
+        report.runtimeInputReadinessReport
+    }
+
+    private func videoSortPriority(_ capability: TaptionCodecHardwareCapability) -> Int {
+        switch report.runtimeAvailability(for: capability.videoCodec) {
+        case .nowHardware:
+            return 0
+        case .nowMixed:
+            return 1
+        case .nowSoftware:
+            return 2
+        case .needsHardware:
+            return 3
+        case .planned:
+            return 4
+        case .unsupported:
+            return 5
         }
     }
 
@@ -477,6 +512,8 @@ private struct DeviceInfoSheetContentView: View {
 
 private struct DeviceVideoCodecCapabilityRow: View {
     var capability: TaptionCodecHardwareCapability
+    var runtimeAvailability: TaptionLaunchInputRuntimeAvailability
+    var routeSelection: TaptionCodecRouteSelection
 
     var body: some View {
         HStack(spacing: 12) {
@@ -490,7 +527,7 @@ private struct DeviceVideoCodecCapabilityRow: View {
                     CodecSupportPill(
                         label: "App",
                         text: appSupportText,
-                        isActive: capability.isInputSupportedByCurrentBuildOnInstalledDevice
+                        isActive: runtimeAvailability.isExecutableNow
                     )
                     CodecSupportPill(
                         label: "Device",
@@ -516,23 +553,19 @@ private struct DeviceVideoCodecCapabilityRow: View {
     }
 
     private var preferredPathSummary: String {
-        if capability.isInputSupportedByCurrentBuildOnInstalledDevice {
-            switch capability.currentBuildInputAvailability {
-            case .availableNow:
-                return "Current app input: Supported now"
-            case .availableOnSupportedHardware:
-                return "Current app input: Supported by this device"
-            case .none:
-                break
-            }
-        }
-
-        if capability.currentBuildInputAvailability == .availableOnSupportedHardware {
+        switch runtimeAvailability {
+        case .nowHardware:
+            return "Current app input: \(routeSelection.displayTitle). Hardware path to H.265 output."
+        case .nowSoftware:
+            return "Current app input: \(routeSelection.displayTitle). Software path to H.265 output."
+        case .nowMixed:
+            return "Current app input: \(routeSelection.displayTitle). Mixed HW/SW path to H.265 output."
+        case .needsHardware:
             return "Current app input: Needs Apple-native hardware for H.265 output on this device."
-        }
-
-        if capability.isInputPlannedByRoadmap {
+        case .planned:
             return "Roadmap input: H.265 output planned, not executable in this build."
+        case .unsupported:
+            break
         }
 
         switch (capability.hardwareDecodeSupported, capability.hardwareEncodeSupported) {
@@ -556,14 +589,7 @@ private struct DeviceVideoCodecCapabilityRow: View {
     }
 
     private var appSupportText: String {
-        switch capability.currentBuildInputAvailability {
-        case .availableNow:
-            return "Now"
-        case .availableOnSupportedHardware:
-            return capability.isInputSupportedByCurrentBuildOnInstalledDevice ? "Now" : "Needs HW"
-        case .none:
-            return capability.isInputPlannedByRoadmap ? "Planned" : "No"
-        }
+        runtimeAvailability.displayName
     }
 
     private var deviceSupportText: String {
@@ -571,15 +597,21 @@ private struct DeviceVideoCodecCapabilityRow: View {
     }
 
     private var rowBackground: Color {
-        capability.shouldHighlightInDeviceInfo ? Color.white.opacity(0.045) : Color.white.opacity(0.025)
+        runtimeAvailability.isExecutableNow || capability.shouldHighlightInDeviceInfo
+            ? Color.white.opacity(0.045)
+            : Color.white.opacity(0.025)
     }
 
     private var titleColor: Color {
-        capability.shouldHighlightInDeviceInfo ? .white : Color.white.opacity(0.42)
+        runtimeAvailability.isExecutableNow || capability.shouldHighlightInDeviceInfo
+            ? .white
+            : Color.white.opacity(0.42)
     }
 
     private var detailColor: Color {
-        capability.shouldHighlightInDeviceInfo ? Color.white.opacity(0.52) : Color.white.opacity(0.32)
+        runtimeAvailability.isExecutableNow || capability.shouldHighlightInDeviceInfo
+            ? Color.white.opacity(0.52)
+            : Color.white.opacity(0.32)
     }
 }
 
@@ -736,17 +768,26 @@ private struct CapabilityBadge: View {
 }
 
 private enum HelpCodecEntryState {
+    case nowHardware
+    case nowSoftware
+    case nowMixed
     case now
-    case hardware
+    case needsHardware
     case planned
     case unsupported
 
     var label: String {
         switch self {
+        case .nowHardware:
+            return "Now(HW)"
+        case .nowSoftware:
+            return "Now(SW)"
+        case .nowMixed:
+            return "Now(HW/SW)"
         case .now:
             return "Now"
-        case .hardware:
-            return "HW"
+        case .needsHardware:
+            return "Needs HW"
         case .planned:
             return "Planned"
         case .unsupported:
@@ -756,22 +797,28 @@ private enum HelpCodecEntryState {
 
     var priority: Int {
         switch self {
-        case .now:
+        case .nowHardware:
             return 0
-        case .hardware:
+        case .nowMixed:
             return 1
-        case .planned:
+        case .nowSoftware:
             return 2
-        case .unsupported:
+        case .now:
             return 3
+        case .needsHardware:
+            return 4
+        case .planned:
+            return 5
+        case .unsupported:
+            return 6
         }
     }
 
     var titleOpacity: Double {
         switch self {
-        case .now:
+        case .nowHardware, .nowSoftware, .nowMixed, .now:
             return 0.92
-        case .hardware:
+        case .needsHardware:
             return 0.78
         case .planned:
             return 0.46
@@ -782,9 +829,9 @@ private enum HelpCodecEntryState {
 
     var labelOpacity: Double {
         switch self {
-        case .now:
+        case .nowHardware, .nowSoftware, .nowMixed, .now:
             return 0.58
-        case .hardware:
+        case .needsHardware:
             return 0.50
         case .planned:
             return 0.34
@@ -803,7 +850,7 @@ private struct HelpCodecEntry: Identifiable {
 private struct HelpLegendCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Now rows can run in this build. HW rows need installed device hardware. Planned rows are roadmap inputs.")
+            Text("Video rows use this installed device: Now(HW) is native hardware, Now(SW) is software fallback, and Needs HW waits for Apple-native hardware.")
                 .font(.subheadline)
                 .foregroundStyle(Color.white.opacity(0.76))
                 .fixedSize(horizontal: false, vertical: true)

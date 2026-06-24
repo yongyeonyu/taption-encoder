@@ -281,6 +281,8 @@ enum TaptionCodecRegistry {
 
     static let softwareImplementedRoutes: Set<TaptionCodecRoute> = [
         TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .h264, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .hevc, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .vp9, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .vp8, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .mpeg1, outputCodec: .hevc),
@@ -340,6 +342,20 @@ enum TaptionCodecRegistry {
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "AV1 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .h264,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "H.264 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .hevc,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "H.265 to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
             sourceCodec: .vp9,

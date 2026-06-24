@@ -1,7 +1,7 @@
 import Foundation
 
 struct HW_DeviceCodecReportSnapshot: Codable, Equatable, Identifiable {
-    static let currentSchemaVersion = 7
+    static let currentSchemaVersion = 8
 
     var id: String
     var schemaVersion: Int
@@ -11,6 +11,7 @@ struct HW_DeviceCodecReportSnapshot: Codable, Equatable, Identifiable {
     var staticMatrixReconciliation: HW_DeviceCodecReportReconciliation?
     var universalCodecCompletionAudit: TaptionUniversalCodecCompletionAuditReport?
     var launchInputReadinessCatalog: TaptionLaunchInputReadinessReport?
+    var runtimeInputReadinessCatalog: TaptionLaunchInputRuntimeReadinessReport?
     var outputReadinessCatalog: TaptionOutputReadinessCatalogReport?
     var audioOutputReadinessCatalog: TaptionAudioOutputReadinessCatalogReport?
 
@@ -23,6 +24,7 @@ struct HW_DeviceCodecReportSnapshot: Codable, Equatable, Identifiable {
         staticMatrixReconciliation: HW_DeviceCodecReportReconciliation? = nil,
         universalCodecCompletionAudit: TaptionUniversalCodecCompletionAuditReport? = nil,
         launchInputReadinessCatalog: TaptionLaunchInputReadinessReport? = nil,
+        runtimeInputReadinessCatalog: TaptionLaunchInputRuntimeReadinessReport? = nil,
         outputReadinessCatalog: TaptionOutputReadinessCatalogReport? = nil,
         audioOutputReadinessCatalog: TaptionAudioOutputReadinessCatalogReport? = nil
     ) {
@@ -37,6 +39,7 @@ struct HW_DeviceCodecReportSnapshot: Codable, Equatable, Identifiable {
         self.staticMatrixReconciliation = staticMatrixReconciliation
         self.universalCodecCompletionAudit = universalCodecCompletionAudit
         self.launchInputReadinessCatalog = launchInputReadinessCatalog
+        self.runtimeInputReadinessCatalog = runtimeInputReadinessCatalog
         self.outputReadinessCatalog = outputReadinessCatalog
         self.audioOutputReadinessCatalog = audioOutputReadinessCatalog
     }
@@ -216,6 +219,7 @@ enum HW_DeviceCodecReportStore {
             staticMatrixReconciliation: HW_DeviceCodecReportReconciler.reconcile(report: report),
             universalCodecCompletionAudit: TaptionUniversalCodecCompletionAuditor.makeReport(),
             launchInputReadinessCatalog: TaptionLaunchSupportCatalog.makeInputReadinessReport(),
+            runtimeInputReadinessCatalog: report.runtimeInputReadinessReport,
             outputReadinessCatalog: TaptionCodecOutputCatalog.makeReadinessReport(),
             audioOutputReadinessCatalog: TaptionAudioCodecOutputCatalog.makeReadinessReport()
         )

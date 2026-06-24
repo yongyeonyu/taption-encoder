@@ -317,14 +317,14 @@ enum SW_SoftwareCodecBackendRegistry {
     static let vlcSoftwareDecoder = TaptionSoftwareCodecBackendProfile(
         backend: .softwareVLCDecoder,
         displayName: "SwiftVLC Video Software Decoder",
-        videoDecodeCodecs: [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .motionJPEG, .wmv],
+        videoDecodeCodecs: [.av1, .h264, .hevc, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .motionJPEG, .wmv],
         videoEncodeCodecs: [],
         audioDecodeCodecs: [],
         audioEncodeCodecs: [],
         readableContainers: [.mp4, .mov, .m4v, .mkv, .webm, .avi, .mpegProgramStream, .mxf, .threeGP, .threeGPP2, .asf, .wmv, .rawElementaryStream],
         writableContainers: [],
         requiresLicenseReview: true,
-        notes: "Current app fallback for AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, Motion JPEG, and Windows Media Video decode. Output encoding is handled by the route-specific software-to-H.265 algorithms."
+        notes: "Current app fallback for AV1, H.264, H.265, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, Motion JPEG, and Windows Media Video decode. Output encoding is handled by the route-specific software-to-H.265 algorithms."
     )
 
     static let ffmpegFamilyCandidate = TaptionSoftwareCodecBackendProfile(

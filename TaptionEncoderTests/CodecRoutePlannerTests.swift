@@ -60,6 +60,57 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(selection.encodeBackend, .appleVideoToolbox)
     }
 
+    func testH264ToHEVCUsesSoftwareEncodeOnOldestSupportedIPad() {
+        let profile = appleModelProfile("iPad7,11")
+        let selection = selectRoute(
+            sourceCodec: .h264,
+            outputCodec: .hevc,
+            profile: profile
+        )
+
+        XCTAssertTrue(profile.canHardwareDecode(.h264))
+        XCTAssertFalse(profile.canHardwareEncode(.hevc))
+        XCTAssertEqual(selection.support, .implemented)
+        XCTAssertTrue(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .mixed)
+        XCTAssertEqual(selection.selectedMode, .software)
+        XCTAssertEqual(selection.decodeBackend, .appleAVAssetExport)
+        XCTAssertEqual(selection.encodeBackend, .customSoftware)
+    }
+
+    func testHEVCToHEVCUsesSoftwareFallbackOnOldestSupportedIPad() {
+        let profile = appleModelProfile("iPad7,11")
+        let selection = selectRoute(
+            sourceCodec: .hevc,
+            outputCodec: .hevc,
+            profile: profile
+        )
+
+        XCTAssertFalse(profile.canHardwareDecode(.hevc))
+        XCTAssertFalse(profile.canHardwareEncode(.hevc))
+        XCTAssertEqual(selection.support, .implemented)
+        XCTAssertTrue(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .software)
+        XCTAssertEqual(selection.selectedMode, .software)
+        XCTAssertEqual(selection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(selection.encodeBackend, .customSoftware)
+    }
+
+    func testHEVCToHEVCStillPrefersHardwareWhenAvailable() {
+        let selection = selectRoute(
+            sourceCodec: .hevc,
+            outputCodec: .hevc,
+            profile: .h264HEVCHardware
+        )
+
+        XCTAssertEqual(selection.support, .implemented)
+        XCTAssertTrue(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .hardware)
+        XCTAssertEqual(selection.selectedMode, .hardware)
+        XCTAssertEqual(selection.decodeBackend, .appleAVAssetExport)
+        XCTAssertEqual(selection.encodeBackend, .appleVideoToolbox)
+    }
+
     func testVP9ToHEVCUsesSoftwareWhenNoHardwareIsAvailable() {
         let selection = selectRoute(
             sourceCodec: .vp9,
@@ -259,7 +310,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(h261ToHEVC.encodeBackend, .ffmpegFamily)
 
         XCTAssertEqual(h264ToAV1.support, .unsupported)
-        XCTAssertEqual(h264ToAV1.executionKind, .planned)
+        XCTAssertEqual(h264ToAV1.executionKind, .unsupported)
         XCTAssertFalse(h264ToAV1.isEncodableNow)
     }
 
@@ -726,6 +777,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         let modes = Set(descriptors.map(\.mode))
         let h264Route = TaptionCodecRoute(sourceCodec: .h264, outputCodec: .hevc)
         let h264Descriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: h264Route)
+        let h264Modes = Set(h264Descriptors.map(\.mode))
+        let hevcRoute = TaptionCodecRoute(sourceCodec: .hevc, outputCodec: .hevc)
+        let hevcDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: hevcRoute)
+        let hevcModes = Set(hevcDescriptors.map(\.mode))
         let alphaRoute = TaptionCodecRoute(sourceCodec: .hevcWithAlpha, outputCodec: .hevc)
         let alphaDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: alphaRoute)
         let dolbyRoute = TaptionCodecRoute(sourceCodec: .dolbyVisionHEVC, outputCodec: .hevc)
@@ -746,9 +801,16 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(descriptors.count, 2)
         XCTAssertTrue(modes.contains(.hardware))
         XCTAssertTrue(modes.contains(.software))
-        XCTAssertEqual(h264Descriptors.count, 1)
-        XCTAssertEqual(h264Descriptors.first?.mode, .hardware)
-        XCTAssertEqual(h264Descriptors.first?.backend, .appleVideoToolbox)
+        XCTAssertEqual(h264Descriptors.count, 2)
+        XCTAssertTrue(h264Modes.contains(.hardware))
+        XCTAssertTrue(h264Modes.contains(.software))
+        XCTAssertTrue(h264Descriptors.contains { $0.mode == .hardware && $0.backend == .appleVideoToolbox })
+        XCTAssertTrue(h264Descriptors.contains { $0.mode == .software && $0.backend == .softwareVLCDecoder })
+        XCTAssertEqual(hevcDescriptors.count, 2)
+        XCTAssertTrue(hevcModes.contains(.hardware))
+        XCTAssertTrue(hevcModes.contains(.software))
+        XCTAssertTrue(hevcDescriptors.contains { $0.mode == .hardware && $0.backend == .appleVideoToolbox })
+        XCTAssertTrue(hevcDescriptors.contains { $0.mode == .software && $0.backend == .softwareVLCDecoder })
         XCTAssertEqual(alphaDescriptors.count, 1)
         XCTAssertEqual(alphaDescriptors.first?.mode, .hardware)
         XCTAssertEqual(alphaDescriptors.first?.backend, .appleVideoToolbox)
@@ -1381,7 +1443,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(SupportedVideoFileExtensions.contains(".m2t"))
         XCTAssertFalse(SupportedVideoFileExtensions.contains("dif"))
         XCTAssertFalse(ImportableVideoTypes.fileExtensions.contains("lrf"))
-        XCTAssertFalse(ImportableVideoTypes.fileExtensions.contains("dvr-ms"))
+        XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("dvr-ms"))
         XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("vc1"))
     }
 
@@ -1727,7 +1789,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             encodeProbeStatus: nil,
             encoderIdentifier: nil
         )
-        let deviceRequiredAppVideo = TaptionCodecHardwareCapability(
+        let appSupportedSoftwareEncodeVideo = TaptionCodecHardwareCapability(
             videoCodec: .h264,
             coreMediaCodecType: "avc1",
             hardwareDecodeSupported: false,
@@ -1759,8 +1821,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(appSupportedSoftwareVideo.isSupportedOnInstalledDevice)
         XCTAssertTrue(appSupportedSoftwareVideo.shouldHighlightInDeviceInfo)
 
-        XCTAssertFalse(deviceRequiredAppVideo.isInputSupportedByCurrentBuildOnInstalledDevice)
-        XCTAssertFalse(deviceRequiredAppVideo.shouldHighlightInDeviceInfo)
+        XCTAssertTrue(appSupportedSoftwareEncodeVideo.isInputSupportedByCurrentBuildOnInstalledDevice)
+        XCTAssertTrue(appSupportedSoftwareEncodeVideo.shouldHighlightInDeviceInfo)
 
         XCTAssertTrue(supportedAudio.isInputSupportedByCurrentBuild)
         XCTAssertTrue(supportedAudio.shouldHighlightInDeviceInfo)
@@ -1855,8 +1917,8 @@ final class CodecRoutePlannerTests: XCTestCase {
                 TaptionLaunchInputVideoSupportItem(codec: .h263, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .motionJPEG, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .wmv, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableOnSupportedHardware),
-                TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableOnSupportedHardware),
+                TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .proRes, availability: .availableOnSupportedHardware)
             ]
         )
@@ -1874,11 +1936,11 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.executableNowInputVideoCodecs,
-            [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .motionJPEG, .wmv]
+            [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .motionJPEG, .wmv, .h264, .hevc]
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.hardwareGatedInputVideoCodecs,
-            [.h264, .hevc, .proRes]
+            [.proRes]
         )
         XCTAssertTrue(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(.h261))
         XCTAssertFalse(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(.av1))
@@ -1889,20 +1951,16 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.makeInputReadinessReport(),
             TaptionLaunchInputReadinessReport(
-                executableNowVideoCodecs: [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .motionJPEG, .wmv],
-                hardwareGatedVideoCodecs: [.h264, .hevc, .proRes],
+                executableNowVideoCodecs: [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .motionJPEG, .wmv, .h264, .hevc],
+                hardwareGatedVideoCodecs: [.proRes],
                 plannedVideoCodecs: TaptionLaunchSupportCatalog.plannedInputVideoCodecs,
                 inputContainers: TaptionLaunchSupportCatalog.supportedInputContainers,
                 outputVideoCodec: .hevc,
                 outputContainers: [.mp4, .mov]
             )
         )
-        XCTAssertTrue(
-            TaptionLaunchSupportCatalog.supportedInputVideoNote.contains("H.264 / AVC")
-        )
-        XCTAssertTrue(
-            TaptionLaunchSupportCatalog.supportedInputVideoNote.contains("H.265 / HEVC")
-        )
+        XCTAssertFalse(TaptionLaunchSupportCatalog.supportedInputVideoNote.contains("H.264 / AVC"))
+        XCTAssertFalse(TaptionLaunchSupportCatalog.supportedInputVideoNote.contains("H.265 / HEVC"))
         XCTAssertTrue(
             TaptionLaunchSupportCatalog.supportedInputVideoNote.contains("Apple ProRes")
         )
@@ -1990,7 +2048,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             TaptionLaunchInputSupportDiagnosis(
                 state: .supported,
                 title: "Input Supported",
-                detail: "H.264 / AVC input can encode to H.265 only on devices with the required Apple-native hardware path."
+                detail: "The current launch build can inspect this input and encode it to H.265 MP4 or MOV."
             )
         )
         XCTAssertEqual(
@@ -2021,6 +2079,24 @@ final class CodecRoutePlannerTests: XCTestCase {
             ),
             .implemented
         )
+    }
+
+    func testRuntimeLaunchReadinessSplitsNowByCurrentDevicePath() {
+        let oldestSupportedProfile = appleModelProfile("iPad7,11")
+        let oldestReport = TaptionLaunchSupportCatalog.makeRuntimeInputReadinessReport(
+            hardwareSupport: oldestSupportedProfile
+        )
+        let hevcHardwareReport = TaptionLaunchSupportCatalog.makeRuntimeInputReadinessReport(
+            hardwareSupport: .h264HEVCHardware
+        )
+
+        XCTAssertTrue(oldestReport.nowMixedVideoCodecs.contains(.h264))
+        XCTAssertTrue(oldestReport.nowSoftwareVideoCodecs.contains(.hevc))
+        XCTAssertFalse(oldestReport.needsHardwareVideoCodecs.contains(.h264))
+        XCTAssertFalse(oldestReport.needsHardwareVideoCodecs.contains(.hevc))
+        XCTAssertTrue(oldestReport.needsHardwareVideoCodecs.contains(.proRes))
+        XCTAssertTrue(hevcHardwareReport.nowHardwareVideoCodecs.contains(.h264))
+        XCTAssertTrue(hevcHardwareReport.nowHardwareVideoCodecs.contains(.hevc))
     }
 
     func testOutputCatalogCombinesRouteAndContainerReadiness() {
@@ -2298,7 +2374,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         XCTAssertEqual(plan.codecRoute, TaptionCodecRoute(sourceCodec: .h264, outputCodec: .proResRaw))
-        XCTAssertEqual(plan.codecExecutionKind, .planned)
+        XCTAssertEqual(plan.codecExecutionKind, .unsupported)
         XCTAssertNil(plan.videoCommandPlan)
     }
 
@@ -3168,7 +3244,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(item.hasCommandPlan)
         XCTAssertEqual(report.commandPlanOnlyRouteCount, 0)
         XCTAssertGreaterThan(report.softwareBackendExecutableRouteCount, 0)
-        XCTAssertFalse(report.allRoutesRunnableInCurrentBuild)
+        XCTAssertTrue(report.allRoutesRunnableInCurrentBuild)
         XCTAssertEqual(
             Set(report.blockedOutputCodecs),
             Set(SW_FFmpegCodecCommandPlanner.commandUnsupportedVideoOutputCodecs)
@@ -4068,8 +4144,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(backend.canReadContainer(.webm))
         XCTAssertTrue(backend.canWriteContainer(.mp4))
         XCTAssertTrue(backend.canWriteContainer(.mov))
-        XCTAssertTrue(backend.canWriteContainer(.avi))
-        XCTAssertTrue(backend.canWriteContainer(.webm))
+        XCTAssertFalse(backend.canWriteContainer(.avi))
+        XCTAssertFalse(backend.canWriteContainer(.webm))
     }
 
     @MainActor

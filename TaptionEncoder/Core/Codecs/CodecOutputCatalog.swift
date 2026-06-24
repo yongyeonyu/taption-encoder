@@ -176,6 +176,56 @@ struct TaptionLaunchInputReadinessReport: Codable, Equatable {
     }
 }
 
+enum TaptionLaunchInputRuntimeAvailability: String, Codable, Equatable {
+    case nowHardware
+    case nowSoftware
+    case nowMixed
+    case needsHardware
+    case planned
+    case unsupported
+
+    var displayName: String {
+        switch self {
+        case .nowHardware:
+            return "Now(HW)"
+        case .nowSoftware:
+            return "Now(SW)"
+        case .nowMixed:
+            return "Now(HW/SW)"
+        case .needsHardware:
+            return "Needs HW"
+        case .planned:
+            return "Planned"
+        case .unsupported:
+            return "No"
+        }
+    }
+
+    var isExecutableNow: Bool {
+        switch self {
+        case .nowHardware, .nowSoftware, .nowMixed:
+            return true
+        case .needsHardware, .planned, .unsupported:
+            return false
+        }
+    }
+}
+
+struct TaptionLaunchInputRuntimeReadinessReport: Codable, Equatable {
+    var nowHardwareVideoCodecs: [TaptionVideoCodec]
+    var nowSoftwareVideoCodecs: [TaptionVideoCodec]
+    var nowMixedVideoCodecs: [TaptionVideoCodec]
+    var needsHardwareVideoCodecs: [TaptionVideoCodec]
+    var plannedVideoCodecs: [TaptionVideoCodec]
+    var unsupportedVideoCodecs: [TaptionVideoCodec]
+
+    var executableNowVideoCodecCount: Int {
+        nowHardwareVideoCodecs.count
+            + nowSoftwareVideoCodecs.count
+            + nowMixedVideoCodecs.count
+    }
+}
+
 enum TaptionLaunchSupportCatalog {
     static let supportedInputContainers: [TaptionVideoContainer] = [
         .mp4,
@@ -202,8 +252,8 @@ enum TaptionLaunchSupportCatalog {
         TaptionLaunchInputVideoSupportItem(codec: .h263, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .motionJPEG, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .wmv, availability: .availableNow),
-        TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableOnSupportedHardware),
-        TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableOnSupportedHardware),
+        TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .proRes, availability: .availableOnSupportedHardware)
     ]
 
@@ -297,6 +347,76 @@ enum TaptionLaunchSupportCatalog {
             inputContainers: supportedInputContainers,
             outputVideoCodec: supportedOutput.videoCodec,
             outputContainers: supportedOutputContainers
+        )
+    }
+
+    static func runtimeAvailability(
+        for codec: TaptionVideoCodec,
+        hardwareSupport: TaptionCodecHardwareSupportProfile
+    ) -> TaptionLaunchInputRuntimeAvailability {
+        guard inputAvailability(for: codec) != nil else {
+            return isPlannedInputVideoCodec(codec) ? .planned : .unsupported
+        }
+
+        let selection = TaptionCodecRoutePlanner.selectRoute(
+            sourceCodec: codec,
+            outputCodec: supportedOutput.videoCodec,
+            requestedMode: .automatic,
+            hardwareSupport: hardwareSupport
+        )
+
+        guard selection.isEncodableNow else {
+            return selection.support == .unsupported ? .unsupported : .needsHardware
+        }
+
+        switch selection.executionKind {
+        case .hardware:
+            return .nowHardware
+        case .software:
+            return .nowSoftware
+        case .mixed:
+            return .nowMixed
+        case .planned:
+            return .planned
+        case .unsupported:
+            return .unsupported
+        }
+    }
+
+    static func makeRuntimeInputReadinessReport(
+        hardwareSupport: TaptionCodecHardwareSupportProfile
+    ) -> TaptionLaunchInputRuntimeReadinessReport {
+        var nowHardwareVideoCodecs: [TaptionVideoCodec] = []
+        var nowSoftwareVideoCodecs: [TaptionVideoCodec] = []
+        var nowMixedVideoCodecs: [TaptionVideoCodec] = []
+        var needsHardwareVideoCodecs: [TaptionVideoCodec] = []
+        var plannedVideoCodecs: [TaptionVideoCodec] = []
+        var unsupportedVideoCodecs: [TaptionVideoCodec] = []
+
+        for codec in TaptionCodecRegistry.universalSourceCodecs {
+            switch runtimeAvailability(for: codec, hardwareSupport: hardwareSupport) {
+            case .nowHardware:
+                nowHardwareVideoCodecs.append(codec)
+            case .nowSoftware:
+                nowSoftwareVideoCodecs.append(codec)
+            case .nowMixed:
+                nowMixedVideoCodecs.append(codec)
+            case .needsHardware:
+                needsHardwareVideoCodecs.append(codec)
+            case .planned:
+                plannedVideoCodecs.append(codec)
+            case .unsupported:
+                unsupportedVideoCodecs.append(codec)
+            }
+        }
+
+        return TaptionLaunchInputRuntimeReadinessReport(
+            nowHardwareVideoCodecs: nowHardwareVideoCodecs,
+            nowSoftwareVideoCodecs: nowSoftwareVideoCodecs,
+            nowMixedVideoCodecs: nowMixedVideoCodecs,
+            needsHardwareVideoCodecs: needsHardwareVideoCodecs,
+            plannedVideoCodecs: plannedVideoCodecs,
+            unsupportedVideoCodecs: unsupportedVideoCodecs
         )
     }
 

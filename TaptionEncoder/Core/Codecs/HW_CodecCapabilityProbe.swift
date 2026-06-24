@@ -88,6 +88,47 @@ struct TaptionDeviceCodecCapabilityReport: Codable, Equatable {
     var audioCapabilities: [TaptionAudioCodecHardwareCapability]
 }
 
+extension TaptionDeviceCodecCapabilityReport {
+    var hardwareSupportProfile: TaptionCodecHardwareSupportProfile {
+        TaptionCodecHardwareSupportProfile(
+            name: modelIdentifier,
+            hardwareDecodeCodecs: Set(videoCapabilities.compactMap { capability in
+                capability.hardwareDecodeSupported == true ? capability.videoCodec : nil
+            }),
+            hardwareEncodeCodecs: Set(videoCapabilities.compactMap { capability in
+                capability.hardwareEncodeSupported == true ? capability.videoCodec : nil
+            })
+        )
+    }
+
+    func routeSelection(
+        for sourceCodec: TaptionVideoCodec,
+        outputCodec: TaptionVideoCodec = .hevc
+    ) -> TaptionCodecRouteSelection {
+        TaptionCodecRoutePlanner.selectRoute(
+            sourceCodec: sourceCodec,
+            outputCodec: outputCodec,
+            requestedMode: .automatic,
+            hardwareSupport: hardwareSupportProfile
+        )
+    }
+
+    func runtimeAvailability(
+        for sourceCodec: TaptionVideoCodec
+    ) -> TaptionLaunchInputRuntimeAvailability {
+        TaptionLaunchSupportCatalog.runtimeAvailability(
+            for: sourceCodec,
+            hardwareSupport: hardwareSupportProfile
+        )
+    }
+
+    var runtimeInputReadinessReport: TaptionLaunchInputRuntimeReadinessReport {
+        TaptionLaunchSupportCatalog.makeRuntimeInputReadinessReport(
+            hardwareSupport: hardwareSupportProfile
+        )
+    }
+}
+
 enum HW_CodecCapabilityProbe {
     static let defaultProbeSize = TaptionPixelSize(width: 1920, height: 1080)
 

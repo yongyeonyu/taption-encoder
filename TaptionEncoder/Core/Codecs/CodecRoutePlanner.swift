@@ -152,7 +152,6 @@ enum TaptionCodecRoutePlanner {
         requestedMode: TaptionEncoderMode = .automatic,
         hardwareSupport: TaptionCodecHardwareSupportProfile? = nil
     ) -> TaptionCodecRouteSelection {
-        let hardwareSupport = hardwareSupport ?? .currentDevice()
         guard let videoTrack = asset.videoTrack else {
             return unsupportedSelection(
                 route: TaptionCodecRoute(sourceCodec: .unknown, outputCodec: outputCodec),
@@ -161,8 +160,23 @@ enum TaptionCodecRoutePlanner {
             )
         }
 
-        let route = TaptionCodecRoute(
+        return selectRoute(
             sourceCodec: videoTrack.codec,
+            outputCodec: outputCodec,
+            requestedMode: requestedMode,
+            hardwareSupport: hardwareSupport
+        )
+    }
+
+    static func selectRoute(
+        sourceCodec: TaptionVideoCodec,
+        outputCodec: TaptionVideoCodec = .hevc,
+        requestedMode: TaptionEncoderMode = .automatic,
+        hardwareSupport: TaptionCodecHardwareSupportProfile? = nil
+    ) -> TaptionCodecRouteSelection {
+        let hardwareSupport = hardwareSupport ?? .currentDevice()
+        let route = TaptionCodecRoute(
+            sourceCodec: sourceCodec,
             outputCodec: outputCodec
         )
         let support = TaptionCodecRegistry.support(for: route)
