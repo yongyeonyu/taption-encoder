@@ -4317,6 +4317,50 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
+    func testOutputRefreshReusesInspectedMetadataForUnchangedFile() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let sourceURL = directoryURL.appendingPathComponent("source.mp4")
+        let sourceData = Data("source".utf8)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try sourceData.write(to: sourceURL)
+
+        let asset = makeAsset(
+            sourceCodec: .av1,
+            duration: 120,
+            fileSize: Int64(sourceData.count),
+            fingerprint: try testMediaFingerprint(for: sourceURL)
+        )
+        let inspector = CountingMediaInspector(asset: asset)
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: inspector
+            )
+        )
+
+        viewModel.startFilesFlow(url: sourceURL)
+        try await waitForReadyToStartState(in: viewModel)
+        guard case .readyToStart(let initialReview) = viewModel.state else {
+            return XCTFail("Expected ready state after initial inspection")
+        }
+        XCTAssertEqual(inspector.inspectionCount, 1)
+
+        viewModel.selectOutputResolution(.hd720)
+        try await waitForCondition(timeout: 2) {
+            if case .readyToStart(let review) = viewModel.state {
+                return review.job.plan.id != initialReview.job.plan.id
+                    && viewModel.outputSizeStatusMessage == "Estimated output: 34 MB."
+            }
+            return false
+        }
+
+        XCTAssertEqual(inspector.inspectionCount, 1)
+    }
+
+    @MainActor
     func testManualSizeUsesChosenValueAndClampsToAutoMaximum() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
@@ -5585,6 +5629,31 @@ final class CodecRoutePlannerTests: XCTestCase {
         }
     }
 
+    private final class CountingMediaInspector: MediaInspecting {
+        private let queue = DispatchQueue(label: "com.taption.encoder.tests.counting-media-inspector")
+        private let asset: TaptionVideoAsset
+        private var inspectionCountStorage = 0
+
+        init(asset: TaptionVideoAsset) {
+            self.asset = asset
+        }
+
+        var inspectionCount: Int {
+            queue.sync { inspectionCountStorage }
+        }
+
+        func inspectVideo(at url: URL) async throws -> TaptionVideoAsset {
+            queue.sync {
+                inspectionCountStorage += 1
+            }
+
+            var inspectedAsset = asset
+            inspectedAsset.displayName = url.lastPathComponent
+            inspectedAsset.location = TaptionVideoAssetLocation(kind: .file, url: url)
+            return inspectedAsset
+        }
+    }
+
     private func readyBroadSoftwareBackendReport() -> TaptionSoftwareCodecBackendReadinessReport {
         SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport(
             isBundledInCurrentBuild: true,
@@ -5595,6 +5664,19 @@ final class CodecRoutePlannerTests: XCTestCase {
     private func temporaryDirectoryURL() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("TaptionEncoderTests-\(UUID().uuidString)", isDirectory: true)
+    }
+
+    private func testMediaFingerprint(for url: URL) throws -> TaptionMediaFingerprint {
+        let values = try url.resourceValues(forKeys: [
+            .fileSizeKey,
+            .creationDateKey,
+            .contentModificationDateKey
+        ])
+        return TaptionMediaFingerprint(
+            fileSize: values.fileSize.map(Int64.init),
+            creationDate: values.creationDate,
+            modificationDate: values.contentModificationDate
+        )
     }
 
     private func makeStarWalletSnapshot(
@@ -5674,6 +5756,109 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
+    func testEncodingProgressCoalescerEmitsFirstStageThresholdAndFinalProgress() {
+        var coalescer = EncodingProgressCoalescer(
+            minimumFractionDelta: 0.01,
+            minimumTimeInterval: 0.5
+        )
+
+        XCTAssertTrue(coalescer.shouldEmit(
+            TaptionEncodingProgress(stage: .preparing, fractionCompleted: 0),
+            now: 0
+        ))
+        XCTAssertFalse(coalescer.shouldEmit(
+            TaptionEncodingProgress(stage: .preparing, fractionCompleted: 0.005),
+            now: 0.1
+        ))
+        XCTAssertTrue(coalescer.shouldEmit(
+            TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.005),
+            now: 0.2
+        ))
+        XCTAssertFalse(coalescer.shouldEmit(
+            TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.012),
+            now: 0.3
+        ))
+        XCTAssertTrue(coalescer.shouldEmit(
+            TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.016),
+            now: 0.4
+        ))
+        XCTAssertTrue(coalescer.shouldEmit(
+            TaptionEncodingProgress(stage: .waitingForSaveGate, fractionCompleted: 1),
+            now: 0.45
+        ))
+    }
+
+    func testEncodingProgressCoalescerEmitsTimedProgressWhenFractionDeltaIsSmall() {
+        var coalescer = EncodingProgressCoalescer(
+            minimumFractionDelta: 0.10,
+            minimumTimeInterval: 0.5
+        )
+
+        XCTAssertTrue(coalescer.shouldEmit(
+            TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.10),
+            now: 1.0
+        ))
+        XCTAssertFalse(coalescer.shouldEmit(
+            TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.12),
+            now: 1.2
+        ))
+        XCTAssertTrue(coalescer.shouldEmit(
+            TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.13),
+            now: 1.6
+        ))
+    }
+
+    func testEncodingProgressEmitterTracksObservedAndEmittedCounts() {
+        var received: [TaptionEncodingProgress] = []
+        let emitter = EncodingProgressEmitter(
+            coalescer: EncodingProgressCoalescer(
+                minimumFractionDelta: 0.10,
+                minimumTimeInterval: 100
+            )
+        ) { progress in
+            received.append(progress)
+        }
+
+        emitter.submit(TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.10))
+        emitter.submit(TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.12))
+        emitter.submit(TaptionEncodingProgress(stage: .waitingForSaveGate, fractionCompleted: 1))
+
+        XCTAssertEqual(received.map(\.stage), [.encoding, .waitingForSaveGate])
+        XCTAssertEqual(emitter.stats, EncodingProgressEmitterStats(observedCount: 3, emittedCount: 2))
+    }
+
+    func testInspectedMediaCacheReusesOnlyMatchingFingerprints() {
+        let url = URL(fileURLWithPath: "/tmp/source.mp4")
+        let originalFingerprint = TaptionMediaFingerprint(
+            fileSize: 1_024,
+            creationDate: Date(timeIntervalSince1970: 1),
+            modificationDate: Date(timeIntervalSince1970: 2)
+        )
+        let changedFingerprint = TaptionMediaFingerprint(
+            fileSize: 2_048,
+            creationDate: Date(timeIntervalSince1970: 1),
+            modificationDate: Date(timeIntervalSince1970: 3)
+        )
+        let asset = TaptionVideoAsset(
+            displayName: "source.mp4",
+            location: TaptionVideoAssetLocation(kind: .file, url: url),
+            container: .mp4,
+            duration: 1,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .h264,
+                naturalSize: TaptionPixelSize(width: 1920, height: 1080),
+                displaySize: TaptionPixelSize(width: 1920, height: 1080)
+            ),
+            fingerprint: originalFingerprint
+        )
+        var cache = TaptionInspectedMediaCache()
+
+        cache.store(asset, for: url)
+
+        XCTAssertEqual(cache.asset(for: url, currentFingerprint: originalFingerprint), asset)
+        XCTAssertNil(cache.asset(for: url, currentFingerprint: changedFingerprint))
+    }
+
     private func waitForPendingSaveExportPrompt(
         in viewModel: HomeViewModel,
         timeout: TimeInterval = 2
@@ -5780,7 +5965,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         sourceCodec: TaptionVideoCodec,
         displaySize: TaptionPixelSize = TaptionPixelSize(width: 1920, height: 1080),
         duration: TimeInterval = 1,
-        fileSize: Int64 = 1_000_000
+        fileSize: Int64 = 1_000_000,
+        fingerprint: TaptionMediaFingerprint? = nil
     ) -> TaptionVideoAsset {
         TaptionVideoAsset(
             displayName: "\(sourceCodec.rawValue).mp4",
@@ -5800,7 +5986,7 @@ final class CodecRoutePlannerTests: XCTestCase {
                     sampleRate: 48_000
                 )
             ],
-            fingerprint: TaptionMediaFingerprint(fileSize: fileSize)
+            fingerprint: fingerprint ?? TaptionMediaFingerprint(fileSize: fileSize)
         )
     }
 

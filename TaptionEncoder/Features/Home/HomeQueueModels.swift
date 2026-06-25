@@ -1,5 +1,28 @@
 import Foundation
 
+struct TaptionInspectedMediaCache {
+    private var assetsByURL: [URL: TaptionVideoAsset] = [:]
+
+    mutating func store(_ asset: TaptionVideoAsset, for url: URL) {
+        assetsByURL[url] = asset
+    }
+
+    func asset(
+        for url: URL,
+        currentFingerprint: TaptionMediaFingerprint
+    ) -> TaptionVideoAsset? {
+        guard let asset = assetsByURL[url],
+              asset.fingerprint == currentFingerprint else {
+            return nil
+        }
+        return asset
+    }
+
+    mutating func removeAll() {
+        assetsByURL.removeAll()
+    }
+}
+
 struct BatchItemRuntime {
     var asset: TaptionVideoAsset?
     var videoInfo: LoadedVideoInfo?

@@ -124,26 +124,61 @@ struct TaptionVideoCore {
         _ job: TaptionPreparedEncodingJob,
         progress: @escaping (TaptionEncodingProgress) -> Void
     ) async throws -> TaptionEncodingResult {
-        try await services.backgroundCoordinator?.beginBackgroundEncoding(plan: job.plan)
-
+        let trace = TaptionEncodingPerformanceTrace(
+            name: "core_encode_prepared_job",
+            category: .encoding,
+            metadata: [
+                "plan": job.plan.id.uuidString,
+                "route": job.plan.codecRoute?.displayName ?? "unknown",
+                "executionKind": job.plan.codecExecutionKind?.rawValue ?? "unknown"
+            ]
+        )
+        var didBeginBackgroundEncoding = false
         do {
+            try await services.backgroundCoordinator?.beginBackgroundEncoding(plan: job.plan)
+            didBeginBackgroundEncoding = services.backgroundCoordinator != nil
+            trace.mark("background_task_ready")
+
             var result = try await services.encoder.encode(plan: job.plan, progress: progress)
+            trace.mark(
+                "encoder_completed",
+                metadata: [
+                    "mode": result.usedMode.rawValue,
+                    "backend": result.usedBackend.rawValue
+                ]
+            )
             if result.pendingSaveState == nil {
                 result.pendingSaveState = makePendingSaveStateIfNeeded(
                     plan: job.plan,
                     result: result
                 )
+                trace.mark("pending_save_state_created")
             }
 
             if let pendingSaveState = result.pendingSaveState,
                job.plan.savePolicy.shouldRestorePendingSaveOnLaunch {
                 try await services.pendingSaveStore.savePendingState(pendingSaveState)
+                trace.mark(
+                    "pending_save_persisted",
+                    metadata: ["pendingSave": pendingSaveState.id.uuidString]
+                )
             }
 
             await services.backgroundCoordinator?.endBackgroundEncoding(planID: job.plan.id)
+            didBeginBackgroundEncoding = false
+            trace.finish("completed")
             return result
+        } catch is CancellationError {
+            if didBeginBackgroundEncoding {
+                await services.backgroundCoordinator?.endBackgroundEncoding(planID: job.plan.id)
+            }
+            trace.finish("cancelled")
+            throw CancellationError()
         } catch {
-            await services.backgroundCoordinator?.endBackgroundEncoding(planID: job.plan.id)
+            if didBeginBackgroundEncoding {
+                await services.backgroundCoordinator?.endBackgroundEncoding(planID: job.plan.id)
+            }
+            trace.finish("failed", metadata: ["error": error.localizedDescription])
             throw error
         }
     }

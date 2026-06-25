@@ -180,6 +180,19 @@ private struct SW_AV1NativeAudioEncodingConfiguration {
     }
 }
 
+private struct SW_AV1SoftwareTranscodeRunStats {
+    var outputAudioTrackCount: Int
+    var frameCount: Int
+    var videoBackpressureWaitCount: Int
+    var videoBackpressureWaitMicroseconds: Int64
+    var audioSampleBufferCount: Int
+    var audioSampleCount: Int64
+    var audioBackpressureWaitCount: Int
+    var audioBackpressureWaitMicroseconds: Int64
+    var finishDurationMilliseconds: String
+    var totalDurationMilliseconds: String
+}
+
 enum SW_AV1HEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
     static let descriptor = TaptionCodecAlgorithmDescriptor(
         sourceCodec: .av1,
@@ -446,62 +459,109 @@ extension SW_AV1HEVCTranscoder {
         progress: @escaping (TaptionEncodingProgress) -> Void
     ) async throws -> TaptionCodecTranscodeOutput {
         let startedAt = Date()
-        let asset = try await AVFoundationMediaInspector().inspectVideo(at: request.sourceURL)
-        let configuration = try SW_AV1HEVCTranscodeConfiguration.make(
-            asset: asset,
-            outputURL: request.outputURL,
-            options: request.options
+        let trace = TaptionEncodingPerformanceTrace(
+            name: "software_hevc_transcode",
+            category: .encoding,
+            metadata: [
+                "source": request.sourceURL.lastPathComponent,
+                "route": request.route.displayName,
+                "codec": sourceCodecLabel,
+                "output": request.outputURL.lastPathComponent
+            ]
         )
-        let audioConfiguration = SW_AV1NativeAudioEncodingConfiguration.make(
-            asset: asset,
-            request: request
-        )
+        let progressEmitter = EncodingProgressEmitter(progress: progress)
+        do {
+            let asset = try await AVFoundationMediaInspector().inspectVideo(at: request.sourceURL)
+            trace.mark(
+                "inspection_complete",
+                metadata: [
+                    "duration": asset.duration.map { String(format: "%.3f", $0) } ?? "unknown",
+                    "audioTracks": "\(asset.audioTracks.count)"
+                ]
+            )
+            let configuration = try SW_AV1HEVCTranscodeConfiguration.make(
+                asset: asset,
+                outputURL: request.outputURL,
+                options: request.options
+            )
+            let audioConfiguration = SW_AV1NativeAudioEncodingConfiguration.make(
+                asset: asset,
+                request: request
+            )
 
-        progress(TaptionEncodingProgress(
-            stage: .preparing,
-            fractionCompleted: 0.02,
-            elapsedTime: 0,
-            estimatedRemainingTime: nil
-        ))
+            progressEmitter.submit(TaptionEncodingProgress(
+                stage: .preparing,
+                fractionCompleted: 0.02,
+                elapsedTime: 0,
+                estimatedRemainingTime: nil
+            ), force: true)
 
-        let outputAudioTrackCount = try await transcode(
-            sourceURL: request.sourceURL,
-            configuration: configuration,
-            audioConfiguration: audioConfiguration,
-            sourceCodecLabel: sourceCodecLabel
-        ) { fraction in
-            let normalizedFraction = min(max(fraction, 0.02), 0.99)
-            let elapsed = Date().timeIntervalSince(startedAt)
-            let remaining = normalizedFraction > 0.02
-                ? max(0, elapsed * (1 - normalizedFraction) / normalizedFraction)
-                : nil
-            progress(TaptionEncodingProgress(
-                stage: .encoding,
-                fractionCompleted: normalizedFraction,
-                elapsedTime: elapsed,
-                estimatedRemainingTime: remaining,
-                currentFrame: Int64((Double(configuration.expectedFrameCount) * normalizedFraction).rounded()),
+            let runStats = try await transcode(
+                sourceURL: request.sourceURL,
+                configuration: configuration,
+                audioConfiguration: audioConfiguration,
+                sourceCodecLabel: sourceCodecLabel
+            ) { fraction in
+                let normalizedFraction = min(max(fraction, 0.02), 0.99)
+                let elapsed = Date().timeIntervalSince(startedAt)
+                let remaining = normalizedFraction > 0.02
+                    ? max(0, elapsed * (1 - normalizedFraction) / normalizedFraction)
+                    : nil
+                progressEmitter.submit(TaptionEncodingProgress(
+                    stage: .encoding,
+                    fractionCompleted: normalizedFraction,
+                    elapsedTime: elapsed,
+                    estimatedRemainingTime: remaining,
+                    currentFrame: Int64((Double(configuration.expectedFrameCount) * normalizedFraction).rounded()),
+                    totalFrames: Int64(configuration.expectedFrameCount)
+                ))
+            }
+
+            progressEmitter.submit(TaptionEncodingProgress(
+                stage: .waitingForSaveGate,
+                fractionCompleted: 1,
+                elapsedTime: Date().timeIntervalSince(startedAt),
+                estimatedRemainingTime: 0,
+                currentFrame: Int64(configuration.expectedFrameCount),
                 totalFrames: Int64(configuration.expectedFrameCount)
-            ))
+            ), force: true)
+            let progressStats = progressEmitter.stats
+            trace.finish(
+                "completed",
+                metadata: [
+                    "frames": "\(runStats.frameCount)",
+                    "progressObserved": "\(progressStats.observedCount)",
+                    "progressEmitted": "\(progressStats.emittedCount)",
+                    "videoBackpressureWaits": "\(runStats.videoBackpressureWaitCount)",
+                    "videoBackpressureMs": TaptionEncodingPerformanceTrace.milliseconds(
+                        Double(runStats.videoBackpressureWaitMicroseconds) / 1_000_000.0
+                    ),
+                    "audioSampleBuffers": "\(runStats.audioSampleBufferCount)",
+                    "audioSamples": "\(runStats.audioSampleCount)",
+                    "audioBackpressureWaits": "\(runStats.audioBackpressureWaitCount)",
+                    "audioBackpressureMs": TaptionEncodingPerformanceTrace.milliseconds(
+                        Double(runStats.audioBackpressureWaitMicroseconds) / 1_000_000.0
+                    ),
+                    "finishMs": runStats.finishDurationMilliseconds,
+                    "totalMs": runStats.totalDurationMilliseconds
+                ]
+            )
+
+            return TaptionCodecTranscodeOutput(
+                outputURL: request.outputURL,
+                route: request.route,
+                usedMode: .software,
+                usedBackend: .softwareVLCDecoder,
+                outputVideoCodec: request.options.outputPolicy.videoCodec,
+                outputAudioTrackCount: runStats.outputAudioTrackCount
+            )
+        } catch is CancellationError {
+            trace.finish("cancelled")
+            throw CancellationError()
+        } catch {
+            trace.finish("failed", metadata: ["error": error.localizedDescription])
+            throw error
         }
-
-        progress(TaptionEncodingProgress(
-            stage: .waitingForSaveGate,
-            fractionCompleted: 1,
-            elapsedTime: Date().timeIntervalSince(startedAt),
-            estimatedRemainingTime: 0,
-            currentFrame: Int64(configuration.expectedFrameCount),
-            totalFrames: Int64(configuration.expectedFrameCount)
-        ))
-
-        return TaptionCodecTranscodeOutput(
-            outputURL: request.outputURL,
-            route: request.route,
-            usedMode: .software,
-            usedBackend: .softwareVLCDecoder,
-            outputVideoCodec: request.options.outputPolicy.videoCodec,
-            outputAudioTrackCount: outputAudioTrackCount
-        )
     }
 
     private static func transcode(
@@ -509,8 +569,9 @@ extension SW_AV1HEVCTranscoder {
         configuration: SW_AV1HEVCTranscodeConfiguration,
         audioConfiguration: SW_AV1NativeAudioEncodingConfiguration?,
         sourceCodecLabel: String,
-        progressHandler: @escaping (Double) async -> Void
-    ) async throws -> Int {
+        progressHandler: @escaping (Double) -> Void
+    ) async throws -> SW_AV1SoftwareTranscodeRunStats {
+        let pipelineStartedAt = Date()
         AppLogger.info(
             "Software \(sourceCodecLabel) transcode pipeline starting",
             category: .encoding,
@@ -787,16 +848,36 @@ extension SW_AV1HEVCTranscoder {
 
         try context.finishVideoInput()
         try audioContext?.finishAudioInput()
+        let finishStartedAt = Date()
         try await finishWriter(writer)
+        let finishDuration = Date().timeIntervalSince(finishStartedAt)
+        let videoMetrics = context.metricsSnapshot()
+        let audioMetrics = audioContext?.metricsSnapshot()
         AppLogger.info(
             "Software \(sourceCodecLabel) transcode pipeline completed",
             category: .encoding,
             metadata: [
                 "source": sourceURL.lastPathComponent,
-                "output": configuration.outputURL.lastPathComponent
+                "output": configuration.outputURL.lastPathComponent,
+                "frames": "\(videoMetrics.frameCount)",
+                "videoBackpressureWaits": "\(videoMetrics.backpressureWaitCount)",
+                "audioSampleBuffers": "\(audioMetrics?.sampleBufferCount ?? 0)"
             ]
         )
-        return audioContext?.didWriteAnySamples == true ? 1 : 0
+        return SW_AV1SoftwareTranscodeRunStats(
+            outputAudioTrackCount: audioContext?.didWriteAnySamples == true ? 1 : 0,
+            frameCount: videoMetrics.frameCount,
+            videoBackpressureWaitCount: videoMetrics.backpressureWaitCount,
+            videoBackpressureWaitMicroseconds: videoMetrics.backpressureWaitMicroseconds,
+            audioSampleBufferCount: audioMetrics?.sampleBufferCount ?? 0,
+            audioSampleCount: audioMetrics?.sampleCount ?? 0,
+            audioBackpressureWaitCount: audioMetrics?.backpressureWaitCount ?? 0,
+            audioBackpressureWaitMicroseconds: audioMetrics?.backpressureWaitMicroseconds ?? 0,
+            finishDurationMilliseconds: TaptionEncodingPerformanceTrace.milliseconds(finishDuration),
+            totalDurationMilliseconds: TaptionEncodingPerformanceTrace.milliseconds(
+                Date().timeIntervalSince(pipelineStartedAt)
+            )
+        )
     }
 
     private static func throwIfCancelled() throws {
@@ -926,6 +1007,9 @@ private final class SW_AV1AudioWriterContext: @unchecked Sendable {
     private let writerQueue = DispatchQueue(label: "com.taption.encoder.av1-software.audio")
 
     nonisolated(unsafe) private var currentSampleCountStorage: Int64 = 0
+    nonisolated(unsafe) private var sampleBufferCountStorage = 0
+    nonisolated(unsafe) private var backpressureWaitCountStorage = 0
+    nonisolated(unsafe) private var backpressureWaitMicrosecondsStorage: Int64 = 0
     nonisolated(unsafe) private var firstPTSMicrosecondsStorage: Int64?
     nonisolated(unsafe) private var didWriteAnySamplesStorage = false
     nonisolated(unsafe) private var didDrainStorage = false
@@ -965,6 +1049,22 @@ private final class SW_AV1AudioWriterContext: @unchecked Sendable {
         return pendingError
     }
 
+    nonisolated func metricsSnapshot() -> (
+        sampleBufferCount: Int,
+        sampleCount: Int64,
+        backpressureWaitCount: Int,
+        backpressureWaitMicroseconds: Int64
+    ) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return (
+            sampleBufferCount: sampleBufferCountStorage,
+            sampleCount: currentSampleCountStorage,
+            backpressureWaitCount: backpressureWaitCountStorage,
+            backpressureWaitMicroseconds: backpressureWaitMicrosecondsStorage
+        )
+    }
+
     nonisolated func requestCancellation() {
         stateLock.lock()
         cancellationRequested = true
@@ -992,6 +1092,8 @@ private final class SW_AV1AudioWriterContext: @unchecked Sendable {
             while !audioInput.isReadyForMoreMediaData {
                 stateLock.lock()
                 let cancelled = cancellationRequested || pendingError != nil
+                backpressureWaitCountStorage += 1
+                backpressureWaitMicrosecondsStorage += 2_000
                 stateLock.unlock()
                 if cancelled {
                     return
@@ -1018,6 +1120,7 @@ private final class SW_AV1AudioWriterContext: @unchecked Sendable {
 
                 stateLock.lock()
                 currentSampleCountStorage += Int64(sampleCount)
+                sampleBufferCountStorage += 1
                 didWriteAnySamplesStorage = true
                 didDrainStorage = false
                 stateLock.unlock()
@@ -1208,12 +1311,14 @@ private final class SW_AV1FrameWriterContext: @unchecked Sendable {
     private let targetSize: CGSize
     private let frameDuration: CMTime
     private let expectedFrameCount: Int
-    nonisolated(unsafe) private let progressHandler: (Double) async -> Void
+    nonisolated(unsafe) private let progressHandler: (Double) -> Void
     private let stateLock = NSLock()
     private let writerQueue = DispatchQueue(label: "com.taption.encoder.av1-software.writer")
 
     nonisolated(unsafe) private var decodePool: CVPixelBufferPool?
     nonisolated(unsafe) private var currentFrameCountStorage = 0
+    nonisolated(unsafe) private var backpressureWaitCountStorage = 0
+    nonisolated(unsafe) private var backpressureWaitMicrosecondsStorage: Int64 = 0
     nonisolated(unsafe) private var didWriteAnyFrame = false
     nonisolated(unsafe) private var pendingError: Error?
     nonisolated(unsafe) private var cancellationRequested = false
@@ -1225,7 +1330,7 @@ private final class SW_AV1FrameWriterContext: @unchecked Sendable {
         targetSize: CGSize,
         frameDuration: CMTime,
         expectedFrameCount: Int,
-        progressHandler: @escaping (Double) async -> Void
+        progressHandler: @escaping (Double) -> Void
     ) {
         self.writer = writer
         self.videoInput = videoInput
@@ -1250,6 +1355,20 @@ private final class SW_AV1FrameWriterContext: @unchecked Sendable {
         stateLock.lock()
         defer { stateLock.unlock() }
         return pendingError
+    }
+
+    nonisolated func metricsSnapshot() -> (
+        frameCount: Int,
+        backpressureWaitCount: Int,
+        backpressureWaitMicroseconds: Int64
+    ) {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return (
+            frameCount: currentFrameCountStorage,
+            backpressureWaitCount: backpressureWaitCountStorage,
+            backpressureWaitMicroseconds: backpressureWaitMicrosecondsStorage
+        )
     }
 
     nonisolated func requestCancellation() {
@@ -1333,6 +1452,8 @@ private final class SW_AV1FrameWriterContext: @unchecked Sendable {
             while !videoInput.isReadyForMoreMediaData {
                 stateLock.lock()
                 let cancelled = cancellationRequested || pendingError != nil
+                backpressureWaitCountStorage += 1
+                backpressureWaitMicrosecondsStorage += 2_000
                 stateLock.unlock()
                 if cancelled {
                     return
@@ -1362,9 +1483,7 @@ private final class SW_AV1FrameWriterContext: @unchecked Sendable {
             didWriteAnyFrame = true
             let progress = Double(currentFrameCountStorage) / Double(max(expectedFrameCount, 1))
             stateLock.unlock()
-            Task {
-                await progressHandler(min(max(progress, 0), 1))
-            }
+            progressHandler(min(max(progress, 0), 1))
         }
     }
 

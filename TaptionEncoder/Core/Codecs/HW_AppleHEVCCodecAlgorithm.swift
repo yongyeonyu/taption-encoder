@@ -64,80 +64,108 @@ enum HW_AppleHEVCCodecAlgorithm {
     ) async throws -> TaptionCodecTranscodeOutput {
         try validate(request: request)
         let startedAt = Date()
-        let asset = AVURLAsset(url: request.sourceURL)
-        let presetName = try selectHEVCPreset(for: asset)
-
-        progress(TaptionEncodingProgress(
-            stage: .preparing,
-            fractionCompleted: 0,
-            elapsedTime: 0,
-            estimatedRemainingTime: nil
-        ))
-
-        guard let exportSession = AVAssetExportSession(asset: asset, presetName: presetName) else {
-            throw TaptionVideoCoreError.compatibleHEVCPresetUnavailable
-        }
-
-        let outputFileType = avFileType(
-            for: request.options.outputPolicy.container,
-            supportedFileTypes: exportSession.supportedFileTypes
+        let trace = TaptionEncodingPerformanceTrace(
+            name: "hw_hevc_transcode",
+            category: .encoding,
+            metadata: [
+                "source": request.sourceURL.lastPathComponent,
+                "route": request.route.displayName,
+                "output": request.outputURL.lastPathComponent
+            ]
         )
-        exportSession.outputURL = request.outputURL
-        exportSession.outputFileType = outputFileType
-        exportSession.shouldOptimizeForNetworkUse = true
-        exportSession.videoComposition = try await videoCompositionIfNeeded(
-            for: asset,
-            targetSize: request.options.outputPolicy.advancedOptions.resizeTo
-        )
+        let progressEmitter = EncodingProgressEmitter(progress: progress)
+        do {
+            let asset = AVURLAsset(url: request.sourceURL)
+            let presetName = try selectHEVCPreset(for: asset)
+            trace.mark("preset_selected", metadata: ["preset": presetName])
 
-        let exportSessionBox = HW_AppleHEVCExportSessionBox(exportSession)
-        let progressTask = Task { [exportSessionBox] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 150_000_000)
-                let rawProgress = Double(exportSessionBox.progress)
-                let fraction = min(max(rawProgress, 0.01), 0.99)
-                let elapsed = Date().timeIntervalSince(startedAt)
-                let remaining = fraction > 0.02
-                    ? max(0, elapsed * (1 - fraction) / fraction)
-                    : nil
-                progress(TaptionEncodingProgress(
-                    stage: .encoding,
-                    fractionCompleted: fraction,
-                    elapsedTime: elapsed,
-                    estimatedRemainingTime: remaining
-                ))
+            progressEmitter.submit(TaptionEncodingProgress(
+                stage: .preparing,
+                fractionCompleted: 0,
+                elapsedTime: 0,
+                estimatedRemainingTime: nil
+            ), force: true)
 
-                if exportSessionBox.status == .completed
-                    || exportSessionBox.status == .failed
-                    || exportSessionBox.status == .cancelled {
-                    return
+            guard let exportSession = AVAssetExportSession(asset: asset, presetName: presetName) else {
+                throw TaptionVideoCoreError.compatibleHEVCPresetUnavailable
+            }
+
+            let outputFileType = avFileType(
+                for: request.options.outputPolicy.container,
+                supportedFileTypes: exportSession.supportedFileTypes
+            )
+            exportSession.outputURL = request.outputURL
+            exportSession.outputFileType = outputFileType
+            exportSession.shouldOptimizeForNetworkUse = true
+            exportSession.videoComposition = try await videoCompositionIfNeeded(
+                for: asset,
+                targetSize: request.options.outputPolicy.advancedOptions.resizeTo
+            )
+            trace.mark(
+                "export_session_configured",
+                metadata: ["fileType": outputFileType.rawValue]
+            )
+
+            let exportSessionBox = HW_AppleHEVCExportSessionBox(exportSession)
+            let progressTask = Task { [exportSessionBox] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 150_000_000)
+                    let rawProgress = Double(exportSessionBox.progress)
+                    let fraction = min(max(rawProgress, 0.01), 0.99)
+                    let elapsed = Date().timeIntervalSince(startedAt)
+                    let remaining = fraction > 0.02
+                        ? max(0, elapsed * (1 - fraction) / fraction)
+                        : nil
+                    progressEmitter.submit(TaptionEncodingProgress(
+                        stage: .encoding,
+                        fractionCompleted: fraction,
+                        elapsedTime: elapsed,
+                        estimatedRemainingTime: remaining
+                    ))
+
+                    if exportSessionBox.status == .completed
+                        || exportSessionBox.status == .failed
+                        || exportSessionBox.status == .cancelled {
+                        return
+                    }
                 }
             }
-        }
-
-        do {
+            defer {
+                progressTask.cancel()
+            }
             try await export(exportSessionBox)
-            progressTask.cancel()
+            trace.mark("export_completed")
+
+            progressEmitter.submit(TaptionEncodingProgress(
+                stage: .waitingForSaveGate,
+                fractionCompleted: 1,
+                elapsedTime: Date().timeIntervalSince(startedAt),
+                estimatedRemainingTime: 0
+            ), force: true)
+            let progressStats = progressEmitter.stats
+            trace.finish(
+                "completed",
+                metadata: [
+                    "progressObserved": "\(progressStats.observedCount)",
+                    "progressEmitted": "\(progressStats.emittedCount)"
+                ]
+            )
+
+            return TaptionCodecTranscodeOutput(
+                outputURL: request.outputURL,
+                route: request.route,
+                usedMode: .hardware,
+                usedBackend: .appleVideoToolbox,
+                outputVideoCodec: request.options.outputPolicy.videoCodec,
+                outputAudioTrackCount: 1
+            )
+        } catch is CancellationError {
+            trace.finish("cancelled")
+            throw CancellationError()
         } catch {
-            progressTask.cancel()
+            trace.finish("failed", metadata: ["error": error.localizedDescription])
             throw error
         }
-
-        progress(TaptionEncodingProgress(
-            stage: .waitingForSaveGate,
-            fractionCompleted: 1,
-            elapsedTime: Date().timeIntervalSince(startedAt),
-            estimatedRemainingTime: 0
-        ))
-
-        return TaptionCodecTranscodeOutput(
-            outputURL: request.outputURL,
-            route: request.route,
-            usedMode: .hardware,
-            usedBackend: .appleVideoToolbox,
-            outputVideoCodec: request.options.outputPolicy.videoCodec,
-            outputAudioTrackCount: 1
-        )
     }
 
     private static func validate(request: TaptionCodecTranscodeRequest) throws {

@@ -211,6 +211,99 @@ enum AppLogger {
     }
 }
 
+final class TaptionEncodingPerformanceTrace: @unchecked Sendable {
+    private let name: String
+    private let category: AppLogCategory
+    private let baseMetadata: [String: String]
+    private let lock = NSLock()
+    private let startedAt = Date()
+    private var lastMarkAt = Date()
+
+    init(
+        name: String,
+        category: AppLogCategory,
+        metadata: [String: String] = [:]
+    ) {
+        self.name = name
+        self.category = category
+        self.baseMetadata = metadata
+        AppLogger.info(
+            "Performance trace started",
+            category: category,
+            metadata: mergedMetadata(
+                phase: "start",
+                elapsedMilliseconds: "0.0",
+                deltaMilliseconds: "0.0",
+                extra: metadata
+            )
+        )
+    }
+
+    func mark(_ phase: String, metadata: [String: String] = [:]) {
+        let timing = timingSnapshot()
+        AppLogger.info(
+            "Performance trace mark",
+            category: category,
+            metadata: mergedMetadata(
+                phase: phase,
+                elapsedMilliseconds: timing.elapsedMilliseconds,
+                deltaMilliseconds: timing.deltaMilliseconds,
+                extra: metadata
+            )
+        )
+    }
+
+    func finish(_ phase: String = "finish", metadata: [String: String] = [:]) {
+        let timing = timingSnapshot()
+        AppLogger.info(
+            "Performance trace finished",
+            category: category,
+            metadata: mergedMetadata(
+                phase: phase,
+                elapsedMilliseconds: timing.elapsedMilliseconds,
+                deltaMilliseconds: timing.deltaMilliseconds,
+                extra: metadata
+            )
+        )
+    }
+
+    static func milliseconds(_ interval: TimeInterval) -> String {
+        String(format: "%.1f", interval * 1000.0)
+    }
+
+    private func timingSnapshot() -> (elapsedMilliseconds: String, deltaMilliseconds: String) {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        let now = Date()
+        let elapsed = now.timeIntervalSince(startedAt)
+        let delta = now.timeIntervalSince(lastMarkAt)
+        lastMarkAt = now
+        return (
+            elapsedMilliseconds: Self.milliseconds(elapsed),
+            deltaMilliseconds: Self.milliseconds(delta)
+        )
+    }
+
+    private func mergedMetadata(
+        phase: String,
+        elapsedMilliseconds: String,
+        deltaMilliseconds: String,
+        extra: [String: String]
+    ) -> [String: String] {
+        var metadata = baseMetadata
+        metadata["trace"] = name
+        metadata["phase"] = phase
+        metadata["elapsedMs"] = elapsedMilliseconds
+        metadata["deltaMs"] = deltaMilliseconds
+        for (key, value) in extra {
+            metadata[key] = value
+        }
+        return metadata
+    }
+}
+
 private extension ISO8601DateFormatter {
     static let appLoggerFormatter: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()

@@ -281,6 +281,108 @@ struct TaptionEncodingProgress: Codable, Equatable {
     }
 }
 
+struct EncodingProgressCoalescer {
+    var minimumFractionDelta: Double
+    var minimumTimeInterval: TimeInterval
+
+    private(set) var lastEmittedProgress: TaptionEncodingProgress?
+    private var lastEmissionUptime: TimeInterval?
+
+    init(
+        minimumFractionDelta: Double = 0.01,
+        minimumTimeInterval: TimeInterval = 0.5
+    ) {
+        self.minimumFractionDelta = max(minimumFractionDelta, 0)
+        self.minimumTimeInterval = max(minimumTimeInterval, 0)
+    }
+
+    mutating func shouldEmit(
+        _ progress: TaptionEncodingProgress,
+        now: TimeInterval = ProcessInfo.processInfo.systemUptime
+    ) -> Bool {
+        let shouldRecord = shouldRecord(progress, now: now)
+        if shouldRecord {
+            lastEmittedProgress = progress
+            lastEmissionUptime = now
+        }
+        return shouldRecord
+    }
+
+    private func shouldRecord(
+        _ progress: TaptionEncodingProgress,
+        now: TimeInterval
+    ) -> Bool {
+        guard let lastEmittedProgress else {
+            return true
+        }
+        if progress.stage != lastEmittedProgress.stage {
+            return true
+        }
+        if progress.fractionCompleted >= 1,
+           lastEmittedProgress.fractionCompleted < 1 {
+            return true
+        }
+        if progress.fractionCompleted - lastEmittedProgress.fractionCompleted >= minimumFractionDelta {
+            return true
+        }
+        guard let lastEmissionUptime else {
+            return true
+        }
+        return now - lastEmissionUptime >= minimumTimeInterval
+            && progress.fractionCompleted > lastEmittedProgress.fractionCompleted
+    }
+}
+
+struct EncodingProgressEmitterStats: Equatable {
+    var observedCount: Int
+    var emittedCount: Int
+}
+
+final class EncodingProgressEmitter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var coalescer: EncodingProgressCoalescer
+    private let progress: (TaptionEncodingProgress) -> Void
+    private var observedCount = 0
+    private var emittedCount = 0
+
+    init(
+        coalescer: EncodingProgressCoalescer = EncodingProgressCoalescer(),
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) {
+        self.coalescer = coalescer
+        self.progress = progress
+    }
+
+    func submit(_ snapshot: TaptionEncodingProgress, force: Bool = false) {
+        var shouldEmit = force
+        lock.lock()
+        observedCount += 1
+        if !shouldEmit {
+            shouldEmit = coalescer.shouldEmit(snapshot)
+        } else {
+            _ = coalescer.shouldEmit(snapshot)
+        }
+        if shouldEmit {
+            emittedCount += 1
+        }
+        lock.unlock()
+
+        guard shouldEmit else {
+            return
+        }
+        progress(snapshot)
+    }
+
+    var stats: EncodingProgressEmitterStats {
+        lock.lock()
+        defer { lock.unlock() }
+        return EncodingProgressEmitterStats(
+            observedCount: observedCount,
+            emittedCount: emittedCount
+        )
+    }
+}
+
 struct TaptionStorageRequirement: Codable, Equatable {
     var estimatedOutputBytes: Int64
     var requiredWorkingBytes: Int64

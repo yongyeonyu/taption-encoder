@@ -29,6 +29,7 @@ final class HomeViewModel: ObservableObject {
     private var pendingSaveQueue: [PendingSaveJob] = []
     private var lastBatchFileCards: [EncodingFileCardSnapshot] = []
     private var selectionInspectionTask: Task<Void, Never>?
+    private var inspectedMediaCache = TaptionInspectedMediaCache()
     private var hasRestoredPendingSaves = false
     private var hasLoadedStarWallet = false
     private var pendingSaveAccessURLs: [UUID: URL] = [:]
@@ -1382,6 +1383,7 @@ final class HomeViewModel: ObservableObject {
         pendingSaveAccessURLs = [:]
         lastBatchFileCards = []
         folderBatch = nil
+        inspectedMediaCache.removeAll()
         rewardedAdStatePollingTask?.cancel()
         rewardedAdStatePollingTask = nil
         state = .idle
@@ -1425,14 +1427,72 @@ final class HomeViewModel: ObservableObject {
         shouldAutoResumeBatchAfterStarEarn = false
         lastBatchFileCards = []
         folderBatch = nil
+        inspectedMediaCache.removeAll()
         state = .failed(HomeEncodingError(title: "Import failed", message: message))
         stopSecurityScopedAccess()
+    }
+
+    private func inspectVideoReusingCache(
+        at url: URL,
+        preinspectedAsset: TaptionVideoAsset? = nil
+    ) async throws -> (asset: TaptionVideoAsset, reusedCache: Bool) {
+        let fingerprint = mediaFingerprint(for: url)
+        let canValidateFingerprint = fingerprint.fileSize != nil
+            || fingerprint.modificationDate != nil
+            || fingerprint.creationDate != nil
+            || fingerprint.contentIdentifier != nil
+
+        if canValidateFingerprint,
+           let preinspectedAsset,
+           preinspectedAsset.fingerprint == fingerprint {
+            inspectedMediaCache.store(preinspectedAsset, for: url)
+            AppLogger.info(
+                "Media inspection reused preinspected asset",
+                category: .mediaInspection,
+                metadata: ["name": url.lastPathComponent]
+            )
+            return (preinspectedAsset, true)
+        }
+
+        if canValidateFingerprint,
+           let cachedAsset = inspectedMediaCache.asset(for: url, currentFingerprint: fingerprint) {
+            AppLogger.info(
+                "Media inspection reused cached asset",
+                category: .mediaInspection,
+                metadata: ["name": url.lastPathComponent]
+            )
+            return (cachedAsset, true)
+        }
+
+        let asset = try await environment.videoCoreServices.inspector.inspectVideo(at: url)
+        if canValidateFingerprint {
+            inspectedMediaCache.store(asset, for: url)
+        }
+        return (asset, false)
+    }
+
+    private func mediaFingerprint(for url: URL) -> TaptionMediaFingerprint {
+        guard let values = try? url.resourceValues(forKeys: [
+            .fileSizeKey,
+            .creationDateKey,
+            .contentModificationDateKey
+        ]) else {
+            return TaptionMediaFingerprint()
+        }
+
+        return TaptionMediaFingerprint(
+            fileSize: values.fileSize.map(Int64.init),
+            creationDate: values.creationDate,
+            modificationDate: values.contentModificationDate,
+            contentIdentifier: nil
+        )
     }
 
     private func prepareEncodingFlow(
         source: HomeSelectedSource,
         autoStartAfterPrepare: Bool = false,
-        allowsBusyState: Bool = false
+        allowsBusyState: Bool = false,
+        preinspectedAsset: TaptionVideoAsset? = nil
     ) {
         guard state.canSelectSource || autoStartAfterPrepare || allowsBusyState else {
             AppLogger.warning(
@@ -1470,6 +1530,15 @@ final class HomeViewModel: ObservableObject {
             guard let self else {
                 return
             }
+            let trace = TaptionEncodingPerformanceTrace(
+                name: "home_prepare_encoding",
+                category: .encoding,
+                metadata: [
+                    "name": source.displayName,
+                    "kind": source.kind.rawValue,
+                    "autoStart": "\(autoStartAfterPrepare)"
+                ]
+            )
 
             do {
                 try Task.checkCancellation()
@@ -1482,7 +1551,20 @@ final class HomeViewModel: ObservableObject {
                 )
                 state = .inspecting(source)
 
-                let asset = try await environment.videoCoreServices.inspector.inspectVideo(at: source.url)
+                trace.mark("inspection_start")
+                let inspected = try await inspectVideoReusingCache(
+                    at: source.url,
+                    preinspectedAsset: preinspectedAsset
+                )
+                let asset = inspected.asset
+                trace.mark(
+                    "inspection_complete",
+                    metadata: [
+                        "cacheHit": "\(inspected.reusedCache)",
+                        "codec": asset.videoTrack?.codec.rawValue ?? "unknown",
+                        "audioTracks": "\(asset.audioTracks.count)"
+                    ]
+                )
                 guard asset.videoTrack != nil else {
                     throw TaptionVideoCoreError.noVideoTrack
                 }
@@ -1497,6 +1579,14 @@ final class HomeViewModel: ObservableObject {
                     outputPolicy: selectedOutput.outputPolicy(for: asset),
                     preferredMode: .automatic,
                     savePolicy: savePolicy
+                )
+                trace.mark(
+                    "job_prepared",
+                    metadata: [
+                        "plan": job.plan.id.uuidString,
+                        "route": job.routeSelection.route.displayName,
+                        "executionKind": job.routeSelection.executionKind.rawValue
+                    ]
                 )
                 if source.kind == .photos {
                     job.plan.finalOutputURL = nil
@@ -1523,6 +1613,14 @@ final class HomeViewModel: ObservableObject {
                 )
                 state = .storageChecking(source)
                 try Task.checkCancellation()
+                trace.mark(
+                    "storage_checked",
+                    metadata: [
+                        "requiredBytes": "\(job.storageRequirement.requiredWorkingBytes)",
+                        "availableBytes": job.storageRequirement.availableBytes.map(String.init) ?? "unknown",
+                        "hasEnoughSpace": "\(job.storageRequirement.hasEnoughSpace)"
+                    ]
+                )
 
                 let canEncodeSelectedOutput = job.routeSelection.isEncodableNow && selectedOutput.isImplementedNow
                 guard canEncodeSelectedOutput else {
@@ -1551,12 +1649,14 @@ final class HomeViewModel: ObservableObject {
                         source: source,
                         errorMessage: detail
                     ) {
+                        trace.finish("blocked", metadata: ["reason": detail])
                         return
                     }
                     state = .failed(HomeEncodingError(
                         title: "Encoding blocked",
                         message: detail
                     ))
+                    trace.finish("blocked", metadata: ["reason": detail])
                     activeTask = nil
                     stopSecurityScopedAccess()
                     requestSessionEndAd(reason: .failedEncoding)
@@ -1588,6 +1688,7 @@ final class HomeViewModel: ObservableObject {
                         source: source,
                         errorMessage: storageMessage
                     ) {
+                        trace.finish("storage_blocked", metadata: ["reason": storageMessage])
                         return
                     }
                     state = .storageBlocked(StorageIssue(
@@ -1595,6 +1696,7 @@ final class HomeViewModel: ObservableObject {
                         availableBytes: job.storageRequirement.availableBytes,
                         message: storageMessage
                     ))
+                    trace.finish("storage_blocked", metadata: ["reason": storageMessage])
                     activeTask = nil
                     return
                 }
@@ -1626,12 +1728,14 @@ final class HomeViewModel: ObservableObject {
 
                 activeTask = nil
                 if autoStartAfterPrepare {
+                    trace.finish("ready_auto_start")
                     await attemptEncodingStart(
                         for: review,
                         autoResumeAfterStarEarn: true
                     )
                 } else {
                     state = .readyToStart(review)
+                    trace.finish("ready")
                 }
             } catch is CancellationError {
                 AppLogger.warning(
@@ -1652,6 +1756,7 @@ final class HomeViewModel: ObservableObject {
                 folderBatch = nil
                 stopSecurityScopedAccess()
                 requestSessionEndAd(reason: .cancelledEncoding)
+                trace.finish("cancelled")
             } catch TaptionVideoCoreError.insufficientStorage(let requiredBytes, let availableBytes) {
                 let storageMessage = storageWarningMessage(
                     requiredBytes: requiredBytes,
@@ -1674,6 +1779,7 @@ final class HomeViewModel: ObservableObject {
                     isActive: false
                 )
                 if handleFolderItemFailure(source: source, errorMessage: storageMessage) {
+                    trace.finish("storage_blocked", metadata: ["reason": storageMessage])
                     return
                 }
                 state = .storageBlocked(StorageIssue(
@@ -1681,6 +1787,7 @@ final class HomeViewModel: ObservableObject {
                     availableBytes: availableBytes,
                     message: storageMessage
                 ))
+                trace.finish("storage_blocked", metadata: ["reason": storageMessage])
                 activeTask = nil
             } catch let error as TaptionVideoCoreError {
                 AppLogger.error(
@@ -1699,6 +1806,7 @@ final class HomeViewModel: ObservableObject {
                     isActive: false
                 )
                 if handleFolderItemFailure(source: source, errorMessage: error.localizedDescription) {
+                    trace.finish("failed", metadata: ["error": error.localizedDescription])
                     return
                 }
                 state = .failed(HomeEncodingError(
@@ -1708,6 +1816,7 @@ final class HomeViewModel: ObservableObject {
                 activeTask = nil
                 stopSecurityScopedAccess()
                 requestSessionEndAd(reason: .failedEncoding)
+                trace.finish("failed", metadata: ["error": error.localizedDescription])
             } catch {
                 AppLogger.error(
                     "Prepare encoding failed",
@@ -1725,6 +1834,7 @@ final class HomeViewModel: ObservableObject {
                     isActive: false
                 )
                 if handleFolderItemFailure(source: source, errorMessage: error.localizedDescription) {
+                    trace.finish("failed", metadata: ["error": error.localizedDescription])
                     return
                 }
                 state = .failed(HomeEncodingError(
@@ -1734,6 +1844,7 @@ final class HomeViewModel: ObservableObject {
                 activeTask = nil
                 stopSecurityScopedAccess()
                 requestSessionEndAd(reason: .failedEncoding)
+                trace.finish("failed", metadata: ["error": error.localizedDescription])
             }
         }
     }
@@ -1758,6 +1869,15 @@ final class HomeViewModel: ObservableObject {
         )
         activeTask?.cancel()
         currentReview = review
+        let trace = TaptionEncodingPerformanceTrace(
+            name: "home_encode_flow",
+            category: .encoding,
+            metadata: [
+                "name": review.source.displayName,
+                "plan": review.job.plan.id.uuidString,
+                "route": review.job.plan.codecRoute?.displayName ?? "unknown"
+            ]
+        )
         let initialProgress = EncodingProgressSnapshot(
             stage: .queued,
             fractionCompleted: 0,
@@ -1784,7 +1904,29 @@ final class HomeViewModel: ObservableObject {
             do {
                 let core = TaptionVideoCore(services: environment.videoCoreServices)
                 var lastLoggedProgressBucket = -1
+                let firstProgressLock = NSLock()
+                var didMarkFirstProgress = false
                 let result = try await core.encodePreparedJob(review.job) { [weak self] progress in
+                    let shouldMarkFirstProgress: Bool = {
+                        firstProgressLock.lock()
+                        defer {
+                            firstProgressLock.unlock()
+                        }
+                        guard !didMarkFirstProgress else {
+                            return false
+                        }
+                        didMarkFirstProgress = true
+                        return true
+                    }()
+                    if shouldMarkFirstProgress {
+                        trace.mark(
+                            "first_progress",
+                            metadata: [
+                                "stage": progress.stage.rawValue,
+                                "fraction": String(format: "%.3f", progress.fractionCompleted)
+                            ]
+                        )
+                    }
                     Task { @MainActor [weak self] in
                         guard let self else {
                             return
@@ -1819,6 +1961,13 @@ final class HomeViewModel: ObservableObject {
                 }
 
                 try Task.checkCancellation()
+                trace.mark(
+                    "encode_completed",
+                    metadata: [
+                        "mode": result.usedMode.rawValue,
+                        "backend": result.usedBackend.rawValue
+                    ]
+                )
 
                 guard let pendingState = result.pendingSaveState else {
                     throw TaptionVideoCoreError.missingTemporaryOutputURL
@@ -1856,6 +2005,7 @@ final class HomeViewModel: ObservableObject {
                 )
                 activeTask = nil
                 state = .pendingSave(pendingJob)
+                trace.finish("pending_save_started", metadata: ["pendingSave": pendingJob.id.uuidString])
                 savePendingJob(pendingJob)
             } catch is CancellationError {
                 AppLogger.warning(
@@ -1878,6 +2028,7 @@ final class HomeViewModel: ObservableObject {
                 folderBatch = nil
                 stopSecurityScopedAccess()
                 requestSessionEndAd(reason: .cancelledEncoding)
+                trace.finish("cancelled")
             } catch let error as TaptionVideoCoreError {
                 AppLogger.error(
                     "Encoding task failed with TaptionVideoCoreError",
@@ -1897,6 +2048,7 @@ final class HomeViewModel: ObservableObject {
                     isActive: false
                 )
                 if handleFolderItemFailure(source: review.source, errorMessage: error.localizedDescription) {
+                    trace.finish("failed", metadata: ["error": error.localizedDescription])
                     return
                 }
                 state = .failed(HomeEncodingError(
@@ -1906,6 +2058,7 @@ final class HomeViewModel: ObservableObject {
                 activeTask = nil
                 stopSecurityScopedAccess()
                 requestSessionEndAd(reason: .failedEncoding)
+                trace.finish("failed", metadata: ["error": error.localizedDescription])
             } catch {
                 AppLogger.error(
                     "Encoding task failed",
@@ -1925,6 +2078,7 @@ final class HomeViewModel: ObservableObject {
                     isActive: false
                 )
                 if handleFolderItemFailure(source: review.source, errorMessage: error.localizedDescription) {
+                    trace.finish("failed", metadata: ["error": error.localizedDescription])
                     return
                 }
                 state = .failed(HomeEncodingError(
@@ -1934,6 +2088,7 @@ final class HomeViewModel: ObservableObject {
                 activeTask = nil
                 stopSecurityScopedAccess()
                 requestSessionEndAd(reason: .failedEncoding)
+                trace.finish("failed", metadata: ["error": error.localizedDescription])
             }
         }
     }
@@ -1961,8 +2116,18 @@ final class HomeViewModel: ObservableObject {
                 "rewardedAdRequired": "\(job.state.requiresRewardedAd)"
             ]
         )
+        let trace = TaptionEncodingPerformanceTrace(
+            name: "home_final_save",
+            category: .saving,
+            metadata: [
+                "source": job.sourceName,
+                "pendingSave": job.state.id.uuidString,
+                "destination": "\(job.state.saveDestination)"
+            ]
+        )
 
         guard !job.state.requiresRewardedAd else {
+            trace.finish("waiting_for_reward")
             pausePendingSaveForRewardedAd(job)
             return
         }
@@ -1995,15 +2160,20 @@ final class HomeViewModel: ObservableObject {
                 workingJob.saveGateMessage = nil
 
                 if conflictResolution == .saveAsUnique {
+                    trace.mark("pending_save_state_update_start")
                     try await environment.pendingSaveStore.savePendingState(workingJob.state)
+                    trace.mark("pending_save_state_updated")
                     updatePendingSaveJob(workingJob)
                 }
 
+                trace.mark("finalize_save_start")
                 let savedURL = try await finalizeSave(
                     for: workingJob.state,
                     conflictResolution: conflictResolution
                 )
+                trace.mark("finalize_save_complete", metadata: ["saved": savedURL.lastPathComponent])
                 await finishPendingSaveJob(workingJob, savedURL: savedURL)
+                trace.finish("completed", metadata: ["saved": savedURL.lastPathComponent])
             } catch is CancellationError {
                 AppLogger.warning(
                     "Save pending job cancelled; pending state retained",
@@ -2021,6 +2191,7 @@ final class HomeViewModel: ObservableObject {
                 )
                 state = .pendingSave(workingJob)
                 activeTask = nil
+                trace.finish("cancelled")
             } catch TaptionFinalSaveConflictError.destinationAlreadyExists(let existingURL) {
                 workingJob.saveGateMessage = "Choose where to save the encoded video, then the export will continue."
                 updatePendingSaveJob(workingJob)
@@ -2043,6 +2214,7 @@ final class HomeViewModel: ObservableObject {
                 )
                 state = .pendingSave(workingJob)
                 activeTask = nil
+                trace.finish("needs_save_location", metadata: ["existing": existingURL.lastPathComponent])
             } catch {
                 if workingJob.state.saveDestination == .sourceFolder,
                    isFileProviderWritePermissionDenied(error) {
@@ -2066,6 +2238,7 @@ final class HomeViewModel: ObservableObject {
                     )
                     state = .pendingSave(workingJob)
                     activeTask = nil
+                    trace.finish("needs_save_location", metadata: ["error": error.localizedDescription])
                     return
                 }
 
@@ -2096,6 +2269,7 @@ final class HomeViewModel: ObservableObject {
                     message: failure.displayMessage
                 ))
                 activeTask = nil
+                trace.finish("failed", metadata: ["error": error.localizedDescription])
             }
         }
     }
@@ -2333,7 +2507,8 @@ final class HomeViewModel: ObservableObject {
         )
 
         do {
-            let asset = try await environment.videoCoreServices.inspector.inspectVideo(at: url)
+            let inspected = try await inspectVideoReusingCache(at: url)
+            let asset = inspected.asset
             let routeSelection = TaptionCodecRoutePlanner.selectRoute(
                 for: asset,
                 outputCodec: selectedOutput.videoCodec,
@@ -2472,7 +2647,8 @@ final class HomeViewModel: ObservableObject {
         prepareEncodingFlow(
             source: source,
             autoStartAfterPrepare: autoStartAfterPrepare,
-            allowsBusyState: allowsBusyState
+            allowsBusyState: allowsBusyState,
+            preinspectedAsset: batch.itemStates[url]?.asset
         )
     }
 
@@ -2926,7 +3102,11 @@ final class HomeViewModel: ObservableObject {
                     "output": selectedOutput.summary
                 ]
             )
-            prepareEncodingFlow(source: review.source, allowsBusyState: true)
+            prepareEncodingFlow(
+                source: review.source,
+                allowsBusyState: true,
+                preinspectedAsset: review.job.asset
+            )
             return
         }
 
@@ -3477,7 +3657,7 @@ final class HomeViewModel: ObservableObject {
                 }
             }
             AppLogger.info(
-                "Copying final output to source folder",
+                "Writing final output to source folder",
                 category: .saving,
                 metadata: [
                     "temporary": state.temporaryOutputURL.lastPathComponent,
@@ -3527,10 +3707,15 @@ final class HomeViewModel: ObservableObject {
                 }
             }
             do {
-                try fileManager.copyItem(at: state.temporaryOutputURL, to: finalOutputURL)
+                let writeResult = try writeFinalOutputFastPath(
+                    temporaryURL: state.temporaryOutputURL,
+                    destinationURL: finalOutputURL,
+                    fileManager: fileManager
+                )
+                finalOutputURL = writeResult.url
             } catch where TaptionFinalSaveConflictError.isDestinationAlreadyExistsError(error) {
                 AppLogger.warning(
-                    "Final save copy collided with an existing destination",
+                    "Final save write collided with an existing destination",
                     category: .saving,
                     metadata: [
                         "temporary": state.temporaryOutputURL.lastPathComponent,
@@ -3552,8 +3737,12 @@ final class HomeViewModel: ObservableObject {
                         preferred: finalOutputURL,
                         fileManager: fileManager
                     )
-                    try fileManager.copyItem(at: state.temporaryOutputURL, to: uniqueURL)
-                    finalOutputURL = uniqueURL
+                    let writeResult = try writeFinalOutputFastPath(
+                        temporaryURL: state.temporaryOutputURL,
+                        destinationURL: uniqueURL,
+                        fileManager: fileManager
+                    )
+                    finalOutputURL = writeResult.url
                 }
             }
             return finalOutputURL
@@ -3597,11 +3786,53 @@ final class HomeViewModel: ObservableObject {
             .appendingPathExtension(pathExtension)
     }
 
+    private func writeFinalOutputFastPath(
+        temporaryURL: URL,
+        destinationURL: URL,
+        fileManager: FileManager
+    ) throws -> (url: URL, method: String) {
+        let startedAt = Date()
+        do {
+            try fileManager.moveItem(at: temporaryURL, to: destinationURL)
+            AppLogger.info(
+                "Final output moved to destination",
+                category: .saving,
+                metadata: [
+                    "final": destinationURL.lastPathComponent,
+                    "method": "move",
+                    "elapsedMs": TaptionEncodingPerformanceTrace.milliseconds(Date().timeIntervalSince(startedAt))
+                ]
+            )
+            return (destinationURL, "move")
+        } catch {
+            AppLogger.warning(
+                "Final output move fast path failed; falling back to copy",
+                category: .saving,
+                metadata: [
+                    "final": destinationURL.lastPathComponent,
+                    "error": error.localizedDescription
+                ]
+            )
+            try fileManager.copyItem(at: temporaryURL, to: destinationURL)
+            AppLogger.info(
+                "Final output copied to destination",
+                category: .saving,
+                metadata: [
+                    "final": destinationURL.lastPathComponent,
+                    "method": "copy_after_move_fallback",
+                    "elapsedMs": TaptionEncodingPerformanceTrace.milliseconds(Date().timeIntervalSince(startedAt))
+                ]
+            )
+            return (destinationURL, "copy_after_move_fallback")
+        }
+    }
+
     private func overwriteFinalOutputOrSaveUnique(
         temporaryURL: URL,
         destinationURL: URL,
         fileManager: FileManager
     ) throws -> URL {
+        let startedAt = Date()
         do {
             let resultingURL = try fileManager.replaceItemAt(
                 destinationURL,
@@ -3612,7 +3843,11 @@ final class HomeViewModel: ObservableObject {
             AppLogger.info(
                 "Existing final output replaced",
                 category: .saving,
-                metadata: ["final": destinationURL.lastPathComponent]
+                metadata: [
+                    "final": destinationURL.lastPathComponent,
+                    "method": "replace",
+                    "elapsedMs": TaptionEncodingPerformanceTrace.milliseconds(Date().timeIntervalSince(startedAt))
+                ]
             )
             return resultingURL ?? destinationURL
         } catch where isFileProviderWritePermissionDenied(error) {
@@ -3629,6 +3864,15 @@ final class HomeViewModel: ObservableObject {
                 ]
             )
             try fileManager.copyItem(at: temporaryURL, to: uniqueURL)
+            AppLogger.info(
+                "Final output copied after replace denial",
+                category: .saving,
+                metadata: [
+                    "final": uniqueURL.lastPathComponent,
+                    "method": "copy_after_replace_denied",
+                    "elapsedMs": TaptionEncodingPerformanceTrace.milliseconds(Date().timeIntervalSince(startedAt))
+                ]
+            )
             return uniqueURL
         }
     }
