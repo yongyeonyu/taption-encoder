@@ -1,17 +1,32 @@
 # Taption Encoder Development Plan
 
-Status date: 2026-06-15
+Status date: 2026-06-27
+
+## Current Release Baseline
+
+Release `01.00.01` is the current shipped baseline and maps to Apple marketing version `1.0.1`, build `19`.
+
+Release proof for this baseline:
+
+- Release commit: `f5af6b3` (`Prepare Taption Encoder 1.0.1 build 19`).
+- `Scripts/run_core_codec_truth_checks.sh` passed.
+- App-scheme XCTest passed with parallel testing disabled: 209 tests, 0 failures.
+- `Scripts/verify_codec_fixture_evidence.sh` passed with 90 fixtures and 180 verified transcodes.
+- Release archive/export upload succeeded for `build/TestFlight-01.00.01-19/TaptionEncoder.xcarchive`.
+- Paired iPhone 14 Pro and iPad Pro 12.9-inch (6th generation) install checks both reported `com.taption.encoder` version `1.0.1`, build `19`.
+
+Post-release planning should treat App Store Connect/TestFlight upload, App Review/store-processing state, device install proof, and runtime app-container logs as separate evidence surfaces.
 
 ## Phase Count
 
 Taption Encoder should be developed in 9 execution phases.
 
-- Phase 0 to Phase 3: build and launch the first monetized AV1 to H.265 app.
-- Phase 4 to Phase 8: expand from the launched app into a broad input encoder with H.265-only video output, legacy software support, FCPXML projects, merge editing, and advanced H.265 controls.
+- Phase 0 to Phase 3: completed the first monetized standalone H.265 / HEVC encoder release baseline.
+- Phase 4 to Phase 8: stabilize the launched app and expand it into a broad input encoder with H.265-only video output, legacy software support, FCPXML projects, merge editing, and advanced H.265 controls.
 
 Launch target:
 
-- Version 1.0 ships at the end of Phase 3.
+- Version `01.00.01` / `1.0.1 (19)` is the current shipped baseline after Phase 3.
 - The completed product direction is reached at the end of Phase 8.
 
 ## Product Completion Definition
@@ -115,7 +130,7 @@ Exit criteria:
 
 ## Phase 2: AV1 To H.265 Core
 
-Status, 2026-06-16: partially implemented for the first AV1 path. The app now uses AVFoundation media inspection, AV1-only validation, AVFoundation HEVC export, automatic software AV1 decode fallback through SwiftVLC/libVLC, VideoToolbox hardware encoder capability reporting, real export/fallback progress, sequential folder processing for common video file extensions, selected Photos import, Photos output save, cancellation cleanup, storage checks, security-scoped file/folder access, AdMob rewarded save, `_taption.mp4` final copy after the save gate, and bundled Vorbis-to-AAC / MP4 audio preservation for the current real WebM software route. Durable pending-save restoration hardening, broader software fallback audio preservation, consent UI, and broad software codec integration remain open.
+Status, 2026-06-27: complete for the `01.00.01` release baseline. The app now uses AVFoundation media inspection, route validation, H.265 export, current executable software fallback routes, VideoToolbox hardware encoder capability reporting, real export/fallback progress, sequential folder processing for supported video extensions, selected Photos import, Photos output save, cancellation cleanup, storage checks, security-scoped file/folder access, Stars/rewarded-save gating, `_taption` final save naming, pending-save recovery, and bundled audio preservation for the current executable software paths. Full broad software-backend execution remains post-release implementation work.
 
 Status, 2026-06-16 update: broad codec planning now has a concrete research and fixture base in `docs/CODEC_SUPPORT_RESEARCH.md`, `docs/VIDEO_CODEC_FIXTURES.md`, `docs/AUDIO_CODEC_FIXTURES.md`, `docs/HEVC_TRANSCODE_TEST_RESULTS.md`, `docs/DEVICE_CODEC_ROUTE_SIMULATION.md`, `Scripts/generate_video_codec_fixtures.sh`, `Scripts/generate_audio_codec_fixtures.sh`, `Scripts/transcode_fixtures_to_hevc.sh`, `Scripts/verify_codec_fixture_evidence.sh`, `Scripts/simulate_codec_route_planner.sh`, `HW_CodecCapabilityProbe.swift`, `SW_CodecSupportCatalog.swift`, `SW_SoftwareCodecBackendRegistry.swift`, `CodecRoutePlanner.swift`, `TaptionCodecTranscodingRegistry.swift`, `CodecFixtureEvidence.swift`, and the `TaptionEncoderTests` Xcode test target. The local host-side smoke gate converted 90 synthetic input fixtures through both `SW_HEVC` and `HW_HEVC`, for 180/180 passing H.265 outputs; 166 attempts preserve measured audio signal, and 14 no-source-audio attempts are explicitly recorded. The fixture set now includes representative container/raw aliases and lossless/intermediate codecs such as DivX, M2TS/TP/TRP/TOD, DAT/MOD/VOB, QT, F4V, OGM, DVR-MS, NUT, RoQ, RealMedia, FFV1, HuffYUV/FFVHuff, Ut Video, MagicYUV, GoPro CineForm, DNxHD/DNxHR, PNG video, R10k, V210, Microsoft RLE, QuickTime Graphics, V308, V408, YUV4, AV1 OBU, H.263, rawvideo Y4M, M1V, and M2V; VC-1 remains a real-world or alternate-generator target because the current local FFmpeg build has no VC-1 encoder. The fixture evidence verifier now enforces that every generated fixture has both SW and HW H.265 PASS rows with output audio signal preserved when the source has audio. `CodecFixtureEvidenceTests` now runs the same evidence check inside the app scheme by parsing both the video smoke TSV and audio-focused smoke TSV from Swift; it also parses the generated video smoke manifest and compares it with `SW_CodecSupportCatalog.fixtureTargets`, so the video sample set stays tied to the software codec roadmap. The same tests build source-preserving H.265/MP4 command plans and gated FFmpeg-family execution jobs for every generated video fixture row, match those jobs against the latest SW/HW H.265 and audio-signal evidence rows, and preserve source-derived size, frame rate, bitrate, audio-to-AAC decisions, and no-audio elementary streams. The audio-focused smoke gate generated 30 audio codec fixtures and converted them through both SW/HW H.265 paths for 60/60 passing outputs with measured audio signal present; the app-scheme fixture evidence tests also parse the audio generation TSV, build AAC/MP4 app-core audio route plans, FFmpeg-family software fallback command plans, and gated execution jobs for every generated audio fixture row, match those jobs against the latest SW/HW H.265 and audio-signal evidence rows, and preserve sample rate, channel count, and source bitrate options so generated codec coverage and pending xHE-AAC, AMR-NB, and AMR-WB generator attempts stay explicit. The route simulator now emits 7,057 TSV lines across 112 generic, Apple family, and model-identifier capability profiles, covers 63 source-to-H.265 codec routes per profile, and verifies HW-first, HW/SW mixed, SW fallback, and hardware-only route availability behavior for `AV1 -> H.265`, `MPEG-2 -> H.265`, `H.264 -> H.265`, `H.265 -> H.265`, `HEVC with Alpha -> H.265`, `Dolby Vision HEVC -> H.265`, and `ProRes -> H.265`; app-scheme evidence tests also parse the generated route matrix TSV to prove profile coverage, universal H.265 route coverage, implemented/planned row counts, and per-side HW decode/encode backend preference. The live H.265 encoder routes now dispatch through a codec registry, with AV1/VP9/VP8/MPEG-2/MPEG-4 Visual software algorithms and Apple-native H.264/H.265/HEVC-with-alpha/Dolby-Vision-HEVC/ProRes HW algorithms registered as route implementations and covered by unit tests. The broad SW backend registry now models future software video/audio decode, H.265 video encode, audio encode, and container read/write coverage for input-to-H.265 route planning; `SW_UniversalCodecTranscodeAlgorithm` now adds planned software descriptors for every non-implemented universal route while returning a clear not-bundled error until the broad backend ships. Audio conversion now has `AudioCodecAlgorithm.swift` plus `SW_UniversalAudioCodecTranscodeAlgorithm.swift`, so every universal audio source/output pair has a function-style planned software descriptor and a clear not-bundled error boundary until the broad backend ships. The Xcode route planner tests verify the same HW/SW priority behavior inside the app scheme, selected output policy preservation for the generic plan model, and asymmetric input-to-H.265 route coverage so non-H.265 output pairs such as `H.264 -> AV1` and `AV1 -> H.264` remain outside product scope. `TaptionUniversalCodecCompletionAuditor` now turns that H.265-only target into a single core audit stage: current builds are planning-locked for broader input-to-H.265 coverage, but command-plan gaps, software-backend gates, and runtime gaps still block full universal execution. The app now reports per-file planned codec paths as `HW`, `SW`, `HW/SW`, `Planned`, or `Unsupported`; the Home screen exposes H.265 output container and setting selectors, while current-build video execution is limited to H.265 output with AV1/VP9/VP8/MPEG-2/MPEG-4 Visual software paths and Apple-native H.264/H.265/HEVC-with-alpha/Dolby-Vision-HEVC/ProRes HW routes where the device supports them. Actual bundled broad-codec execution, broad software fallback beyond these shipped VLC-backed routes, and broader input-to-H.265 conversion algorithms remain implementation work.
 
@@ -171,9 +186,11 @@ Exit criteria:
 - Insufficient storage blocks before output.
 - Output naming appends `_taption`.
 
-## Phase 3: Monetized 1.0 Launch
+## Phase 3: Monetized 01.00.01 Launch
 
-Goal: ship the first public version: free AV1 to H.265 with ads.
+Goal: ship the first public version: free H.265 / HEVC conversion with ads.
+
+Status, 2026-06-27: release `01.00.01` / `1.0.1 (19)` is shipped as the current baseline. Release assets, App Store metadata, fixed H.265 output policy, MP4/MOV output formats, file/folder/Photos flows, HW/SW route handling, Stars/rewarded-save gating, pending-save recovery, and broad input-to-H.265 planning evidence are in place. Follow-up work moves into Phase 4 stabilization and real-device runtime proof.
 
 Scope:
 

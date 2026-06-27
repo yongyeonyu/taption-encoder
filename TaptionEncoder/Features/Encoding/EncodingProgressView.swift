@@ -4,6 +4,7 @@ struct EncodingProgressView: View {
     var state: HomeScreenState
     var displayDetail: String? = nil
     var canStartEncoding: Bool? = nil
+    var startActionTitle: String = "Start"
     var showsSaveAction: Bool = false
     var saveActionTitle: String = "Save"
     var watchAdButtonTitle: String = "Watch Ad (+1 Star)"
@@ -118,11 +119,13 @@ struct EncodingProgressView: View {
             Button {
                 onStart()
             } label: {
-                Label("Start", systemImage: "play.fill")
+                Label(startActionTitle, systemImage: "play.fill")
                     .font(contentScale < 0.9 ? .caption.weight(.semibold) : .body.weight(.semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: controlHeight)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
             .buttonStyle(.plain)
             .background(TaptionTheme.accent)
@@ -150,11 +153,13 @@ struct EncodingProgressView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         } else if state.preparedEncodingReview != nil {
             Button {} label: {
-                Label("Start", systemImage: "play.fill")
+                Label(startActionTitle, systemImage: "play.fill")
                     .font(contentScale < 0.9 ? .caption.weight(.semibold) : .body.weight(.semibold))
                     .foregroundStyle(TaptionTheme.disabledText)
                     .frame(maxWidth: .infinity)
                     .frame(height: controlHeight)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
             .buttonStyle(.plain)
             .background(TaptionTheme.elevatedSurface)

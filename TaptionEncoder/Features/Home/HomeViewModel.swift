@@ -84,6 +84,14 @@ final class HomeViewModel: ObservableObject {
         return review.videoInfo.isRouteEncodable
     }
 
+    var startActionTitle: String {
+        let starCost = estimatedStartStarCost
+        guard starCost > 0 else {
+            return "Start"
+        }
+        return "Start (\(formattedStarDelta(-starCost)))"
+    }
+
     var watchAdButtonTitle: String {
         if isWatchingStarAd {
             return "Watching Ad..."
@@ -111,6 +119,24 @@ final class HomeViewModel: ObservableObject {
 
     var canWatchAdForStar: Bool {
         !state.isBusy && !isWatchingStarAd
+    }
+
+    private var estimatedStartStarCost: Int {
+        guard let review = state.preparedEncodingReview,
+              review.videoInfo.isRouteEncodable else {
+            return 0
+        }
+        guard let folderBatch else {
+            return 1
+        }
+        return max(folderBatch.remainingEncodableFileCount, 1)
+    }
+
+    private func formattedStarDelta(_ delta: Int) -> String {
+        let absoluteValue = abs(delta)
+        let sign = delta < 0 ? "-" : "+"
+        let noun = absoluteValue == 1 ? "Star" : "Stars"
+        return "\(sign)\(absoluteValue) \(noun)"
     }
 
     var progressDetailText: String {

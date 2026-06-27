@@ -233,6 +233,8 @@ enum TaptionLaunchSupportCatalog {
         .m4v,
         .avi,
         .webm,
+        .flv,
+        .ogg,
         .mxf,
         .mpegProgramStream,
         .threeGP,
@@ -250,7 +252,20 @@ enum TaptionLaunchSupportCatalog {
         TaptionLaunchInputVideoSupportItem(codec: .mpeg2, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .mpeg4Visual, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .h263, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .h261, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .flashVideo, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .microsoftMPEG4V2, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .microsoftMPEG4V3, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .motionJPEG, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .jpeg2000, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .jpegLS, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .losslessJPEG, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .animation, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .cinepak, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .sorensonVideo, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .sorensonVideo3, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .quickTimeVideo, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .theora, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .wmv, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableNow),
@@ -326,7 +341,7 @@ enum TaptionLaunchSupportCatalog {
     }
 
     static var supportedInputContainerNote: String {
-        "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as WebM, AVI, MXF, MPEG program streams, 3GP, 3G2, ASF/WMV, and raw elementary streams."
+        "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as WebM, FLV, OGG/OGV, AVI, MXF, MPEG program streams, 3GP, 3G2, ASF/WMV, and raw elementary streams."
     }
 
     static func inputAvailability(for codec: TaptionVideoCodec) -> TaptionLaunchInputSupportAvailability? {

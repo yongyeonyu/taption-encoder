@@ -45,7 +45,20 @@ struct TaptionCodecTranscodingRegistry: @unchecked Sendable {
             TaptionCodecTranscodingAlgorithmEntry(SW_MPEG2HEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_MPEG4VisualHEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_H263HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_H261HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_FlashVideoHEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_MicrosoftMPEG4V2HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_MicrosoftMPEG4V3HEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_MotionJPEGHEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_JPEG2000HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_JPEGLSHEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_LosslessJPEGHEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_AnimationHEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_CinepakHEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_SorensonVideoHEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_SorensonVideo3HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_QuickTimeVideoHEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_TheoraHEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_WMVHEVCTranscoder.self)
         ] + HW_AppleHEVCCodecAlgorithm.nativeDescriptors.map { descriptor in
             TaptionCodecTranscodingAlgorithmEntry(

@@ -90,6 +90,18 @@ struct FolderEncodingBatch {
         fileURLs.contains { itemStates[$0]?.isEnabled != false }
     }
 
+    var remainingEncodableFileCount: Int {
+        remainingEncodableFileCount(startingAt: currentIndex)
+    }
+
+    func remainingEncodableFileCount(startingAt index: Int) -> Int {
+        let startIndex = min(max(index, 0), fileURLs.count)
+        return fileURLs
+            .dropFirst(startIndex)
+            .filter { itemStates[$0]?.isEnabled != false }
+            .count
+    }
+
     func snapshot(currentFileName: String? = nil) -> FolderQueueSnapshot {
         FolderQueueSnapshot(
             folderName: folderName,

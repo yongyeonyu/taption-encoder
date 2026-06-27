@@ -1,15 +1,26 @@
 # Taption Encoder Detailed Development Plan
 
-Status date: 2026-06-15
+Status date: 2026-06-27
 
 ## Purpose
 
 This document is the implementation-level plan for building Taption Encoder from the current standalone shell into the completed product direction.
 
+The current shipped baseline is release `01.00.01`, mapped to Apple marketing version `1.0.1` and build `19`.
+
+Release proof for this baseline:
+
+- Release commit: `f5af6b3` (`Prepare Taption Encoder 1.0.1 build 19`).
+- `Scripts/run_core_codec_truth_checks.sh` passed.
+- App-scheme XCTest passed with parallel testing disabled: 209 tests, 0 failures.
+- `Scripts/verify_codec_fixture_evidence.sh` passed with 90 fixtures and 180 verified transcodes.
+- Release archive/export upload succeeded for `build/TestFlight-01.00.01-19/TaptionEncoder.xcarchive`.
+- Paired iPhone 14 Pro and iPad Pro 12.9-inch (6th generation) install checks both reported `com.taption.encoder` version `1.0.1`, build `19`.
+
 The product path is:
 
-- First release: AV1 to H.265.
-- Next product milestone: all practical user video inputs to H.265.
+- Released baseline: standalone H.265 / HEVC conversion with fixed H.265 video output, MP4/MOV output containers, file/folder/Photos sources, HW/SW route handling, Stars/rewarded-save recovery, and release metadata/assets.
+- Next product milestone: stabilize `01.00.01` feedback and continue all practical user video inputs to H.265.
 - Final product: broad practical input conversion to H.265 / HEVC only.
 - Business model: free app supported by ads.
 - Core value: easy phone-based encoding, old-device software encoding support, source-like output defaults, and later multi-video merge/edit workflows.
@@ -24,9 +35,9 @@ This plan is more detailed than `docs/DEVELOPMENT_PLAN.md`. Use this document as
 - Visible app strings must be English.
 - The app remains separate from `/Users/u_mo_c/Documents/taption`.
 - Main Taption editor code must not be imported unless a file is intentionally ported.
-- MVP input is AV1 video.
-- MVP output is H.265 video in an `.mp4` container.
-- Mid-term output remains H.265 video.
+- The original MVP input was AV1 video; release `01.00.01` also includes current software fallback routes for VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, Motion JPEG, and Windows Media Video, plus Apple-native hardware routes for H.264, H.265, and ProRes when the device supports them.
+- Release `01.00.01` output is H.265 video in MP4 or MOV.
+- Mid-term output remains H.265 video while broad input support is proven.
 - Long-term output remains H.265 video with selectable containers and encode settings.
 - MVP "format" settings mean H.265 container selection, such as `.mp4` and `.mov`; later advanced format settings must not add alternate video output codecs.
 - Default quality policy is source-like visual preservation, not smallest file size.
@@ -46,7 +57,7 @@ This plan is more detailed than `docs/DEVELOPMENT_PLAN.md`. Use this document as
 | 0 | Foundation Lock | Pre-implementation | Correct project settings, architecture skeleton, and policy alignment |
 | 1 | Main UX And State Machine | Pre-MVP | Real main UI with fake services and testable states |
 | 2 | AV1 To H.265 Core | MVP core | Real AV1 inspection and H.265 encode pipeline |
-| 3 | Monetized 1.0 Launch | Version 1.0 | Ad-supported AV1 to H.265 app ready for App Store |
+| 3 | Monetized Launch | Version 01.00.01 / 1.0.1 (19) | Ad-supported H.265 / HEVC app released as the current baseline |
 | 4 | Stabilization And Legacy Proof | Version 1.1 | Old-device software proof, warnings, telemetry, recovery |
 | 5 | Broad Input Engine | Version 1.2/1.3 | Expanded codec/container input coverage |
 | 6 | FCPXML Project Planning | Version 1.4 | Native `.fcpxml` projects and merge planning |
@@ -590,21 +601,24 @@ Device tests:
 - HDR/color metadata preservation may be partial.
 - Long software encodes on old devices may overheat or be too slow.
 
-## Phase 3: Monetized 1.0 Launch
+## Phase 3: Monetized 01.00.01 Launch
 
 ### Objective
 
-Ship the first App Store-ready product: free AV1 to H.265 conversion with non-personalized AdMob placements and rewarded save.
+Ship the first App Store-ready product: free H.265 / HEVC conversion with non-personalized AdMob placements and rewarded save.
+
+Status, 2026-06-27: release `01.00.01` / `1.0.1 (19)` is the shipped baseline. Phase 3 is complete for the release train, and follow-up work should move into Phase 4 stabilization, real-device runtime proof, and broader input execution.
 
 ### Product Scope
 
-- AV1 to H.265 `.mp4`.
-- Automatic hardware/software codec path with info-only display.
-- Files and Photos inputs.
+- H.265 / HEVC output in MP4 or MOV.
+- Broad practical input-to-H.265 route planning, with current executable routes separated from planned software-backend routes.
+- Automatic hardware/software/mixed codec path with info-only display.
+- File, folder, and Photos inputs.
 - Progress, ETA, cancel, reset.
 - Pending save recovery.
 - Non-personalized ads.
-- Rewarded save gate.
+- Stars-based save path with rewarded-save gate when no Star is available.
 - iOS 26+ background option.
 - iOS 18-25 keep-app-open guidance.
 

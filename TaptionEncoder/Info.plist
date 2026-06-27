@@ -50,6 +50,8 @@
 	<string>public.app-category.video</string>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>UIFileSharingEnabled</key>
+	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Taption Encoder needs access to selected videos for local conversion.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

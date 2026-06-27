@@ -391,6 +391,94 @@ enum SW_H263HEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
     }
 }
 
+enum SW_H261HEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .h261,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "H.261 to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .h261)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "H.261",
+            progress: progress
+        )
+    }
+}
+
+enum SW_FlashVideoHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .flashVideo,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "Flash Video to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .flashVideo)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "Flash Video",
+            progress: progress
+        )
+    }
+}
+
+enum SW_MicrosoftMPEG4V2HEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .microsoftMPEG4V2,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "Microsoft MPEG-4 V2 to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .microsoftMPEG4V2)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "Microsoft MPEG-4 V2",
+            progress: progress
+        )
+    }
+}
+
+enum SW_MicrosoftMPEG4V3HEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .microsoftMPEG4V3,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "Microsoft MPEG-4 V3 to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .microsoftMPEG4V3)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "Microsoft MPEG-4 V3",
+            progress: progress
+        )
+    }
+}
+
 enum SW_MotionJPEGHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
     static let descriptor = TaptionCodecAlgorithmDescriptor(
         sourceCodec: .motionJPEG,
@@ -408,6 +496,204 @@ enum SW_MotionJPEGHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
         return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
             request: request,
             sourceCodecLabel: "Motion JPEG",
+            progress: progress
+        )
+    }
+}
+
+enum SW_JPEG2000HEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .jpeg2000,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "JPEG 2000 to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .jpeg2000)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "JPEG 2000",
+            progress: progress
+        )
+    }
+}
+
+enum SW_JPEGLSHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .jpegLS,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "JPEG-LS to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .jpegLS)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "JPEG-LS",
+            progress: progress
+        )
+    }
+}
+
+enum SW_LosslessJPEGHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .losslessJPEG,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "Lossless JPEG to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .losslessJPEG)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "Lossless JPEG",
+            progress: progress
+        )
+    }
+}
+
+enum SW_AnimationHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .animation,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "Apple Animation to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .animation)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "Apple Animation",
+            progress: progress
+        )
+    }
+}
+
+enum SW_CinepakHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .cinepak,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "Cinepak to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .cinepak)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "Cinepak",
+            progress: progress
+        )
+    }
+}
+
+enum SW_SorensonVideoHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .sorensonVideo,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "Sorenson Video to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .sorensonVideo)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "Sorenson Video",
+            progress: progress
+        )
+    }
+}
+
+enum SW_SorensonVideo3HEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .sorensonVideo3,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "Sorenson Video 3 to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .sorensonVideo3)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "Sorenson Video 3",
+            progress: progress
+        )
+    }
+}
+
+enum SW_QuickTimeVideoHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .quickTimeVideo,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "QuickTime Video to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .quickTimeVideo)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "QuickTime Video",
+            progress: progress
+        )
+    }
+}
+
+enum SW_TheoraHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .theora,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "Theora to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .theora)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "Theora",
             progress: progress
         )
     }

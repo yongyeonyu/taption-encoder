@@ -1,10 +1,12 @@
 # Taption Encoder Release Action Items
 
-Status date: 2026-06-18
+Status date: 2026-06-27
 
 ## Current State
 
-- Product path is AV1 to H.265 first, broad inputs to H.265 next, universal codec-to-codec conversion final.
+- Product path is AV1 to H.265 first, broad inputs to H.265 next, H.265-only video output final.
+- Release `01.00.01` is the current shipped baseline and maps to Apple marketing version `1.0.1`, build `19`.
+- Release commit is `f5af6b3` (`Prepare Taption Encoder 1.0.1 build 19`).
 - Project shell exists.
 - App is configured for iPhone and iPad.
 - Minimum OS is iOS/iPadOS 18.0 for the current SwiftVLC software fallback binary.
@@ -14,13 +16,29 @@ Status date: 2026-06-18
 - Detailed phase-by-phase implementation guide exists in `docs/DETAILED_DEVELOPMENT_PLAN.md`.
 - Phase 0 foundation is implemented: app environment, feature flags, Home feature shell, protocol boundaries, and Xcode project grouping exist.
 - Phase 1 UX/state machine is implemented: File, folder, and Photos sources can drive inspecting, storage checking, encoding progress, cancellation, rewarded-save waiting, pending-save recovery, and completed states.
-- Phase 2 first real encoder slice is partially implemented: File, folder, and selected Photos import now use AVFoundation media inspection, AV1-only validation, video-info review before Start, AVFoundation H.265 export, automatic software AV1 decode fallback, real export/fallback progress, codec-path reporting, security-scoped file/folder access, broad folder extension discovery, folder sequential processing, Photos output save, storage checks, cancellation cleanup, and `_taption.mp4` final save after Star consumption or a zero-Star rewarded-save gate.
-- Development is planned as 9 execution phases, with version 1.0 launching after Phase 3 and final product completion after Phase 8.
+- Phase 2 first real encoder slice is implemented for the release baseline: File, folder, and selected Photos import now use AVFoundation media inspection, route validation, video-info review before Start, H.265 export, software fallback for current executable software routes, real export/fallback progress, codec-path reporting, security-scoped file/folder access, broad folder extension discovery, folder sequential processing, Photos output save, storage checks, cancellation cleanup, and `_taption` final save after Star consumption or a zero-Star rewarded-save gate.
+- Development is planned as 9 execution phases; release `01.00.01` / `1.0.1 (19)` is the shipped Phase 3 baseline, and final product completion remains targeted after Phase 8.
 - Main screen is componentized with top/bottom banners, File, Folder, Photos, Reset, output codec/container selector, automatic codec-path info, video-info review, folder queue summary, output summary, status, progress, ETA, Start, Cancel, pending-save, and save completion surfaces.
 - Main screen now has a top-left menu with Help, Open Source Notices, and Device Info sheets.
 - AdMob app and production ad units are created and integrated for top/bottom banner, rewarded save, app-open, start interstitial, and session-end interstitial placements; Debug builds use Google's iOS test ad unit IDs.
-- App Store release assets and metadata are not ready.
+- App Store release assets, app icon, preview/marketing copy, support URL, release metadata, and H.265-only output policy copy were prepared for release `01.00.01`.
+- App Store Connect/TestFlight export upload succeeded for `1.0.1 (19)` and the uploaded package entered processing.
+- Paired iPhone 14 Pro and iPad Pro 12.9-inch (6th generation) install checks both reported `com.taption.encoder` version `1.0.1`, build `19`.
+- Latest release proof: `Scripts/run_core_codec_truth_checks.sh` passed; app-scheme XCTest passed with parallel testing disabled at 209 tests and 0 failures; `Scripts/verify_codec_fixture_evidence.sh` passed with 90 fixtures and 180 verified transcodes.
 - The project is in Git and pushed to `https://github.com/yongyeonyu/taption-encoder`.
+
+## Release 01.00.01 Closeout
+
+- [x] Set Apple marketing version/build to `1.0.1 (19)`.
+- [x] Commit release build preparation as `f5af6b3`.
+- [x] Push the release commit to `main` / `origin/main`.
+- [x] Run `Scripts/run_core_codec_truth_checks.sh`.
+- [x] Run full app-scheme XCTest with parallel testing disabled: 209 tests, 0 failures.
+- [x] Run `Scripts/verify_codec_fixture_evidence.sh`.
+- [x] Archive and export/upload `build/TestFlight-01.00.01-19/TaptionEncoder.xcarchive`.
+- [x] Confirm App Store Connect/TestFlight upload success and package processing.
+- [x] Install/check the release build on paired iPhone and iPad devices.
+- [x] Release `01.00.01`.
 
 ## P0 Decisions Needed
 
@@ -55,7 +73,7 @@ Status date: 2026-06-18
 - [x] Help, Device Info, and saved codec reports separate current-build executable inputs, hardware-gated inputs, and roadmap-only H.265 input coverage.
 - [x] Production AdMob IDs, privacy policy, support URL, and `app-ads.txt` will be added to the existing account/site setup.
 
-## P0 Release Blockers
+## P0 Release Blockers And Post-Release Follow-Ups
 
 - [x] Apply iOS/iPadOS 18.0 deployment target for the current SwiftVLC software fallback binary.
 - [x] Build Phase 0 main UI: top/bottom banner areas, title, File, Folder, Photos, Reset, automatic codec-path info, H.265 output summary, status/progress/cancel area.

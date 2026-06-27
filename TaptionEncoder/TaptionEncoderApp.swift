@@ -28,6 +28,7 @@ struct TaptionEncoderApp: App {
     init() {
         AppLogger.configure()
         AppLogger.info("Application init", category: .app)
+        TaptionTestVideoSeeder.seedBundledSamplesIntoDocuments()
         AdMobBootstrapper.start()
     }
 

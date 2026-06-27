@@ -289,7 +289,20 @@ enum TaptionCodecRegistry {
         TaptionCodecRoute(sourceCodec: .mpeg2, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .mpeg4Visual, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .h263, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .h261, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .flashVideo, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .microsoftMPEG4V2, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .microsoftMPEG4V3, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .motionJPEG, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .jpeg2000, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .jpegLS, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .losslessJPEG, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .animation, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .cinepak, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .sorensonVideo, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .sorensonVideo3, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .quickTimeVideo, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .theora, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .wmv, outputCodec: .hevc)
     ]
 
@@ -400,11 +413,102 @@ enum TaptionCodecRegistry {
             displayName: "H.263 to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .h261,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "H.261 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .flashVideo,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Flash Video to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .microsoftMPEG4V2,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Microsoft MPEG-4 V2 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .microsoftMPEG4V3,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Microsoft MPEG-4 V3 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
             sourceCodec: .motionJPEG,
             outputCodec: .hevc,
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "Motion JPEG to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .jpeg2000,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "JPEG 2000 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .jpegLS,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "JPEG-LS to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .losslessJPEG,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Lossless JPEG to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .animation,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Apple Animation to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .cinepak,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Cinepak to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .sorensonVideo,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Sorenson Video to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .sorensonVideo3,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Sorenson Video 3 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .quickTimeVideo,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "QuickTime Video to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .theora,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Theora to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
             sourceCodec: .wmv,

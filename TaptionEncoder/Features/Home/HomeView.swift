@@ -74,6 +74,7 @@ struct HomeView: View {
                         state: viewModel.state,
                         displayDetail: viewModel.progressDetailText,
                         canStartEncoding: viewModel.canStartEncodingNow,
+                        startActionTitle: viewModel.startActionTitle,
                         showsSaveAction: viewModel.showsSaveAction,
                         saveActionTitle: viewModel.saveActionTitle,
                         watchAdButtonTitle: viewModel.watchAdButtonTitle,

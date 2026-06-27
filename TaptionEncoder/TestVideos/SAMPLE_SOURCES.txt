@@ -1,0 +1,15 @@
+Taption Encoder test video samples
+
+Most samples in this folder were generated as short codec-specific clips from:
+Big Buck Bunny, Blender Foundation, https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4
+
+Big Buck Bunny project license reference:
+https://peach.blender.org/about/
+
+The Theora sample was copied from:
+https://download.blender.org/peach/trailer/trailer_400p.ogg
+
+The Sorenson Video 3 sample was trimmed from the FFmpeg samples archive:
+https://samples.ffmpeg.org/V-codecs/SVQ3/Vertical400kbit.sorenson3.mov
+
+Generated and trimmed files are renamed with support state, codec name, codec tag, and container.

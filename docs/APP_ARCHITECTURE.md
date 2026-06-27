@@ -1,8 +1,10 @@
 # Taption Encoder App Architecture
 
+Status date: 2026-06-27
+
 ## Product Direction
 
-Taption Encoder is a free, phone-first video encoder that makes conversion simple enough to run directly on iPhone or iPad. The first product milestone is AV1 to H.265, the next milestone is broad input to H.265, and the final product goal is practical all-input-to-H.265 conversion through hardware, software, or mixed codec paths. H.265 / HEVC is the only video output codec. The app must stay separate from the main Taption editor unless a file is intentionally ported.
+Taption Encoder is a free, phone-first video encoder that makes conversion simple enough to run directly on iPhone or iPad. Release `01.00.01` / `1.0.1 (19)` is the shipped baseline, and the final product goal remains practical all-input-to-H.265 conversion through hardware, software, or mixed codec paths. H.265 / HEVC is the only video output codec. The app must stay separate from the main Taption editor unless a file is intentionally ported.
 
 The product core is convenience: choose one or more videos, keep the original look by default, encode with minimal setup, optionally do small edits, and get a saved output in the desired codec/container. Advertising supports the free business model; it should be dense enough to monetize the app, but it is not the product's purpose.
 
@@ -23,8 +25,8 @@ Primary constraints:
 - Minimum OS is iOS/iPadOS 18.0 for the current SwiftVLC software fallback binary; lower OS support requires a codec stack built for that target.
 - iPad uses the same centered, mobile-width UI and flow as iPhone.
 - Visible app strings stay in English.
-- MVP input is AV1 video.
-- MVP output is fixed to H.265 video in an `.mp4` container.
+- Release `01.00.01` executable input routes include AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, Motion JPEG, and Windows Media Video software fallback routes, plus Apple-native H.264, H.265, and ProRes hardware routes when the device supports them.
+- Release `01.00.01` output is fixed to H.265 video in MP4 or MOV.
 - Mid-term output remains H.265 video while broad input support is proven.
 - Long-term output video codec remains fixed to H.265 / HEVC. Output selection may expose containers and encode settings, not alternate video codecs.
 - The core codec model is an all-input-to-H.265 mesh: adding a codec to the input catalog does not make it a video output candidate.
@@ -72,11 +74,11 @@ Primary constraints:
 - Add placeholder surfaces for banner ads, progress, cancellation, storage errors, and rewarded-save flow.
 - Add ad placement containers for banner, app-open, interstitial, native, and rewarded save ads behind protocol abstractions.
 
-Implementation status, 2026-06-15:
+Implementation status, 2026-06-27:
 
 - Phase 0 app structure is in place.
 - `AppEnvironment`, feature flags, app configuration, Home feature files, core protocol directories, and fake services compile.
-- The main screen has the required Phase 0 surfaces, real file/folder/selected-Photos AV1 to H.265 conversion, and AdMob SDK integration for top/bottom banner, rewarded save, app-open, start interstitial, and session-end interstitial placements. Native ads, consent UI, and broad codec support remain later-phase work.
+- The main screen has the required Phase 0 surfaces, real file/folder/selected-Photos H.265 conversion, folder processing, MP4/MOV output selection, AdMob SDK integration for top/bottom banner, rewarded save, app-open, start interstitial, and session-end interstitial placements, and current-build executable codec routes separated from planned software-backend routes.
 
 ### Phase 1: AV1 To H.265 MVP
 
@@ -546,7 +548,7 @@ Top to bottom:
 
 - AdMob top and bottom banner areas.
 - App title: `Taption Encoder`.
-- Subtitle: `AV1 to H.265`.
+- Subtitle: `H.265 / HEVC`.
 - Source actions:
   - `File` with `doc`.
   - `Folder` with `folder`.
@@ -961,8 +963,8 @@ Simulator validation:
 - Keep security-scoped access open for the selected file when possible.
 - Generate the output name from the original source:
   - `sample.mp4` -> `sample_taption.mp4`
-  - `sample.mov` -> `sample_taption.mp4`
-- Use H.265 video in an MP4 container for the first release unless the encoder implementation proves MOV is safer.
+  - `sample.mov` -> `sample_taption.mov` when MOV output is selected
+- Use H.265 video in the selected MP4 or MOV output container.
 - Write to a temporary app-owned file first.
 - After rewarded ad completion, move or copy to the final sibling destination.
 - If rewarded save is unavailable, skipped, or interrupted, keep the completed temporary output and store a pending-save record.

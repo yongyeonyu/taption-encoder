@@ -171,6 +171,73 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(selection.encodeBackend, .customSoftware)
     }
 
+    func testH261ToHEVCUsesSoftwareWhenNoHardwareIsAvailable() {
+        let selection = selectRoute(
+            sourceCodec: .h261,
+            outputCodec: .hevc,
+            profile: .softwareOnly
+        )
+
+        XCTAssertEqual(selection.support, .implemented)
+        XCTAssertTrue(selection.isEncodableNow)
+        XCTAssertEqual(selection.executionKind, .software)
+        XCTAssertEqual(selection.selectedMode, .software)
+        XCTAssertEqual(selection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(selection.encodeBackend, .customSoftware)
+    }
+
+    func testNextSevenLegacyCodecsToHEVCUseSoftwareWhenNoHardwareIsAvailable() {
+        let codecs: [TaptionVideoCodec] = [
+            .flashVideo,
+            .microsoftMPEG4V2,
+            .microsoftMPEG4V3,
+            .jpeg2000,
+            .jpegLS,
+            .losslessJPEG,
+            .animation
+        ]
+
+        for codec in codecs {
+            let selection = selectRoute(
+                sourceCodec: codec,
+                outputCodec: .hevc,
+                profile: .softwareOnly
+            )
+
+            XCTAssertEqual(selection.support, .implemented, codec.displayName)
+            XCTAssertTrue(selection.isEncodableNow, codec.displayName)
+            XCTAssertEqual(selection.executionKind, .software, codec.displayName)
+            XCTAssertEqual(selection.selectedMode, .software, codec.displayName)
+            XCTAssertEqual(selection.decodeBackend, .softwareVLCDecoder, codec.displayName)
+            XCTAssertEqual(selection.encodeBackend, .customSoftware, codec.displayName)
+        }
+    }
+
+    func testNextFiveLegacyCodecsToHEVCUseSoftwareWhenNoHardwareIsAvailable() {
+        let codecs: [TaptionVideoCodec] = [
+            .cinepak,
+            .sorensonVideo,
+            .sorensonVideo3,
+            .quickTimeVideo,
+            .theora
+        ]
+
+        for codec in codecs {
+            let selection = selectRoute(
+                sourceCodec: codec,
+                outputCodec: .hevc,
+                profile: .softwareOnly
+            )
+
+            XCTAssertEqual(selection.support, .implemented, codec.displayName)
+            XCTAssertTrue(selection.isEncodableNow, codec.displayName)
+            XCTAssertEqual(selection.executionKind, .software, codec.displayName)
+            XCTAssertEqual(selection.selectedMode, .software, codec.displayName)
+            XCTAssertEqual(selection.decodeBackend, .softwareVLCDecoder, codec.displayName)
+            XCTAssertEqual(selection.encodeBackend, .customSoftware, codec.displayName)
+        }
+    }
+
     func testMotionJPEGToHEVCUsesSoftwareWhenNoHardwareIsAvailable() {
         let selection = selectRoute(
             sourceCodec: .motionJPEG,
@@ -292,8 +359,8 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     func testPlannedUniversalRoutesRemainVisibleButNotEncodable() {
-        let h261ToHEVC = selectRoute(
-            sourceCodec: .h261,
+        let jpegToHEVC = selectRoute(
+            sourceCodec: .jpeg,
             outputCodec: .hevc,
             profile: .softwareOnly
         )
@@ -303,11 +370,11 @@ final class CodecRoutePlannerTests: XCTestCase {
             profile: .h264HEVCHardware
         )
 
-        XCTAssertEqual(h261ToHEVC.support, .planned)
-        XCTAssertEqual(h261ToHEVC.executionKind, .planned)
-        XCTAssertFalse(h261ToHEVC.isEncodableNow)
-        XCTAssertEqual(h261ToHEVC.decodeBackend, .ffmpegFamily)
-        XCTAssertEqual(h261ToHEVC.encodeBackend, .ffmpegFamily)
+        XCTAssertEqual(jpegToHEVC.support, .planned)
+        XCTAssertEqual(jpegToHEVC.executionKind, .planned)
+        XCTAssertFalse(jpegToHEVC.isEncodableNow)
+        XCTAssertEqual(jpegToHEVC.decodeBackend, .ffmpegFamily)
+        XCTAssertEqual(jpegToHEVC.encodeBackend, .ffmpegFamily)
 
         XCTAssertEqual(h264ToAV1.support, .unsupported)
         XCTAssertEqual(h264ToAV1.executionKind, .unsupported)
@@ -793,6 +860,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         let mpeg4Descriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: mpeg4Route)
         let h263Route = TaptionCodecRoute(sourceCodec: .h263, outputCodec: .hevc)
         let h263Descriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: h263Route)
+        let h261Route = TaptionCodecRoute(sourceCodec: .h261, outputCodec: .hevc)
+        let h261Descriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: h261Route)
         let motionJPEGRoute = TaptionCodecRoute(sourceCodec: .motionJPEG, outputCodec: .hevc)
         let motionJPEGDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: motionJPEGRoute)
         let wmvRoute = TaptionCodecRoute(sourceCodec: .wmv, outputCodec: .hevc)
@@ -829,6 +898,16 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(h263Descriptors.count, 1)
         XCTAssertEqual(h263Descriptors.first?.mode, .software)
         XCTAssertEqual(h263Descriptors.first?.backend, .softwareVLCDecoder)
+        XCTAssertEqual(h261Descriptors.count, 1)
+        XCTAssertEqual(h261Descriptors.first?.mode, .software)
+        XCTAssertEqual(h261Descriptors.first?.backend, .softwareVLCDecoder)
+        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora] {
+            let route = TaptionCodecRoute(sourceCodec: codec, outputCodec: .hevc)
+            let codecDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: route)
+            XCTAssertEqual(codecDescriptors.count, 1, codec.displayName)
+            XCTAssertEqual(codecDescriptors.first?.mode, .software, codec.displayName)
+            XCTAssertEqual(codecDescriptors.first?.backend, .softwareVLCDecoder, codec.displayName)
+        }
         XCTAssertEqual(motionJPEGDescriptors.count, 1)
         XCTAssertEqual(motionJPEGDescriptors.first?.mode, .software)
         XCTAssertEqual(motionJPEGDescriptors.first?.backend, .softwareVLCDecoder)
@@ -940,7 +1019,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     func testLiveRegistryKeepsPlannedSoftwareDescriptorsSeparateFromExecutableAlgorithms() {
-        let plannedRoute = TaptionCodecRoute(sourceCodec: .h261, outputCodec: .hevc)
+        let plannedRoute = TaptionCodecRoute(sourceCodec: .jpeg, outputCodec: .hevc)
 
         XCTAssertTrue(TaptionCodecTranscodingRegistry.live.descriptors(for: plannedRoute).isEmpty)
         XCTAssertEqual(
@@ -954,7 +1033,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     func testConfiguredLiveRegistryPromotesPlannedSoftwareRoutesWhenBackendIsExecutable() {
-        let plannedRoute = TaptionCodecRoute(sourceCodec: .h261, outputCodec: .hevc)
+        let plannedRoute = TaptionCodecRoute(sourceCodec: .jpeg, outputCodec: .hevc)
         let registry = TaptionCodecTranscodingRegistry.makeLive(
             softwareExecutor: SW_FFmpegCommandExecutor(
                 readinessReport: readyBroadSoftwareBackendReport(),
@@ -976,9 +1055,9 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     func testConfiguredLiveRegistryCanTranscodePlannedSoftwareRouteWhenBackendIsExecutable() async throws {
-        let outputURL = temporaryTestURL(fileName: "runtime-registry-h261-to-hevc.mp4")
+        let outputURL = temporaryTestURL(fileName: "runtime-registry-jpeg-to-hevc.mp4")
         try? FileManager.default.removeItem(at: outputURL)
-        let plannedRoute = TaptionCodecRoute(sourceCodec: .h261, outputCodec: .hevc)
+        let plannedRoute = TaptionCodecRoute(sourceCodec: .jpeg, outputCodec: .hevc)
         let registry = TaptionCodecTranscodingRegistry.makeLive(
             softwareExecutor: SW_FFmpegCommandExecutor(
                 readinessReport: readyBroadSoftwareBackendReport(),
@@ -998,7 +1077,7 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         let output = try await registry.transcode(
             request: TaptionCodecTranscodeRequest(
-                sourceURL: URL(fileURLWithPath: "/tmp/runtime-registry-input.avi"),
+                sourceURL: URL(fileURLWithPath: "/tmp/runtime-registry-input.mp4"),
                 outputURL: outputURL,
                 route: plannedRoute,
                 options: .preservingSource(outputCodec: .hevc, container: .mp4)
@@ -1020,7 +1099,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     func testUniversalSoftwareAlgorithmReportsBundledBackendMissingUntilImplementationLands() async {
-        let route = TaptionCodecRoute(sourceCodec: .h261, outputCodec: .hevc)
+        let route = TaptionCodecRoute(sourceCodec: .jpeg, outputCodec: .hevc)
         let request = TaptionCodecTranscodeRequest(
             sourceURL: URL(fileURLWithPath: "/tmp/input.mp4"),
             outputURL: URL(fileURLWithPath: "/tmp/output.mp4"),
@@ -1042,7 +1121,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     func testFFmpegVideoCodecTranscodeExecutorBlocksUntilReadinessGatesClose() async throws {
-        let route = TaptionCodecRoute(sourceCodec: .h261, outputCodec: .hevc)
+        let route = TaptionCodecRoute(sourceCodec: .jpeg, outputCodec: .hevc)
         let request = TaptionCodecTranscodeRequest(
             sourceURL: URL(fileURLWithPath: "/tmp/input.mp4"),
             outputURL: URL(fileURLWithPath: "/tmp/output.mp4"),
@@ -1074,9 +1153,9 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     func testFFmpegVideoCodecTranscodeExecutorRunsThroughInjectedRunnerWhenReady() async throws {
-        let outputURL = temporaryTestURL(fileName: "h261-to-hevc.mp4")
+        let outputURL = temporaryTestURL(fileName: "jpeg-to-hevc.mp4")
         try? FileManager.default.removeItem(at: outputURL)
-        let route = TaptionCodecRoute(sourceCodec: .h261, outputCodec: .hevc)
+        let route = TaptionCodecRoute(sourceCodec: .jpeg, outputCodec: .hevc)
         let request = TaptionCodecTranscodeRequest(
             sourceURL: URL(fileURLWithPath: "/tmp/input.mp4"),
             outputURL: outputURL,
@@ -1434,6 +1513,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             plistExtensions.isSuperset(of: launchExtensions),
             "Missing Info.plist video extensions: \(launchExtensions.subtracting(plistExtensions).sorted().joined(separator: ", "))"
         )
+        XCTAssertEqual(plist["LSSupportsOpeningDocumentsInPlace"] as? Bool, true)
+        XCTAssertEqual(plist["UIFileSharingEnabled"] as? Bool, true)
         XCTAssertTrue(SupportedVideoFileExtensions.contains(".mp4"))
         XCTAssertTrue(SupportedVideoFileExtensions.contains("qt"))
         XCTAssertTrue(SupportedVideoFileExtensions.contains("M4V"))
@@ -1445,6 +1526,69 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(ImportableVideoTypes.fileExtensions.contains("lrf"))
         XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("dvr-ms"))
         XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("vc1"))
+    }
+
+    func testBundledTestVideosMatchCurrentLaunchVideoSupport() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let testVideosURL = rootURL.appendingPathComponent("TaptionEncoder/TestVideos", isDirectory: true)
+        let filenames = try FileManager.default
+            .contentsOfDirectory(atPath: testVideosURL.path)
+            .filter { !$0.hasPrefix(".") }
+            .sorted()
+        let videoFilenames = filenames.filter { $0 != TaptionTestVideoSeeder.sourceNoticeFilename }
+
+        XCTAssertEqual(Set(videoFilenames), Set(TaptionTestVideoSeeder.expectedBundledVideoSampleFilenames))
+        XCTAssertEqual(
+            videoFilenames.filter { $0.hasPrefix("available-now_") }.count,
+            TaptionLaunchSupportCatalog.executableNowInputVideoCodecs.count
+        )
+        XCTAssertEqual(
+            videoFilenames.filter { $0.hasPrefix("supported-hardware_") }.count,
+            TaptionLaunchSupportCatalog.hardwareGatedInputVideoCodecs.count
+        )
+        XCTAssertTrue(filenames.contains(TaptionTestVideoSeeder.sourceNoticeFilename))
+        XCTAssertTrue(videoFilenames.allSatisfy { $0.contains("_") && $0.split(separator: "_").count >= 4 })
+    }
+
+    func testTestVideoSeederCreatesDocumentsFolderAndPreservesExistingFiles() throws {
+        let fileManager = FileManager.default
+        let rootURL = fileManager.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let sourceURL = rootURL.appendingPathComponent("Source", isDirectory: true)
+        let documentsURL = rootURL.appendingPathComponent("Documents", isDirectory: true)
+        let destinationURL = documentsURL.appendingPathComponent(
+            TaptionTestVideoSeeder.documentsFolderName,
+            isDirectory: true
+        )
+        defer {
+            try? fileManager.removeItem(at: rootURL)
+        }
+
+        try fileManager.createDirectory(at: sourceURL, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: destinationURL, withIntermediateDirectories: true)
+
+        let existingFilename = TaptionTestVideoSeeder.expectedBundledVideoSampleFilenames[0]
+        let copiedFilename = TaptionTestVideoSeeder.expectedBundledVideoSampleFilenames[1]
+        let existingDestinationURL = destinationURL.appendingPathComponent(existingFilename)
+        let copiedDestinationURL = destinationURL.appendingPathComponent(copiedFilename)
+
+        try Data("bundle-existing".utf8).write(to: sourceURL.appendingPathComponent(existingFilename))
+        try Data("bundle-copied".utf8).write(to: sourceURL.appendingPathComponent(copiedFilename))
+        try Data("user-existing".utf8).write(to: existingDestinationURL)
+
+        let result = try TaptionTestVideoSeeder.seedSamples(
+            sourceURL: sourceURL,
+            documentsDirectoryURL: documentsURL,
+            fileManager: fileManager
+        )
+
+        XCTAssertEqual(result.destinationURL, destinationURL)
+        XCTAssertEqual(result.copiedFilenames, [copiedFilename])
+        XCTAssertEqual(result.skippedFilenames, [existingFilename])
+        XCTAssertEqual(try String(contentsOf: existingDestinationURL), "user-existing")
+        XCTAssertEqual(try String(contentsOf: copiedDestinationURL), "bundle-copied")
     }
 
     func testUniversalVideoCommandPlannerRejectsEveryUnsupportedOutputCodec() {
@@ -1915,7 +2059,20 @@ final class CodecRoutePlannerTests: XCTestCase {
                 TaptionLaunchInputVideoSupportItem(codec: .mpeg2, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .mpeg4Visual, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .h263, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .h261, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .flashVideo, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .microsoftMPEG4V2, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .microsoftMPEG4V3, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .motionJPEG, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .jpeg2000, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .jpegLS, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .losslessJPEG, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .animation, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .cinepak, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .sorensonVideo, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .sorensonVideo3, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .quickTimeVideo, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .theora, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .wmv, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableNow),
@@ -1924,25 +2081,28 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputVideoSummary,
-            "AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, Motion JPEG, Windows Media Video, H.264 / AVC, H.265 / HEVC, Apple ProRes"
+            "AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2, Microsoft MPEG-4 V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, H.264 / AVC, H.265 / HEVC, Apple ProRes"
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainers,
-            [.mp4, .mov, .m4v, .avi, .webm, .mxf, .mpegProgramStream, .threeGP, .threeGPP2, .asf, .wmv, .rawElementaryStream]
+            [.mp4, .mov, .m4v, .avi, .webm, .flv, .ogg, .mxf, .mpegProgramStream, .threeGP, .threeGPP2, .asf, .wmv, .rawElementaryStream]
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainerSummary,
-            "MP4, MOV, QT, M4V, AVI, DIVX, WEBM, MXF, MPG, MPEG, MPE, VOB, MOD, DAT, 3GP, 3GPP, 3G2, 3GPP2, ASF, DVR-MS, WMV, H264, H265, HEVC, 264, 265, IVF, OBU, Y4M, AV1, H263, M1V, M2V, VC1"
+            "MP4, MOV, QT, M4V, AVI, DIVX, WEBM, FLV, F4V, OGG, OGV, OGM, MXF, MPG, MPEG, MPE, VOB, MOD, DAT, 3GP, 3GPP, 3G2, 3GPP2, ASF, DVR-MS, WMV, H264, H265, HEVC, 264, 265, IVF, OBU, Y4M, AV1, H263, M1V, M2V, VC1"
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.executableNowInputVideoCodecs,
-            [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .motionJPEG, .wmv, .h264, .hevc]
+            [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .wmv, .h264, .hevc]
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.hardwareGatedInputVideoCodecs,
             [.proRes]
         )
-        XCTAssertTrue(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(.h261))
+        XCTAssertFalse(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(.h261))
+        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora] {
+            XCTAssertFalse(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(codec), codec.displayName)
+        }
         XCTAssertFalse(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(.av1))
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedOutputContainerSummary,
@@ -1951,7 +2111,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.makeInputReadinessReport(),
             TaptionLaunchInputReadinessReport(
-                executableNowVideoCodecs: [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .motionJPEG, .wmv, .h264, .hevc],
+                executableNowVideoCodecs: [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .wmv, .h264, .hevc],
                 hardwareGatedVideoCodecs: [.proRes],
                 plannedVideoCodecs: TaptionLaunchSupportCatalog.plannedInputVideoCodecs,
                 inputContainers: TaptionLaunchSupportCatalog.supportedInputContainers,
@@ -1966,7 +2126,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainerNote,
-            "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as WebM, AVI, MXF, MPEG program streams, 3GP, 3G2, ASF/WMV, and raw elementary streams."
+            "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as WebM, FLV, OGG/OGV, AVI, MXF, MPEG program streams, 3GP, 3G2, ASF/WMV, and raw elementary streams."
         )
         XCTAssertTrue(
             TaptionLaunchSupportCatalog.plannedInputVideoNote.contains("roadmap input codecs")
@@ -2054,11 +2214,35 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.diagnoseInput(container: .mp4, videoCodec: .h261),
             TaptionLaunchInputSupportDiagnosis(
-                state: .plannedCodec,
-                title: "Input Planned",
-                detail: "H.261 input is in the H.265 roadmap, but is not executable in this build."
+                state: .supported,
+                title: "Input Supported",
+                detail: "The current launch build can inspect this input and encode it to H.265 MP4 or MOV."
             )
         )
+        for input in [
+            (TaptionVideoContainer.flv, TaptionVideoCodec.flashVideo),
+            (.avi, .microsoftMPEG4V2),
+            (.avi, .microsoftMPEG4V3),
+            (.mov, .jpeg2000),
+            (.mov, .jpegLS),
+            (.avi, .losslessJPEG),
+            (.mov, .animation),
+            (.mov, .cinepak),
+            (.mov, .sorensonVideo),
+            (.mov, .sorensonVideo3),
+            (.mov, .quickTimeVideo),
+            (.ogg, .theora)
+        ] {
+            XCTAssertEqual(
+                TaptionLaunchSupportCatalog.diagnoseInput(container: input.0, videoCodec: input.1),
+                TaptionLaunchInputSupportDiagnosis(
+                    state: .supported,
+                    title: "Input Supported",
+                    detail: "The current launch build can inspect this input and encode it to H.265 MP4 or MOV."
+                ),
+                input.1.displayName
+            )
+        }
         XCTAssertEqual(TaptionLaunchSupportCatalog.supportedOutput.videoCodec, .hevc)
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedOutput.audioCodec,
@@ -2138,7 +2322,7 @@ final class CodecRoutePlannerTests: XCTestCase {
                 outputCodec: .hevc,
                 container: .mp4
             ),
-            .commandPlanReady
+            .implemented
         )
         XCTAssertEqual(
             TaptionCodecOutputCatalog.routeImplementationState(
@@ -2468,7 +2652,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         let message = TaptionVideoCoreError.unsupportedSourceCodec(.h264).localizedDescription
 
         XCTAssertTrue(message.contains("H.265 / MP4 or MOV output"))
-        XCTAssertTrue(message.contains("AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, Motion JPEG, and Windows Media Video with software fallback"))
+        XCTAssertTrue(message.contains("AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2/V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, and Windows Media Video with software fallback"))
         XCTAssertTrue(message.contains("H.264, H.265, or ProRes"))
         XCTAssertTrue(message.contains("H.264 / AVC"))
         XCTAssertTrue(message.contains("universal codec roadmap"))
@@ -2763,9 +2947,9 @@ final class CodecRoutePlannerTests: XCTestCase {
             outputSelection: TaptionOutputSelection(videoCodec: .hevc, container: .mp4)
         )
         let planned = LoadedVideoPathInfo.make(
-            sourceCodec: .h261,
+            sourceCodec: .jpeg,
             routeSelection: selectRoute(
-                sourceCodec: .h261,
+                sourceCodec: .jpeg,
                 outputCodec: .hevc,
                 profile: .softwareOnly
             ),
@@ -3210,7 +3394,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(wmvItem.hasCommandPlan)
 
         let commandOnlyItem = TaptionVideoCodecExecutionReadinessReporter.item(
-            for: TaptionCodecRoute(sourceCodec: .h261, outputCodec: .hevc),
+            for: TaptionCodecRoute(sourceCodec: .jpeg, outputCodec: .hevc),
             outputContainer: .mp4
         )
         XCTAssertEqual(commandOnlyItem.readiness, .commandPlanOnly)
@@ -3230,7 +3414,7 @@ final class CodecRoutePlannerTests: XCTestCase {
 
     func testVideoExecutionReadinessReportPromotesCommandPlansWhenBroadBackendShips() {
         let item = TaptionVideoCodecExecutionReadinessReporter.item(
-            for: TaptionCodecRoute(sourceCodec: .h261, outputCodec: .hevc),
+            for: TaptionCodecRoute(sourceCodec: .jpeg, outputCodec: .hevc),
             outputContainer: .mp4,
             broadSoftwareBackendExecutable: true
         )
@@ -3606,7 +3790,12 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(decoded.launchInputReadinessCatalog?.outputVideoCodec, .hevc)
         XCTAssertEqual(decoded.launchInputReadinessCatalog?.outputContainers, [.mp4, .mov])
-        XCTAssertTrue(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(.h261) == true)
+        XCTAssertTrue(decoded.launchInputReadinessCatalog?.executableNowVideoCodecs.contains(.h261) == true)
+        XCTAssertFalse(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(.h261) == true)
+        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora] {
+            XCTAssertTrue(decoded.launchInputReadinessCatalog?.executableNowVideoCodecs.contains(codec) == true, codec.displayName)
+            XCTAssertFalse(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(codec) == true, codec.displayName)
+        }
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"routeSimulationSummary\"") == true)
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"staticMatrixReconciliation\"") == true)
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"universalCodecCompletionAudit\"") == true)
@@ -3930,11 +4119,11 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     func testEncoderServiceRunsPreparedSoftwareCommandPlanWhenBroadBackendIsReady() async throws {
-        let outputURL = temporaryTestURL(fileName: "h261-to-hevc.mp4")
+        let outputURL = temporaryTestURL(fileName: "jpeg-to-hevc.mp4")
         try? FileManager.default.removeItem(at: outputURL)
         let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
-            asset: makeAsset(sourceCodec: .h261),
-            sourceURL: URL(fileURLWithPath: "/tmp/h261-source.avi"),
+            asset: makeAsset(sourceCodec: .jpeg),
+            sourceURL: URL(fileURLWithPath: "/tmp/jpeg-source.mp4"),
             temporaryOutputURL: outputURL,
             outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4),
             savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
@@ -3958,11 +4147,11 @@ final class CodecRoutePlannerTests: XCTestCase {
             progressStages.append(progress.stage)
         }
 
-        XCTAssertEqual(plan.codecRoute, TaptionCodecRoute(sourceCodec: .h261, outputCodec: .hevc))
+        XCTAssertEqual(plan.codecRoute, TaptionCodecRoute(sourceCodec: .jpeg, outputCodec: .hevc))
         XCTAssertEqual(plan.codecExecutionKind, .planned)
         XCTAssertNotNil(plan.videoCommandPlan)
         XCTAssertEqual(result.temporaryOutputURL, outputURL)
-        XCTAssertEqual(result.finalOutputURL?.lastPathComponent, "h261-source_taption.mp4")
+        XCTAssertEqual(result.finalOutputURL?.lastPathComponent, "jpeg-source_taption.mp4")
         XCTAssertEqual(result.usedBackend, .ffmpegFamily)
         XCTAssertEqual(result.usedMode, .software)
         XCTAssertEqual(progressStages, [.preparing, .encoding, .completed])
@@ -3972,15 +4161,15 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     func testEncoderServiceKeepsPreparedNoAudioSoftwareCommandPlan() async throws {
-        let outputURL = temporaryTestURL(fileName: "silent-h261-to-hevc.mp4")
+        let outputURL = temporaryTestURL(fileName: "silent-jpeg-to-hevc.mp4")
         try? FileManager.default.removeItem(at: outputURL)
         let silentAsset = TaptionVideoAsset(
-            displayName: "silent-h261.avi",
+            displayName: "silent-jpeg.mp4",
             location: TaptionVideoAssetLocation(kind: .file),
             container: .mp4,
             duration: 1,
             videoTrack: TaptionVideoTrackInfo(
-                codec: .h261,
+                codec: .jpeg,
                 naturalSize: TaptionPixelSize(width: 1920, height: 1080),
                 displaySize: TaptionPixelSize(width: 1920, height: 1080),
                 nominalFrameRate: TaptionRationalFrameRate(numerator: 30)
@@ -3989,7 +4178,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
             asset: silentAsset,
-            sourceURL: URL(fileURLWithPath: "/tmp/silent-h261-source.avi"),
+            sourceURL: URL(fileURLWithPath: "/tmp/silent-jpeg-source.mp4"),
             temporaryOutputURL: outputURL,
             outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4),
             savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
@@ -5489,6 +5678,9 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         viewModel.startFilesFlow(urls: fileURLs)
         try await waitForReadyToStartState(in: viewModel)
+
+        XCTAssertEqual(viewModel.startActionTitle, "Start (-3 Stars)")
+
         viewModel.startPreparedEncoding()
 
         try await waitForCondition(timeout: 3) {
@@ -5513,6 +5705,80 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(viewModel.state.title, "Save Complete")
         let showCallCountAfterSaveAd = await rewardedAdProvider.recordedShowCallCount()
         XCTAssertEqual(showCallCountAfterSaveAd, 1)
+    }
+
+    @MainActor
+    func testFolderBatchRequiresRewardedAdsForEveryMissingStarBeforeAllSavesComplete() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let fileURLs = [
+            directoryURL.appendingPathComponent("a.mp4"),
+            directoryURL.appendingPathComponent("b.mp4"),
+            directoryURL.appendingPathComponent("c.mp4")
+        ]
+        for url in fileURLs {
+            try Data("source".utf8).write(to: url)
+        }
+
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 1))
+        let rewardedAdProvider = RecordingRewardedAdProvider(showResult: .earnedReward)
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
+                rewardedAdProvider: rewardedAdProvider,
+                starWalletStore: walletStore
+            )
+        )
+
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+
+        XCTAssertEqual(viewModel.startActionTitle, "Start (-3 Stars)")
+
+        viewModel.startPreparedEncoding()
+        try await waitForCondition(timeout: 3) {
+            viewModel.state.pendingSaveJob?.sourceName == "b.mp4"
+                && viewModel.state.pendingSaveJob?.state.requiresRewardedAd == true
+                && viewModel.starWalletSnapshot.balance == 0
+        }
+
+        var showCallCount = await rewardedAdProvider.recordedShowCallCount()
+        XCTAssertEqual(showCallCount, 0)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("a_taption.mp4").path
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("b_taption.mp4").path
+        ))
+
+        viewModel.watchAdForStar()
+        try await waitForCondition(timeout: 3) {
+            viewModel.state.pendingSaveJob?.sourceName == "c.mp4"
+                && viewModel.state.pendingSaveJob?.state.requiresRewardedAd == true
+        }
+
+        showCallCount = await rewardedAdProvider.recordedShowCallCount()
+        XCTAssertEqual(showCallCount, 1)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("b_taption.mp4").path
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("c_taption.mp4").path
+        ))
+
+        viewModel.watchAdForStar()
+        try await waitForCompletedSave(in: viewModel, timeout: 3)
+
+        showCallCount = await rewardedAdProvider.recordedShowCallCount()
+        XCTAssertEqual(showCallCount, 2)
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("c_taption.mp4").path
+        ))
     }
 
     private struct FakeFFmpegCommandRunner: SW_FFmpegCommandRunning {

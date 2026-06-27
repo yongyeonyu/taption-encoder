@@ -1,8 +1,8 @@
 # Taption Encoder
 
-Taption Encoder is a free iOS video encoder app intended to make phone-based conversion simple. The first milestone is AV1 to H.265, the next milestone is broad input to H.265, and the long-term goal is practical all-input-to-H.265 conversion through hardware, software, or mixed codec paths, old-device compatibility where practical, background encoding where the OS allows it, and multi-video assembly into one H.265 output with lightweight editing.
+Taption Encoder is a free iOS video encoder app intended to make phone-based conversion simple. The current shipped baseline is release `01.00.01`, mapped to Apple marketing version `1.0.1` and build `19`. The product direction remains practical all-input-to-H.265 conversion through hardware, software, or mixed codec paths, old-device compatibility where practical, background encoding where the OS allows it, and multi-video assembly into one H.265 output with lightweight editing.
 
-The first release starts by extracting Taption's AV1 to H.265 conversion path into a focused standalone app. Later releases expand toward "almost any video in, H.265 out" plus simple multi-camera merge workflows. Output video codec is a product constraint: H.265 / HEVC is the only supported video output codec. Routes such as `H.264 -> AV1` or `AV1 -> H.264` are not product routes.
+Release `01.00.01` establishes the focused standalone H.265 / HEVC encoder app. Later releases expand toward "almost any video in, H.265 out" plus simple multi-camera merge workflows. Output video codec is a product constraint: H.265 / HEVC is the only supported video output codec. Routes such as `H.264 -> AV1` or `AV1 -> H.264` are not product routes.
 
 Product path: **AV1 to H.265 first, broad inputs to H.265 next, H.265-only output final.**
 
@@ -15,6 +15,21 @@ Product path: **AV1 to H.265 first, broad inputs to H.265 next, H.265-only outpu
 - Initial platform: iPhone and iPad portrait only
 - Minimum OS: iOS/iPadOS 18.0
 - iPad UX: use the same portrait-first flow and centered mobile-width layout as iPhone
+
+## Release Status
+
+- Current release label: `01.00.01`
+- Apple version/build: `1.0.1 (19)`
+- Release commit: `f5af6b3` (`Prepare Taption Encoder 1.0.1 build 19`)
+- Release date: 2026-06-27
+- App Store Connect/TestFlight upload: export/upload succeeded and the uploaded package entered processing.
+- Device install proof: paired iPhone 14 Pro and iPad Pro 12.9-inch (6th generation) both reported `com.taption.encoder` version `1.0.1`, build `19`.
+- Verification proof:
+  - `Scripts/run_core_codec_truth_checks.sh` passed.
+  - App-scheme XCTest passed with parallel testing disabled: 209 tests, 0 failures.
+  - `Scripts/verify_codec_fixture_evidence.sh` passed with 90 fixtures and 180 verified transcodes.
+  - Release archive/export upload succeeded for `build/TestFlight-01.00.01-19/TaptionEncoder.xcarchive`.
+  - GoogleMobileAds and UserMessagingPlatform SDK dSYM upload warnings did not block the successful app upload.
 
 ## Source Core To Port
 
@@ -40,10 +55,11 @@ Next implementation pass should isolate the media conversion core before importi
 - Device codec route simulation: [`docs/DEVICE_CODEC_ROUTE_SIMULATION.md`](docs/DEVICE_CODEC_ROUTE_SIMULATION.md)
 - Local H.265 transcode fixture results: [`docs/HEVC_TRANSCODE_TEST_RESULTS.md`](docs/HEVC_TRANSCODE_TEST_RESULTS.md)
 - Release action items and launch blockers: [`docs/ACTION_ITEMS.md`](docs/ACTION_ITEMS.md)
+- Release closeout for `01.00.01`: [`docs/RELEASE_01.00.01.md`](docs/RELEASE_01.00.01.md)
 
-## MVP Scope
+## Release 01.00.01 Scope
 
-- Input: AV1 video
+- Input: AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, Motion JPEG, and Windows Media Video through the current software fallback path; H.264, H.265, and ProRes through Apple-native hardware routes when the device supports them
 - Output: H.265 video with `.mp4` as the default container and `.mov` as a selectable output container
 - Default output: preserve source-like resolution, frame rate, orientation, color characteristics, audio timing, and visual quality whenever technically possible
 - Device orientation: iPhone and iPad portrait only
@@ -62,6 +78,7 @@ Next implementation pass should isolate the media conversion core before importi
 
 ## Implementation Status
 
+- Release `01.00.01` / `1.0.1 (19)` is the current shipped baseline as of 2026-06-27.
 - Phase 0 foundation is implemented as of 2026-06-15.
 - The app now has `AppEnvironment`, `FeatureFlags`, `AppConfiguration`, the `Features/Home` screen shell, protocol boundaries, and real AVFoundation services for the first AV1-to-H.265 path.
 - Phase 1 UX/state machine is implemented as of 2026-06-15.

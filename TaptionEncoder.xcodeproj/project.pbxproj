@@ -78,6 +78,8 @@
 		8A2B3C4D5E6F701000000001 /* CodecRoutePlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000101 /* CodecRoutePlannerTests.swift */; };
 		8A2B3C4D5E6F701000000002 /* CodecFixtureEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000102 /* CodecFixtureEvidenceTests.swift */; };
 		8A2B3C4D5E6F701000000003 /* ProjectDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000103 /* ProjectDocumentTests.swift */; };
+		AA2B3C4D5E6F701000000001 /* TestVideoSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2B3C4D5E6F701000000101 /* TestVideoSeeder.swift */; };
+		AA2B3C4D5E6F701000000002 /* TestVideos in Resources */ = {isa = PBXBuildFile; fileRef = AA2B3C4D5E6F701000000102 /* TestVideos */; };
 		9A2B3C4D5E6F701000000001 /* OpenSourceNotices in Resources */ = {isa = PBXBuildFile; fileRef = 9A2B3C4D5E6F701000000101 /* OpenSourceNotices */; };
 /* End PBXBuildFile section */
 
@@ -165,6 +167,8 @@
 		8A2B3C4D5E6F701000000101 /* CodecRoutePlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecRoutePlannerTests.swift; sourceTree = "<group>"; };
 		8A2B3C4D5E6F701000000102 /* CodecFixtureEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecFixtureEvidenceTests.swift; sourceTree = "<group>"; };
 		8A2B3C4D5E6F701000000103 /* ProjectDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDocumentTests.swift; sourceTree = "<group>"; };
+		AA2B3C4D5E6F701000000101 /* TestVideoSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestVideoSeeder.swift; sourceTree = "<group>"; };
+		AA2B3C4D5E6F701000000102 /* TestVideos */ = {isa = PBXFileReference; lastKnownFileType = folder; path = TestVideos; sourceTree = "<group>"; };
 		9A2B3C4D5E6F701000000101 /* OpenSourceNotices */ = {isa = PBXFileReference; lastKnownFileType = folder; path = OpenSourceNotices; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -211,6 +215,7 @@
 				4A2B3C4D5E6F701000000203 /* Shared */,
 				2A2B3C4D5E6F701000000300 /* Core */,
 				1A2B3C4D5E6F701000000103 /* Assets.xcassets */,
+				AA2B3C4D5E6F701000000102 /* TestVideos */,
 				9A2B3C4D5E6F701000000101 /* OpenSourceNotices */,
 			);
 			path = TaptionEncoder;
@@ -286,6 +291,7 @@
 				3A2B3C4D5E6F701000000102 /* FeatureFlags.swift */,
 				3A2B3C4D5E6F701000000103 /* AppEnvironment.swift */,
 				3A2B3C4D5E6F701000000104 /* Stars.swift */,
+				AA2B3C4D5E6F701000000101 /* TestVideoSeeder.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -563,6 +569,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A2B3C4D5E6F701000000003 /* Assets.xcassets in Resources */,
+				AA2B3C4D5E6F701000000002 /* TestVideos in Resources */,
 				9A2B3C4D5E6F701000000001 /* OpenSourceNotices in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -592,6 +599,7 @@
 				3A2B3C4D5E6F701000000002 /* FeatureFlags.swift in Sources */,
 				3A2B3C4D5E6F701000000003 /* AppEnvironment.swift in Sources */,
 				3A2B3C4D5E6F701000000021 /* Stars.swift in Sources */,
+				AA2B3C4D5E6F701000000001 /* TestVideoSeeder.swift in Sources */,
 				3A2B3C4D5E6F701000000004 /* HomeView.swift in Sources */,
 				3A2B3C4D5E6F701000000005 /* HomeViewModel.swift in Sources */,
 				3A2B3C4D5E6F701000000006 /* HomeScreenState.swift in Sources */,
