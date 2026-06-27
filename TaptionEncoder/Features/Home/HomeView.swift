@@ -1,5 +1,7 @@
+import Darwin
 import SwiftUI
 import PhotosUI
+import UIKit
 
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
@@ -96,6 +98,8 @@ struct HomeView: View {
                         adUnitID: viewModel.bannerAdUnitID,
                         displayScale: metrics.bannerScale
                     )
+
+                    exitButton(metrics: metrics)
                 }
                 .padding(.horizontal, metrics.horizontalPadding)
                 .padding(.vertical, metrics.verticalPadding)
@@ -355,6 +359,32 @@ struct HomeView: View {
                 .stroke(TaptionTheme.border, lineWidth: 1)
         )
         .accessibilityLabel("Stars \(viewModel.starBalanceDisplayText)")
+    }
+
+    private func exitButton(metrics: HomeLayoutMetrics) -> some View {
+        Button {
+            AppLogger.info("Exit button tapped", category: .ui)
+            EncoderAppExitController.requestExit()
+        } label: {
+            HStack(spacing: 8 * metrics.contentScale) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 15 * metrics.contentScale, weight: .semibold))
+                Text("Exit")
+                    .font(metrics.buttonFont.weight(.semibold))
+            }
+            .foregroundStyle(Color(red: 1.0, green: 0.78, blue: 0.80))
+            .frame(maxWidth: .infinity)
+            .frame(height: metrics.footerExitButtonHeight)
+            .background(Color(red: 1.0, green: 0.30, blue: 0.34).opacity(0.16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color(red: 1.0, green: 0.30, blue: 0.34).opacity(0.48), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Exit")
+        .accessibilityIdentifier("button.exit")
     }
 
     private func outputSelector(metrics: HomeLayoutMetrics) -> some View {
@@ -681,4 +711,28 @@ struct HomeView: View {
 
 #Preview {
     HomeView()
+}
+
+private enum EncoderAppExitController {
+    @MainActor
+    static func requestExit() {
+        let application = UIApplication.shared
+        let foregroundScene = application.connectedScenes.first { scene in
+            scene.activationState == .foregroundActive || scene.activationState == .foregroundInactive
+        }
+
+        if let sceneSession = foregroundScene?.session {
+            application.requestSceneSessionDestruction(sceneSession, options: nil) { _ in
+                terminateProcess()
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            terminateProcess()
+        }
+    }
+
+    private static func terminateProcess() {
+        Darwin.exit(EXIT_SUCCESS)
+    }
 }

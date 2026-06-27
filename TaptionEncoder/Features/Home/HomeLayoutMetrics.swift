@@ -11,6 +11,7 @@ struct HomeLayoutMetrics {
     var verticalPadding: CGFloat
     var controlHeight: CGFloat
     var filePanelHeight: CGFloat
+    var footerExitButtonHeight: CGFloat
     var headerIconSize: CGFloat
     var headerFont: Font
     var buttonFont: Font
@@ -47,6 +48,7 @@ struct HomeLayoutMetrics {
         horizontalPadding = isPad ? max(28, 40 * widthScale) : max(12, 20 * widthScale)
         verticalPadding = compactHeightPressure ? max(4, 8 * contentScale) : max(5, 10 * contentScale)
         controlHeight = max(32, 42 * contentScale)
+        footerExitButtonHeight = max(32, 40 * contentScale)
         headerIconSize = max(17, 23 * contentScale)
         headerFont = contentScale < 0.84 ? .subheadline : .title3
         buttonFont = contentScale < 0.84 ? .caption.weight(.semibold) : .body
@@ -63,6 +65,7 @@ struct HomeLayoutMetrics {
             + outputSelectorHeight
             + codecSummaryHeight
             + progressCardHeight
+            + footerExitButtonHeight
             + (verticalSpacing * 7)
             + (verticalPadding * 2)
         let remainingHeight = canvasHeight - fixedComponentHeight
