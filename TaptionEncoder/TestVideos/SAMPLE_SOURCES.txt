@@ -12,7 +12,8 @@ https://download.blender.org/peach/trailer/trailer_400p.ogg
 The Sorenson Video 3 sample was trimmed from the FFmpeg samples archive:
 https://samples.ffmpeg.org/V-codecs/SVQ3/Vertical400kbit.sorenson3.mov
 
-The Microsoft Video 1, ASUS V1, and ASUS V2 samples were generated locally from
+The Microsoft Video 1, ASUS V1, ASUS V2, Flash Screen Video,
+Flash Screen Video 2, ZMBV, CLJR, and FFV1 samples were generated locally from
 the Taption Encoder fixture script:
 Scripts/generate_video_codec_fixtures.sh
 

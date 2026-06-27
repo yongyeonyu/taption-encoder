@@ -178,6 +178,18 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return .asusV1
         case "asv2":
             return .asusV2
+        case "fsv1", "flashsv":
+            return .flashScreenVideo
+        case "fsv2", "flashsv2":
+            return .flashScreenVideo2
+        case "zmbv":
+            return .zmbv
+        case "cljr":
+            return .cljr
+        case "snow":
+            return .snow
+        case "ffv1":
+            return .ffv1
         default:
             return .unknown
         }
@@ -340,7 +352,7 @@ private struct SW_VLCMediaInspector: MediaInspecting {
         let tracks = media.tracks()
         let videoTrack = tracks
             .first(where: { $0.type == .video })
-            .map(makeVideoTrackInfo)
+            .map { makeVideoTrackInfo(from: $0, url: url) }
             ?? fallbackVideoTrack(for: url)
         let audioTracks = tracks
             .filter { $0.type == .audio }
@@ -395,11 +407,12 @@ private struct SW_VLCMediaInspector: MediaInspecting {
         }
     }
 
-    private func makeVideoTrackInfo(from track: Track) -> TaptionVideoTrackInfo {
+    private func makeVideoTrackInfo(from track: Track, url: URL) -> TaptionVideoTrackInfo {
         let width = max(track.width ?? 0, 2)
         let height = max(track.height ?? 0, 2)
+        let codec = videoCodec(from: track, url: url)
         return TaptionVideoTrackInfo(
-            codec: videoCodec(from: track.codec),
+            codec: codec,
             naturalSize: TaptionPixelSize(width: width, height: height),
             displaySize: TaptionPixelSize(width: width, height: height),
             nominalFrameRate: frameRate(from: track.frameRate),
@@ -407,6 +420,25 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             color: TaptionColorDescription(),
             rotationDegrees: 0
         )
+    }
+
+    private func videoCodec(from track: Track, url: URL) -> TaptionVideoCodec {
+        let codec = videoCodec(from: track.codec)
+        guard codec == .unknown else {
+            return codec
+        }
+
+        let metadata = [
+            track.name,
+            track.trackDescription,
+            url.deletingPathExtension().lastPathComponent
+        ]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+        if metadata.contains("snow") {
+            return .snow
+        }
+        return .unknown
     }
 
     private func makeAudioTrackInfo(from track: Track) -> TaptionAudioTrackInfo {
@@ -486,6 +518,18 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             return .asusV1
         case "asv2":
             return .asusV2
+        case "fsv1", "flashsv":
+            return .flashScreenVideo
+        case "fsv2", "flashsv2":
+            return .flashScreenVideo2
+        case "zmbv":
+            return .zmbv
+        case "cljr":
+            return .cljr
+        case "snow":
+            return .snow
+        case "ffv1":
+            return .ffv1
         default:
             return .unknown
         }

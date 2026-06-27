@@ -59,7 +59,7 @@ Next implementation pass should isolate the media conversion core before importi
 
 ## Release 01.00.01 Scope
 
-- Input: AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2/V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, Microsoft Video 1, and ASUS V1/V2 through the current software fallback path; H.264, H.265, and ProRes through Apple-native hardware routes when the device supports them
+- Input: AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2/V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, Microsoft Video 1, ASUS V1/V2, Flash Screen Video, Flash Screen Video 2, ZMBV, CLJR, and FFV1 through the current software fallback path; H.264, H.265, and ProRes through Apple-native hardware routes when the device supports them
 - Output: H.265 video with `.mp4` as the default container and `.mov` as a selectable output container
 - Default output: preserve source-like resolution, frame rate, orientation, color characteristics, audio timing, and visual quality whenever technically possible
 - Device orientation: iPhone and iPad portrait only
@@ -96,7 +96,7 @@ Next implementation pass should isolate the media conversion core before importi
 - Planned video and audio codec routes now have gated FFmpeg-family execution wrappers, so future bundled broad-backend conversion can share the same readiness-gated runner path from function-style codec requests.
 - Route matrix evidence from `Samples/CodecFixtures/transcode_reports/route_matrix_latest/codec_route_matrix.tsv` is also parsed by the app-scheme tests, proving profile coverage, universal route coverage, and HW decode/encode preference in the generated simulation report.
 - Audio route planning now covers default source-audio-to-AAC decisions for MP4/MOV H.265 output, including copy/native/SW route states and fixture coverage status.
-- The live H.265 execution paths now run through `TaptionCodecTranscodingRegistry`, so AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2/V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, Microsoft Video 1, and ASUS V1/V2 software routes plus hardware-capable routes are registered as replaceable implementations instead of being hardcoded in the encoder service.
+- The live H.265 execution paths now run through `TaptionCodecTranscodingRegistry`, so AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2/V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, Microsoft Video 1, ASUS V1/V2, Flash Screen Video, Flash Screen Video 2, ZMBV, CLJR, and FFV1 software routes plus hardware-capable routes are registered as replaceable implementations instead of being hardcoded in the encoder service.
 - Apple-native H.265 hardware routes are now registered for `H.264 -> H.265`, `H.265 -> H.265`, `HEVC with Alpha -> H.265`, `Dolby Vision HEVC -> H.265`, and `ProRes -> H.265` when the simulated or runtime device profile can hardware-decode the source and hardware-encode H.265. Devices without that full HW path keep those routes visible as planned software-fallback work instead of pretending they can run.
 - Broad software codec planning now has `SW_SoftwareCodecBackendRegistry`, which models software video/audio decode, H.265 video encode, audio encode, and container read/write coverage for future broad-input execution. `SW_UniversalCodecTranscodeAlgorithm` may still expose older broad route scaffolding internally while returning a clear not-bundled error until the broad backend and license review are complete.
 - Single-asset encoding plans now carry a planned FFmpeg-family video command plan for H.265 output routes when the broad software backend can plan the input, mirroring the existing audio command-plan attachment.
@@ -178,7 +178,7 @@ Output video codec remains H.265 only. Future releases should expand input cover
 - Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG
 - QuickTime Animation, Cinepak, Sorenson Video, RPZA, DV/DVCPro
 - Flash Video, Flash Screen Video, Microsoft MPEG-4 V2/V3, Microsoft Video 1
-- ASUS V1/V2, ZMBV, CLJR, Snow, RealVideo
+- ASUS V1/V2, ZMBV, CLJR, FFV1, Snow, RealVideo
 - Windows Media / VC-1 where software support and licensing allow it
 - Other practical user video codecs supported by the selected software codec backend
 - App binary size may increase if broad input support requires bundled software codec components.

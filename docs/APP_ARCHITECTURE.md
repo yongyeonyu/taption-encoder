@@ -25,7 +25,7 @@ Primary constraints:
 - Minimum OS is iOS/iPadOS 18.0 for the current SwiftVLC software fallback binary; lower OS support requires a codec stack built for that target.
 - iPad uses the same centered, mobile-width UI and flow as iPhone.
 - Visible app strings stay in English.
-- Release `01.00.01` shipped the first broad-input baseline. Current development executable input routes include AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2/V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, Microsoft Video 1, and ASUS V1/V2 software fallback routes, plus Apple-native H.264, H.265, and ProRes hardware routes when the device supports them.
+- Release `01.00.01` shipped the first broad-input baseline. Current development executable input routes include AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2/V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, Microsoft Video 1, ASUS V1/V2, Flash Screen Video, Flash Screen Video 2, ZMBV, CLJR, and FFV1 software fallback routes, plus Apple-native H.264, H.265, and ProRes hardware routes when the device supports them.
 - Release `01.00.01` output is fixed to H.265 video in MP4 or MOV.
 - Mid-term output remains H.265 video while broad input support is proven.
 - Long-term output video codec remains fixed to H.265 / HEVC. Output selection may expose containers and encode settings, not alternate video codecs.
@@ -152,7 +152,7 @@ Current baseline artifacts:
 - Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG
 - QuickTime Animation, Cinepak, Sorenson Video, RPZA, DV/DVCPro
 - Flash Video, Flash Screen Video, Microsoft MPEG-4 V2/V3, Microsoft Video 1
-- ASUS V1/V2, ZMBV, CLJR, Snow, RealVideo
+- ASUS V1/V2, ZMBV, CLJR, FFV1, Snow, RealVideo
 - Windows Media / VC-1 where software support and licensing allow it
 - Other codecs supported by the selected software codec backend, subject to licensing and App Store constraints
 

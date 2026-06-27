@@ -779,11 +779,11 @@ private enum HelpCodecEntryState {
     var label: String {
         switch self {
         case .nowHardware:
-            return "Now(HW)"
+            return "HW"
         case .nowSoftware:
-            return "Now(SW)"
+            return "SW"
         case .nowMixed:
-            return "Now(HW/SW)"
+            return "HW/SW"
         case .now:
             return "Now"
         case .needsHardware:
@@ -850,7 +850,7 @@ private struct HelpCodecEntry: Identifiable {
 private struct HelpLegendCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Video rows use this installed device: Now(HW) is native hardware, Now(SW) is software fallback, and Needs HW waits for Apple-native hardware.")
+            Text("Video rows use this installed device: HW is native hardware, SW is software fallback, and Needs HW waits for Apple-native hardware.")
                 .font(.subheadline)
                 .foregroundStyle(Color.white.opacity(0.76))
                 .fixedSize(horizontal: false, vertical: true)

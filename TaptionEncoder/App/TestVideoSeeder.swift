@@ -39,6 +39,11 @@ enum TaptionTestVideoSeeder {
         "Microsoft Video 1.avi",
         "ASUS V1.avi",
         "ASUS V2.avi",
+        "Flash Screen Video.flv",
+        "Flash Screen Video 2.flv",
+        "ZMBV.avi",
+        "CLJR.avi",
+        "FFV1.mkv",
         "H.264 AVC.mp4",
         "H.265 HEVC.mp4",
         "Apple ProRes.mov"

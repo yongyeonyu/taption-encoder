@@ -306,7 +306,12 @@ enum TaptionCodecRegistry {
         TaptionCodecRoute(sourceCodec: .wmv, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .microsoftVideo1, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .asusV1, outputCodec: .hevc),
-        TaptionCodecRoute(sourceCodec: .asusV2, outputCodec: .hevc)
+        TaptionCodecRoute(sourceCodec: .asusV2, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .flashScreenVideo, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .flashScreenVideo2, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .zmbv, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .cljr, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .ffv1, outputCodec: .hevc)
     ]
 
     static let appleNativeHEVCHardwareSourceCodecs: [TaptionVideoCodec] = [
@@ -540,6 +545,41 @@ enum TaptionCodecRegistry {
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "ASUS V2 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .flashScreenVideo,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Flash Screen Video to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .flashScreenVideo2,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Flash Screen Video 2 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .zmbv,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "ZMBV to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .cljr,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "CLJR to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .ffv1,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "FFV1 to H.265 Software"
         )
         ] + appleNativeHEVCHardwareAlgorithmDescriptors
     }

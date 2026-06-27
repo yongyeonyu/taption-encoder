@@ -791,6 +791,116 @@ enum SW_ASUSV2HEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
     }
 }
 
+enum SW_FlashScreenVideoHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .flashScreenVideo,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "Flash Screen Video to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .flashScreenVideo)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "Flash Screen Video",
+            progress: progress
+        )
+    }
+}
+
+enum SW_FlashScreenVideo2HEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .flashScreenVideo2,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "Flash Screen Video 2 to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .flashScreenVideo2)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "Flash Screen Video 2",
+            progress: progress
+        )
+    }
+}
+
+enum SW_ZMBVHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .zmbv,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "ZMBV to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .zmbv)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "ZMBV",
+            progress: progress
+        )
+    }
+}
+
+enum SW_CLJRHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .cljr,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "CLJR to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .cljr)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "CLJR",
+            progress: progress
+        )
+    }
+}
+
+enum SW_FFV1HEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .ffv1,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "FFV1 to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .ffv1)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "FFV1",
+            progress: progress
+        )
+    }
+}
+
 extension SW_AV1HEVCTranscoder {
     static func validate(
         request: TaptionCodecTranscodeRequest,
