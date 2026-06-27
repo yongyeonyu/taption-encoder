@@ -162,7 +162,7 @@ Apple device-family simulation is tracked in `docs/APPLE_DEVICE_CODEC_MATRIX.md`
 
 ## Current Implementation State
 
-- Implemented routes: AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, Motion JPEG, and Windows Media Video to H.265 using the current software fallback path; H.264, H.265, and ProRes to H.265 use Apple-native hardware routes on profiles that can hardware-decode the source and hardware-encode H.265.
+- Implemented routes: AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2/V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, Microsoft Video 1, and ASUS V1/V2 to H.265 using the current software fallback path; H.264, H.265, and ProRes to H.265 use Apple-native hardware routes on profiles that can hardware-decode the source and hardware-encode H.265.
 - Implemented catalog: universal route model, function-style codec request/options/output API, expanded codec/container/audio enums, HW probe file, Apple device-family HW profile catalog, SW fixture catalog file, app-side route planner, and capability-profile route simulation.
 - Implemented audio route planner: default all-planned-audio-to-AAC route selection with copy/native/SW/planned states and fixture coverage status.
 - Implemented algorithm files: `HW_AppleHEVCCodecAlgorithm.swift`, `HW_AV1HEVCCodecAlgorithm.swift`, and `SW_AV1HEVCCodecAlgorithm.swift` expose `TaptionCodecTranscodeRequest -> TaptionCodecTranscodeOutput` entry points. The app software fallback path now uses the shared request API, while the Apple-native H.265 HW path is separated from the AV1-specific wrapper for future Taption reuse.

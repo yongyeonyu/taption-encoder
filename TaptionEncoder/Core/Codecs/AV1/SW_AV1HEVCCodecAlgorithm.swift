@@ -725,6 +725,72 @@ enum SW_WMVHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
     }
 }
 
+enum SW_MicrosoftVideo1HEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .microsoftVideo1,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "Microsoft Video 1 to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .microsoftVideo1)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "Microsoft Video 1",
+            progress: progress
+        )
+    }
+}
+
+enum SW_ASUSV1HEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .asusV1,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "ASUS V1 to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .asusV1)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "ASUS V1",
+            progress: progress
+        )
+    }
+}
+
+enum SW_ASUSV2HEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .asusV2,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "ASUS V2 to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .asusV2)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "ASUS V2",
+            progress: progress
+        )
+    }
+}
+
 extension SW_AV1HEVCTranscoder {
     static func validate(
         request: TaptionCodecTranscodeRequest,

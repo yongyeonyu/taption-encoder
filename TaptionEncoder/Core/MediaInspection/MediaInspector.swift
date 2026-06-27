@@ -172,6 +172,12 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return .proResRaw
         case "wmv1", "wmv2", "wmv3":
             return .wmv
+        case "msvc", "cram":
+            return .microsoftVideo1
+        case "asv1":
+            return .asusV1
+        case "asv2":
+            return .asusV2
         default:
             return .unknown
         }
@@ -474,6 +480,12 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             return .proResRaw
         case "wmv1", "wmv2", "wmv3":
             return .wmv
+        case "msvc", "cram":
+            return .microsoftVideo1
+        case "asv1":
+            return .asusV1
+        case "asv2":
+            return .asusV2
         default:
             return .unknown
         }

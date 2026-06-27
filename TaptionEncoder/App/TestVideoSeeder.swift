@@ -36,6 +36,9 @@ enum TaptionTestVideoSeeder {
         "QuickTime Video.mov",
         "Theora.ogv",
         "Windows Media Video.wmv",
+        "Microsoft Video 1.avi",
+        "ASUS V1.avi",
+        "ASUS V2.avi",
         "H.264 AVC.mp4",
         "H.265 HEVC.mp4",
         "Apple ProRes.mov"

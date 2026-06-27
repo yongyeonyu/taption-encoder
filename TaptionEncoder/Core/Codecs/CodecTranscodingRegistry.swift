@@ -59,7 +59,10 @@ struct TaptionCodecTranscodingRegistry: @unchecked Sendable {
             TaptionCodecTranscodingAlgorithmEntry(SW_SorensonVideo3HEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_QuickTimeVideoHEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_TheoraHEVCTranscoder.self),
-            TaptionCodecTranscodingAlgorithmEntry(SW_WMVHEVCTranscoder.self)
+            TaptionCodecTranscodingAlgorithmEntry(SW_WMVHEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_MicrosoftVideo1HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_ASUSV1HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_ASUSV2HEVCTranscoder.self)
         ] + HW_AppleHEVCCodecAlgorithm.nativeDescriptors.map { descriptor in
             TaptionCodecTranscodingAlgorithmEntry(
                 descriptor: descriptor,

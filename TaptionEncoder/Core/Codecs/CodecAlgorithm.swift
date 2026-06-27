@@ -303,7 +303,10 @@ enum TaptionCodecRegistry {
         TaptionCodecRoute(sourceCodec: .sorensonVideo3, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .quickTimeVideo, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .theora, outputCodec: .hevc),
-        TaptionCodecRoute(sourceCodec: .wmv, outputCodec: .hevc)
+        TaptionCodecRoute(sourceCodec: .wmv, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .microsoftVideo1, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .asusV1, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .asusV2, outputCodec: .hevc)
     ]
 
     static let appleNativeHEVCHardwareSourceCodecs: [TaptionVideoCodec] = [
@@ -516,6 +519,27 @@ enum TaptionCodecRegistry {
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "Windows Media Video to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .microsoftVideo1,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Microsoft Video 1 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .asusV1,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "ASUS V1 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .asusV2,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "ASUS V2 to H.265 Software"
         )
         ] + appleNativeHEVCHardwareAlgorithmDescriptors
     }

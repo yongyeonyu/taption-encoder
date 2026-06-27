@@ -901,7 +901,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(h261Descriptors.count, 1)
         XCTAssertEqual(h261Descriptors.first?.mode, .software)
         XCTAssertEqual(h261Descriptors.first?.backend, .softwareVLCDecoder)
-        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora] {
+        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .microsoftVideo1, .asusV1, .asusV2] {
             let route = TaptionCodecRoute(sourceCodec: codec, outputCodec: .hevc)
             let codecDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: route)
             XCTAssertEqual(codecDescriptors.count, 1, codec.displayName)
@@ -1631,6 +1631,19 @@ final class CodecRoutePlannerTests: XCTestCase {
             "QuickTime Video.mov",
             "Flash Video.flv"
         ]
+        try await assertBundledSamplesEncodeToHEVCMP4(sampleFilenames)
+    }
+
+    func testNextLegacyBundledSamplesEncodeToHEVCMP4() async throws {
+        let sampleFilenames = [
+            "Microsoft Video 1.avi",
+            "ASUS V1.avi",
+            "ASUS V2.avi"
+        ]
+        try await assertBundledSamplesEncodeToHEVCMP4(sampleFilenames)
+    }
+
+    private func assertBundledSamplesEncodeToHEVCMP4(_ sampleFilenames: [String]) async throws {
         let outputDirectoryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: outputDirectoryURL, withIntermediateDirectories: true)
@@ -2231,6 +2244,9 @@ final class CodecRoutePlannerTests: XCTestCase {
                 TaptionLaunchInputVideoSupportItem(codec: .quickTimeVideo, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .theora, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .wmv, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .microsoftVideo1, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .asusV1, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .asusV2, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .proRes, availability: .availableOnSupportedHardware)
@@ -2238,7 +2254,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputVideoSummary,
-            "AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2, Microsoft MPEG-4 V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, H.264 / AVC, H.265 / HEVC, Apple ProRes"
+            "AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2, Microsoft MPEG-4 V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, Microsoft Video 1, ASUS V1, ASUS V2, H.264 / AVC, H.265 / HEVC, Apple ProRes"
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainers,
@@ -2250,7 +2266,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.executableNowInputVideoCodecs,
-            [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .wmv, .h264, .hevc]
+            [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .wmv, .microsoftVideo1, .asusV1, .asusV2, .h264, .hevc]
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.hardwareGatedInputVideoCodecs,
@@ -2268,7 +2284,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.makeInputReadinessReport(),
             TaptionLaunchInputReadinessReport(
-                executableNowVideoCodecs: [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .wmv, .h264, .hevc],
+                executableNowVideoCodecs: [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .wmv, .microsoftVideo1, .asusV1, .asusV2, .h264, .hevc],
                 hardwareGatedVideoCodecs: [.proRes],
                 plannedVideoCodecs: TaptionLaunchSupportCatalog.plannedInputVideoCodecs,
                 inputContainers: TaptionLaunchSupportCatalog.supportedInputContainers,
@@ -2836,7 +2852,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         let message = TaptionVideoCoreError.unsupportedSourceCodec(.h264).localizedDescription
 
         XCTAssertTrue(message.contains("H.265 / MP4 or MOV output"))
-        XCTAssertTrue(message.contains("AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2/V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, and Windows Media Video with software fallback"))
+        XCTAssertTrue(message.contains("AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2/V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, Microsoft Video 1, and ASUS V1/V2 with software fallback"))
         XCTAssertTrue(message.contains("H.264, H.265, or ProRes"))
         XCTAssertTrue(message.contains("H.264 / AVC"))
         XCTAssertTrue(message.contains("universal codec roadmap"))
@@ -3577,6 +3593,16 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(wmvItem.isRunnableInCurrentBuild)
         XCTAssertTrue(wmvItem.hasCommandPlan)
 
+        for codec in [TaptionVideoCodec.microsoftVideo1, .asusV1, .asusV2] {
+            let item = TaptionVideoCodecExecutionReadinessReporter.item(
+                for: TaptionCodecRoute(sourceCodec: codec, outputCodec: .hevc),
+                outputContainer: .mp4
+            )
+            XCTAssertEqual(item.readiness, .implementedInCurrentBuild, codec.displayName)
+            XCTAssertTrue(item.isRunnableInCurrentBuild, codec.displayName)
+            XCTAssertTrue(item.hasCommandPlan, codec.displayName)
+        }
+
         let commandOnlyItem = TaptionVideoCodecExecutionReadinessReporter.item(
             for: TaptionCodecRoute(sourceCodec: .jpeg, outputCodec: .hevc),
             outputContainer: .mp4
@@ -3976,7 +4002,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(decoded.launchInputReadinessCatalog?.outputContainers, [.mp4, .mov])
         XCTAssertTrue(decoded.launchInputReadinessCatalog?.executableNowVideoCodecs.contains(.h261) == true)
         XCTAssertFalse(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(.h261) == true)
-        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora] {
+        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .microsoftVideo1, .asusV1, .asusV2] {
             XCTAssertTrue(decoded.launchInputReadinessCatalog?.executableNowVideoCodecs.contains(codec) == true, codec.displayName)
             XCTAssertFalse(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(codec) == true, codec.displayName)
         }
@@ -6539,6 +6565,9 @@ final class CodecRoutePlannerTests: XCTestCase {
             ("QuickTime Video.mov", .quickTimeVideo),
             ("Theora.ogv", .theora),
             ("Windows Media Video.wmv", .wmv),
+            ("Microsoft Video 1.avi", .microsoftVideo1),
+            ("ASUS V1.avi", .asusV1),
+            ("ASUS V2.avi", .asusV2),
             ("H.264 AVC.mp4", .h264),
             ("H.265 HEVC.mp4", .hevc)
         ]
