@@ -3,6 +3,7 @@ import Foundation
 import Security
 
 enum StarLedgerEventKind: String, Codable, Equatable {
+    case initialInstallBonus
     case rewardEarned
     case encodingStart
     case failureRefund
@@ -230,6 +231,8 @@ protocol StarWalletSecureStoring: Sendable {
     func loadIntegrityMetadata() throws -> StarWalletIntegrityMetadata?
     func saveIntegrityMetadata(_ metadata: StarWalletIntegrityMetadata) throws
     func clearIntegrityMetadata() throws
+    func loadInitialBonusGranted() throws -> Bool
+    func saveInitialBonusGranted() throws
 }
 
 struct StarWalletIntegrityMetadata: Codable, Equatable, Sendable {
@@ -241,6 +244,7 @@ struct KeychainStarWalletSecureStore: StarWalletSecureStoring {
     private let service: String
     private let encryptionKeyAccount = "wallet-encryption-key"
     private let integrityAccount = "wallet-integrity-metadata"
+    private let initialBonusGrantedAccount = "initial-bonus-granted"
 
     init(service: String = "\(Bundle.main.bundleIdentifier ?? "com.taption.encoder").stars") {
         self.service = service
@@ -270,6 +274,17 @@ struct KeychainStarWalletSecureStore: StarWalletSecureStoring {
 
     func clearIntegrityMetadata() throws {
         try delete(account: integrityAccount)
+    }
+
+    func loadInitialBonusGranted() throws -> Bool {
+        guard let data = try load(account: initialBonusGrantedAccount) else {
+            return false
+        }
+        return String(data: data, encoding: .utf8) == "1"
+    }
+
+    func saveInitialBonusGranted() throws {
+        try saveOrUpdate(data: Data("1".utf8), account: initialBonusGrantedAccount)
     }
 
     private func load(account: String) throws -> Data? {
@@ -336,6 +351,8 @@ struct KeychainStarWalletSecureStore: StarWalletSecureStoring {
 }
 
 actor StarWalletStore: StarWalletManaging {
+    static let initialInstallBonusStarCount = 10
+
     private let fileURL: URL
     private let quarantineDirectoryURL: URL
     private let secureStore: any StarWalletSecureStoring
@@ -430,7 +447,7 @@ actor StarWalletStore: StarWalletManaging {
 
     private func loadSnapshot() throws -> StarWalletSnapshot {
         guard fileManager.fileExists(atPath: fileURL.path) else {
-            return .empty
+            return try createInitialInstallBonusSnapshotIfNeeded()
         }
 
         let encryptedData = try Data(contentsOf: fileURL)
@@ -440,7 +457,47 @@ actor StarWalletStore: StarWalletManaging {
         let snapshot = try JSONDecoder.starWalletDecoder.decode(StarWalletSnapshot.self, from: decryptedData)
         try validateIntegrity(snapshot: snapshot, encryptedData: encryptedData)
         try syncIntegrityMetadataIfNeeded(snapshot: snapshot, encryptedData: encryptedData)
+        try markInitialBonusGrantedIfNeeded()
         return snapshot
+    }
+
+    private func createInitialInstallBonusSnapshotIfNeeded() throws -> StarWalletSnapshot {
+        guard try !secureStore.loadInitialBonusGranted() else {
+            return .empty
+        }
+
+        let now = clock()
+        let snapshot = StarWalletSnapshot(
+            balance: Self.initialInstallBonusStarCount,
+            totalEarned: Self.initialInstallBonusStarCount,
+            totalSpent: 0,
+            totalPurchased: 0,
+            sequence: 1,
+            lastUpdatedAt: now,
+            events: [
+                StarLedgerEvent(
+                    kind: .initialInstallBonus,
+                    delta: Self.initialInstallBonusStarCount,
+                    note: "initial_install_bonus",
+                    createdAt: now
+                )
+            ]
+        )
+        try persist(snapshot)
+        try secureStore.saveInitialBonusGranted()
+        AppLogger.info(
+            "Initial install Stars bonus granted",
+            category: .app,
+            metadata: ["stars": "\(Self.initialInstallBonusStarCount)"]
+        )
+        return snapshot
+    }
+
+    private func markInitialBonusGrantedIfNeeded() throws {
+        guard try !secureStore.loadInitialBonusGranted() else {
+            return
+        }
+        try secureStore.saveInitialBonusGranted()
     }
 
     private func persist(_ snapshot: StarWalletSnapshot) throws {
@@ -547,6 +604,14 @@ actor StarWalletStore: StarWalletManaging {
         Data(SHA256.hash(data: data))
     }
 }
+
+#if DEBUG
+extension StarWalletStore {
+    func persistForTesting(_ snapshot: StarWalletSnapshot) throws {
+        try persist(snapshot)
+    }
+}
+#endif
 
 extension TaptionEncoderStorageLocations {
     static var starWalletFileURL: URL {

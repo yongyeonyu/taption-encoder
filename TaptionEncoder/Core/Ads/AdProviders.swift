@@ -755,8 +755,15 @@ private struct AdMobBannerRepresentable: UIViewRepresentable {
 final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
     static let shared = AdMobRewardedAdManager()
 
-    private var preparedAd: RewardedAd?
-    private var preparedAdUnitID = ""
+    private struct PreparedRewardedAd {
+        var ad: RewardedAd
+        var adUnitID: String
+        var loadedAt: Date
+    }
+
+    private let maxPreparedAdCount = 2
+    private let preparedAdExpirationInterval: TimeInterval = 55 * 60
+    private var preparedAds: [PreparedRewardedAd] = []
     private var activeAd: RewardedAd?
     private var activeContinuation: CheckedContinuation<Bool, Never>?
     private var didEarnReward = false
@@ -765,12 +772,14 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
     private var retryWorkItem: DispatchWorkItem?
     private var retryCount = 0
     private var isWaitingForRetry = false
+    private var isCacheFillScheduled = false
 
     func currentState(adUnitID: String) async -> AdLoadState {
         guard !adUnitID.isEmpty else {
             return .unavailable
         }
-        if preparedAd != nil, preparedAdUnitID == adUnitID {
+        pruneExpiredPreparedAds()
+        if hasPreparedAd(for: adUnitID) {
             return .ready
         }
         if isLoading {
@@ -791,9 +800,16 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
             lastKnownState = .unavailable
             return .unavailable
         }
-        if preparedAd != nil, preparedAdUnitID == adUnitID {
-            AppLogger.debug("Rewarded ad already ready", category: .ads)
+        pruneExpiredPreparedAds()
+        discardPreparedAdsForOtherUnits(adUnitID)
+        if hasPreparedAd(for: adUnitID) {
+            AppLogger.debug(
+                "Rewarded ad already ready",
+                category: .ads,
+                metadata: ["cached": "\(preparedAdCount(for: adUnitID))"]
+            )
             lastKnownState = .ready
+            fillPreparedAdCacheIfNeeded(adUnitID: adUnitID)
             return .ready
         }
         if isWaitingForRetry {
@@ -812,6 +828,19 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
             return .loading
         }
 
+        let state = await loadOneRewardedAd(adUnitID: adUnitID)
+        if state == .ready {
+            fillPreparedAdCacheIfNeeded(adUnitID: adUnitID)
+        }
+        return state
+    }
+
+    private func loadOneRewardedAd(adUnitID: String) async -> AdLoadState {
+        guard preparedAdCount(for: adUnitID) < maxPreparedAdCount else {
+            lastKnownState = .ready
+            return .ready
+        }
+
         isLoading = true
         lastKnownState = .loading
         defer { isLoading = false }
@@ -827,14 +856,19 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
             retryCount = 0
             isWaitingForRetry = false
             ad.fullScreenContentDelegate = self
-            preparedAd = ad
-            preparedAdUnitID = adUnitID
+            preparedAds.append(PreparedRewardedAd(
+                ad: ad,
+                adUnitID: adUnitID,
+                loadedAt: Date()
+            ))
             lastKnownState = .ready
-            AppLogger.info("Rewarded ad loaded", category: .ads)
+            AppLogger.info(
+                "Rewarded ad loaded",
+                category: .ads,
+                metadata: ["cached": "\(preparedAdCount(for: adUnitID))"]
+            )
             return .ready
         } catch {
-            preparedAd = nil
-            preparedAdUnitID = ""
             lastKnownState = .unavailable
             AppLogger.error(
                 "Rewarded ad failed to load",
@@ -857,7 +891,7 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
 
         let loadState = await prepareForPresentation(adUnitID: adUnitID)
         guard loadState == .ready,
-              let ad = preparedAd else {
+              let ad = dequeuePreparedAd(for: adUnitID) else {
             AppLogger.warning(
                 "Rewarded ad show unavailable after preparation",
                 category: .ads,
@@ -880,11 +914,10 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
         retryWorkItem = nil
         retryCount = 0
         isWaitingForRetry = false
-        preparedAd = nil
-        preparedAdUnitID = ""
         activeAd = ad
         didEarnReward = false
         lastKnownState = .loading
+        fillPreparedAdCacheIfNeeded(adUnitID: adUnitID)
 
         return await withCheckedContinuation { continuation in
             activeContinuation = continuation
@@ -933,6 +966,57 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
         }
 
         return latestState
+    }
+
+    private func fillPreparedAdCacheIfNeeded(adUnitID: String) {
+        pruneExpiredPreparedAds()
+        guard !adUnitID.isEmpty,
+              !isLoading,
+              !isWaitingForRetry,
+              !isCacheFillScheduled,
+              preparedAdCount(for: adUnitID) < maxPreparedAdCount else {
+            return
+        }
+
+        isCacheFillScheduled = true
+        Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+            defer { self.isCacheFillScheduled = false }
+            guard !self.isLoading,
+                  !self.isWaitingForRetry,
+                  self.preparedAdCount(for: adUnitID) < self.maxPreparedAdCount else {
+                return
+            }
+            _ = await self.loadOneRewardedAd(adUnitID: adUnitID)
+        }
+    }
+
+    private func hasPreparedAd(for adUnitID: String) -> Bool {
+        preparedAds.contains { $0.adUnitID == adUnitID }
+    }
+
+    private func preparedAdCount(for adUnitID: String) -> Int {
+        preparedAds.filter { $0.adUnitID == adUnitID }.count
+    }
+
+    private func dequeuePreparedAd(for adUnitID: String) -> RewardedAd? {
+        pruneExpiredPreparedAds()
+        guard let index = preparedAds.firstIndex(where: { $0.adUnitID == adUnitID }) else {
+            return nil
+        }
+        return preparedAds.remove(at: index).ad
+    }
+
+    private func pruneExpiredPreparedAds(now: Date = Date()) {
+        preparedAds.removeAll {
+            now.timeIntervalSince($0.loadedAt) > preparedAdExpirationInterval
+        }
+    }
+
+    private func discardPreparedAdsForOtherUnits(_ adUnitID: String) {
+        preparedAds.removeAll { $0.adUnitID != adUnitID }
     }
 
     private func waitForReadyState(adUnitID: String) async -> AdLoadState {

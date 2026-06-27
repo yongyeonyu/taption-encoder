@@ -4929,6 +4929,117 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(makeStarWalletSnapshot(balance: 1_200).badgeText, "999+")
     }
 
+    func testStarWalletStoreGrantsInitialInstallBonusOnce() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        let secureStore = TestStarWalletSecureStore()
+        let walletFileURL = directoryURL.appendingPathComponent("stars.enc")
+        let quarantineURL = directoryURL.appendingPathComponent("quarantine", isDirectory: true)
+        let store = StarWalletStore(
+            fileURL: walletFileURL,
+            quarantineDirectoryURL: quarantineURL,
+            secureStore: secureStore
+        )
+
+        let snapshot = await store.currentSnapshot()
+
+        XCTAssertEqual(snapshot.balance, StarWalletStore.initialInstallBonusStarCount)
+        XCTAssertEqual(snapshot.totalEarned, StarWalletStore.initialInstallBonusStarCount)
+        XCTAssertEqual(snapshot.totalSpent, 0)
+        XCTAssertEqual(snapshot.totalPurchased, 0)
+        XCTAssertEqual(snapshot.sequence, 1)
+        XCTAssertEqual(snapshot.events.map(\.kind), [.initialInstallBonus])
+        XCTAssertEqual(snapshot.events.first?.delta, StarWalletStore.initialInstallBonusStarCount)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: walletFileURL.path))
+
+        let reloadedStore = StarWalletStore(
+            fileURL: walletFileURL,
+            quarantineDirectoryURL: quarantineURL,
+            secureStore: secureStore
+        )
+        let reloadedSnapshot = await reloadedStore.currentSnapshot()
+
+        XCTAssertEqual(reloadedSnapshot.balance, StarWalletStore.initialInstallBonusStarCount)
+        XCTAssertEqual(reloadedSnapshot.sequence, 1)
+        XCTAssertEqual(reloadedSnapshot.events.map(\.kind), [.initialInstallBonus])
+    }
+
+    func testStarWalletStoreDoesNotRegrantInitialBonusAfterWalletFileRemoval() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        let secureStore = TestStarWalletSecureStore()
+        let walletFileURL = directoryURL.appendingPathComponent("stars.enc")
+        let quarantineURL = directoryURL.appendingPathComponent("quarantine", isDirectory: true)
+        let store = StarWalletStore(
+            fileURL: walletFileURL,
+            quarantineDirectoryURL: quarantineURL,
+            secureStore: secureStore
+        )
+
+        _ = await store.currentSnapshot()
+        try FileManager.default.removeItem(at: walletFileURL)
+
+        let reloadedStore = StarWalletStore(
+            fileURL: walletFileURL,
+            quarantineDirectoryURL: quarantineURL,
+            secureStore: secureStore
+        )
+        let reloadedSnapshot = await reloadedStore.currentSnapshot()
+
+        XCTAssertEqual(reloadedSnapshot, .empty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: walletFileURL.path))
+    }
+
+    func testStarWalletStoreMarksExistingWalletAsInitialBonusGranted() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        let secureStore = TestStarWalletSecureStore()
+        let walletFileURL = directoryURL.appendingPathComponent("stars.enc")
+        let quarantineURL = directoryURL.appendingPathComponent("quarantine", isDirectory: true)
+        let existingStore = StarWalletStore(
+            fileURL: walletFileURL,
+            quarantineDirectoryURL: quarantineURL,
+            secureStore: secureStore
+        )
+        let existingSnapshot = makeStarWalletSnapshot(balance: 3, sequence: 7)
+        try await existingStore.persistForTesting(existingSnapshot)
+
+        let reloadedStore = StarWalletStore(
+            fileURL: walletFileURL,
+            quarantineDirectoryURL: quarantineURL,
+            secureStore: secureStore
+        )
+        let reloadedSnapshot = await reloadedStore.currentSnapshot()
+
+        XCTAssertEqual(reloadedSnapshot.balance, 3)
+        XCTAssertEqual(reloadedSnapshot.sequence, 7)
+        XCTAssertFalse(reloadedSnapshot.events.contains { $0.kind == .initialInstallBonus })
+
+        try FileManager.default.removeItem(at: walletFileURL)
+
+        let missingWalletStore = StarWalletStore(
+            fileURL: walletFileURL,
+            quarantineDirectoryURL: quarantineURL,
+            secureStore: secureStore
+        )
+        let missingWalletSnapshot = await missingWalletStore.currentSnapshot()
+
+        XCTAssertEqual(missingWalletSnapshot, .empty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: walletFileURL.path))
+    }
+
     func testStarWalletStoreRoundTripsEncryptedSnapshot() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
@@ -5415,6 +5526,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     private final class TestStarWalletSecureStore: @unchecked Sendable, StarWalletSecureStoring {
         private var encryptionKeyData = Data((0..<32).map(UInt8.init))
         private var integrityMetadata: StarWalletIntegrityMetadata?
+        private var initialBonusGranted = false
 
         func loadOrCreateEncryptionKeyData() throws -> Data {
             encryptionKeyData
@@ -5430,6 +5542,14 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         func clearIntegrityMetadata() throws {
             integrityMetadata = nil
+        }
+
+        func loadInitialBonusGranted() throws -> Bool {
+            initialBonusGranted
+        }
+
+        func saveInitialBonusGranted() throws {
+            initialBonusGranted = true
         }
     }
 
