@@ -2,6 +2,8 @@ import Foundation
 
 struct TaptionTestVideoSeedResult: Equatable {
     let destinationURL: URL
+    let migratedFilenames: [String]
+    let removedLegacyFilenames: [String]
     let copiedFilenames: [String]
     let skippedFilenames: [String]
 }
@@ -12,31 +14,59 @@ enum TaptionTestVideoSeeder {
     static let sourceNoticeFilename = "SAMPLE_SOURCES.txt"
 
     static let expectedBundledVideoSampleFilenames = [
-        "available-now_av1_av01_mp4.mp4",
-        "available-now_vp9_vp09_webm.webm",
-        "available-now_vp8_vp8_webm.webm",
-        "available-now_mpeg1_mpeg1video_mpg.mpg",
-        "available-now_mpeg2_mpeg2video_mpg.mpg",
-        "available-now_mpeg4-visual_mpeg4_avi.avi",
-        "available-now_h263_h263_3gp.3gp",
-        "available-now_h261_h261_h261.h261",
-        "available-now_flash-video_flv1_flv.flv",
-        "available-now_microsoft-mpeg4-v2_msmpeg4v2_avi.avi",
-        "available-now_microsoft-mpeg4-v3_msmpeg4v3_avi.avi",
-        "available-now_motion-jpeg_mjpeg_avi.avi",
-        "available-now_jpeg-2000_jpeg2000_mov.mov",
-        "available-now_jpeg-ls_jpegls_avi.avi",
-        "available-now_lossless-jpeg_ljpeg_avi.avi",
-        "available-now_apple-animation_qtrle_mov.mov",
-        "available-now_cinepak_cvid_mov.mov",
-        "available-now_sorenson-video_svq1_mov.mov",
-        "available-now_sorenson-video-3_svq3_mov.mov",
-        "available-now_quicktime-video_rpza_mov.mov",
-        "available-now_theora_theora_ogv.ogv",
-        "available-now_wmv_wmv2_wmv.wmv",
-        "available-now_h264-avc_avc1_mp4.mp4",
-        "available-now_h265-hevc_hvc1_mp4.mp4",
-        "supported-hardware_prores_prores_mov.mov"
+        "AV1.mp4",
+        "VP9.webm",
+        "VP8.webm",
+        "MPEG-1.mpg",
+        "MPEG-2.mpg",
+        "MPEG-4 Visual.avi",
+        "H.263.3gp",
+        "H.261.h261",
+        "Flash Video.flv",
+        "Microsoft MPEG-4 V2.avi",
+        "Microsoft MPEG-4 V3.avi",
+        "Motion JPEG.avi",
+        "JPEG 2000.mov",
+        "JPEG-LS.avi",
+        "Lossless JPEG.avi",
+        "Apple Animation.mov",
+        "Cinepak.mov",
+        "Sorenson Video.mov",
+        "Sorenson Video 3.mov",
+        "QuickTime Video.mov",
+        "Theora.ogv",
+        "Windows Media Video.wmv",
+        "H.264 AVC.mp4",
+        "H.265 HEVC.mp4",
+        "Apple ProRes.mov"
+    ]
+
+    static let legacyVideoSampleFilenamePairs: [(current: String, legacy: String)] = [
+        ("AV1.mp4", "available-now_av1_av01_mp4.mp4"),
+        ("VP9.webm", "available-now_vp9_vp09_webm.webm"),
+        ("VP8.webm", "available-now_vp8_vp8_webm.webm"),
+        ("MPEG-1.mpg", "available-now_mpeg1_mpeg1video_mpg.mpg"),
+        ("MPEG-2.mpg", "available-now_mpeg2_mpeg2video_mpg.mpg"),
+        ("MPEG-4 Visual.avi", "available-now_mpeg4-visual_mpeg4_avi.avi"),
+        ("H.263.3gp", "available-now_h263_h263_3gp.3gp"),
+        ("H.261.h261", "available-now_h261_h261_h261.h261"),
+        ("Flash Video.flv", "available-now_flash-video_flv1_flv.flv"),
+        ("Microsoft MPEG-4 V2.avi", "available-now_microsoft-mpeg4-v2_msmpeg4v2_avi.avi"),
+        ("Microsoft MPEG-4 V3.avi", "available-now_microsoft-mpeg4-v3_msmpeg4v3_avi.avi"),
+        ("Motion JPEG.avi", "available-now_motion-jpeg_mjpeg_avi.avi"),
+        ("JPEG 2000.mov", "available-now_jpeg-2000_jpeg2000_mov.mov"),
+        ("JPEG-LS.avi", "available-now_jpeg-ls_jpegls_avi.avi"),
+        ("Lossless JPEG.avi", "available-now_lossless-jpeg_ljpeg_avi.avi"),
+        ("Apple Animation.mov", "available-now_apple-animation_qtrle_mov.mov"),
+        ("Cinepak.mov", "available-now_cinepak_cvid_mov.mov"),
+        ("Sorenson Video.mov", "available-now_sorenson-video_svq1_mov.mov"),
+        ("Sorenson Video 3.mov", "available-now_sorenson-video-3_svq3_mov.mov"),
+        ("QuickTime Video.mov", "available-now_quicktime-video_rpza_mov.mov"),
+        ("Theora.ogv", "available-now_theora_theora_ogv.ogv"),
+        ("Windows Media Video.wmv", "available-now_wmv_wmv2_wmv.wmv"),
+        ("H.264 AVC.mp4", "available-now_h264-avc_avc1_mp4.mp4"),
+        ("H.265 HEVC.mp4", "available-now_h265-hevc_hvc1_mp4.mp4"),
+        ("Apple ProRes.mov", "supported-hardware_prores_prores_mov.mov")
     ]
 
     static func seedBundledSamplesIntoDocuments(
@@ -65,6 +95,8 @@ enum TaptionTestVideoSeeder {
                 metadata: [
                     "destination": result.destinationURL.path,
                     "copied": "\(result.copiedFilenames.count)",
+                    "migrated": "\(result.migratedFilenames.count)",
+                    "removedLegacy": "\(result.removedLegacyFilenames.count)",
                     "skipped": "\(result.skippedFilenames.count)"
                 ]
             )
@@ -90,6 +122,10 @@ enum TaptionTestVideoSeeder {
         try fileManager.createDirectory(
             at: destinationURL,
             withIntermediateDirectories: true
+        )
+        let legacyMigration = try migrateLegacySampleFilenames(
+            in: destinationURL,
+            fileManager: fileManager
         )
 
         let sourceFiles = try fileManager
@@ -121,9 +157,37 @@ enum TaptionTestVideoSeeder {
 
         return TaptionTestVideoSeedResult(
             destinationURL: destinationURL,
+            migratedFilenames: legacyMigration.migratedFilenames,
+            removedLegacyFilenames: legacyMigration.removedLegacyFilenames,
             copiedFilenames: copiedFilenames,
             skippedFilenames: skippedFilenames
         )
+    }
+
+    private static func migrateLegacySampleFilenames(
+        in destinationURL: URL,
+        fileManager: FileManager
+    ) throws -> (migratedFilenames: [String], removedLegacyFilenames: [String]) {
+        var migratedFilenames: [String] = []
+        var removedLegacyFilenames: [String] = []
+
+        for pair in legacyVideoSampleFilenamePairs {
+            let currentURL = destinationURL.appendingPathComponent(pair.current, isDirectory: false)
+            let legacyURL = destinationURL.appendingPathComponent(pair.legacy, isDirectory: false)
+            guard fileManager.fileExists(atPath: legacyURL.path) else {
+                continue
+            }
+
+            if fileManager.fileExists(atPath: currentURL.path) {
+                try fileManager.removeItem(at: legacyURL)
+                removedLegacyFilenames.append(pair.legacy)
+            } else {
+                try fileManager.moveItem(at: legacyURL, to: currentURL)
+                migratedFilenames.append(pair.current)
+            }
+        }
+
+        return (migratedFilenames, removedLegacyFilenames)
     }
 
     private static func documentsDirectoryURL(fileManager: FileManager) throws -> URL {

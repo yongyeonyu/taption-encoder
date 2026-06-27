@@ -506,7 +506,7 @@ enum TaptionVideoContainer: String, Codable, Equatable, CaseIterable {
         case .realMedia:
             return ["rm", "rmvb"]
         case .rawElementaryStream:
-            return ["h264", "h265", "hevc", "264", "265", "ivf", "obu", "y4m", "av1", "h263", "m1v", "m2v", "vc1"]
+            return ["h264", "h265", "hevc", "264", "265", "ivf", "obu", "y4m", "av1", "h263", "h261", "m1v", "m2v", "vc1"]
         case .unknown:
             return []
         }

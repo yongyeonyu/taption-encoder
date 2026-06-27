@@ -11,6 +11,7 @@ struct SW_AV1HEVCTranscodeConfiguration {
     let targetBitrate: Int
     let frameDuration: CMTime
     let expectedFrameCount: Int
+    let limitsToExpectedFrameCount: Bool
     let duration: CMTime
     let outputURL: URL
     let outputFileType: AVFileType
@@ -41,15 +42,18 @@ struct SW_AV1HEVCTranscodeConfiguration {
             options.outputPolicy.advancedOptions.targetBitrate,
             targetSize: targetSize
         )
-        let durationSeconds = max(asset.duration ?? 0, 0)
+        let hasKnownDuration = asset.duration.map { $0.isFinite && $0 > 0 } ?? false
+        let durationSeconds = hasKnownDuration ? max(asset.duration ?? 0, 0) : 0
         let duration = CMTime(seconds: durationSeconds, preferredTimescale: 600)
-        let expectedFrameCount = max(1, Int((durationSeconds * fps).rounded()))
+        let progressDurationSeconds = hasKnownDuration ? durationSeconds : 1
+        let expectedFrameCount = max(1, Int((progressDurationSeconds * fps).rounded()))
 
         return SW_AV1HEVCTranscodeConfiguration(
             targetSize: targetSize,
             targetBitrate: targetBitrate,
             frameDuration: CMTime(seconds: 1.0 / fps, preferredTimescale: 600),
             expectedFrameCount: expectedFrameCount,
+            limitsToExpectedFrameCount: hasKnownDuration,
             duration: duration,
             outputURL: outputURL,
             outputFileType: avFileType(for: options.outputPolicy.container)
@@ -782,25 +786,60 @@ extension SW_AV1HEVCTranscoder {
                 estimatedRemainingTime: nil
             ), force: true)
 
-            let runStats = try await transcode(
-                sourceURL: request.sourceURL,
-                configuration: configuration,
-                audioConfiguration: audioConfiguration,
-                sourceCodecLabel: sourceCodecLabel
-            ) { fraction in
-                let normalizedFraction = min(max(fraction, 0.02), 0.99)
-                let elapsed = Date().timeIntervalSince(startedAt)
-                let remaining = normalizedFraction > 0.02
-                    ? max(0, elapsed * (1 - normalizedFraction) / normalizedFraction)
-                    : nil
+            let runStats: SW_AV1SoftwareTranscodeRunStats
+            do {
+                runStats = try await transcode(
+                    sourceURL: request.sourceURL,
+                    configuration: configuration,
+                    audioConfiguration: audioConfiguration,
+                    sourceCodecLabel: sourceCodecLabel
+                ) { fraction in
+                    let normalizedFraction = min(max(fraction, 0.02), 0.99)
+                    let elapsed = Date().timeIntervalSince(startedAt)
+                    let remaining = normalizedFraction > 0.02
+                        ? max(0, elapsed * (1 - normalizedFraction) / normalizedFraction)
+                        : nil
+                    progressEmitter.submit(TaptionEncodingProgress(
+                        stage: .encoding,
+                        fractionCompleted: normalizedFraction,
+                        elapsedTime: elapsed,
+                        estimatedRemainingTime: remaining,
+                        currentFrame: Int64((Double(configuration.expectedFrameCount) * normalizedFraction).rounded()),
+                        totalFrames: Int64(configuration.expectedFrameCount)
+                    ))
+                }
+            } catch let error as NSError where isNoFrameDecodeTimeout(error) {
+                AppLogger.warning(
+                    "Software \(sourceCodecLabel) decoder produced no frames; retrying with a fresh decoder",
+                    category: .encoding,
+                    metadata: ["source": request.sourceURL.lastPathComponent]
+                )
                 progressEmitter.submit(TaptionEncodingProgress(
-                    stage: .encoding,
-                    fractionCompleted: normalizedFraction,
-                    elapsedTime: elapsed,
-                    estimatedRemainingTime: remaining,
-                    currentFrame: Int64((Double(configuration.expectedFrameCount) * normalizedFraction).rounded()),
-                    totalFrames: Int64(configuration.expectedFrameCount)
-                ))
+                    stage: .preparing,
+                    fractionCompleted: 0.02,
+                    elapsedTime: Date().timeIntervalSince(startedAt),
+                    estimatedRemainingTime: nil
+                ), force: true)
+                runStats = try await transcode(
+                    sourceURL: request.sourceURL,
+                    configuration: configuration,
+                    audioConfiguration: audioConfiguration,
+                    sourceCodecLabel: sourceCodecLabel
+                ) { fraction in
+                    let normalizedFraction = min(max(fraction, 0.02), 0.99)
+                    let elapsed = Date().timeIntervalSince(startedAt)
+                    let remaining = normalizedFraction > 0.02
+                        ? max(0, elapsed * (1 - normalizedFraction) / normalizedFraction)
+                        : nil
+                    progressEmitter.submit(TaptionEncodingProgress(
+                        stage: .encoding,
+                        fractionCompleted: normalizedFraction,
+                        elapsedTime: elapsed,
+                        estimatedRemainingTime: remaining,
+                        currentFrame: Int64((Double(configuration.expectedFrameCount) * normalizedFraction).rounded()),
+                        totalFrames: Int64(configuration.expectedFrameCount)
+                    ))
+                }
             }
 
             progressEmitter.submit(TaptionEncodingProgress(
@@ -947,6 +986,7 @@ extension SW_AV1HEVCTranscoder {
             targetSize: configuration.targetSize,
             frameDuration: configuration.frameDuration,
             expectedFrameCount: configuration.expectedFrameCount,
+            limitsToExpectedFrameCount: configuration.limitsToExpectedFrameCount,
             progressHandler: progressHandler
         )
         let videoOpaque = Unmanaged.passRetained(context).toOpaque()
@@ -1051,6 +1091,7 @@ extension SW_AV1HEVCTranscoder {
             }
 
             if audioContext == nil,
+               configuration.limitsToExpectedFrameCount,
                context.didReachExpectedFrameCount,
                !stopRequested {
                 stopRequested = true
@@ -1076,12 +1117,14 @@ extension SW_AV1HEVCTranscoder {
                    idleDuration > max(1.0, configuration.frameDuration.seconds * 12) {
                     break
                 }
-                let isNearPlaybackEnd = playbackPosition >= 0.995
-                    || playbackTimeSeconds >= max(configuration.duration.seconds - 0.25, 0)
-                if isNearPlaybackEnd,
-                   audioDidDrain,
-                   idleDuration > max(0.5, configuration.frameDuration.seconds * 6) {
-                    break
+                if configuration.limitsToExpectedFrameCount {
+                    let isNearPlaybackEnd = playbackPosition >= 0.995
+                        || playbackTimeSeconds >= max(configuration.duration.seconds - 0.25, 0)
+                    if isNearPlaybackEnd,
+                       audioDidDrain,
+                       idleDuration > max(0.5, configuration.frameDuration.seconds * 6) {
+                        break
+                    }
                 }
             }
 
@@ -1170,6 +1213,10 @@ extension SW_AV1HEVCTranscoder {
         if Task.isCancelled {
             throw CancellationError()
         }
+    }
+
+    private static func isNoFrameDecodeTimeout(_ error: NSError) -> Bool {
+        error.domain == "TaptionEncoder" && error.code == -105
     }
 
     private static func writerVideoOutputSettings(
@@ -1261,6 +1308,10 @@ extension SW_AV1HEVCTranscoder {
 
         if !allowsAudio {
             libvlc_media_add_option(media, ":no-audio")
+        }
+        if sourceURL.pathExtension.lowercased() == "h261" {
+            libvlc_media_add_option(media, ":demux=avformat")
+            libvlc_media_add_option(media, ":avformat-format=h261")
         }
         libvlc_media_add_option(media, ":no-sub-autodetect-file")
         libvlc_media_add_option(media, ":no-snapshot-preview")
@@ -1597,6 +1648,7 @@ private final class SW_AV1FrameWriterContext: @unchecked Sendable {
     private let targetSize: CGSize
     private let frameDuration: CMTime
     private let expectedFrameCount: Int
+    private let limitsToExpectedFrameCount: Bool
     nonisolated(unsafe) private let progressHandler: (Double) -> Void
     private let stateLock = NSLock()
     private let writerQueue = DispatchQueue(label: "com.taption.encoder.av1-software.writer")
@@ -1616,6 +1668,7 @@ private final class SW_AV1FrameWriterContext: @unchecked Sendable {
         targetSize: CGSize,
         frameDuration: CMTime,
         expectedFrameCount: Int,
+        limitsToExpectedFrameCount: Bool,
         progressHandler: @escaping (Double) -> Void
     ) {
         self.writer = writer
@@ -1624,6 +1677,7 @@ private final class SW_AV1FrameWriterContext: @unchecked Sendable {
         self.targetSize = targetSize
         self.frameDuration = frameDuration
         self.expectedFrameCount = expectedFrameCount
+        self.limitsToExpectedFrameCount = limitsToExpectedFrameCount
         self.progressHandler = progressHandler
     }
 
@@ -1634,7 +1688,7 @@ private final class SW_AV1FrameWriterContext: @unchecked Sendable {
     }
 
     nonisolated var didReachExpectedFrameCount: Bool {
-        currentFrameCount >= expectedFrameCount
+        limitsToExpectedFrameCount && currentFrameCount >= expectedFrameCount
     }
 
     nonisolated func snapshotError() -> Error? {
@@ -1731,7 +1785,9 @@ private final class SW_AV1FrameWriterContext: @unchecked Sendable {
     nonisolated func appendDecodedPixelBuffer(_ pixelBuffer: CVPixelBuffer) {
         writerQueue.sync {
             stateLock.lock()
-            let shouldAbort = cancellationRequested || pendingError != nil || currentFrameCountStorage >= expectedFrameCount
+            let reachedFrameLimit = limitsToExpectedFrameCount
+                && currentFrameCountStorage >= expectedFrameCount
+            let shouldAbort = cancellationRequested || pendingError != nil || reachedFrameLimit
             stateLock.unlock()
             guard !shouldAbort else { return }
 

@@ -42,7 +42,7 @@ struct AVFoundationMediaInspector: MediaInspecting {
             }
             let audioTrackInfo = try await audioTracks.asyncMap { try await inspectAudioTrack($0) }
 
-            return TaptionVideoAsset(
+            let inspectedAsset = TaptionVideoAsset(
                 displayName: url.lastPathComponent,
                 location: TaptionVideoAssetLocation(kind: .file, url: url),
                 container: container(for: url),
@@ -51,6 +51,10 @@ struct AVFoundationMediaInspector: MediaInspecting {
                 audioTracks: audioTrackInfo,
                 fingerprint: fingerprint(for: url)
             )
+            if shouldFallbackToSoftwareInspection(for: url, inspectedAsset: inspectedAsset) {
+                return try await SW_VLCMediaInspector().inspectVideo(at: url)
+            }
+            return inspectedAsset
         } catch {
             guard shouldFallbackToSoftwareInspection(for: url, error: error) else {
                 throw error
@@ -118,28 +122,44 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return .vp9
         case "vp08":
             return .vp8
-        case "mp4v":
+        case "mp4v", "fmp4":
             return .mpeg4Visual
         case "mp2v":
             return .mpeg2
         case "mp1v":
             return .mpeg1
-        case "h263":
+        case "h263", "s263":
             return .h263
-        case "jpeg", "dmb1":
-            return .jpeg
-        case "mjpa", "mjpb":
+        case "h261":
+            return .h261
+        case "flv1":
+            return .flashVideo
+        case "mp42":
+            return .microsoftMPEG4V2
+        case "mp43":
+            return .microsoftMPEG4V3
+        case "jpeg", "dmb1", "mjpa", "mjpb", "mjpg":
             return .motionJPEG
+        case "mjp2":
+            return .jpeg2000
+        case "mjls":
+            return .jpegLS
+        case "ljpg":
+            return .losslessJPEG
         case "jxlc":
             return .jpegXL
         case "rle":
             return .animation
         case "cvid":
             return .cinepak
+        case "rpza":
+            return .quickTimeVideo
         case "svq1":
             return .sorensonVideo
         case "svq3":
             return .sorensonVideo3
+        case "theo", "thra":
+            return .theora
         case "dvc":
             return .dv
         case "dvcp", "dvpp", "dv5n", "dv5p":
@@ -285,16 +305,37 @@ struct AVFoundationMediaInspector: MediaInspecting {
             || nsError.code == AVError.fileFormatNotRecognized.rawValue
             || nsError.code == -11828
     }
+
+    private func shouldFallbackToSoftwareInspection(
+        for url: URL,
+        inspectedAsset: TaptionVideoAsset
+    ) -> Bool {
+        let container = TaptionVideoContainer.inferred(from: url)
+        guard SW_SoftwareCodecBackendRegistry.vlcSoftwareDecoder.readableContainers.contains(container) else {
+            return false
+        }
+
+        return inspectedAsset.videoTrack == nil
+            || inspectedAsset.videoTrack?.codec == .unknown
+    }
 }
 
 private struct SW_VLCMediaInspector: MediaInspecting {
     func inspectVideo(at url: URL) async throws -> TaptionVideoAsset {
         let media = try Media(url: url)
-        _ = try await media.parse(timeout: .seconds(10))
+        do {
+            _ = try await media.parse(timeout: .seconds(10))
+        } catch {
+            if let fallbackAsset = fallbackAsset(for: url) {
+                return fallbackAsset
+            }
+            throw error
+        }
         let tracks = media.tracks()
         let videoTrack = tracks
             .first(where: { $0.type == .video })
             .map(makeVideoTrackInfo)
+            ?? fallbackVideoTrack(for: url)
         let audioTracks = tracks
             .filter { $0.type == .audio }
             .map(makeAudioTrackInfo)
@@ -308,6 +349,44 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             audioTracks: audioTracks,
             fingerprint: fingerprint(for: url)
         )
+    }
+
+    private func fallbackAsset(for url: URL) -> TaptionVideoAsset? {
+        guard let videoTrack = fallbackVideoTrack(for: url) else {
+            return nil
+        }
+
+        return TaptionVideoAsset(
+            displayName: url.lastPathComponent,
+            location: TaptionVideoAssetLocation(kind: .file, url: url),
+            container: TaptionVideoContainer.inferred(from: url),
+            duration: nil,
+            videoTrack: videoTrack,
+            audioTracks: [],
+            fingerprint: fingerprint(for: url)
+        )
+    }
+
+    private func fallbackVideoTrack(for url: URL) -> TaptionVideoTrackInfo? {
+        let fileExtension = url.pathExtension.lowercased()
+        if fileExtension == "h261" {
+            return TaptionVideoTrackInfo(
+                codec: .h261,
+                naturalSize: TaptionPixelSize(width: 176, height: 144),
+                displaySize: TaptionPixelSize(width: 176, height: 144),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 25),
+                estimatedBitrate: nil,
+                color: TaptionColorDescription(),
+                rotationDegrees: 0
+            )
+        }
+
+        switch TaptionVideoContainer.inferred(from: url) {
+        case .mpegProgramStream:
+            return mpegVideoTrackInfo(for: url)
+        default:
+            return nil
+        }
     }
 
     private func makeVideoTrackInfo(from track: Track) -> TaptionVideoTrackInfo {
@@ -347,24 +426,42 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             return .hevc
         case "dvh1", "dvhe":
             return .dolbyVisionHEVC
-        case "mp4v":
+        case "mp4v", "fmp4":
             return .mpeg4Visual
         case "mp2v", "mpeg":
             return .mpeg2
         case "mp1v":
             return .mpeg1
-        case "h263":
+        case "h263", "s263":
             return .h263
-        case "jpeg":
-            return .jpeg
-        case "mjpg":
+        case "h261":
+            return .h261
+        case "flv1":
+            return .flashVideo
+        case "mp42":
+            return .microsoftMPEG4V2
+        case "mp43":
+            return .microsoftMPEG4V3
+        case "jpeg", "dmb1", "mjpg", "mjpa", "mjpb":
             return .motionJPEG
+        case "mjp2":
+            return .jpeg2000
+        case "mjls":
+            return .jpegLS
+        case "ljpg":
+            return .losslessJPEG
+        case "rle":
+            return .animation
         case "cvid":
             return .cinepak
+        case "rpza":
+            return .quickTimeVideo
         case "svq1":
             return .sorensonVideo
         case "svq3":
             return .sorensonVideo3
+        case "theo", "thra":
+            return .theora
         case "dvc":
             return .dv
         case "dvcp", "dvpp", "dv5n", "dv5p":
@@ -460,6 +557,127 @@ private struct SW_VLCMediaInspector: MediaInspecting {
         ], encoding: .ascii)?
             .trimmingCharacters(in: .controlCharacters.union(.whitespacesAndNewlines))
             .lowercased() ?? ""
+    }
+
+    private func mpegVideoTrackInfo(for url: URL) -> TaptionVideoTrackInfo? {
+        guard let sequence = MPEGVideoSequenceHeaderParser.parse(url: url) else {
+            return nil
+        }
+
+        return TaptionVideoTrackInfo(
+            codec: sequence.codec,
+            naturalSize: sequence.size,
+            displaySize: sequence.size,
+            nominalFrameRate: sequence.frameRate,
+            estimatedBitrate: nil,
+            color: TaptionColorDescription(),
+            rotationDegrees: 0
+        )
+    }
+}
+
+private struct MPEGVideoSequenceHeaderParser {
+    struct SequenceInfo {
+        let codec: TaptionVideoCodec
+        let size: TaptionPixelSize
+        let frameRate: TaptionRationalFrameRate?
+    }
+
+    static func parse(url: URL) -> SequenceInfo? {
+        guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else {
+            return nil
+        }
+        return parse(data: data)
+    }
+
+    private static func parse(data: Data) -> SequenceInfo? {
+        let bytes = [UInt8](data.prefix(4 * 1_024 * 1_024))
+        guard let sequenceHeaderIndex = firstStartCodeIndex(0xB3, in: bytes),
+              sequenceHeaderIndex + 7 < bytes.count else {
+            return nil
+        }
+
+        let payloadIndex = sequenceHeaderIndex + 4
+        let width = Int(bytes[payloadIndex]) << 4
+            | Int(bytes[payloadIndex + 1] >> 4)
+        let height = Int(bytes[payloadIndex + 1] & 0x0F) << 8
+            | Int(bytes[payloadIndex + 2])
+        let frameRateCode = Int(bytes[payloadIndex + 3] & 0x0F)
+        let hasSequenceExtension = containsSequenceExtension(
+            in: bytes,
+            after: sequenceHeaderIndex + 8
+        )
+
+        return SequenceInfo(
+            codec: hasSequenceExtension ? .mpeg2 : .mpeg1,
+            size: TaptionPixelSize(width: max(width, 2), height: max(height, 2)),
+            frameRate: frameRate(for: frameRateCode)
+        )
+    }
+
+    private static func containsSequenceExtension(
+        in bytes: [UInt8],
+        after startIndex: Int
+    ) -> Bool {
+        var index = max(startIndex, 0)
+        while index + 4 < bytes.count {
+            guard bytes[index] == 0x00,
+                  bytes[index + 1] == 0x00,
+                  bytes[index + 2] == 0x01 else {
+                index += 1
+                continue
+            }
+            let startCode = bytes[index + 3]
+            if startCode == 0xB5 {
+                return bytes[index + 4] >> 4 == 0x01
+            }
+            if startCode == 0x00 || startCode == 0xB3 {
+                return false
+            }
+            index += 4
+        }
+        return false
+    }
+
+    private static func firstStartCodeIndex(_ code: UInt8, in bytes: [UInt8]) -> Int? {
+        guard bytes.count >= 4 else {
+            return nil
+        }
+
+        var index = 0
+        while index + 3 < bytes.count {
+            if bytes[index] == 0x00,
+               bytes[index + 1] == 0x00,
+               bytes[index + 2] == 0x01,
+               bytes[index + 3] == code {
+                return index
+            }
+            index += 1
+        }
+        return nil
+    }
+
+    private static func frameRate(for code: Int) -> TaptionRationalFrameRate? {
+        switch code {
+        case 1:
+            return TaptionRationalFrameRate(numerator: 24_000, denominator: 1_001)
+        case 2:
+            return TaptionRationalFrameRate(numerator: 24)
+        case 3:
+            return TaptionRationalFrameRate(numerator: 25)
+        case 4:
+            return TaptionRationalFrameRate(numerator: 30_000, denominator: 1_001)
+        case 5:
+            return TaptionRationalFrameRate(numerator: 30)
+        case 6:
+            return TaptionRationalFrameRate(numerator: 50)
+        case 7:
+            return TaptionRationalFrameRate(numerator: 60_000, denominator: 1_001)
+        case 8:
+            return TaptionRationalFrameRate(numerator: 60)
+        default:
+            return nil
+        }
     }
 }
 

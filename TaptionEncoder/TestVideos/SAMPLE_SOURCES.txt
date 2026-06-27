@@ -12,4 +12,4 @@ https://download.blender.org/peach/trailer/trailer_400p.ogg
 The Sorenson Video 3 sample was trimmed from the FFmpeg samples archive:
 https://samples.ffmpeg.org/V-codecs/SVQ3/Vertical400kbit.sorenson3.mov
 
-Generated and trimmed files are renamed with support state, codec name, codec tag, and container.
+Generated and trimmed files are renamed with the codec name only.
