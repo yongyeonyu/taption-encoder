@@ -2,11 +2,12 @@ Taption Encoder bundled test video samples
 
 Policy for this folder:
 - Each bundled video sample must be 1 MB or smaller.
-- Samples should use official/public test-media sources. When the official
-  source file is larger than 1 MB, the bundled file may be a trimmed or
-  same-codec transcode derived from that official source.
-- No purely local/generated-only sample remains after the 2026-06-28 source
-  audit.
+- Samples should use official/public test-media sources when available. When
+  the official source file is larger than 1 MB, the bundled file may be a
+  trimmed or same-codec transcode derived from that official source.
+- Generated-only test-pattern fixtures are not bundled. If no official/public
+  source file is found for an executable codec, the codec remains unsupported
+  by the default sample bundle until a real source is available.
 
 Official Chromium media test data:
 - AV1.mp4
@@ -53,6 +54,10 @@ Official FFmpeg samples archive:
   https://samples.ffmpeg.org/V-codecs/RPZA/1701-D.mov
 - Theora.ogv
   https://samples.ffmpeg.org/V-codecs/Theora/theora_testsuite/320x240.ogv
+- RealVideo 1.0.rm
+  https://samples.ffmpeg.org/real/VC-RV10/thankyou.rm
+- RealVideo.rm
+  https://samples.ffmpeg.org/real/VC-RV20/Dolby7.5fps1.rm
 - Windows Media Video.wmv
   https://samples.ffmpeg.org/archive/all/asf+wmv2+++wmv_green_squares_wmp_ffout.wmv
 - Microsoft Video 1.avi
@@ -79,6 +84,16 @@ Official FFmpeg samples archive:
   rsync://samples.ffmpeg.org/fate-suite/v410/lenav410.mov
 - YUV4.mov
   https://samples.ffmpeg.org/V-codecs/yuv4/lenayuv4.mov
+- Ut Video.avi
+  http://fate-suite.ffmpeg.org/utvideo/utvideo_yuv420_median.avi
+- MagicYUV.avi
+  http://fate-suite.ffmpeg.org/magy/magy_yuv420_median.avi
+- Microsoft RLE.avi
+  http://fate-suite.ffmpeg.org/msrle/Search-RLE.avi
+- QuickTime Graphics.mov
+  https://samples.ffmpeg.org/V-codecs/SMC/aletrek-smc.mov
+- Raw Video.avi
+  https://samples.ffmpeg.org/archive/video/rawvideo/avi+rawvideo+++wmv_green_squares_wmp_grey.avi
 
 Official FFmpeg samples archive sources trimmed or same-codec transcoded to
 fit the 1 MB bundle limit:
@@ -106,6 +121,21 @@ fit the 1 MB bundle limit:
 - V210.avi
   Same-codec V210 transcode from the official FFmpeg FATE V210 source.
   rsync://samples.ffmpeg.org/fate-suite/v210/v210_720p-partial.avi
+- Snow.avi
+  Trimmed with video stream copy from the official 6.43 MB Snow source.
+  https://samples.ffmpeg.org/V-codecs/SNOW/snow-chroma-bug.avi
+- PNG Video.avi
+  Same-codec PNG video transcode from the official 2.00 MB FFmpeg FATE PNG1 source.
+  http://fate-suite.ffmpeg.org/png1/corepng-partial.avi
+- R10K.mov
+  Same-codec R10K transcode from the official 1.05 MB R10K source.
+  https://samples.ffmpeg.org/V-codecs/r10k/r10k_full-range_big-endian.mov
+- R210.avi
+  Same-codec R210 transcode from the official 3.52 MB FFmpeg FATE R210 source.
+  http://fate-suite.ffmpeg.org/r210/r210.avi
+- RoQ Video.roq
+  Same-codec RoQ transcode from the official 2.00 MB FFmpeg samples RoQ source.
+  https://samples.ffmpeg.org/game-formats/idroq/alice/ealogo.roq
 - Apple ProRes.mov
   Trimmed with video stream copy from the official 3.34 MB ProRes source.
   https://samples.ffmpeg.org/ffmpeg-bugs/trac/ticket3846/ProRes_FCP.mov

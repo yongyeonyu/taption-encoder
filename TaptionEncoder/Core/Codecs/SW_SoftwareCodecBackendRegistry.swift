@@ -209,7 +209,7 @@ enum TaptionOpenSourceNoticeCatalog {
             TaptionOpenSourceNoticeEntry(
                 id: "swiftvlc-libvlc",
                 name: "SwiftVLC / libVLC",
-                summary: "Software AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2/V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, Microsoft Video 1, ASUS V1/V2, FlashSV/FlashSV2, ZMBV, CLJR, FFV1, HuffYUV, DVCPro HD, DV, QuickTime Graphics, CineForm, DNxHD, V308, V210, V408, and V410 decoding fallback used by the current app build.",
+                summary: "Software decoding fallback for the current executable broad video input set used by the app's H.265 output routes.",
                 category: .shippedComponent,
                 isShippedInCurrentBuild: true,
                 requiresFinalLicenseText: true,
@@ -317,14 +317,14 @@ enum SW_SoftwareCodecBackendRegistry {
     static let vlcSoftwareDecoder = TaptionSoftwareCodecBackendProfile(
         backend: .softwareVLCDecoder,
         displayName: "SwiftVLC Video Software Decoder",
-        videoDecodeCodecs: [.av1, .h264, .hevc, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .wmv, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1, .huffYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .v308, .v210, .v408, .v410, .yuv4],
+        videoDecodeCodecs: [.av1, .h264, .hevc, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .realVideo1, .realVideo, .roqVideo, .wmv, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV, .utVideo, .magicYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .y41p, .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo],
         videoEncodeCodecs: [],
         audioDecodeCodecs: [],
         audioEncodeCodecs: [],
-        readableContainers: [.mp4, .mov, .m4v, .mkv, .webm, .avi, .flv, .ogg, .mpegProgramStream, .mxf, .dv, .threeGP, .threeGPP2, .asf, .wmv, .rawElementaryStream],
+        readableContainers: [.mp4, .mov, .m4v, .mkv, .webm, .avi, .flv, .ogg, .mpegProgramStream, .mxf, .dv, .threeGP, .threeGPP2, .asf, .wmv, .roq, .realMedia, .rawElementaryStream],
         writableContainers: [],
         requiresLicenseReview: true,
-        notes: "Current app fallback for AV1, H.264, H.265, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2/V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, Microsoft Video 1, ASUS V1/V2, FlashSV/FlashSV2, ZMBV, CLJR, FFV1, HuffYUV, DVCPro HD, DV, CineForm, DNxHD, V308, V210, V408, V410, and YUV4 decode. Output encoding is handled by the route-specific software-to-H.265 algorithms."
+        notes: "Current app fallback for AV1, H.264, H.265, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2/V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, RealVideo 1.0, RealVideo, RoQ Video, Windows Media Video, Microsoft Video 1, ASUS V1/V2, FlashSV/FlashSV2, ZMBV, CLJR, Snow, FFV1, HuffYUV, Ut Video, MagicYUV, DVCPro HD, DV, CineForm, DNxHD, PNG Video, R10K, V308, V210, R210, V408, V410, Y41P, Microsoft RLE, QuickTime Graphics, YUV4, and Raw Video decode. Output encoding is handled by the route-specific software-to-H.265 algorithms."
     )
 
     static let ffmpegFamilyCandidate = TaptionSoftwareCodecBackendProfile(

@@ -238,6 +238,59 @@ final class CodecRoutePlannerTests: XCTestCase {
         }
     }
 
+    func testNextTenPreservationCodecsToHEVCUseSoftwareWhenNoHardwareIsAvailable() {
+        let codecs: [TaptionVideoCodec] = [
+            .snow,
+            .utVideo,
+            .magicYUV,
+            .pngVideo,
+            .r10k,
+            .r210,
+            .y41p,
+            .microsoftRLE,
+            .quickTimeGraphics,
+            .rawVideo
+        ]
+
+        for codec in codecs {
+            let selection = selectRoute(
+                sourceCodec: codec,
+                outputCodec: .hevc,
+                profile: .softwareOnly
+            )
+
+            XCTAssertEqual(selection.support, .implemented, codec.displayName)
+            XCTAssertTrue(selection.isEncodableNow, codec.displayName)
+            XCTAssertEqual(selection.executionKind, .software, codec.displayName)
+            XCTAssertEqual(selection.selectedMode, .software, codec.displayName)
+            XCTAssertEqual(selection.decodeBackend, .softwareVLCDecoder, codec.displayName)
+            XCTAssertEqual(selection.encodeBackend, .customSoftware, codec.displayName)
+        }
+    }
+
+    func testRealVideoAndRoQCodecsToHEVCUseSoftwareWhenNoHardwareIsAvailable() {
+        let codecs: [TaptionVideoCodec] = [
+            .realVideo1,
+            .realVideo,
+            .roqVideo
+        ]
+
+        for codec in codecs {
+            let selection = selectRoute(
+                sourceCodec: codec,
+                outputCodec: .hevc,
+                profile: .softwareOnly
+            )
+
+            XCTAssertEqual(selection.support, .implemented, codec.displayName)
+            XCTAssertTrue(selection.isEncodableNow, codec.displayName)
+            XCTAssertEqual(selection.executionKind, .software, codec.displayName)
+            XCTAssertEqual(selection.selectedMode, .software, codec.displayName)
+            XCTAssertEqual(selection.decodeBackend, .softwareVLCDecoder, codec.displayName)
+            XCTAssertEqual(selection.encodeBackend, .customSoftware, codec.displayName)
+        }
+    }
+
     func testMotionJPEGToHEVCUsesSoftwareWhenNoHardwareIsAvailable() {
         let selection = selectRoute(
             sourceCodec: .motionJPEG,
@@ -901,7 +954,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(h261Descriptors.count, 1)
         XCTAssertEqual(h261Descriptors.first?.mode, .software)
         XCTAssertEqual(h261Descriptors.first?.backend, .softwareVLCDecoder)
-        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1, .huffYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .v308, .v210, .v408, .v410, .yuv4] {
+        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .realVideo1, .realVideo, .roqVideo, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV, .utVideo, .magicYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .y41p, .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo] {
             let route = TaptionCodecRoute(sourceCodec: codec, outputCodec: .hevc)
             let codecDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: route)
             XCTAssertEqual(codecDescriptors.count, 1, codec.displayName)
@@ -1524,7 +1577,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(SupportedVideoFileExtensions.contains("webm"))
         XCTAssertTrue(SupportedVideoFileExtensions.contains("DAT"))
         XCTAssertFalse(SupportedVideoFileExtensions.contains(".m2t"))
-        XCTAssertFalse(SupportedVideoFileExtensions.contains("dif"))
+        XCTAssertTrue(SupportedVideoFileExtensions.contains("dif"))
         XCTAssertFalse(ImportableVideoTypes.fileExtensions.contains("lrf"))
         XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("dvr-ms"))
         XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("vc1"))
@@ -1545,20 +1598,33 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(Set(videoFilenames), Set(TaptionTestVideoSeeder.expectedBundledVideoSampleFilenames))
         XCTAssertEqual(
             videoFilenames.count,
-            TaptionLaunchSupportCatalog.executableNowInputVideoCodecs.count
+            bundledAvailableNowSampleCodecExpectations().count
                 + TaptionLaunchSupportCatalog.hardwareGatedInputVideoCodecs.count
         )
         XCTAssertTrue(filenames.contains(TaptionTestVideoSeeder.sourceNoticeFilename))
         XCTAssertFalse(videoFilenames.contains { $0.hasPrefix("available-now_") })
         XCTAssertFalse(videoFilenames.contains { $0.hasPrefix("supported-hardware_") })
         XCTAssertFalse(videoFilenames.contains { $0.contains("_") })
+        XCTAssertFalse(videoFilenames.contains("Y41P.avi"))
+    }
+
+    func testBundledSampleSourceNoticeRejectsGeneratedOnlyFixtures() throws {
+        let sourceNoticeURL = bundledTestVideosURL().appendingPathComponent(TaptionTestVideoSeeder.sourceNoticeFilename)
+        let sourceNotice = try String(contentsOf: sourceNoticeURL, encoding: .utf8)
+
+        XCTAssertFalse(sourceNotice.contains("Generated codec-conformance fixture"))
+        XCTAssertFalse(sourceNotice.contains("Generated with FFmpeg"))
+        XCTAssertFalse(sourceNotice.contains("Y41P.avi"))
     }
 
     func testBundledAvailableNowSamplesInspectToExpectedLaunchCodecs() async throws {
         let testVideosURL = bundledTestVideosURL()
         let expectations = bundledAvailableNowSampleCodecExpectations()
 
-        XCTAssertEqual(expectations.count, TaptionLaunchSupportCatalog.executableNowInputVideoCodecs.count)
+        let sampledCodecs = Set(expectations.map(\.1))
+        XCTAssertTrue(Set(TaptionLaunchSupportCatalog.executableNowInputVideoCodecs).isSuperset(of: sampledCodecs))
+        XCTAssertTrue(TaptionLaunchSupportCatalog.executableNowInputVideoCodecs.contains(.y41p))
+        XCTAssertFalse(expectations.contains { $0.0 == "Y41P.avi" })
 
         for (filename, expectedCodec) in expectations {
             let sampleURL = testVideosURL.appendingPathComponent(filename)
@@ -1666,6 +1732,15 @@ final class CodecRoutePlannerTests: XCTestCase {
             "V408.mov",
             "V410.mov",
             "YUV4.mov"
+        ]
+        try await assertBundledSamplesEncodeToHEVCMP4(sampleFilenames)
+    }
+
+    func testRealVideoAndRoQBundledSamplesEncodeToHEVCMP4() async throws {
+        let sampleFilenames = [
+            "RealVideo 1.0.rm",
+            "RealVideo.rm",
+            "RoQ Video.roq"
         ]
         try await assertBundledSamplesEncodeToHEVCMP4(sampleFilenames)
     }
@@ -2259,76 +2334,50 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     func testLaunchSupportCatalogMatchesCurrentLaunchContract() {
+        let expectedExecutableNowVideoCodecs: [TaptionVideoCodec] = [
+            .av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261,
+            .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG,
+            .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak,
+            .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora,
+            .realVideo1, .realVideo, .roqVideo, .wmv,
+            .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo,
+            .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV,
+            .utVideo, .magicYUV, .dvcProHD, .dv, .cineForm, .dnxhd,
+            .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .y41p,
+            .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo, .h264, .hevc
+        ]
+        let expectedSupportedInputVideoCodecs = expectedExecutableNowVideoCodecs.map {
+            TaptionLaunchInputVideoSupportItem(codec: $0, availability: .availableNow)
+        } + [
+            TaptionLaunchInputVideoSupportItem(codec: .proRes, availability: .availableOnSupportedHardware)
+        ]
+
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputVideoCodecs,
-            [
-                TaptionLaunchInputVideoSupportItem(codec: .av1, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .vp9, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .vp8, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .mpeg1, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .mpeg2, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .mpeg4Visual, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .h263, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .h261, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .flashVideo, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .microsoftMPEG4V2, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .microsoftMPEG4V3, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .motionJPEG, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .jpeg2000, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .jpegLS, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .losslessJPEG, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .animation, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .cinepak, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .sorensonVideo, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .sorensonVideo3, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .quickTimeVideo, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .theora, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .wmv, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .microsoftVideo1, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .asusV1, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .asusV2, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .flashScreenVideo, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .flashScreenVideo2, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .zmbv, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .cljr, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .ffv1, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .huffYUV, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .dvcProHD, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .dv, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .cineForm, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .dnxhd, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .v308, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .v210, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .v408, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .v410, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .yuv4, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableNow),
-                TaptionLaunchInputVideoSupportItem(codec: .proRes, availability: .availableOnSupportedHardware)
-            ]
+            expectedSupportedInputVideoCodecs
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputVideoSummary,
-            "AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2, Microsoft MPEG-4 V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, Microsoft Video 1, ASUS V1, ASUS V2, Flash Screen Video, Flash Screen Video 2, Zip Motion Blocks Video, Cirrus Logic AccuPak, FFV1, HuffYUV, DVCPro HD, DV, GoPro CineForm, DNxHD / DNxHR, V308 4:4:4, V210 10-bit 4:2:2, V408 4:4:4:4, V410 10-bit 4:4:4, YUV4 4:2:0, H.264 / AVC, H.265 / HEVC, Apple ProRes"
+            expectedSupportedInputVideoCodecs.map { $0.codec.displayName }.joined(separator: ", ")
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainers,
-            [.mp4, .mov, .m4v, .mkv, .avi, .webm, .flv, .ogg, .mxf, .mpegProgramStream, .dv, .threeGP, .threeGPP2, .asf, .wmv, .rawElementaryStream]
+            [.mp4, .mov, .m4v, .mkv, .avi, .webm, .flv, .ogg, .mxf, .mpegProgramStream, .dv, .threeGP, .threeGPP2, .asf, .wmv, .roq, .realMedia, .rawElementaryStream]
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainerSummary,
-            "MP4, MOV, QT, M4V, MKV, AVI, DIVX, WEBM, FLV, F4V, OGG, OGV, OGM, MXF, MPG, MPEG, MPE, VOB, MOD, DAT, DV, DIF, 3GP, 3GPP, 3G2, 3GPP2, ASF, DVR-MS, WMV, H264, H265, HEVC, 264, 265, IVF, OBU, Y4M, AV1, H263, H261, M1V, M2V, VC1"
+            "MP4, MOV, QT, M4V, MKV, AVI, DIVX, WEBM, FLV, F4V, OGG, OGV, OGM, MXF, MPG, MPEG, MPE, VOB, MOD, DAT, DV, DIF, 3GP, 3GPP, 3G2, 3GPP2, ASF, DVR-MS, WMV, ROQ, RM, RMVB, H264, H265, HEVC, 264, 265, IVF, OBU, Y4M, AV1, H263, H261, M1V, M2V, VC1"
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.executableNowInputVideoCodecs,
-            [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .wmv, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1, .huffYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .v308, .v210, .v408, .v410, .yuv4, .h264, .hevc]
+            expectedExecutableNowVideoCodecs
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.hardwareGatedInputVideoCodecs,
             [.proRes]
         )
         XCTAssertFalse(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(.h261))
-        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1, .huffYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .v308, .v210, .v408, .v410, .yuv4] {
+        for codec in expectedExecutableNowVideoCodecs {
             XCTAssertFalse(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(codec), codec.displayName)
         }
         XCTAssertFalse(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(.av1))
@@ -2339,7 +2388,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.makeInputReadinessReport(),
             TaptionLaunchInputReadinessReport(
-                executableNowVideoCodecs: [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .wmv, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1, .huffYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .v308, .v210, .v408, .v410, .yuv4, .h264, .hevc],
+                executableNowVideoCodecs: expectedExecutableNowVideoCodecs,
                 hardwareGatedVideoCodecs: [.proRes],
                 plannedVideoCodecs: TaptionLaunchSupportCatalog.plannedInputVideoCodecs,
                 inputContainers: TaptionLaunchSupportCatalog.supportedInputContainers,
@@ -2905,10 +2954,15 @@ final class CodecRoutePlannerTests: XCTestCase {
 
     func testUnsupportedSourceCodecErrorSeparatesCurrentBuildFromUniversalRoadmap() {
         let message = TaptionVideoCoreError.unsupportedSourceCodec(.h264).localizedDescription
+        let executableSummary = TaptionLaunchSupportCatalog.executableNowInputVideoCodecs
+            .map(\.displayName)
+            .joined(separator: ", ")
 
         XCTAssertTrue(message.contains("H.265 / MP4 or MOV output"))
-        XCTAssertTrue(message.contains("AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2/V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, Microsoft Video 1, ASUS V1/V2, Flash Screen Video, Flash Screen Video 2, ZMBV, CLJR, and FFV1 with software fallback"))
-        XCTAssertTrue(message.contains("H.264, H.265, or ProRes"))
+        XCTAssertTrue(message.contains(executableSummary))
+        XCTAssertTrue(message.contains("Hardware-gated inputs: Apple ProRes"))
+        XCTAssertTrue(message.contains("Snow"))
+        XCTAssertTrue(message.contains("Raw Video"))
         XCTAssertTrue(message.contains("H.264 / AVC"))
         XCTAssertTrue(message.contains("universal codec roadmap"))
         XCTAssertTrue(message.contains("not executable on the selected device/output path yet"))
@@ -4057,7 +4111,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(decoded.launchInputReadinessCatalog?.outputContainers, [.mp4, .mov])
         XCTAssertTrue(decoded.launchInputReadinessCatalog?.executableNowVideoCodecs.contains(.h261) == true)
         XCTAssertFalse(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(.h261) == true)
-        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1, .huffYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .v308, .v210, .v408, .v410, .yuv4] {
+        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .realVideo1, .realVideo, .roqVideo, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV, .utVideo, .magicYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .y41p, .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo] {
             XCTAssertTrue(decoded.launchInputReadinessCatalog?.executableNowVideoCodecs.contains(codec) == true, codec.displayName)
             XCTAssertFalse(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(codec) == true, codec.displayName)
         }
@@ -6619,6 +6673,9 @@ final class CodecRoutePlannerTests: XCTestCase {
             ("Sorenson Video 3.mov", .sorensonVideo3),
             ("QuickTime Video.mov", .quickTimeVideo),
             ("Theora.ogv", .theora),
+            ("RealVideo 1.0.rm", .realVideo1),
+            ("RealVideo.rm", .realVideo),
+            ("RoQ Video.roq", .roqVideo),
             ("Windows Media Video.wmv", .wmv),
             ("Microsoft Video 1.avi", .microsoftVideo1),
             ("ASUS V1.avi", .asusV1),
@@ -6627,17 +6684,26 @@ final class CodecRoutePlannerTests: XCTestCase {
             ("Flash Screen Video 2.flv", .flashScreenVideo2),
             ("ZMBV.avi", .zmbv),
             ("CLJR.avi", .cljr),
+            ("Snow.avi", .snow),
             ("FFV1.avi", .ffv1),
             ("HuffYUV.avi", .huffYUV),
+            ("Ut Video.avi", .utVideo),
+            ("MagicYUV.avi", .magicYUV),
             ("DVCPro HD.mov", .dvcProHD),
             ("DV.dv", .dv),
-            ("YUV4.mov", .yuv4),
             ("CineForm.avi", .cineForm),
             ("DNxHD.mov", .dnxhd),
+            ("PNG Video.avi", .pngVideo),
+            ("R10K.mov", .r10k),
             ("V308.mov", .v308),
             ("V210.avi", .v210),
+            ("R210.avi", .r210),
             ("V408.mov", .v408),
             ("V410.mov", .v410),
+            ("Microsoft RLE.avi", .microsoftRLE),
+            ("QuickTime Graphics.mov", .quickTimeGraphics),
+            ("YUV4.mov", .yuv4),
+            ("Raw Video.avi", .rawVideo),
             ("H.264 AVC.mp4", .h264),
             ("H.265 HEVC.mp4", .hevc)
         ]

@@ -160,6 +160,10 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return .sorensonVideo3
         case "theo", "thra":
             return .theora
+        case "rv10":
+            return .realVideo1
+        case "rv20", "rv30", "rv40", "rv60":
+            return .realVideo
         case "roq":
             return .roqVideo
         case "dvc":
@@ -206,7 +210,7 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return .cineForm
         case "avdn", "dnxhd", "dnxhr":
             return .dnxhd
-        case "png", "png1":
+        case "png", "png1", "mpng":
             return .pngVideo
         case "r10k", "r10g":
             return .r10k
@@ -214,6 +218,10 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return .v210
         case "r210":
             return .r210
+        case "y41p":
+            return .y41p
+        case "raw ", "raw", "rawv", "iyuv", "i420", "yuy2":
+            return .rawVideo
         case "v410":
             return .v410
         case "v308":
@@ -479,6 +487,15 @@ private struct SW_VLCMediaInspector: MediaInspecting {
         if metadata.contains("vc-1") || metadata.contains("vc1") {
             return .vc1
         }
+        if metadata.contains("realvideo 1.0") || metadata.contains("rv10") {
+            return .realVideo1
+        }
+        if metadata.contains("realvideo") || metadata.contains("rv20") {
+            return .realVideo
+        }
+        if metadata.contains("dvcpro") || metadata.contains("dv50") {
+            return .dvcPro
+        }
         if metadata.contains("dvvideo")
             || metadata.split(separator: " ").contains("dv") {
             return .dv
@@ -503,6 +520,21 @@ private struct SW_VLCMediaInspector: MediaInspecting {
         }
         if metadata.contains("dnx") {
             return .dnxhd
+        }
+        if metadata.contains("png video") || metadata.contains("png") {
+            return .pngVideo
+        }
+        if metadata.contains("r10k") {
+            return .r10k
+        }
+        if metadata.contains("r210") {
+            return .r210
+        }
+        if metadata.contains("y41p") {
+            return .y41p
+        }
+        if metadata.contains("rawvideo") || metadata.contains("raw video") {
+            return .rawVideo
         }
         if metadata.contains("v410") {
             return .v410
@@ -577,6 +609,10 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             return .sorensonVideo3
         case "theo", "thra":
             return .theora
+        case "rv10":
+            return .realVideo1
+        case "rv20", "rv30", "rv40", "rv60":
+            return .realVideo
         case "roq":
             return .roqVideo
         case "dvc":
@@ -623,7 +659,7 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             return .cineForm
         case "avdn", "dnxhd", "dnxhr":
             return .dnxhd
-        case "png", "png1":
+        case "png", "png1", "mpng":
             return .pngVideo
         case "r10k", "r10g":
             return .r10k
@@ -631,6 +667,10 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             return .v210
         case "r210":
             return .r210
+        case "y41p":
+            return .y41p
+        case "raw ", "raw", "rawv", "iyuv", "i420", "yuy2":
+            return .rawVideo
         case "v410":
             return .v410
         case "v308":

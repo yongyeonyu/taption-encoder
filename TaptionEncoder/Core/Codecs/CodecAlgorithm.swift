@@ -303,6 +303,9 @@ enum TaptionCodecRegistry {
         TaptionCodecRoute(sourceCodec: .sorensonVideo3, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .quickTimeVideo, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .theora, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .realVideo1, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .realVideo, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .roqVideo, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .wmv, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .microsoftVideo1, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .asusV1, outputCodec: .hevc),
@@ -311,17 +314,27 @@ enum TaptionCodecRegistry {
         TaptionCodecRoute(sourceCodec: .flashScreenVideo2, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .zmbv, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .cljr, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .snow, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .ffv1, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .huffYUV, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .utVideo, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .magicYUV, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .dvcProHD, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .dv, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .cineForm, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .dnxhd, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .pngVideo, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .r10k, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .v308, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .v210, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .r210, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .v408, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .v410, outputCodec: .hevc),
-        TaptionCodecRoute(sourceCodec: .yuv4, outputCodec: .hevc)
+        TaptionCodecRoute(sourceCodec: .y41p, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .microsoftRLE, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .quickTimeGraphics, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .yuv4, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .rawVideo, outputCodec: .hevc)
     ]
 
     static let appleNativeHEVCHardwareSourceCodecs: [TaptionVideoCodec] = [
@@ -529,6 +542,27 @@ enum TaptionCodecRegistry {
             displayName: "Theora to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .realVideo1,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "RealVideo 1.0 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .realVideo,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "RealVideo to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .roqVideo,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "RoQ Video to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
             sourceCodec: .wmv,
             outputCodec: .hevc,
             mode: .software,
@@ -585,6 +619,13 @@ enum TaptionCodecRegistry {
             displayName: "CLJR to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .snow,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Snow to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
             sourceCodec: .ffv1,
             outputCodec: .hevc,
             mode: .software,
@@ -597,6 +638,20 @@ enum TaptionCodecRegistry {
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "HuffYUV to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .utVideo,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Ut Video to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .magicYUV,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "MagicYUV to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
             sourceCodec: .dvcProHD,
@@ -627,6 +682,20 @@ enum TaptionCodecRegistry {
             displayName: "DNxHD to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .pngVideo,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "PNG Video to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .r10k,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "R10K to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
             sourceCodec: .v308,
             outputCodec: .hevc,
             mode: .software,
@@ -639,6 +708,13 @@ enum TaptionCodecRegistry {
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "V210 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .r210,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "R210 to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
             sourceCodec: .v408,
@@ -655,11 +731,39 @@ enum TaptionCodecRegistry {
             displayName: "V410 to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .y41p,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Y41P to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .microsoftRLE,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Microsoft RLE to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .quickTimeGraphics,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "QuickTime Graphics to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
             sourceCodec: .yuv4,
             outputCodec: .hevc,
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "YUV4 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .rawVideo,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Raw Video to H.265 Software"
         )
         ] + appleNativeHEVCHardwareAlgorithmDescriptors
     }
