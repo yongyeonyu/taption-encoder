@@ -31,6 +31,7 @@ struct BatchItemRuntime {
     var detailText: String?
     var isActive: Bool
     var isEnabled: Bool
+    var isPreviewable: Bool
 
     static let queued = BatchItemRuntime(
         asset: nil,
@@ -39,7 +40,8 @@ struct BatchItemRuntime {
         statusText: "Queued",
         detailText: nil,
         isActive: false,
-        isEnabled: true
+        isEnabled: true,
+        isPreviewable: false
     )
 }
 
@@ -120,13 +122,15 @@ struct FolderEncodingBatch {
                 id: url.absoluteString,
                 fileName: url.lastPathComponent,
                 sourceKind: sourceKind,
+                thumbnailSourceURL: url,
                 videoInfo: item.videoInfo,
                 statusText: item.statusText,
                 detailText: item.detailText,
                 progress: item.progress,
                 isActive: item.isActive,
                 isSelected: selectedURL == url,
-                isEnabled: item.isEnabled
+                isEnabled: item.isEnabled,
+                isPreviewable: item.isPreviewable
             )
         }
     }

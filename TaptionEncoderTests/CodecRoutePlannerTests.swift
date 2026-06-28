@@ -1,7 +1,9 @@
 import AVFoundation
 import AudioToolbox
 import CoreMedia
+import SwiftUI
 import SwiftVLC
+import UIKit
 import XCTest
 @testable import Taption_Encoder
 
@@ -1664,6 +1666,82 @@ final class CodecRoutePlannerTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testBundledAvailableNowSamplesGenerateQueueThumbnails() async throws {
+        var failures: [String] = []
+
+        for filename in filteredBundledAvailableNowSampleFilenames() {
+            let sampleURL = bundledTestVideosURL().appendingPathComponent(filename)
+            do {
+                let image = try await QueueVideoThumbnailRenderer.thumbnailImage(
+                    for: sampleURL,
+                    timeout: .seconds(4)
+                )
+                XCTAssertGreaterThan(image.size.width, 0, filename)
+                XCTAssertGreaterThan(image.size.height, 0, filename)
+                XCTAssertGreaterThan(image.pngData()?.count ?? 0, 128, filename)
+            } catch {
+                failures.append("\(filename): \(error)")
+            }
+        }
+
+        XCTAssertTrue(
+            failures.isEmpty,
+            "Queue thumbnail generation failed for supported bundled samples:\n\(failures.joined(separator: "\n"))"
+        )
+    }
+
+    @MainActor
+    func testQueuePreviewVideoViewProducesVideoOutputForFirstBundledSample() async throws {
+        #if targetEnvironment(simulator)
+        let sampleURL = bundledTestVideosURL().appendingPathComponent("ASUS V1.avi")
+        let player = Player(instance: QueuePreviewPlayerFactory.softwareDecodeInstance)
+        let media = try Media(url: sampleURL)
+        QueuePreviewPlayerFactory.configureSoftwareDecodeOptions(on: media, sourceURL: sampleURL)
+
+        let hostingController = UIHostingController(
+            rootView: VideoView(player)
+                .aspectRatio(4.0 / 3.0, contentMode: .fit)
+                .frame(width: 320, height: 240)
+                .background(Color.black)
+        )
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 240))
+        addTeardownBlock {
+            Task { @MainActor in
+                window.isHidden = true
+                await player.shutdown()
+            }
+        }
+        window.rootViewController = hostingController
+        window.makeKeyAndVisible()
+        hostingController.view.frame = window.bounds
+        hostingController.view.setNeedsLayout()
+        hostingController.view.layoutIfNeeded()
+        try await Task.sleep(nanoseconds: 250_000_000)
+
+        try player.play(media)
+        try await waitForCondition(timeout: 8) {
+            player.hasVideoOutput || player.activeVideoOutputs > 0
+        }
+
+        let snapshotURL = temporaryTestURL(fileName: "asus-v1-preview.png")
+        defer {
+            try? FileManager.default.removeItem(at: snapshotURL)
+            window.isHidden = true
+        }
+
+        try await waitForPreviewSnapshot(
+            player: player,
+            snapshotURL: snapshotURL,
+            timeout: 5
+        )
+
+        await player.shutdown()
+        #else
+        throw XCTSkip("Preview drawable smoke test is simulator-scoped.")
+        #endif
+    }
+
     func testBundledProResSampleKeepsHardwareGate() async throws {
         let sampleURL = bundledTestVideosURL().appendingPathComponent("Apple ProRes.mov")
         let asset = try await AVFoundationMediaInspector().inspectVideo(at: sampleURL)
@@ -1796,7 +1874,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         }
     }
 
-    func testTestVideoSeederCreatesDocumentsFolderAndPreservesExistingFiles() throws {
+    func testTestVideoSeederRemovesExistingDocumentsFolderAndCopiesBundledFiles() throws {
         let fileManager = FileManager.default
         let rootURL = fileManager.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -1813,14 +1891,15 @@ final class CodecRoutePlannerTests: XCTestCase {
         try fileManager.createDirectory(at: sourceURL, withIntermediateDirectories: true)
         try fileManager.createDirectory(at: destinationURL, withIntermediateDirectories: true)
 
-        let existingFilename = TaptionTestVideoSeeder.expectedBundledVideoSampleFilenames[0]
-        let copiedFilename = TaptionTestVideoSeeder.expectedBundledVideoSampleFilenames[1]
-        let existingDestinationURL = destinationURL.appendingPathComponent(existingFilename)
-        let copiedDestinationURL = destinationURL.appendingPathComponent(copiedFilename)
+        let firstFilename = TaptionTestVideoSeeder.expectedBundledVideoSampleFilenames[0]
+        let secondFilename = TaptionTestVideoSeeder.expectedBundledVideoSampleFilenames[1]
+        let staleDestinationURL = destinationURL.appendingPathComponent(firstFilename)
+        let extraDestinationURL = destinationURL.appendingPathComponent("user-leftover.mov")
 
-        try Data("bundle-existing".utf8).write(to: sourceURL.appendingPathComponent(existingFilename))
-        try Data("bundle-copied".utf8).write(to: sourceURL.appendingPathComponent(copiedFilename))
-        try Data("user-existing".utf8).write(to: existingDestinationURL)
+        try Data("bundle-first".utf8).write(to: sourceURL.appendingPathComponent(firstFilename))
+        try Data("bundle-second".utf8).write(to: sourceURL.appendingPathComponent(secondFilename))
+        try Data("stale-existing".utf8).write(to: staleDestinationURL)
+        try Data("leftover".utf8).write(to: extraDestinationURL)
 
         let result = try TaptionTestVideoSeeder.seedSamples(
             sourceURL: sourceURL,
@@ -1829,15 +1908,17 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         XCTAssertEqual(result.destinationURL, destinationURL)
-        XCTAssertEqual(result.migratedFilenames, [])
-        XCTAssertEqual(result.removedLegacyFilenames, [])
-        XCTAssertEqual(result.copiedFilenames, [copiedFilename])
-        XCTAssertEqual(result.skippedFilenames, [existingFilename])
-        XCTAssertEqual(try String(contentsOf: existingDestinationURL), "user-existing")
-        XCTAssertEqual(try String(contentsOf: copiedDestinationURL), "bundle-copied")
+        XCTAssertTrue(result.removedExistingFolder)
+        XCTAssertEqual(result.copiedFilenames, [firstFilename, secondFilename].sorted())
+        XCTAssertEqual(try String(contentsOf: staleDestinationURL), "bundle-first")
+        XCTAssertEqual(
+            try String(contentsOf: destinationURL.appendingPathComponent(secondFilename)),
+            "bundle-second"
+        )
+        XCTAssertFalse(fileManager.fileExists(atPath: extraDestinationURL.path))
     }
 
-    func testTestVideoSeederMigratesLegacySampleFilenames() throws {
+    func testTestVideoSeederCreatesDocumentsFolderWhenMissing() throws {
         let fileManager = FileManager.default
         let rootURL = fileManager.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -1852,15 +1933,12 @@ final class CodecRoutePlannerTests: XCTestCase {
         }
 
         try fileManager.createDirectory(at: sourceURL, withIntermediateDirectories: true)
-        try fileManager.createDirectory(at: destinationURL, withIntermediateDirectories: true)
 
-        let pair = TaptionTestVideoSeeder.legacyVideoSampleFilenamePairs[0]
-        let currentSourceURL = sourceURL.appendingPathComponent(pair.current)
-        let currentDestinationURL = destinationURL.appendingPathComponent(pair.current)
-        let legacyDestinationURL = destinationURL.appendingPathComponent(pair.legacy)
+        let filename = TaptionTestVideoSeeder.expectedBundledVideoSampleFilenames[0]
+        let sourceFileURL = sourceURL.appendingPathComponent(filename)
+        let destinationFileURL = destinationURL.appendingPathComponent(filename)
 
-        try Data("bundle-current".utf8).write(to: currentSourceURL)
-        try Data("legacy-user-copy".utf8).write(to: legacyDestinationURL)
+        try Data("bundle-current".utf8).write(to: sourceFileURL)
 
         let result = try TaptionTestVideoSeeder.seedSamples(
             sourceURL: sourceURL,
@@ -1868,12 +1946,10 @@ final class CodecRoutePlannerTests: XCTestCase {
             fileManager: fileManager
         )
 
-        XCTAssertEqual(result.migratedFilenames, [pair.current])
-        XCTAssertEqual(result.removedLegacyFilenames, [])
-        XCTAssertEqual(result.copiedFilenames, [])
-        XCTAssertEqual(result.skippedFilenames, [pair.current])
-        XCTAssertFalse(fileManager.fileExists(atPath: legacyDestinationURL.path))
-        XCTAssertEqual(try String(contentsOf: currentDestinationURL), "legacy-user-copy")
+        XCTAssertEqual(result.destinationURL, destinationURL)
+        XCTAssertFalse(result.removedExistingFolder)
+        XCTAssertEqual(result.copiedFilenames, [filename])
+        XCTAssertEqual(try String(contentsOf: destinationFileURL), "bundle-current")
     }
 
     func testUniversalVideoCommandPlannerRejectsEveryUnsupportedOutputCodec() {
@@ -2191,6 +2267,55 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(unsupportedInfo.isInputSupportedForCurrentBuild)
         XCTAssertFalse(unsupportedInfo.isCodecPathSupportedForCurrentBuild)
         XCTAssertFalse(unsupportedInfo.isAudioPathSupportedForCurrentBuild)
+    }
+
+    @MainActor
+    func testPreviewOrientationControllerAllowsLandscapeOnlyDuringPreview() {
+        let controller = AppOrientationController.shared
+
+        controller.restorePortrait(requestGeometryUpdate: false)
+        XCTAssertEqual(controller.supportedOrientations, .portrait)
+
+        controller.activatePreviewOrientations(requestGeometryUpdate: false)
+        XCTAssertTrue(controller.supportedOrientations.contains(.portrait))
+        XCTAssertTrue(controller.supportedOrientations.contains(.landscapeLeft))
+        XCTAssertTrue(controller.supportedOrientations.contains(.landscapeRight))
+
+        controller.restorePortrait(requestGeometryUpdate: false)
+        XCTAssertEqual(controller.supportedOrientations, .portrait)
+    }
+
+    func testQueuePreviewPlaybackMathFormatsAndClampsControls() {
+        XCTAssertEqual(QueuePreviewPlaybackMath.formattedSeconds(nil), "--:--")
+        XCTAssertEqual(QueuePreviewPlaybackMath.formattedSeconds(65), "01:05")
+        XCTAssertEqual(QueuePreviewPlaybackMath.formattedSeconds(3661), "1:01:01")
+
+        XCTAssertEqual(QueuePreviewPlaybackMath.clampedPosition(-0.4), 0)
+        XCTAssertEqual(QueuePreviewPlaybackMath.clampedPosition(1.4), 1)
+        XCTAssertEqual(
+            QueuePreviewPlaybackMath.horizontalDragPosition(
+                startPosition: 0.5,
+                translation: 100,
+                containerWidth: 400
+            ),
+            0.75
+        )
+        XCTAssertEqual(
+            QueuePreviewPlaybackMath.horizontalDragPosition(
+                startPosition: 0.1,
+                translation: -200,
+                containerWidth: 400
+            ),
+            0
+        )
+        XCTAssertEqual(
+            QueuePreviewPlaybackMath.verticalAdjustmentDelta(
+                translation: -50,
+                containerHeight: 200
+            ),
+            0.25,
+            accuracy: 0.0001
+        )
     }
 
     func testDeviceCodecCapabilitiesExposeInstalledDeviceSupportFlags() {
@@ -6100,6 +6225,218 @@ final class CodecRoutePlannerTests: XCTestCase {
         ))
     }
 
+    @MainActor
+    func testFolderPickerSelectionRoutesVideoFileToFileFlow() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let sourceURL = directoryURL.appendingPathComponent("picked.mp4")
+        try Data("source".utf8).write(to: sourceURL)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+
+        viewModel.handleFolderPickerSelection(urls: [sourceURL])
+        try await waitForReadyToStartState(in: viewModel)
+
+        guard case .readyToStart(let review) = viewModel.state else {
+            return XCTFail("Expected ready state for file passthrough")
+        }
+        XCTAssertEqual(review.source.kind, .files)
+        XCTAssertEqual(review.source.url, sourceURL)
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.fileName, "picked.mp4")
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.thumbnailSourceURL, sourceURL)
+    }
+
+    @MainActor
+    func testFolderPickerSelectionRoutesFolderToFolderFlow() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let folderURL = directoryURL.appendingPathComponent("PickedFolder", isDirectory: true)
+        let sourceURL = folderURL.appendingPathComponent("inside.mp4")
+        try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        try Data("source".utf8).write(to: sourceURL)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+
+        viewModel.handleFolderPickerSelection(urls: [folderURL])
+        try await waitForReadyToStartState(in: viewModel)
+
+        guard case .readyToStart(let review) = viewModel.state else {
+            return XCTFail("Expected ready state for folder selection")
+        }
+        XCTAssertEqual(review.source.kind, .folder)
+        XCTAssertEqual(review.folderQueue?.folderName, "PickedFolder")
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.id, sourceURL.absoluteString)
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.sourceKind, .folder)
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.thumbnailSourceURL, sourceURL)
+    }
+
+    @MainActor
+    func testQueueCardTapOpensPreviewForEnabledBatchItem() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let fileURLs = [
+            directoryURL.appendingPathComponent("a.mp4"),
+            directoryURL.appendingPathComponent("b.mp4")
+        ]
+        for url in fileURLs {
+            try Data("source".utf8).write(to: url)
+        }
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+
+        viewModel.openPreviewForFileCard(id: fileURLs[1].absoluteString)
+        try await waitForCondition(timeout: 2) {
+            viewModel.activePreview?.sourceURL == fileURLs[1]
+        }
+
+        XCTAssertEqual(viewModel.activePreview?.displayName, "b.mp4")
+        XCTAssertEqual(viewModel.activePreview?.videoInfo.isRouteEncodable, true)
+        XCTAssertEqual(
+            viewModel.fileCardSnapshots.first(where: { $0.id == fileURLs[1].absoluteString })?.isSelected,
+            true
+        )
+        XCTAssertEqual(
+            viewModel.fileCardSnapshots.first(where: { $0.id == fileURLs[1].absoluteString })?.isPreviewable,
+            true
+        )
+        XCTAssertEqual(
+            viewModel.fileCardSnapshots.first(where: { $0.id == fileURLs[1].absoluteString })?.thumbnailSourceURL,
+            fileURLs[1]
+        )
+    }
+
+    @MainActor
+    func testUnsupportedQueueCardTapDoesNotOpenPreview() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let supportedURL = directoryURL.appendingPathComponent("a.mp4")
+        let sourceURL = directoryURL.appendingPathComponent("unsupported.mp4")
+        try Data("source".utf8).write(to: supportedURL)
+        try Data("source".utf8).write(to: sourceURL)
+
+        let unsupportedAsset = TaptionVideoAsset(
+            displayName: "unsupported.mp4",
+            location: TaptionVideoAssetLocation(kind: .file, url: sourceURL),
+            container: .mp4,
+            duration: 1,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .unknown,
+                naturalSize: TaptionPixelSize(width: 1920, height: 1080),
+                displaySize: TaptionPixelSize(width: 1920, height: 1080)
+            )
+        )
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: URLMappedMediaInspector(
+                    assetsByLastPathComponent: [
+                        supportedURL.lastPathComponent: makeAsset(sourceCodec: .h264),
+                        sourceURL.lastPathComponent: unsupportedAsset
+                    ],
+                    fallbackAsset: makeAsset(sourceCodec: .h264)
+                )
+            )
+        )
+
+        viewModel.startFilesFlow(urls: [supportedURL, sourceURL])
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.openPreviewForFileCard(id: sourceURL.absoluteString)
+
+        try await waitForCondition(timeout: 2) {
+            viewModel.fileCardSnapshots.first(where: { $0.id == sourceURL.absoluteString })?.isEnabled == false
+        }
+
+        XCTAssertNil(viewModel.activePreview)
+        XCTAssertEqual(
+            viewModel.fileCardSnapshots.first(where: { $0.id == sourceURL.absoluteString })?.isEnabled,
+            false
+        )
+        XCTAssertEqual(
+            viewModel.fileCardSnapshots.first(where: { $0.id == sourceURL.absoluteString })?.isPreviewable,
+            false
+        )
+        XCTAssertEqual(
+            viewModel.fileCardSnapshots.first(where: { $0.id == sourceURL.absoluteString })?.thumbnailSourceURL,
+            sourceURL
+        )
+    }
+
+    @MainActor
+    func testPreviewClosesOnResetSourceChangeAndEncodingStart() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let firstURL = directoryURL.appendingPathComponent("first.mp4")
+        let secondURL = directoryURL.appendingPathComponent("second.mp4")
+        try Data("source".utf8).write(to: firstURL)
+        try Data("source".utf8).write(to: secondURL)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264)),
+                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8))
+            )
+        )
+
+        viewModel.startFilesFlow(url: firstURL)
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.openPreviewForFileCard(id: firstURL.lastPathComponent)
+        XCTAssertEqual(viewModel.activePreview?.sourceURL, firstURL)
+
+        viewModel.startFilesFlow(url: secondURL)
+        XCTAssertNil(viewModel.activePreview)
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.openPreviewForFileCard(id: secondURL.lastPathComponent)
+        XCTAssertEqual(viewModel.activePreview?.sourceURL, secondURL)
+
+        viewModel.startPreparedEncoding()
+        XCTAssertNil(viewModel.activePreview)
+        try await waitForCondition(timeout: 2) {
+            if viewModel.state.pendingSaveJob != nil {
+                return true
+            }
+            if case .completed = viewModel.state {
+                return true
+            }
+            return false
+        }
+
+        viewModel.reset()
+        XCTAssertNil(viewModel.activePreview)
+    }
+
     private struct FakeFFmpegCommandRunner: SW_FFmpegCommandRunning {
         var runBlock: @Sendable (SW_FFmpegCommandPlan) async throws -> SW_FFmpegCommandRunResult
 
@@ -6328,6 +6665,18 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         func inspectVideo(at url: URL) async throws -> TaptionVideoAsset {
             var inspectedAsset = asset
+            inspectedAsset.displayName = url.lastPathComponent
+            inspectedAsset.location = TaptionVideoAssetLocation(kind: .file, url: url)
+            return inspectedAsset
+        }
+    }
+
+    private struct URLMappedMediaInspector: MediaInspecting {
+        var assetsByLastPathComponent: [String: TaptionVideoAsset]
+        var fallbackAsset: TaptionVideoAsset
+
+        func inspectVideo(at url: URL) async throws -> TaptionVideoAsset {
+            var inspectedAsset = assetsByLastPathComponent[url.lastPathComponent] ?? fallbackAsset
             inspectedAsset.displayName = url.lastPathComponent
             inspectedAsset.location = TaptionVideoAssetLocation(kind: .file, url: url)
             return inspectedAsset
@@ -6648,6 +6997,52 @@ final class CodecRoutePlannerTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("TaptionEncoder/TestVideos", isDirectory: true)
+    }
+
+    private func filteredBundledAvailableNowSampleFilenames() -> [String] {
+        let filenames = bundledAvailableNowSampleCodecExpectations().map(\.0)
+        guard let sampleFilter = ProcessInfo.processInfo.environment["TAPTION_SAMPLE_FILTER"],
+              sampleFilter.isEmpty == false else {
+            return filenames
+        }
+        let filteredFilenames = filenames.filter { $0 == sampleFilter }
+        XCTAssertFalse(filteredFilenames.isEmpty, sampleFilter)
+        return filteredFilenames
+    }
+
+    @MainActor
+    private func waitForPreviewSnapshot(
+        player: Player,
+        snapshotURL: URL,
+        timeout: TimeInterval
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastError: Error?
+
+        while Date() < deadline {
+            try? FileManager.default.removeItem(at: snapshotURL)
+            do {
+                try player.takeSnapshot(to: snapshotURL.path, width: 160, height: 0)
+                let data = try Data(contentsOf: snapshotURL)
+                if data.count > 128,
+                   let image = UIImage(data: data),
+                   image.size.width > 0,
+                   image.size.height > 0 {
+                    return
+                }
+            } catch {
+                lastError = error
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        throw NSError(
+            domain: "TaptionEncoderTests",
+            code: -1201,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Preview snapshot was not produced before timeout. Last error: \(String(describing: lastError))"
+            ]
+        )
     }
 
     private func bundledAvailableNowSampleCodecExpectations() -> [(String, TaptionVideoCodec)] {

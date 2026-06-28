@@ -362,6 +362,7 @@ struct AVFoundationMediaInspector: MediaInspecting {
         return nsError.code == AVError.unknown.rawValue
             || nsError.code == AVError.fileFormatNotRecognized.rawValue
             || nsError.code == -11828
+            || nsError.code == -11829
     }
 
     private func shouldFallbackToSoftwareInspection(

@@ -96,6 +96,7 @@ Status date: 2026-06-27
 - [x] Restore pending save jobs on app launch so the user can retry saving without re-encoding.
 - [x] Implement File source import with security-scoped access.
 - [x] Implement Folder source import with security-scoped access.
+- [x] Add folder-picker file passthrough and queue-list full-screen preview: Folder accepts either one folder or one supported video file; file selection uses the existing File import flow; tapping an enabled queue item opens a full-screen SwiftVLC/libVLC preview using current-build implemented codec routes, preserves source resolution, avoids temporary H.265 preview files, and stops playback on Close/reset/source change/encoding start.
 - [x] Implement sequential folder encoding for supported video files.
 - [x] Implement Photos source import and new Photos asset save.
 - [x] Implement storage checks before encoding and before final save.

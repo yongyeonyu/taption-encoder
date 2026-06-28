@@ -747,6 +747,7 @@ struct EncodingFileCardSnapshot: Identifiable, Equatable {
     var id: String
     var fileName: String
     var sourceKind: HomeSourceKind
+    var thumbnailSourceURL: URL? = nil
     var videoInfo: LoadedVideoInfo?
     var statusText: String
     var detailText: String?
@@ -754,6 +755,36 @@ struct EncodingFileCardSnapshot: Identifiable, Equatable {
     var isActive: Bool
     var isSelected: Bool
     var isEnabled: Bool
+    var isPreviewable: Bool = false
+
+    var isInteractable: Bool {
+        isEnabled || isPreviewable
+    }
+}
+
+struct QueueVideoPreview: Identifiable, Equatable {
+    var id: String
+    var displayName: String
+    var sourceURL: URL
+    var videoInfo: LoadedVideoInfo
+    var displaySize: TaptionPixelSize?
+
+    var codecBadge: String {
+        videoInfo.inputSummary
+    }
+
+    var pathBadge: String {
+        videoInfo.codecPathBadge
+    }
+
+    var aspectRatio: Double? {
+        guard let displaySize,
+              displaySize.width > 0,
+              displaySize.height > 0 else {
+            return nil
+        }
+        return Double(displaySize.width) / Double(displaySize.height)
+    }
 }
 
 struct FolderQueueSnapshot: Equatable {

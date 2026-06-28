@@ -1696,6 +1696,7 @@ extension SW_AV1HEVCTranscoder {
             _ = libvlc_media_player_stop_async(player)
             waitForVLCQuiescence(player)
             libvlc_video_set_callbacks(player, nil, nil, nil, nil)
+            libvlc_video_set_format_callbacks(player, nil, nil)
             context.clearDecodePool()
             libvlc_media_player_release(player)
             libvlc_media_release(media)
@@ -2004,10 +2005,10 @@ extension SW_AV1HEVCTranscoder {
     }
 
     private static func waitForVLCQuiescence(_ player: OpaquePointer) {
-        let deadline = ProcessInfo.processInfo.systemUptime + 1.5
+        let deadline = ProcessInfo.processInfo.systemUptime + 2.5
         while ProcessInfo.processInfo.systemUptime < deadline {
             let state = libvlc_media_player_get_state(player)
-            if (state == libvlc_Stopped || state == libvlc_Stopping || state == libvlc_Error),
+            if (state == libvlc_Stopped || state == libvlc_Error),
                libvlc_media_player_has_vout(player) == 0 {
                 return
             }

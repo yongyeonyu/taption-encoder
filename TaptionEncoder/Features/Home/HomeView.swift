@@ -1,5 +1,6 @@
 import Darwin
 import SwiftUI
+import SwiftVLC
 import PhotosUI
 import UIKit
 
@@ -69,7 +70,7 @@ struct HomeView: View {
                         files: viewModel.fileCardSnapshots,
                         contentScale: metrics.contentScale,
                         panelHeight: metrics.filePanelHeight,
-                        onSelect: { viewModel.selectFileCard(id: $0) }
+                        onSelect: { viewModel.openPreviewForFileCard(id: $0) }
                     )
 
                     EncodingProgressView(
@@ -134,11 +135,11 @@ struct HomeView: View {
         }
         .sheet(isPresented: $isFolderImporterPresented) {
             VideoDocumentPicker(
-                contentTypes: [.folder],
+                contentTypes: [.folder] + ImportableVideoTypes.all,
                 allowsMultipleSelection: false,
                 onPick: { urls in
                     AppLogger.info(
-                        "Folder picker returned folders",
+                        "Folder picker returned items",
                         category: .folderImport,
                         metadata: [
                             "count": "\(urls.count)",
@@ -146,9 +147,7 @@ struct HomeView: View {
                         ]
                     )
                     isFolderImporterPresented = false
-                    if let url = urls.first {
-                        viewModel.startFolderFlow(url: url)
-                    }
+                    viewModel.handleFolderPickerSelection(urls: urls)
                 },
                 onCancel: {
                     AppLogger.info("Folder picker cancelled", category: .folderImport)
@@ -229,6 +228,21 @@ struct HomeView: View {
                 }
             )
             .ignoresSafeArea()
+        }
+        .fullScreenCover(
+            item: Binding<QueueVideoPreview?>(
+                get: { viewModel.activePreview },
+                set: { preview in
+                    if preview == nil {
+                        viewModel.dismissPreview()
+                    }
+                }
+            )
+        ) { preview in
+            QueueVideoPreviewView(
+                preview: preview,
+                onClose: { viewModel.dismissPreview() }
+            )
         }
         .photosPicker(
             isPresented: $isPhotosPickerPresented,
@@ -706,6 +720,823 @@ struct HomeView: View {
             Spacer(minLength: 0)
         }
         .foregroundStyle(isEnabled ? Color.white.opacity(0.92) : TaptionTheme.disabledText)
+    }
+}
+
+enum QueuePreviewPlaybackMath {
+    static let skipIntervalSeconds = 10.0
+
+    static func seconds(from duration: Duration?) -> Double? {
+        guard let duration else {
+            return nil
+        }
+        let components = duration.components
+        let seconds = Double(components.seconds)
+        let attoseconds = Double(components.attoseconds) / 1_000_000_000_000_000_000
+        let total = seconds + attoseconds
+        return total.isFinite ? max(0, total) : nil
+    }
+
+    static func formattedTime(_ duration: Duration?) -> String {
+        formattedSeconds(seconds(from: duration))
+    }
+
+    static func formattedSeconds(_ seconds: Double?) -> String {
+        guard let secondsValue = seconds,
+              secondsValue.isFinite else {
+            return "--:--"
+        }
+        let wholeSeconds = max(0, Int(secondsValue.rounded()))
+        let hours = wholeSeconds / 3600
+        let minutes = (wholeSeconds % 3600) / 60
+        let seconds = wholeSeconds % 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%02d:%02d", minutes, seconds)
+    }
+
+    static func clampedPosition(_ value: Double) -> Double {
+        guard value.isFinite else {
+            return 0
+        }
+        return min(max(value, 0), 1)
+    }
+
+    static func horizontalDragPosition(
+        startPosition: Double,
+        translation: CGFloat,
+        containerWidth: CGFloat
+    ) -> Double {
+        guard containerWidth > 0 else {
+            return clampedPosition(startPosition)
+        }
+        let positionDelta = Double(translation / containerWidth)
+        return clampedPosition(startPosition + positionDelta)
+    }
+
+    static func verticalAdjustmentDelta(
+        translation: CGFloat,
+        containerHeight: CGFloat
+    ) -> Float {
+        guard containerHeight > 0 else {
+            return 0
+        }
+        return Float(-translation / containerHeight)
+    }
+}
+
+private enum QueuePreviewDragMode: Equatable {
+    case seek(startPosition: Double)
+    case brightness(startValue: CGFloat)
+    case volume(startValue: Float)
+}
+
+private struct QueuePreviewGestureFeedback: Equatable {
+    var systemImage: String
+    var text: String
+}
+
+private struct QueueVideoPreviewView: View {
+    var preview: QueueVideoPreview
+    var onClose: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var player = Player(instance: QueuePreviewPlayerFactory.softwareDecodeInstance)
+    @State private var playbackError: String?
+    @State private var isLoading = true
+    @State private var didRequestShutdown = false
+    @State private var areControlsVisible = true
+    @State private var isScrubbing = false
+    @State private var scrubberPosition = 0.0
+    @State private var dragMode: QueuePreviewDragMode?
+    @State private var dragSeekPreviewPosition: Double?
+    @State private var gestureFeedback: QueuePreviewGestureFeedback?
+    @State private var controlsHideTask: Task<Void, Never>?
+    @State private var gestureFeedbackTask: Task<Void, Never>?
+    @State private var didAttachVideoSurface = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color.black
+                    .ignoresSafeArea()
+
+                videoSurface(containerSize: proxy.size)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea()
+
+                videoGestureLayer(containerSize: proxy.size)
+
+                if areControlsVisible {
+                    controlsBackdrop
+                        .transition(.opacity)
+
+                    controlsOverlay
+                        .transition(.opacity)
+                }
+
+                centerPlayPauseOverlay
+
+                statusOverlay
+
+                if let gestureFeedback {
+                    gestureFeedbackOverlay(gestureFeedback)
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                }
+            }
+        }
+        .background(
+            Color.black
+                .ignoresSafeArea()
+        )
+        .onAppear {
+            AppOrientationController.shared.activatePreviewOrientations()
+            showControls(scheduleAutoHide: false)
+        }
+        .task(id: preview.id) {
+            await startPlayback()
+        }
+        .onChange(of: player.isPlaying) { _, isPlaying in
+            if isPlaying {
+                scheduleControlsAutoHide()
+            } else {
+                showControls(scheduleAutoHide: false)
+            }
+        }
+        .onDisappear {
+            shutdownPlayer()
+        }
+    }
+
+    @ViewBuilder
+    private func videoSurface(containerSize: CGSize) -> some View {
+        let fittedSize = fittedVideoSize(in: containerSize)
+        VideoView(player)
+            .id(preview.id)
+            .frame(width: fittedSize.width, height: fittedSize.height)
+            .background(Color.black)
+            .onAppear {
+                didAttachVideoSurface = true
+                AppLogger.info(
+                    "Queue preview video surface appeared",
+                    category: .ui,
+                    metadata: ["name": preview.displayName]
+                )
+            }
+            .onDisappear {
+                didAttachVideoSurface = false
+            }
+    }
+
+    private func videoGestureLayer(containerSize: CGSize) -> some View {
+        Color.clear
+            .ignoresSafeArea()
+            .contentShape(Rectangle())
+            .gesture(tapGesture(containerSize: containerSize))
+            .simultaneousGesture(dragGesture(containerSize: containerSize))
+    }
+
+    private var controlsBackdrop: some View {
+        LinearGradient(
+            colors: [
+                Color.black.opacity(0.62),
+                Color.black.opacity(0.08),
+                Color.black.opacity(0.68)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+    }
+
+    private var controlsOverlay: some View {
+        VStack(spacing: 0) {
+            previewHeader
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+
+            Spacer(minLength: 0)
+
+            transportControls
+                .padding(.horizontal, 16)
+                .padding(.bottom, 18)
+        }
+    }
+
+    private var previewHeader: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 7) {
+                Text(preview.displayName)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.94))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.72)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 7) {
+                        previewBadge(systemImage: "video", text: preview.codecBadge)
+                        previewBadge(systemImage: "point.3.connected.trianglepath.dotted", text: preview.pathBadge)
+                        previewBadge(systemImage: "aspectratio", text: preview.videoInfo.resolution)
+                    }
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Button(action: closePreview) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 28, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color.white.opacity(0.94))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close")
+        }
+    }
+
+    private var centerPlayPauseOverlay: some View {
+        Group {
+            if areControlsVisible && !isLoading && playbackError == nil {
+                Button(action: togglePlayback) {
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 36, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .frame(width: 76, height: 76)
+                        .background(Color.black.opacity(0.54))
+                        .clipShape(Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                .transition(.opacity.combined(with: .scale(scale: 0.92)))
+            }
+        }
+    }
+
+    private var transportControls: some View {
+        VStack(spacing: 9) {
+            Slider(
+                value: Binding(
+                    get: { displayedSliderPosition },
+                    set: { newValue in
+                        isScrubbing = true
+                        scrubberPosition = QueuePreviewPlaybackMath.clampedPosition(newValue)
+                        showControls(scheduleAutoHide: false)
+                    }
+                ),
+                in: 0...1,
+                onEditingChanged: { editing in
+                    if editing {
+                        isScrubbing = true
+                        scrubberPosition = displayedSliderPosition
+                        showControls(scheduleAutoHide: false)
+                    } else {
+                        finishScrubbing()
+                    }
+                }
+            )
+            .disabled(!player.isSeekable && player.duration == nil)
+            .tint(Color.white)
+
+            HStack(spacing: 16) {
+                Button(action: skipBackward) {
+                    Image(systemName: "gobackward.10")
+                        .font(.system(size: 21, weight: .semibold))
+                        .frame(width: 44, height: 38)
+                }
+                .accessibilityLabel("Rewind 10 seconds")
+
+                Button(action: togglePlayback) {
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 24, weight: .bold))
+                        .frame(width: 48, height: 40)
+                }
+                .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+
+                Button(action: skipForward) {
+                    Image(systemName: "goforward.10")
+                        .font(.system(size: 21, weight: .semibold))
+                        .frame(width: 44, height: 38)
+                }
+                .accessibilityLabel("Forward 10 seconds")
+
+                Text(displayedCurrentTimeText)
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.88))
+
+                Spacer(minLength: 8)
+
+                Text(durationText)
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.74))
+            }
+            .foregroundStyle(Color.white)
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(Color.black.opacity(0.58))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private var statusOverlay: some View {
+        if isLoading || playbackError != nil {
+            VStack(spacing: 10) {
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(Color.white)
+                    Text("Loading preview")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.white.opacity(0.86))
+                }
+
+                if let playbackError {
+                    Text(playbackError)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(Color.black.opacity(0.66))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(.bottom, 18)
+        }
+    }
+
+    private func gestureFeedbackOverlay(_ feedback: QueuePreviewGestureFeedback) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: feedback.systemImage)
+                .font(.system(size: 20, weight: .semibold))
+            Text(feedback.text)
+                .font(.headline.monospacedDigit().weight(.semibold))
+        }
+        .foregroundStyle(Color.white)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.black.opacity(0.66))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    private func previewBadge(systemImage: String, text: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.caption2.weight(.semibold))
+            Text(text)
+                .font(.caption.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .foregroundStyle(Color.white.opacity(0.86))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Color.white.opacity(0.13))
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+
+    private var displayedSliderPosition: Double {
+        if isScrubbing {
+            return QueuePreviewPlaybackMath.clampedPosition(scrubberPosition)
+        }
+        if let dragSeekPreviewPosition {
+            return QueuePreviewPlaybackMath.clampedPosition(dragSeekPreviewPosition)
+        }
+        return QueuePreviewPlaybackMath.clampedPosition(player.position)
+    }
+
+    private var displayedCurrentTimeText: String {
+        if let durationSeconds,
+           isScrubbing || dragSeekPreviewPosition != nil {
+            return QueuePreviewPlaybackMath.formattedSeconds(durationSeconds * displayedSliderPosition)
+        }
+        return QueuePreviewPlaybackMath.formattedTime(player.currentTime)
+    }
+
+    private var durationText: String {
+        QueuePreviewPlaybackMath.formattedTime(player.duration)
+    }
+
+    private var durationSeconds: Double? {
+        QueuePreviewPlaybackMath.seconds(from: player.duration)
+    }
+
+    @MainActor
+    private func startPlayback() async {
+        playbackError = nil
+        isLoading = true
+        player.aspectRatio = .default
+
+        do {
+            await waitForVideoSurfaceAttachment()
+            try Task.checkCancellation()
+            let media = try makePreviewMedia()
+            try player.play(media)
+            if !(await waitForVideoOutput()) {
+                AppLogger.warning(
+                    "Queue preview started without a video output",
+                    category: .ui,
+                    metadata: [
+                        "name": preview.displayName,
+                        "activeVideoOutputs": "\(player.activeVideoOutputs)",
+                        "hasVideoOutput": "\(player.hasVideoOutput)"
+                    ]
+                )
+            }
+            isLoading = false
+            showControls(scheduleAutoHide: true)
+        } catch is CancellationError {
+            isLoading = false
+        } catch {
+            playbackError = "Preview failed. SwiftVLC could not decode this file."
+            isLoading = false
+            AppLogger.error(
+                "Queue preview playback failed",
+                category: .ui,
+                metadata: [
+                    "name": preview.displayName,
+                    "error": String(describing: error)
+                ]
+            )
+        }
+    }
+
+    private func closePreview() {
+        AppLogger.info(
+            "Queue preview close tapped",
+            category: .ui,
+            metadata: ["name": preview.displayName]
+        )
+        shutdownPlayer()
+        onClose()
+        dismiss()
+    }
+
+    private func togglePlayback() {
+        player.togglePlayPause()
+        showControls(scheduleAutoHide: player.isPlaybackRequestedActive)
+    }
+
+    private func skipBackward() {
+        seekBy(seconds: -QueuePreviewPlaybackMath.skipIntervalSeconds)
+        showGestureFeedback(systemImage: "gobackward.10", text: "-10s")
+    }
+
+    private func skipForward() {
+        seekBy(seconds: QueuePreviewPlaybackMath.skipIntervalSeconds)
+        showGestureFeedback(systemImage: "goforward.10", text: "+10s")
+    }
+
+    private func seekBy(seconds: Double) {
+        let offset = Duration.seconds(seconds)
+        if (try? player.seek(by: offset, fast: true)) == nil {
+            _ = player.jump(by: offset)
+        }
+        showControls(scheduleAutoHide: true)
+    }
+
+    private func finishScrubbing() {
+        let target = QueuePreviewPlaybackMath.clampedPosition(scrubberPosition)
+        if player.isSeekable, player.duration != nil {
+            try? player.seek(to: PlaybackPosition(target))
+        } else {
+            _ = player.seek(toPosition: PlaybackPosition(target), fast: true)
+        }
+        isScrubbing = false
+        scrubberPosition = target
+        showControls(scheduleAutoHide: true)
+    }
+
+    private func tapGesture(containerSize: CGSize) -> some Gesture {
+        ExclusiveGesture(
+            SpatialTapGesture(count: 2, coordinateSpace: .local),
+            SpatialTapGesture(count: 1, coordinateSpace: .local)
+        )
+        .onEnded { value in
+            switch value {
+            case .first(let tap):
+                handleDoubleTap(at: tap.location, containerSize: containerSize)
+            case .second:
+                toggleControls()
+            }
+        }
+    }
+
+    private func dragGesture(containerSize: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 18, coordinateSpace: .local)
+            .onChanged { value in
+                handleDragChanged(value, containerSize: containerSize)
+            }
+            .onEnded { value in
+                handleDragEnded(value, containerSize: containerSize)
+            }
+    }
+
+    private func handleDoubleTap(at location: CGPoint, containerSize: CGSize) {
+        guard containerSize.width > 0 else {
+            return
+        }
+        showControls(scheduleAutoHide: true)
+        if location.x < containerSize.width / 2 {
+            skipBackward()
+        } else {
+            skipForward()
+        }
+    }
+
+    private func handleDragChanged(_ value: DragGesture.Value, containerSize: CGSize) {
+        if dragMode == nil {
+            dragMode = resolvedDragMode(for: value, containerSize: containerSize)
+        }
+
+        guard let dragMode else {
+            return
+        }
+
+        switch dragMode {
+        case .seek(let startPosition):
+            let targetPosition = QueuePreviewPlaybackMath.horizontalDragPosition(
+                startPosition: startPosition,
+                translation: value.translation.width,
+                containerWidth: containerSize.width
+            )
+            dragSeekPreviewPosition = targetPosition
+            let feedbackText: String
+            if let durationSeconds {
+                feedbackText = QueuePreviewPlaybackMath.formattedSeconds(durationSeconds * targetPosition)
+            } else {
+                feedbackText = "\(Int((targetPosition * 100).rounded()))%"
+            }
+            showGestureFeedback(systemImage: "arrow.left.and.right", text: feedbackText, autoDismiss: false)
+        case .brightness(let startValue):
+            let delta = CGFloat(QueuePreviewPlaybackMath.verticalAdjustmentDelta(
+                translation: value.translation.height,
+                containerHeight: containerSize.height
+            ))
+            let brightness = min(max(startValue + delta, 0), 1)
+            UIScreen.main.brightness = brightness
+            showGestureFeedback(
+                systemImage: "sun.max.fill",
+                text: "\(Int((brightness * 100).rounded()))%",
+                autoDismiss: false
+            )
+        case .volume(let startValue):
+            let delta = QueuePreviewPlaybackMath.verticalAdjustmentDelta(
+                translation: value.translation.height,
+                containerHeight: containerSize.height
+            )
+            let volume = min(max(startValue + delta, 0), 2)
+            try? player.setAudioVolume(Volume(volume))
+            showGestureFeedback(
+                systemImage: player.isMuted || volume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                text: "\(Int((min(volume, 1) * 100).rounded()))%",
+                autoDismiss: false
+            )
+        }
+    }
+
+    private func handleDragEnded(_ value: DragGesture.Value, containerSize: CGSize) {
+        defer {
+            dragMode = nil
+            dragSeekPreviewPosition = nil
+            dismissGestureFeedbackAfterDelay()
+            showControls(scheduleAutoHide: true)
+        }
+
+        guard case .seek(let startPosition) = dragMode else {
+            return
+        }
+
+        let targetPosition = QueuePreviewPlaybackMath.horizontalDragPosition(
+            startPosition: startPosition,
+            translation: value.translation.width,
+            containerWidth: containerSize.width
+        )
+        if player.isSeekable, player.duration != nil {
+            try? player.seek(to: PlaybackPosition(targetPosition))
+        } else {
+            _ = player.seek(toPosition: PlaybackPosition(targetPosition), fast: true)
+        }
+    }
+
+    private func resolvedDragMode(
+        for value: DragGesture.Value,
+        containerSize: CGSize
+    ) -> QueuePreviewDragMode? {
+        let horizontalDistance = abs(value.translation.width)
+        let verticalDistance = abs(value.translation.height)
+
+        if horizontalDistance > verticalDistance * 1.2 {
+            return .seek(startPosition: player.position)
+        }
+
+        if verticalDistance > horizontalDistance * 1.2 {
+            if value.startLocation.x < containerSize.width / 2 {
+                return .brightness(startValue: UIScreen.main.brightness)
+            }
+            return .volume(startValue: player.volume)
+        }
+
+        return nil
+    }
+
+    private func toggleControls() {
+        if areControlsVisible {
+            controlsHideTask?.cancel()
+            withAnimation(.easeInOut(duration: 0.18)) {
+                areControlsVisible = false
+            }
+        } else {
+            showControls(scheduleAutoHide: true)
+        }
+    }
+
+    private func showControls(scheduleAutoHide: Bool) {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            areControlsVisible = true
+        }
+        controlsHideTask?.cancel()
+        guard scheduleAutoHide,
+              player.isPlaybackRequestedActive,
+              playbackError == nil,
+              !isLoading else {
+            return
+        }
+        scheduleControlsAutoHide()
+    }
+
+    private func scheduleControlsAutoHide() {
+        controlsHideTask?.cancel()
+        guard player.isPlaybackRequestedActive,
+              playbackError == nil,
+              !isLoading else {
+            return
+        }
+        controlsHideTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else {
+                return
+            }
+            withAnimation(.easeInOut(duration: 0.22)) {
+                areControlsVisible = false
+            }
+        }
+    }
+
+    private func showGestureFeedback(
+        systemImage: String,
+        text: String,
+        autoDismiss: Bool = true
+    ) {
+        withAnimation(.easeInOut(duration: 0.12)) {
+            gestureFeedback = QueuePreviewGestureFeedback(systemImage: systemImage, text: text)
+        }
+        gestureFeedbackTask?.cancel()
+        if autoDismiss {
+            dismissGestureFeedbackAfterDelay()
+        }
+    }
+
+    private func dismissGestureFeedbackAfterDelay() {
+        gestureFeedbackTask?.cancel()
+        gestureFeedbackTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 850_000_000)
+            guard !Task.isCancelled else {
+                return
+            }
+            withAnimation(.easeInOut(duration: 0.18)) {
+                gestureFeedback = nil
+            }
+        }
+    }
+
+    private func fittedVideoSize(in containerSize: CGSize) -> CGSize {
+        guard containerSize.width > 0,
+              containerSize.height > 0,
+              let aspectRatio = preview.aspectRatio,
+              aspectRatio > 0 else {
+            return containerSize
+        }
+
+        let containerAspectRatio = containerSize.width / containerSize.height
+        if containerAspectRatio > CGFloat(aspectRatio) {
+            let height = containerSize.height
+            return CGSize(width: height * CGFloat(aspectRatio), height: height)
+        }
+
+        let width = containerSize.width
+        return CGSize(width: width, height: width / CGFloat(aspectRatio))
+    }
+
+    private func makePreviewMedia() throws -> Media {
+        let media = try Media(url: preview.sourceURL)
+        QueuePreviewPlayerFactory.configureSoftwareDecodeOptions(on: media, sourceURL: preview.sourceURL)
+        return media
+    }
+
+    @MainActor
+    private func waitForVideoSurfaceAttachment() async {
+        for _ in 0..<20 {
+            if didAttachVideoSurface {
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                return
+            }
+            if Task.isCancelled {
+                return
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+
+        AppLogger.warning(
+            "Queue preview playback starting before video surface attachment was observed",
+            category: .ui,
+            metadata: ["name": preview.displayName]
+        )
+    }
+
+    @MainActor
+    private func waitForVideoOutput() async -> Bool {
+        for _ in 0..<30 {
+            if player.hasVideoOutput || player.activeVideoOutputs > 0 {
+                return true
+            }
+            if Task.isCancelled {
+                return false
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return player.hasVideoOutput || player.activeVideoOutputs > 0
+    }
+
+    private func shutdownPlayer() {
+        guard !didRequestShutdown else {
+            return
+        }
+        didRequestShutdown = true
+        controlsHideTask?.cancel()
+        gestureFeedbackTask?.cancel()
+        AppOrientationController.shared.restorePortrait()
+        Task { @MainActor in
+            await player.shutdown()
+        }
+    }
+}
+
+enum QueuePreviewPlayerFactory {
+    static let softwareDecodeInstance = makeSoftwareDecodeInstance(applicationName: "Taption Encoder Preview")
+
+    static func configureSoftwareDecodeOptions(on media: Media, sourceURL: URL, allowsAudio: Bool = true) {
+        media.addOption(":codec=avcodec")
+        media.addOption(":avcodec-hw=none")
+        media.addOption(":no-sub-autodetect-file")
+        media.addOption(":no-drop-late-frames")
+        media.addOption(":no-skip-frames")
+        if !allowsAudio {
+            media.addOption(":no-audio")
+        }
+        if sourceURL.pathExtension.lowercased() == "h261" {
+            media.addOption(":demux=avformat")
+            media.addOption(":avformat-format=h261")
+        }
+    }
+
+    private static func makeSoftwareDecodeInstance(applicationName: String) -> VLCInstance {
+        let arguments = VLCInstance.defaultArguments + [
+            "--codec=avcodec",
+            "--avcodec-hw=none"
+        ]
+
+        do {
+            return try VLCInstance(
+                arguments: arguments,
+                applicationName: applicationName,
+                httpUserAgent: "TaptionEncoder/1.0"
+            )
+        } catch {
+            AppLogger.warning(
+                "Falling back to the shared VLC instance for queue preview",
+                category: .ui,
+                metadata: ["error": String(describing: error)]
+            )
+            return .shared
+        }
     }
 }
 

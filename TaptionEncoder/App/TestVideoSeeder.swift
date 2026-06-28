@@ -2,10 +2,8 @@ import Foundation
 
 struct TaptionTestVideoSeedResult: Equatable {
     let destinationURL: URL
-    let migratedFilenames: [String]
-    let removedLegacyFilenames: [String]
+    let removedExistingFolder: Bool
     let copiedFilenames: [String]
-    let skippedFilenames: [String]
 }
 
 enum TaptionTestVideoSeeder {
@@ -71,59 +69,6 @@ enum TaptionTestVideoSeeder {
         "Apple ProRes.mov"
     ]
 
-    static let legacyVideoSampleFilenamePairs: [(current: String, legacy: String)] = [
-        ("AV1.mp4", "available-now_av1_av01_mp4.mp4"),
-        ("VP9.webm", "available-now_vp9_vp09_webm.webm"),
-        ("VP8.webm", "available-now_vp8_vp8_webm.webm"),
-        ("MPEG-1.mpg", "available-now_mpeg1_mpeg1video_mpg.mpg"),
-        ("MPEG-2.mpg", "available-now_mpeg2_mpeg2video_mpg.mpg"),
-        ("MPEG-4 Visual.mov", "available-now_mpeg4-visual_mpeg4_avi.avi"),
-        ("MPEG-4 Visual.mov", "MPEG-4 Visual.avi"),
-        ("H.263.3gp", "available-now_h263_h263_3gp.3gp"),
-        ("H.261.h261", "available-now_h261_h261_h261.h261"),
-        ("Flash Video.flv", "available-now_flash-video_flv1_flv.flv"),
-        ("Microsoft MPEG-4 V2.avi", "available-now_microsoft-mpeg4-v2_msmpeg4v2_avi.avi"),
-        ("Microsoft MPEG-4 V3.wmv", "available-now_microsoft-mpeg4-v3_msmpeg4v3_avi.avi"),
-        ("Microsoft MPEG-4 V3.wmv", "Microsoft MPEG-4 V3.avi"),
-        ("Motion JPEG.avi", "available-now_motion-jpeg_mjpeg_avi.avi"),
-        ("JPEG 2000.mov", "available-now_jpeg-2000_jpeg2000_mov.mov"),
-        ("JPEG-LS.avi", "available-now_jpeg-ls_jpegls_avi.avi"),
-        ("Lossless JPEG.avi", "available-now_lossless-jpeg_ljpeg_avi.avi"),
-        ("Apple Animation.mov", "available-now_apple-animation_qtrle_mov.mov"),
-        ("Cinepak.mov", "available-now_cinepak_cvid_mov.mov"),
-        ("Sorenson Video.mov", "available-now_sorenson-video_svq1_mov.mov"),
-        ("Sorenson Video 3.mov", "available-now_sorenson-video-3_svq3_mov.mov"),
-        ("QuickTime Video.mov", "available-now_quicktime-video_rpza_mov.mov"),
-        ("Theora.ogv", "available-now_theora_theora_ogv.ogv"),
-        ("RealVideo 1.0.rm", "available-now_realvideo-1-rv10_rm.rm"),
-        ("RealVideo.rm", "available-now_realvideo-rv20_rm.rm"),
-        ("RoQ Video.roq", "available-now_roq-video_roq_roq.roq"),
-        ("Windows Media Video.wmv", "available-now_wmv_wmv2_wmv.wmv"),
-        ("H.264 AVC.mp4", "available-now_h264-avc_avc1_mp4.mp4"),
-        ("H.265 HEVC.mp4", "available-now_h265-hevc_hvc1_mp4.mp4"),
-        ("Apple ProRes.mov", "supported-hardware_prores_prores_mov.mov"),
-        ("FFV1.avi", "FFV1.mkv"),
-        ("HuffYUV.avi", "available-now_huffyuv_huffyuv_avi.avi"),
-        ("Snow.avi", "available-now_snow_snow_avi.avi"),
-        ("Ut Video.avi", "available-now_ut-video_utvideo_avi.avi"),
-        ("MagicYUV.avi", "available-now_magicyuv_magicyuv_avi.avi"),
-        ("DVCPro HD.mov", "available-now_dvcpro-hd_dvhq_mov.mov"),
-        ("DV.dv", "available-now_dv_dvvideo_dv.dv"),
-        ("CineForm.avi", "available-now_cineform_cfhd_mov.mov"),
-        ("DNxHD.mov", "available-now_dnxhd_dnxhd_mov.mov"),
-        ("PNG Video.avi", "available-now_png-video_png_avi.avi"),
-        ("R10K.mov", "available-now_r10k_r10k_mov.mov"),
-        ("V308.mov", "available-now_v308_v308_mov.mov"),
-        ("V210.avi", "available-now_v210_v210_mov.mov"),
-        ("R210.avi", "available-now_r210_r210_avi.avi"),
-        ("V408.mov", "available-now_v408_v408_mov.mov"),
-        ("V410.mov", "available-now_v410_v410_mov.mov"),
-        ("Microsoft RLE.avi", "available-now_microsoft-rle_msrle_avi.avi"),
-        ("QuickTime Graphics.mov", "available-now_quicktime-graphics_smc_mov.mov"),
-        ("YUV4.mov", "available-now_yuv4_yuv4_mov.mov"),
-        ("Raw Video.avi", "available-now_raw-video_rawvideo_avi.avi")
-    ]
-
     static func seedBundledSamplesIntoDocuments(
         bundle: Bundle = .main,
         fileManager: FileManager = .default
@@ -150,9 +95,7 @@ enum TaptionTestVideoSeeder {
                 metadata: [
                     "destination": result.destinationURL.path,
                     "copied": "\(result.copiedFilenames.count)",
-                    "migrated": "\(result.migratedFilenames.count)",
-                    "removedLegacy": "\(result.removedLegacyFilenames.count)",
-                    "skipped": "\(result.skippedFilenames.count)"
+                    "removedExistingFolder": "\(result.removedExistingFolder)"
                 ]
             )
         } catch {
@@ -174,13 +117,14 @@ enum TaptionTestVideoSeeder {
             documentsFolderName,
             isDirectory: true
         )
+        let removedExistingFolder = fileManager.fileExists(atPath: destinationURL.path)
+        if removedExistingFolder {
+            try fileManager.removeItem(at: destinationURL)
+        }
+
         try fileManager.createDirectory(
             at: destinationURL,
             withIntermediateDirectories: true
-        )
-        let legacyMigration = try migrateLegacySampleFilenames(
-            in: destinationURL,
-            fileManager: fileManager
         )
 
         let sourceFiles = try fileManager
@@ -196,53 +140,19 @@ enum TaptionTestVideoSeeder {
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
 
         var copiedFilenames: [String] = []
-        var skippedFilenames: [String] = []
 
         for sourceFileURL in sourceFiles {
             let filename = sourceFileURL.lastPathComponent
             let destinationFileURL = destinationURL.appendingPathComponent(filename, isDirectory: false)
-            if fileManager.fileExists(atPath: destinationFileURL.path) {
-                skippedFilenames.append(filename)
-                continue
-            }
-
             try fileManager.copyItem(at: sourceFileURL, to: destinationFileURL)
             copiedFilenames.append(filename)
         }
 
         return TaptionTestVideoSeedResult(
             destinationURL: destinationURL,
-            migratedFilenames: legacyMigration.migratedFilenames,
-            removedLegacyFilenames: legacyMigration.removedLegacyFilenames,
-            copiedFilenames: copiedFilenames,
-            skippedFilenames: skippedFilenames
+            removedExistingFolder: removedExistingFolder,
+            copiedFilenames: copiedFilenames
         )
-    }
-
-    private static func migrateLegacySampleFilenames(
-        in destinationURL: URL,
-        fileManager: FileManager
-    ) throws -> (migratedFilenames: [String], removedLegacyFilenames: [String]) {
-        var migratedFilenames: [String] = []
-        var removedLegacyFilenames: [String] = []
-
-        for pair in legacyVideoSampleFilenamePairs {
-            let currentURL = destinationURL.appendingPathComponent(pair.current, isDirectory: false)
-            let legacyURL = destinationURL.appendingPathComponent(pair.legacy, isDirectory: false)
-            guard fileManager.fileExists(atPath: legacyURL.path) else {
-                continue
-            }
-
-            if fileManager.fileExists(atPath: currentURL.path) {
-                try fileManager.removeItem(at: legacyURL)
-                removedLegacyFilenames.append(pair.legacy)
-            } else {
-                try fileManager.moveItem(at: legacyURL, to: currentURL)
-                migratedFilenames.append(pair.current)
-            }
-        }
-
-        return (migratedFilenames, removedLegacyFilenames)
     }
 
     private static func documentsDirectoryURL(fileManager: FileManager) throws -> URL {

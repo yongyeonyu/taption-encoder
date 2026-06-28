@@ -21,6 +21,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var starWalletSnapshot: StarWalletSnapshot
     @Published private(set) var rewardedAdState: AdLoadState
     @Published private(set) var isWatchingStarAd: Bool
+    @Published private(set) var activePreview: QueueVideoPreview?
 
     private let environment: AppEnvironment
     private var activeTask: Task<Void, Never>?
@@ -29,6 +30,7 @@ final class HomeViewModel: ObservableObject {
     private var pendingSaveQueue: [PendingSaveJob] = []
     private var lastBatchFileCards: [EncodingFileCardSnapshot] = []
     private var selectionInspectionTask: Task<Void, Never>?
+    private var previewInspectionTask: Task<Void, Never>?
     private var inspectedMediaCache = TaptionInspectedMediaCache()
     private var hasRestoredPendingSaves = false
     private var hasLoadedStarWallet = false
@@ -52,6 +54,7 @@ final class HomeViewModel: ObservableObject {
         self.starWalletSnapshot = .empty
         self.rewardedAdState = .idle
         self.isWatchingStarAd = false
+        self.activePreview = nil
         AppLogger.info(
             "HomeViewModel initialized",
             category: .app,
@@ -62,6 +65,8 @@ final class HomeViewModel: ObservableObject {
     deinit {
         AppLogger.info("HomeViewModel deinitialized", category: .app)
         activeTask?.cancel()
+        selectionInspectionTask?.cancel()
+        previewInspectionTask?.cancel()
         rewardedAdStatePollingTask?.cancel()
     }
 
@@ -659,7 +664,8 @@ final class HomeViewModel: ObservableObject {
                 progress: nil,
                 isActive: true,
                 isSelected: true,
-                isEnabled: review.videoInfo.isRouteEncodable
+                isEnabled: review.videoInfo.isRouteEncodable,
+                isPreviewable: isPreviewableInCurrentBuild(asset: review.job.asset)
             )]
         case .encoding(let progress):
             if let currentReview {
@@ -671,7 +677,8 @@ final class HomeViewModel: ObservableObject {
                     progress: progress,
                     isActive: true,
                     isSelected: true,
-                    isEnabled: true
+                    isEnabled: true,
+                    isPreviewable: isPreviewableInCurrentBuild(asset: currentReview.job.asset)
                 )]
             }
             return []
@@ -679,31 +686,36 @@ final class HomeViewModel: ObservableObject {
             return [fileCard(
                 sourceName: output.sourceName,
                 sourceKind: currentReview?.source.kind ?? .files,
+                thumbnailSourceURL: currentReview?.source.url,
                 videoInfo: currentReview?.videoInfo,
                 statusText: "Waiting to Save",
                 detailText: "Ready to save the encoded video.",
                 progress: completedProgressSnapshot(label: codecPathTitle(mode: output.usedEncoderMode)),
                 isActive: true,
                 isSelected: true,
-                isEnabled: true
+                isEnabled: true,
+                isPreviewable: currentReview.map { isPreviewableInCurrentBuild(asset: $0.job.asset) } ?? false
             )]
         case .saving(let job):
             return [fileCard(
                 sourceName: job.sourceName,
                 sourceKind: currentReview?.source.kind ?? .files,
+                thumbnailSourceURL: currentReview?.source.url,
                 videoInfo: currentReview?.videoInfo,
                 statusText: "Saving",
                 detailText: "Writing the completed H.265 output.",
                 progress: completedProgressSnapshot(label: "Saving"),
                 isActive: true,
                 isSelected: true,
-                isEnabled: true
+                isEnabled: true,
+                isPreviewable: currentReview.map { isPreviewableInCurrentBuild(asset: $0.job.asset) } ?? false
             )]
         case .pendingSave(let job):
             let requiresRewardedAd = job.state.requiresRewardedAd
             return [fileCard(
                 sourceName: job.sourceName,
                 sourceKind: currentReview?.source.kind ?? .files,
+                thumbnailSourceURL: currentReview?.source.url,
                 videoInfo: currentReview?.videoInfo,
                 statusText: requiresRewardedAd ? "Watch Ad to Save" : "Pending Save",
                 detailText: job.saveGateMessage ?? (
@@ -714,7 +726,8 @@ final class HomeViewModel: ObservableObject {
                 progress: completedProgressSnapshot(label: requiresRewardedAd ? "Ready to Save" : "Pending Save"),
                 isActive: true,
                 isSelected: true,
-                isEnabled: true
+                isEnabled: true,
+                isPreviewable: currentReview.map { isPreviewableInCurrentBuild(asset: $0.job.asset) } ?? false
             )]
         case .completed(let output):
             return [fileCard(
@@ -889,6 +902,27 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
+    func handleFolderPickerSelection(urls: [URL]) {
+        let selectedURLs = urls.sorted {
+            $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+        }
+        guard let firstURL = selectedURLs.first else {
+            return
+        }
+
+        let fileURLs = selectedURLs.filter { !selectedURLIsDirectory($0) }
+        if !fileURLs.isEmpty {
+            if fileURLs.count == 1 {
+                startFilesFlow(url: fileURLs[0])
+            } else {
+                startFilesFlow(urls: fileURLs)
+            }
+            return
+        }
+
+        startFolderFlow(url: firstURL)
+    }
+
     func startFilesFlow(url: URL) {
         AppLogger.info(
             "Single file flow started",
@@ -898,6 +932,7 @@ final class HomeViewModel: ObservableObject {
         guard canStartNewSourceFlow() else {
             return
         }
+        dismissPreview()
         selectionInspectionTask?.cancel()
         folderBatch = nil
         currentReview = nil
@@ -942,6 +977,7 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
+        dismissPreview()
         activeTask?.cancel()
         selectionInspectionTask?.cancel()
         currentReview = nil
@@ -973,6 +1009,7 @@ final class HomeViewModel: ObservableObject {
             category: .folderImport,
             metadata: ["name": url.lastPathComponent]
         )
+        dismissPreview()
         activeTask?.cancel()
         selectionInspectionTask?.cancel()
         currentReview = nil
@@ -1029,6 +1066,7 @@ final class HomeViewModel: ObservableObject {
         guard canStartNewSourceFlow() else {
             return
         }
+        dismissPreview()
         selectionInspectionTask?.cancel()
         folderBatch = nil
         currentReview = nil
@@ -1039,6 +1077,41 @@ final class HomeViewModel: ObservableObject {
             url: url
         )
         prepareEncodingFlow(source: source)
+    }
+
+    func openPreviewForFileCard(id: String) {
+        if openBatchPreviewForFileCard(id: id) {
+            return
+        }
+
+        guard !state.isBusy else {
+            AppLogger.info(
+                "Preview ignored because the encoder is busy",
+                category: .ui,
+                metadata: ["id": id]
+            )
+            return
+        }
+
+        guard let preview = currentReviewPreview(for: id) else {
+            AppLogger.warning("File card preview ignored because item was not found", category: .ui)
+            return
+        }
+
+        presentPreview(preview)
+    }
+
+    func dismissPreview() {
+        previewInspectionTask?.cancel()
+        previewInspectionTask = nil
+        if let activePreview {
+            AppLogger.info(
+                "Queue preview dismissed",
+                category: .ui,
+                metadata: ["name": activePreview.displayName]
+            )
+        }
+        activePreview = nil
     }
 
     func selectFileCard(id: String) {
@@ -1101,12 +1174,135 @@ final class HomeViewModel: ObservableObject {
             )
             return
         }
+        dismissPreview()
         Task { @MainActor [weak self] in
             await self?.attemptEncodingStart(
                 for: review,
                 autoResumeAfterStarEarn: false
             )
         }
+    }
+
+    private func openBatchPreviewForFileCard(id: String) -> Bool {
+        guard var batch = folderBatch,
+              let selectedURL = batch.fileURLs.first(where: { $0.absoluteString == id }) else {
+            return false
+        }
+
+        guard canOpenFolderPreviewInCurrentState else {
+            AppLogger.info(
+                "Folder preview ignored because the encoder is processing output",
+                category: .ui,
+                metadata: ["id": id]
+            )
+            return true
+        }
+
+        let item = batch.itemStates[selectedURL] ?? .queued
+        guard item.isEnabled || item.isPreviewable else {
+            AppLogger.info(
+                "Disabled file card preview ignored",
+                category: .ui,
+                metadata: [
+                    "name": selectedURL.lastPathComponent,
+                    "status": item.statusText
+                ]
+            )
+            return true
+        }
+
+        batch.selectedURL = selectedURL
+        folderBatch = batch
+        objectWillChange.send()
+
+        if let preview = batchPreview(for: selectedURL) {
+            presentPreview(preview)
+            return true
+        }
+
+        guard item.videoInfo == nil else {
+            AppLogger.info(
+                "Queue preview ignored because route is not encodable",
+                category: .ui,
+                metadata: [
+                    "name": selectedURL.lastPathComponent,
+                    "status": item.statusText
+                ]
+            )
+            return true
+        }
+
+        previewInspectionTask?.cancel()
+        previewInspectionTask = Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+            await self.inspectSelectedBatchItemInfo(url: selectedURL)
+            guard !Task.isCancelled,
+                  let preview = self.batchPreview(for: selectedURL) else {
+                return
+            }
+            self.presentPreview(preview)
+        }
+        return true
+    }
+
+    private func currentReviewPreview(for id: String) -> QueueVideoPreview? {
+        guard let review = currentReview ?? state.preparedEncodingReview,
+              review.videoInfo.isRouteEncodable,
+              id == review.source.displayName
+                || id == review.source.url.absoluteString
+                || id == review.source.id.uuidString else {
+            return nil
+        }
+
+        return QueueVideoPreview(
+            id: review.source.url.absoluteString,
+            displayName: review.source.displayName,
+            sourceURL: review.source.url,
+            videoInfo: review.videoInfo,
+            displaySize: review.job.asset.videoTrack?.displaySize
+        )
+    }
+
+    private func batchPreview(for url: URL) -> QueueVideoPreview? {
+        guard let item = folderBatch?.itemStates[url],
+              item.isPreviewable,
+              let videoInfo = item.videoInfo,
+              item.asset?.videoTrack != nil else {
+            return nil
+        }
+
+        return QueueVideoPreview(
+            id: url.absoluteString,
+            displayName: url.lastPathComponent,
+            sourceURL: url,
+            videoInfo: videoInfo,
+            displaySize: item.asset?.videoTrack?.displaySize
+        )
+    }
+
+    private var canOpenFolderPreviewInCurrentState: Bool {
+        switch state {
+        case .encoding, .cancelling, .saving:
+            return false
+        case .idle, .importing, .inspecting, .storageChecking, .storageBlocked, .readyToStart,
+                .waitingForReward, .pendingSave, .completed, .failed, .cancelled:
+            return true
+        }
+    }
+
+    private func presentPreview(_ preview: QueueVideoPreview) {
+        activePreview = preview
+        AppLogger.info(
+            "Queue preview opened",
+            category: .ui,
+            metadata: [
+                "name": preview.displayName,
+                "codec": preview.codecBadge,
+                "path": preview.pathBadge
+            ]
+        )
     }
 
     func watchAdForStar() {
@@ -1396,6 +1592,7 @@ final class HomeViewModel: ObservableObject {
         }
         AppLogger.info("Reset requested", category: .ui)
         let pendingStatesToReset = resetPendingStates()
+        dismissPreview()
         activeTask?.cancel()
         activeTask = nil
         selectionInspectionTask?.cancel()
@@ -1444,6 +1641,7 @@ final class HomeViewModel: ObservableObject {
             category: .app,
             metadata: ["message": message]
         )
+        dismissPreview()
         activeTask?.cancel()
         activeTask = nil
         selectionInspectionTask?.cancel()
@@ -2546,6 +2744,7 @@ final class HomeViewModel: ObservableObject {
                 outputName: outputName(for: source),
                 routeSelection: routeSelection
             )
+            let isPreviewable = isPreviewableInCurrentBuild(asset: asset)
             guard let videoTrack = asset.videoTrack else {
                 AppLogger.warning(
                     "Batch item disabled because no video track was found",
@@ -2560,7 +2759,8 @@ final class HomeViewModel: ObservableObject {
                     detailText: "Not supported yet. No readable video track.",
                     progress: nil,
                     isActive: false,
-                    isEnabled: false
+                    isEnabled: false,
+                    isPreviewable: false
                 )
                 return
             }
@@ -2583,7 +2783,8 @@ final class HomeViewModel: ObservableObject {
                     detailText: "\(routeSelection.displayTitle). Ready to encode.",
                     progress: nil,
                     isActive: false,
-                    isEnabled: true
+                    isEnabled: true,
+                    isPreviewable: isPreviewable
                 )
             } else {
                 AppLogger.info(
@@ -2604,7 +2805,8 @@ final class HomeViewModel: ObservableObject {
                     detailText: info.readinessDetailText,
                     progress: nil,
                     isActive: false,
-                    isEnabled: false
+                    isEnabled: false,
+                    isPreviewable: isPreviewable
                 )
             }
         } catch {
@@ -2622,7 +2824,8 @@ final class HomeViewModel: ObservableObject {
                 detailText: "Not supported yet. \(error.localizedDescription)",
                 progress: nil,
                 isActive: false,
-                isEnabled: false
+                isEnabled: false,
+                isPreviewable: false
             )
         }
     }
@@ -2928,7 +3131,8 @@ final class HomeViewModel: ObservableObject {
         detailText: String?,
         progress: EncodingProgressSnapshot?,
         isActive: Bool,
-        isEnabled: Bool? = nil
+        isEnabled: Bool? = nil,
+        isPreviewable: Bool? = nil
     ) {
         guard var batch = folderBatch else {
             return
@@ -2947,13 +3151,20 @@ final class HomeViewModel: ObservableObject {
         if let isEnabled {
             item.isEnabled = isEnabled
         }
+        if let isPreviewable {
+            item.isPreviewable = isPreviewable
+        }
         if isActive {
             batch.selectedURL = url
         }
         batch.itemStates[url] = item
         if item.isEnabled == false,
+           !item.isPreviewable,
            batch.selectedURL == url {
-            batch.selectedURL = batch.fileURLs.first { batch.itemStates[$0]?.isEnabled != false }
+            batch.selectedURL = batch.fileURLs.first { url in
+                let item = batch.itemStates[url]
+                return item?.isEnabled != false || item?.isPreviewable == true
+            }
         }
         folderBatch = batch
         objectWillChange.send()
@@ -3007,6 +3218,7 @@ final class HomeViewModel: ObservableObject {
                 id: job.id.uuidString,
                 fileName: job.sourceName,
                 sourceKind: .files,
+                thumbnailSourceURL: nil,
                 videoInfo: nil,
                 statusText: statusText,
                 detailText: detailText,
@@ -3114,6 +3326,35 @@ final class HomeViewModel: ObservableObject {
         return true
     }
 
+    private func selectedURLIsDirectory(_ url: URL) -> Bool {
+        if url.hasDirectoryPath {
+            return true
+        }
+        let values = try? url.resourceValues(forKeys: [.isDirectoryKey])
+        return values?.isDirectory == true
+    }
+
+    private func isPreviewableInCurrentBuild(asset: TaptionVideoAsset) -> Bool {
+        guard let videoTrack = asset.videoTrack else {
+            return false
+        }
+
+        let decoder = SW_SoftwareCodecBackendRegistry.vlcSoftwareDecoder
+        guard decoder.canDecodeVideo(videoTrack.codec) else {
+            return false
+        }
+
+        if decoder.canReadContainer(asset.container) {
+            return true
+        }
+
+        guard let url = asset.location.url else {
+            return false
+        }
+        return asset.container != .unknown
+            && SupportedVideoFileExtensions.contains(url.pathExtension)
+    }
+
     private func refreshPreparedSourceAfterOutputChange() {
         guard !state.isBusy else {
             return
@@ -3163,6 +3404,7 @@ final class HomeViewModel: ObservableObject {
             )
             item.videoInfo = info
             item.isEnabled = info.isRouteEncodable
+            item.isPreviewable = isPreviewableInCurrentBuild(asset: asset)
             item.statusText = info.isRouteEncodable ? "Queued" : info.readinessStatusText
             item.detailText = info.isRouteEncodable ? "\(routeSelection.displayTitle). Ready to encode." : info.readinessDetailText
             item.progress = nil
@@ -3170,7 +3412,10 @@ final class HomeViewModel: ObservableObject {
             batch.itemStates[url] = item
         }
 
-        batch.selectedURL = batch.fileURLs.first { batch.itemStates[$0]?.isEnabled != false }
+        batch.selectedURL = batch.fileURLs.first { url in
+            let item = batch.itemStates[url]
+            return item?.isEnabled != false || item?.isPreviewable == true
+        }
             ?? batch.fileURLs.first
         folderBatch = batch
         objectWillChange.send()
@@ -3194,43 +3439,50 @@ final class HomeViewModel: ObservableObject {
         progress: EncodingProgressSnapshot?,
         isActive: Bool,
         isSelected: Bool,
-        isEnabled: Bool
+        isEnabled: Bool,
+        isPreviewable: Bool = false
     ) -> EncodingFileCardSnapshot {
         fileCard(
             sourceName: source.displayName,
             sourceKind: source.kind,
+            thumbnailSourceURL: source.url,
             videoInfo: videoInfo,
             statusText: statusText,
             detailText: detailText,
             progress: progress,
             isActive: isActive,
             isSelected: isSelected,
-            isEnabled: isEnabled
+            isEnabled: isEnabled,
+            isPreviewable: isPreviewable
         )
     }
 
     private func fileCard(
         sourceName: String,
         sourceKind: HomeSourceKind,
+        thumbnailSourceURL: URL? = nil,
         videoInfo: LoadedVideoInfo?,
         statusText: String,
         detailText: String?,
         progress: EncodingProgressSnapshot?,
         isActive: Bool,
         isSelected: Bool,
-        isEnabled: Bool
+        isEnabled: Bool,
+        isPreviewable: Bool = false
     ) -> EncodingFileCardSnapshot {
         EncodingFileCardSnapshot(
             id: sourceName,
             fileName: sourceName,
             sourceKind: sourceKind,
+            thumbnailSourceURL: thumbnailSourceURL,
             videoInfo: videoInfo,
             statusText: statusText,
             detailText: detailText,
             progress: progress,
             isActive: isActive,
             isSelected: isSelected,
-            isEnabled: isEnabled
+            isEnabled: isEnabled,
+            isPreviewable: isPreviewable
         )
     }
 
