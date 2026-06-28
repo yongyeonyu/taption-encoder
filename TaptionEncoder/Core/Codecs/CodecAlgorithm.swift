@@ -311,7 +311,17 @@ enum TaptionCodecRegistry {
         TaptionCodecRoute(sourceCodec: .flashScreenVideo2, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .zmbv, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .cljr, outputCodec: .hevc),
-        TaptionCodecRoute(sourceCodec: .ffv1, outputCodec: .hevc)
+        TaptionCodecRoute(sourceCodec: .ffv1, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .huffYUV, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .dvcProHD, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .dv, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .cineForm, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .dnxhd, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .v308, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .v210, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .v408, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .v410, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .yuv4, outputCodec: .hevc)
     ]
 
     static let appleNativeHEVCHardwareSourceCodecs: [TaptionVideoCodec] = [
@@ -580,6 +590,76 @@ enum TaptionCodecRegistry {
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "FFV1 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .huffYUV,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "HuffYUV to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .dvcProHD,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "DVCPro HD to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .dv,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "DV to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .cineForm,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "GoPro CineForm to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .dnxhd,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "DNxHD to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .v308,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "V308 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .v210,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "V210 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .v408,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "V408 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .v410,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "V410 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .yuv4,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "YUV4 to H.265 Software"
         )
         ] + appleNativeHEVCHardwareAlgorithmDescriptors
     }

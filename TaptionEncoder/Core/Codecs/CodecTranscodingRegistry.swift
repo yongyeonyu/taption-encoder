@@ -67,7 +67,17 @@ struct TaptionCodecTranscodingRegistry: @unchecked Sendable {
             TaptionCodecTranscodingAlgorithmEntry(SW_FlashScreenVideo2HEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_ZMBVHEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_CLJRHEVCTranscoder.self),
-            TaptionCodecTranscodingAlgorithmEntry(SW_FFV1HEVCTranscoder.self)
+            TaptionCodecTranscodingAlgorithmEntry(SW_FFV1HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_HuffYUVHEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_DVCProHDHEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_DVHEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_CineFormHEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_DNxHDHEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_V308HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_V210HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_V408HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_V410HEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_YUV4HEVCTranscoder.self)
         ] + HW_AppleHEVCCodecAlgorithm.nativeDescriptors.map { descriptor in
             TaptionCodecTranscodingAlgorithmEntry(
                 descriptor: descriptor,

@@ -136,11 +136,11 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return .flashVideo
         case "mp42":
             return .microsoftMPEG4V2
-        case "mp43":
+        case "mp43", "div3", "div4", "div5", "mpg3":
             return .microsoftMPEG4V3
         case "jpeg", "dmb1", "mjpa", "mjpb", "mjpg":
             return .motionJPEG
-        case "mjp2":
+        case "mjp2", "avj2":
             return .jpeg2000
         case "mjls":
             return .jpegLS
@@ -160,12 +160,16 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return .sorensonVideo3
         case "theo", "thra":
             return .theora
+        case "roq":
+            return .roqVideo
         case "dvc":
             return .dv
         case "dvcp", "dvpp", "dv5n", "dv5p":
             return .dvcPro
         case "dvhp", "dvhq", "dvh6", "dvh5", "dvh3", "dvh2":
             return .dvcProHD
+        case "wvc1", "vc1":
+            return .vc1
         case "ap4x", "ap4h", "apch", "apcn", "apcs", "apco":
             return .proRes
         case "aprn", "aprh":
@@ -174,6 +178,8 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return .wmv
         case "msvc", "cram":
             return .microsoftVideo1
+        case "mrle", "msrl":
+            return .microsoftRLE
         case "asv1":
             return .asusV1
         case "asv2":
@@ -190,6 +196,32 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return .snow
         case "ffv1":
             return .ffv1
+        case "hfyu", "ffvh":
+            return .huffYUV
+        case "uly0", "uly2", "uly4", "ulrg", "ulra":
+            return .utVideo
+        case "magy":
+            return .magicYUV
+        case "cfhd":
+            return .cineForm
+        case "avdn", "dnxhd", "dnxhr":
+            return .dnxhd
+        case "png", "png1":
+            return .pngVideo
+        case "r10k", "r10g":
+            return .r10k
+        case "v210":
+            return .v210
+        case "r210":
+            return .r210
+        case "v410":
+            return .v410
+        case "v308":
+            return .v308
+        case "v408":
+            return .v408
+        case "yuv4":
+            return .yuv4
         default:
             return .unknown
         }
@@ -438,6 +470,49 @@ private struct SW_VLCMediaInspector: MediaInspecting {
         if metadata.contains("snow") {
             return .snow
         }
+        if metadata.contains("huffyuv") || metadata.contains("huff") {
+            return .huffYUV
+        }
+        if metadata.contains("utvideo") || metadata.contains("ut video") {
+            return .utVideo
+        }
+        if metadata.contains("vc-1") || metadata.contains("vc1") {
+            return .vc1
+        }
+        if metadata.contains("dvvideo")
+            || metadata.split(separator: " ").contains("dv") {
+            return .dv
+        }
+        if metadata.contains("roq") {
+            return .roqVideo
+        }
+        if metadata.contains("quicktime graphics") || metadata.contains("smc") {
+            return .quickTimeGraphics
+        }
+        if metadata.contains("yuv4") {
+            return .yuv4
+        }
+        if metadata.contains("msrle") || metadata.contains("microsoft rle") {
+            return .microsoftRLE
+        }
+        if metadata.contains("magic") || metadata.contains("magy") {
+            return .magicYUV
+        }
+        if metadata.contains("cfhd") || metadata.contains("cineform") {
+            return .cineForm
+        }
+        if metadata.contains("dnx") {
+            return .dnxhd
+        }
+        if metadata.contains("v410") {
+            return .v410
+        }
+        if metadata.contains("v308") {
+            return .v308
+        }
+        if metadata.contains("v408") {
+            return .v408
+        }
         return .unknown
     }
 
@@ -478,11 +553,11 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             return .flashVideo
         case "mp42":
             return .microsoftMPEG4V2
-        case "mp43":
+        case "mp43", "div3", "div4", "div5", "mpg3":
             return .microsoftMPEG4V3
         case "jpeg", "dmb1", "mjpg", "mjpa", "mjpb":
             return .motionJPEG
-        case "mjp2":
+        case "mjp2", "avj2":
             return .jpeg2000
         case "mjls":
             return .jpegLS
@@ -494,18 +569,24 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             return .cinepak
         case "rpza":
             return .quickTimeVideo
+        case "smc":
+            return .quickTimeGraphics
         case "svq1":
             return .sorensonVideo
         case "svq3":
             return .sorensonVideo3
         case "theo", "thra":
             return .theora
+        case "roq":
+            return .roqVideo
         case "dvc":
             return .dv
         case "dvcp", "dvpp", "dv5n", "dv5p":
             return .dvcPro
         case "dvhp", "dvhq", "dvh6", "dvh5", "dvh3", "dvh2":
             return .dvcProHD
+        case "wvc1", "vc1":
+            return .vc1
         case "ap4x", "ap4h", "apch", "apcn", "apcs", "apco":
             return .proRes
         case "aprn", "aprh":
@@ -514,6 +595,8 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             return .wmv
         case "msvc", "cram":
             return .microsoftVideo1
+        case "mrle", "msrl":
+            return .microsoftRLE
         case "asv1":
             return .asusV1
         case "asv2":
@@ -530,6 +613,32 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             return .snow
         case "ffv1":
             return .ffv1
+        case "hfyu", "ffvh":
+            return .huffYUV
+        case "uly0", "uly2", "uly4", "ulrg", "ulra":
+            return .utVideo
+        case "magy":
+            return .magicYUV
+        case "cfhd":
+            return .cineForm
+        case "avdn", "dnxhd", "dnxhr":
+            return .dnxhd
+        case "png", "png1":
+            return .pngVideo
+        case "r10k", "r10g":
+            return .r10k
+        case "v210":
+            return .v210
+        case "r210":
+            return .r210
+        case "v410":
+            return .v410
+        case "v308":
+            return .v308
+        case "v408":
+            return .v408
+        case "yuv4":
+            return .yuv4
         default:
             return .unknown
         }

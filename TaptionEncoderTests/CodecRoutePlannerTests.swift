@@ -901,7 +901,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(h261Descriptors.count, 1)
         XCTAssertEqual(h261Descriptors.first?.mode, .software)
         XCTAssertEqual(h261Descriptors.first?.backend, .softwareVLCDecoder)
-        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1] {
+        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1, .huffYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .v308, .v210, .v408, .v410, .yuv4] {
             let route = TaptionCodecRoute(sourceCodec: codec, outputCodec: .hevc)
             let codecDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: route)
             XCTAssertEqual(codecDescriptors.count, 1, codec.displayName)
@@ -1649,7 +1649,23 @@ final class CodecRoutePlannerTests: XCTestCase {
             "Flash Screen Video 2.flv",
             "ZMBV.avi",
             "CLJR.avi",
-            "FFV1.mkv"
+            "FFV1.avi"
+        ]
+        try await assertBundledSamplesEncodeToHEVCMP4(sampleFilenames)
+    }
+
+    func testNextIntermediateBundledSamplesEncodeToHEVCMP4() async throws {
+        let sampleFilenames = [
+            "HuffYUV.avi",
+            "DVCPro HD.mov",
+            "DV.dv",
+            "CineForm.avi",
+            "DNxHD.mov",
+            "V308.mov",
+            "V210.avi",
+            "V408.mov",
+            "V410.mov",
+            "YUV4.mov"
         ]
         try await assertBundledSamplesEncodeToHEVCMP4(sampleFilenames)
     }
@@ -1671,24 +1687,37 @@ final class CodecRoutePlannerTests: XCTestCase {
             )
         )
 
-        for filename in sampleFilenames {
-            let sampleURL = bundledTestVideosURL().appendingPathComponent(filename)
-            let outputURL = outputDirectoryURL
-                .appendingPathComponent("\(sampleURL.deletingPathExtension().lastPathComponent)-hevc.mp4")
+        let filteredSampleFilenames: [String]
+        if let sampleFilter = ProcessInfo.processInfo.environment["TAPTION_SAMPLE_FILTER"],
+           sampleFilter.isEmpty == false {
+            filteredSampleFilenames = sampleFilenames.filter { $0 == sampleFilter }
+            XCTAssertFalse(filteredSampleFilenames.isEmpty, sampleFilter)
+        } else {
+            filteredSampleFilenames = sampleFilenames
+        }
 
-            let job = try await core.prepareSingleAssetHEVCJob(
-                sourceURL: sampleURL,
-                temporaryOutputURL: outputURL,
-                savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
-            )
-            let result = try await core.encodePreparedJob(job, progress: { _ in })
-            let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: result.temporaryOutputURL)
+        for filename in filteredSampleFilenames {
+            do {
+                let sampleURL = bundledTestVideosURL().appendingPathComponent(filename)
+                let outputURL = outputDirectoryURL
+                    .appendingPathComponent("\(sampleURL.deletingPathExtension().lastPathComponent)-hevc.mp4")
 
-            XCTAssertTrue(job.routeSelection.isEncodableNow, filename)
-            XCTAssertEqual(result.temporaryOutputURL, outputURL, filename)
-            XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path), filename)
-            XCTAssertEqual(outputAsset.container, .mp4, filename)
-            XCTAssertEqual(outputAsset.videoTrack?.codec, .hevc, filename)
+                let job = try await core.prepareSingleAssetHEVCJob(
+                    sourceURL: sampleURL,
+                    temporaryOutputURL: outputURL,
+                    savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+                )
+                let result = try await core.encodePreparedJob(job, progress: { _ in })
+                let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: result.temporaryOutputURL)
+
+                XCTAssertTrue(job.routeSelection.isEncodableNow, filename)
+                XCTAssertEqual(result.temporaryOutputURL, outputURL, filename)
+                XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path), filename)
+                XCTAssertEqual(outputAsset.container, .mp4, filename)
+                XCTAssertEqual(outputAsset.videoTrack?.codec, .hevc, filename)
+            } catch {
+                XCTFail("\(filename): \(error)")
+            }
         }
     }
 
@@ -2263,6 +2292,16 @@ final class CodecRoutePlannerTests: XCTestCase {
                 TaptionLaunchInputVideoSupportItem(codec: .zmbv, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .cljr, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .ffv1, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .huffYUV, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .dvcProHD, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .dv, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .cineForm, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .dnxhd, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .v308, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .v210, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .v408, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .v410, availability: .availableNow),
+                TaptionLaunchInputVideoSupportItem(codec: .yuv4, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableNow),
                 TaptionLaunchInputVideoSupportItem(codec: .proRes, availability: .availableOnSupportedHardware)
@@ -2270,26 +2309,26 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputVideoSummary,
-            "AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2, Microsoft MPEG-4 V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, Microsoft Video 1, ASUS V1, ASUS V2, Flash Screen Video, Flash Screen Video 2, Zip Motion Blocks Video, Cirrus Logic AccuPak, FFV1, H.264 / AVC, H.265 / HEVC, Apple ProRes"
+            "AV1, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2, Microsoft MPEG-4 V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, Windows Media Video, Microsoft Video 1, ASUS V1, ASUS V2, Flash Screen Video, Flash Screen Video 2, Zip Motion Blocks Video, Cirrus Logic AccuPak, FFV1, HuffYUV, DVCPro HD, DV, GoPro CineForm, DNxHD / DNxHR, V308 4:4:4, V210 10-bit 4:2:2, V408 4:4:4:4, V410 10-bit 4:4:4, YUV4 4:2:0, H.264 / AVC, H.265 / HEVC, Apple ProRes"
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainers,
-            [.mp4, .mov, .m4v, .mkv, .avi, .webm, .flv, .ogg, .mxf, .mpegProgramStream, .threeGP, .threeGPP2, .asf, .wmv, .rawElementaryStream]
+            [.mp4, .mov, .m4v, .mkv, .avi, .webm, .flv, .ogg, .mxf, .mpegProgramStream, .dv, .threeGP, .threeGPP2, .asf, .wmv, .rawElementaryStream]
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainerSummary,
-            "MP4, MOV, QT, M4V, MKV, AVI, DIVX, WEBM, FLV, F4V, OGG, OGV, OGM, MXF, MPG, MPEG, MPE, VOB, MOD, DAT, 3GP, 3GPP, 3G2, 3GPP2, ASF, DVR-MS, WMV, H264, H265, HEVC, 264, 265, IVF, OBU, Y4M, AV1, H263, H261, M1V, M2V, VC1"
+            "MP4, MOV, QT, M4V, MKV, AVI, DIVX, WEBM, FLV, F4V, OGG, OGV, OGM, MXF, MPG, MPEG, MPE, VOB, MOD, DAT, DV, DIF, 3GP, 3GPP, 3G2, 3GPP2, ASF, DVR-MS, WMV, H264, H265, HEVC, 264, 265, IVF, OBU, Y4M, AV1, H263, H261, M1V, M2V, VC1"
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.executableNowInputVideoCodecs,
-            [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .wmv, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1, .h264, .hevc]
+            [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .wmv, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1, .huffYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .v308, .v210, .v408, .v410, .yuv4, .h264, .hevc]
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.hardwareGatedInputVideoCodecs,
             [.proRes]
         )
         XCTAssertFalse(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(.h261))
-        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1] {
+        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1, .huffYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .v308, .v210, .v408, .v410, .yuv4] {
             XCTAssertFalse(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(codec), codec.displayName)
         }
         XCTAssertFalse(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(.av1))
@@ -2300,7 +2339,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.makeInputReadinessReport(),
             TaptionLaunchInputReadinessReport(
-                executableNowVideoCodecs: [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .wmv, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1, .h264, .hevc],
+                executableNowVideoCodecs: [.av1, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .wmv, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1, .huffYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .v308, .v210, .v408, .v410, .yuv4, .h264, .hevc],
                 hardwareGatedVideoCodecs: [.proRes],
                 plannedVideoCodecs: TaptionLaunchSupportCatalog.plannedInputVideoCodecs,
                 inputContainers: TaptionLaunchSupportCatalog.supportedInputContainers,
@@ -4018,7 +4057,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(decoded.launchInputReadinessCatalog?.outputContainers, [.mp4, .mov])
         XCTAssertTrue(decoded.launchInputReadinessCatalog?.executableNowVideoCodecs.contains(.h261) == true)
         XCTAssertFalse(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(.h261) == true)
-        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1] {
+        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .ffv1, .huffYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .v308, .v210, .v408, .v410, .yuv4] {
             XCTAssertTrue(decoded.launchInputReadinessCatalog?.executableNowVideoCodecs.contains(codec) == true, codec.displayName)
             XCTAssertFalse(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(codec) == true, codec.displayName)
         }
@@ -6564,12 +6603,12 @@ final class CodecRoutePlannerTests: XCTestCase {
             ("VP8.webm", .vp8),
             ("MPEG-1.mpg", .mpeg1),
             ("MPEG-2.mpg", .mpeg2),
-            ("MPEG-4 Visual.avi", .mpeg4Visual),
+            ("MPEG-4 Visual.mov", .mpeg4Visual),
             ("H.263.3gp", .h263),
             ("H.261.h261", .h261),
             ("Flash Video.flv", .flashVideo),
             ("Microsoft MPEG-4 V2.avi", .microsoftMPEG4V2),
-            ("Microsoft MPEG-4 V3.avi", .microsoftMPEG4V3),
+            ("Microsoft MPEG-4 V3.wmv", .microsoftMPEG4V3),
             ("Motion JPEG.avi", .motionJPEG),
             ("JPEG 2000.mov", .jpeg2000),
             ("JPEG-LS.avi", .jpegLS),
@@ -6588,7 +6627,17 @@ final class CodecRoutePlannerTests: XCTestCase {
             ("Flash Screen Video 2.flv", .flashScreenVideo2),
             ("ZMBV.avi", .zmbv),
             ("CLJR.avi", .cljr),
-            ("FFV1.mkv", .ffv1),
+            ("FFV1.avi", .ffv1),
+            ("HuffYUV.avi", .huffYUV),
+            ("DVCPro HD.mov", .dvcProHD),
+            ("DV.dv", .dv),
+            ("YUV4.mov", .yuv4),
+            ("CineForm.avi", .cineForm),
+            ("DNxHD.mov", .dnxhd),
+            ("V308.mov", .v308),
+            ("V210.avi", .v210),
+            ("V408.mov", .v408),
+            ("V410.mov", .v410),
             ("H.264 AVC.mp4", .h264),
             ("H.265 HEVC.mp4", .hevc)
         ]

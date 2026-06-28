@@ -1,20 +1,111 @@
-Taption Encoder test video samples
+Taption Encoder bundled test video samples
 
-Most samples in this folder were generated as short codec-specific clips from:
-Big Buck Bunny, Blender Foundation, https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4
+Policy for this folder:
+- Each bundled video sample must be 1 MB or smaller.
+- Samples should use official/public test-media sources. When the official
+  source file is larger than 1 MB, the bundled file may be a trimmed or
+  same-codec transcode derived from that official source.
+- No purely local/generated-only sample remains after the 2026-06-28 source
+  audit.
 
-Big Buck Bunny project license reference:
-https://peach.blender.org/about/
+Official Chromium media test data:
+- AV1.mp4
+  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear-av1.mp4
+- VP9.webm
+  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear-vp9.webm
+- VP8.webm
+  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear-320x240.webm
+- H.264 AVC.mp4
+  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear.mp4
+- H.265 HEVC.mp4
+  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear-hevc-frag.mp4
 
-The Theora sample was copied from:
-https://download.blender.org/peach/trailer/trailer_400p.ogg
+Official FFmpeg samples archive:
+- MPEG-1.mpg
+  https://samples.ffmpeg.org/MPEG1/mpeg_demuxer_crash.mpg
+- MPEG-2.mpg
+  https://samples.ffmpeg.org/archive/all/mpeg+mpeg2video+ac3++resolutionchange.mpg
+- MPEG-4 Visual.mov
+  https://samples.ffmpeg.org/V-codecs/MPEG4/problem.mov
+- H.263.3gp
+  https://samples.ffmpeg.org/A-codecs/suite/3GP/3gpp_50k_h263_aac_o.3gp
+- H.261.h261
+  https://samples.ffmpeg.org/V-codecs/h261/h261-raw/video.261
+- Flash Video.flv
+  https://samples.ffmpeg.org/archive/all/flv+flv+mp3++shingo10M.flv
+- Microsoft MPEG-4 V2.avi
+  https://samples.ffmpeg.org/testsuite/mp42.avi
+- Microsoft MPEG-4 V3.wmv
+  https://samples.ffmpeg.org/testsuite/mp43.wmv
+- Motion JPEG.avi
+  https://samples.ffmpeg.org/V-codecs/MJPEGs/xawtv.avi
+- JPEG 2000.mov
+  https://samples.ffmpeg.org/jpeg2000/avj2-cdxynotimplemented.mov
+- Apple Animation.mov
+  https://samples.ffmpeg.org/V-codecs/QTRLE/Animation-Monochrome.mov
+- Cinepak.mov
+  https://samples.ffmpeg.org/V-codecs/CVID/clione.mov
+- Sorenson Video.mov
+  https://samples.ffmpeg.org/V-codecs/SVQ1/MystxSVQD12.mov
+- Sorenson Video 3.mov
+  https://samples.ffmpeg.org/V-codecs/SVQ3/blade_2_m480.mov
+- QuickTime Video.mov
+  https://samples.ffmpeg.org/V-codecs/RPZA/1701-D.mov
+- Theora.ogv
+  https://samples.ffmpeg.org/V-codecs/Theora/theora_testsuite/320x240.ogv
+- Windows Media Video.wmv
+  https://samples.ffmpeg.org/archive/all/asf+wmv2+++wmv_green_squares_wmp_ffout.wmv
+- Microsoft Video 1.avi
+  https://samples.ffmpeg.org/testsuite/msvc.avi
+- ZMBV.avi
+  https://samples.ffmpeg.org/V-codecs/ZMBV/zmbv_16bit.avi
+- FFV1.avi
+  https://samples.ffmpeg.org/avi/ffv1/testset/ffv1.0-1-0-0-0-yuv410p.avi
+- HuffYUV.avi
+  https://samples.ffmpeg.org/V-codecs/HuffYUV/cons-huffyuv.avi
+- DVCPro HD.mov
+  rsync://samples.ffmpeg.org/fate-suite/dv/dvcprohd_720p50.mov
+- DV.dv
+  https://samples.ffmpeg.org/DV-raw/shots0000.dv
+- CineForm.avi
+  rsync://samples.ffmpeg.org/fate-suite/cfhd/cfhd_422.avi
+- DNxHD.mov
+  rsync://samples.ffmpeg.org/fate-suite/dnxhd/dnxhd100_cid1260.mov
+- V308.mov
+  https://samples.ffmpeg.org/V-codecs/v308/lenav308.mov
+- V408.mov
+  https://samples.ffmpeg.org/V-codecs/v408/lenav408.mov
+- V410.mov
+  rsync://samples.ffmpeg.org/fate-suite/v410/lenav410.mov
+- YUV4.mov
+  https://samples.ffmpeg.org/V-codecs/yuv4/lenayuv4.mov
 
-The Sorenson Video 3 sample was trimmed from the FFmpeg samples archive:
-https://samples.ffmpeg.org/V-codecs/SVQ3/Vertical400kbit.sorenson3.mov
-
-The Microsoft Video 1, ASUS V1, ASUS V2, Flash Screen Video,
-Flash Screen Video 2, ZMBV, CLJR, and FFV1 samples were generated locally from
-the Taption Encoder fixture script:
-Scripts/generate_video_codec_fixtures.sh
-
-Generated and trimmed files are renamed with the codec name only.
+Official FFmpeg samples archive sources trimmed or same-codec transcoded to
+fit the 1 MB bundle limit:
+- ASUS V1.avi
+  Trimmed with video stream copy from the official 1.86 MB ASV1 source.
+  https://samples.ffmpeg.org/V-codecs/ASV1/ASV1.avi
+- ASUS V2.avi
+  Trimmed with video stream copy from the official 5.20 MB ASV2 source.
+  https://samples.ffmpeg.org/V-codecs/ASV2/asv2_320x240_3.avi
+- Flash Screen Video.flv
+  Trimmed with video stream copy from the official 1.26 MB FlashSV source.
+  https://samples.ffmpeg.org/FLV/flash_screen/screen.flv
+- Flash Screen Video 2.flv
+  Trimmed with video stream copy from the official 11.89 MB FlashSV2 source.
+  https://samples.ffmpeg.org/ffmpeg-bugs/trac/ticket2844/fflashsv2.flv
+- CLJR.avi
+  Trimmed with video stream copy from the official 5.40 MB CLJR source.
+  https://samples.ffmpeg.org/V-codecs/CLJR/testcljr.avi
+- JPEG-LS.avi
+  Trimmed with video stream copy from the official 5.87 MB JPEG-LS source.
+  https://samples.ffmpeg.org/ffmpeg-bugs/trac/ticket3086/fjpegls.avi
+- Lossless JPEG.avi
+  Same-codec LJPG transcode from the official 24.04 MB Lossless JPEG source.
+  https://samples.ffmpeg.org/mplayer-bugs/bug2175/picvideo_ljpg.avi
+- V210.avi
+  Same-codec V210 transcode from the official FFmpeg FATE V210 source.
+  rsync://samples.ffmpeg.org/fate-suite/v210/v210_720p-partial.avi
+- Apple ProRes.mov
+  Trimmed with video stream copy from the official 3.34 MB ProRes source.
+  https://samples.ffmpeg.org/ffmpeg-bugs/trac/ticket3846/ProRes_FCP.mov
