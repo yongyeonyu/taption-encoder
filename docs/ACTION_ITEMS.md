@@ -5,6 +5,9 @@ Status date: 2026-06-27
 ## Current State
 
 - Product path is AV1 to H.265 first, broad inputs to H.265 next, H.265-only video output final.
+- Action item count as of the current preview/sample verification pass: 326 total, 205 completed, 121 remaining.
+- Current execution order for the active preview/sample verification pass: 1) count remaining action items and state the active order, 2) run simulator verification, 3) make every supported bundled codec sample show a Home queue thumbnail, 4) make supported File/Folder imports carry thumbnails, 5) make preview playback show video, 6) verify preview-to-Home close/navigation, 7) normalize bundled samples to 5 seconds and keep install-time full overwrite, 8) review code and update development docs, 9) commit, push `main`, then install on iPhone.
+- Latest preview/sample verification on 2026-06-29: `Scripts/verify_bundled_test_videos.sh` passed for 55 bundled videos normalized to 5 seconds; `Scripts/run_core_codec_truth_checks.sh` passed; focused iPhone simulator XCTest passed for bundled sample matching, source notice policy, codec inspection, software-only readiness, queue thumbnails, File/Folder thumbnail source routing, preview video output, preview close/reset/source-change/encoding-start behavior, and representative bundled H.265/MP4 transcodes.
 - Release `01.00.01` is the current shipped baseline and maps to Apple marketing version `1.0.1`, build `19`.
 - Release commit is `f5af6b3` (`Prepare Taption Encoder 1.0.1 build 19`).
 - Project shell exists.

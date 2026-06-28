@@ -1,10 +1,15 @@
 Taption Encoder bundled test video samples
 
 Policy for this folder:
-- Each bundled video sample must be 1 MB or smaller.
+- Each bundled video sample is normalized to approximately 5 seconds for
+  queue thumbnail and preview verification.
+- Samples should stay 1 MB or smaller when the codec/container can reasonably
+  support that at 5 seconds. Fixed-bitrate DV-family samples are the current
+  documented exception: `DV.dv` and `DVCPro HD.mov` preserve the expected codec
+  identity and 5-second duration, so they exceed 1 MB.
 - Samples should use official/public test-media sources when available. When
   the official source file is larger than 1 MB, the bundled file may be a
-  trimmed or same-codec transcode derived from that official source.
+  trimmed, looped, or same-codec transcode derived from that official source.
 - Generated-only test-pattern fixtures are not bundled. If no official/public
   source file is found for an executable codec, the codec remains unsupported
   by the default sample bundle until a real source is available.
