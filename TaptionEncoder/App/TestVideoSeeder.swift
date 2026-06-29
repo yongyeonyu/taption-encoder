@@ -159,6 +159,11 @@ enum TaptionTestVideoSeeder {
         )
     }
 
+    static func documentsSampleFolderURL(fileManager: FileManager = .default) throws -> URL {
+        try documentsDirectoryURL(fileManager: fileManager)
+            .appendingPathComponent(documentsFolderName, isDirectory: true)
+    }
+
     private static func documentsDirectoryURL(fileManager: FileManager) throws -> URL {
         guard let documentsURL = fileManager.urls(
             for: .documentDirectory,

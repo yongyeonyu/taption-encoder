@@ -1091,6 +1091,47 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
+    func openSampleLibrary(fileManager: FileManager = .default) {
+        guard canStartNewSourceFlow() else {
+            return
+        }
+        guard state.canSelectSource else {
+            AppLogger.warning(
+                "Sample library ignored because source selection is disabled",
+                category: .folderImport,
+                metadata: ["state": "\(state)"]
+            )
+            return
+        }
+
+        do {
+            var sampleFolderURL = try TaptionTestVideoSeeder.documentsSampleFolderURL(fileManager: fileManager)
+            var isDirectory: ObjCBool = false
+            if !fileManager.fileExists(atPath: sampleFolderURL.path, isDirectory: &isDirectory) || !isDirectory.boolValue {
+                TaptionTestVideoSeeder.seedBundledSamplesIntoDocuments(fileManager: fileManager)
+                sampleFolderURL = try TaptionTestVideoSeeder.documentsSampleFolderURL(fileManager: fileManager)
+            }
+
+            AppLogger.info(
+                "Sample library opened without Files picker",
+                category: .folderImport,
+                metadata: ["path": sampleFolderURL.path]
+            )
+            startFolderFlow(url: sampleFolderURL)
+        } catch {
+            AppLogger.error(
+                "Sample library failed",
+                category: .folderImport,
+                metadata: ["error": error.localizedDescription]
+            )
+            state = .failed(HomeEncodingError(
+                title: "Samples failed",
+                message: error.localizedDescription
+            ))
+            requestSessionEndAd(reason: .failedEncoding)
+        }
+    }
+
     func startPhotosFlow(url: URL, displayName: String) {
         AppLogger.info(
             "Photos flow started",

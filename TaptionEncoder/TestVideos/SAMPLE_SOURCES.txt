@@ -18,33 +18,43 @@ Policy for this folder:
   without readable source audio may carry generated preview audio; current
   no-audio exceptions are raw `H.261.h261` and `RoQ Video.roq`.
 
-Official Chromium media test data:
+Official Blender Open Movie downloads:
 - AV1.mp4
-  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear-av1.mp4
+  Derived from Sintel trailer 00:04-00:09; video re-encoded to AV1 and the
+  original AAC source audio re-encoded to AAC.
+  https://download.blender.org/durian/trailer/sintel_trailer-480p.mp4
 - VP9.webm
-  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear-vp9.webm
+  Derived from Big Buck Bunny 320x180 00:15-00:20; video re-encoded to VP9 and
+  the original AAC source audio re-encoded to Opus.
+  https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4
 - VP8.webm
-  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear-320x240.webm
+  Derived from Sintel trailer 00:22-00:27; video re-encoded to VP8 and the
+  original AAC source audio re-encoded to Opus.
+  https://download.blender.org/durian/trailer/sintel_trailer-480p.mp4
 - H.264 AVC.mp4
-  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear.mp4
-- MPEG-1.mpg
-  Derived from Chromium bear.mp4; video re-encoded to MPEG-1 and the original
-  AAC source audio looped/re-encoded to MP2.
-  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear.mp4
-- RealVideo 1.0.rm
-  Derived from Chromium bear.mp4; video re-encoded to RealVideo 1.0 and the
-  original AAC source audio looped/re-encoded to AC-3.
-  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear.mp4
-- RealVideo.rm
-  Derived from Chromium bear.mp4; video re-encoded to RealVideo 2.0 and the
-  original AAC source audio looped/re-encoded to AC-3.
-  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear.mp4
-- Snow.avi
-  Derived from Chromium bear.mp4; video re-encoded to Snow and the original AAC
-  source audio looped/re-encoded to MP3.
-  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear.mp4
+  Derived from Big Buck Bunny 320x180 02:00-02:05; video re-encoded to H.264
+  and the original AAC source audio re-encoded to AAC.
+  https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4
 - H.265 HEVC.mp4
-  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear-hevc-frag.mp4
+  Derived from Sintel trailer 00:36-00:41; video re-encoded to H.265 and the
+  original AAC source audio re-encoded to AAC.
+  https://download.blender.org/durian/trailer/sintel_trailer-480p.mp4
+- MPEG-1.mpg
+  Derived from Big Buck Bunny 320x180 04:10-04:15; video re-encoded to MPEG-1
+  and the original AAC source audio re-encoded to MP2.
+  https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4
+- RealVideo 1.0.rm
+  Derived from Sintel trailer 00:08-00:13; video re-encoded to RealVideo 1.0
+  and the original AAC source audio re-encoded to AC-3.
+  https://download.blender.org/durian/trailer/sintel_trailer-480p.mp4
+- RealVideo.rm
+  Derived from Big Buck Bunny 320x180 05:20-05:25; video re-encoded to
+  RealVideo 2.0 and the original AAC source audio re-encoded to AC-3.
+  https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4
+- Snow.avi
+  Derived from Big Buck Bunny 320x180 01:15-01:20; video re-encoded to Snow and the
+  original AAC source audio re-encoded to MP3.
+  https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4
 
 Official FFmpeg samples archive:
 - MPEG-2.mpg

@@ -5,6 +5,7 @@ struct SourceActionBar: View {
     var canReset: Bool
     var onFiles: () -> Void
     var onFolder: () -> Void
+    var onSamples: () -> Void
     var onPhotos: () -> Void
     var onReset: () -> Void
     var controlHeight: CGFloat = 44
@@ -43,6 +44,16 @@ struct SourceActionBar: View {
                     height: controlHeight,
                     font: buttonFont,
                     action: onPhotos
+                )
+
+                PrimaryActionButton(
+                    title: "Samples",
+                    systemImage: "play.rectangle.on.rectangle",
+                    isProminent: true,
+                    isEnabled: canSelectSource,
+                    height: controlHeight,
+                    font: buttonFont,
+                    action: onSamples
                 )
 
                 PrimaryActionButton(

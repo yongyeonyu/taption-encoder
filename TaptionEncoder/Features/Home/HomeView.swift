@@ -49,6 +49,10 @@ struct HomeView: View {
                             AppLogger.info("Folder button tapped", category: .ui)
                             isFolderImporterPresented = true
                         },
+                        onSamples: {
+                            AppLogger.info("Samples button tapped", category: .ui)
+                            viewModel.openSampleLibrary()
+                        },
                         onPhotos: {
                             AppLogger.info("Photos button tapped", category: .ui)
                             isPhotosPickerPresented = true

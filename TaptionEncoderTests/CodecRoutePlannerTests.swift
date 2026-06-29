@@ -1899,7 +1899,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(sourceNotice.contains("real/VC-RV20/Dolby7.5fps1.rm"))
         XCTAssertFalse(sourceNotice.contains("snow-chroma-bug.avi"))
         XCTAssertFalse(sourceNotice.contains("audible tone track when"))
-        XCTAssertTrue(sourceNotice.contains("Derived from Chromium bear.mp4"))
+        XCTAssertFalse(sourceNotice.contains("Derived from Chromium bear.mp4"))
+        XCTAssertTrue(sourceNotice.contains("Official Blender Open Movie downloads"))
+        XCTAssertTrue(sourceNotice.contains("BigBuckBunny_320x180.mp4"))
+        XCTAssertTrue(sourceNotice.contains("sintel_trailer-480p.mp4"))
         XCTAssertTrue(sourceNotice.contains("original"))
         XCTAssertTrue(sourceNotice.contains("source audio"))
         XCTAssertFalse(sourceNotice.contains("Y41P.avi"))
@@ -2364,6 +2367,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(result.removedExistingFolder)
         XCTAssertEqual(result.copiedFilenames, [filename])
         XCTAssertEqual(try String(contentsOf: destinationFileURL), "bundle-current")
+    }
+
+    func testTestVideoSeederDocumentsSampleFolderURLUsesSharedFolderName() throws {
+        let sampleURL = try TaptionTestVideoSeeder.documentsSampleFolderURL()
+
+        XCTAssertEqual(sampleURL.lastPathComponent, TaptionTestVideoSeeder.documentsFolderName)
+        XCTAssertTrue(sampleURL.path.contains("/Documents/"))
     }
 
     func testUniversalVideoCommandPlannerRejectsEveryUnsupportedOutputCodec() {
