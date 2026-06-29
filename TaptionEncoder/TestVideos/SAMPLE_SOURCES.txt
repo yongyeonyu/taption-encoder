@@ -31,6 +31,18 @@ Official Chromium media test data:
   Derived from Chromium bear.mp4; video re-encoded to MPEG-1 and the original
   AAC source audio looped/re-encoded to MP2.
   https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear.mp4
+- RealVideo 1.0.rm
+  Derived from Chromium bear.mp4; video re-encoded to RealVideo 1.0 and the
+  original AAC source audio looped/re-encoded to AC-3.
+  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear.mp4
+- RealVideo.rm
+  Derived from Chromium bear.mp4; video re-encoded to RealVideo 2.0 and the
+  original AAC source audio looped/re-encoded to AC-3.
+  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear.mp4
+- Snow.avi
+  Derived from Chromium bear.mp4; video re-encoded to Snow and the original AAC
+  source audio looped/re-encoded to MP3.
+  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear.mp4
 - H.265 HEVC.mp4
   https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear-hevc-frag.mp4
 
@@ -65,10 +77,6 @@ Official FFmpeg samples archive:
   https://samples.ffmpeg.org/V-codecs/RPZA/1701-D.mov
 - Theora.ogv
   https://samples.ffmpeg.org/V-codecs/Theora/theora_testsuite/320x240.ogv
-- RealVideo 1.0.rm
-  https://samples.ffmpeg.org/real/VC-RV10/thankyou.rm
-- RealVideo.rm
-  https://samples.ffmpeg.org/real/VC-RV20/Dolby7.5fps1.rm
 - Windows Media Video.wmv
   https://samples.ffmpeg.org/archive/all/asf+wmv2+++wmv_green_squares_wmp_ffout.wmv
 - Microsoft Video 1.avi
@@ -133,9 +141,6 @@ fit the 1 MB bundle limit:
 - V210.avi
   Same-codec V210 transcode from the official FFmpeg FATE V210 source.
   rsync://samples.ffmpeg.org/fate-suite/v210/v210_720p-partial.avi
-- Snow.avi
-  Trimmed with video stream copy from the official 6.43 MB Snow source.
-  https://samples.ffmpeg.org/V-codecs/SNOW/snow-chroma-bug.avi
 - PNG Video.avi
   Same-codec PNG video transcode from the official 2.00 MB FFmpeg FATE PNG1 source.
   http://fate-suite.ffmpeg.org/png1/corepng-partial.avi

@@ -1833,6 +1833,30 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(extensionLegacyFileExtensions, appLegacyFileExtensions)
         XCTAssertTrue(extensionLegacyFileExtensions.contains("h261"))
         XCTAssertTrue(extensionLegacyConformance.isSuperset(of: ["public.movie", "public.video"]))
+        XCTAssertTrue(projectText.contains("SampleThumbnailCatalog.swift in Sources"))
+        XCTAssertTrue(projectText.contains("SampleThumbnails in Resources"))
+        let extensionResourcesBlock = try XCTUnwrap(
+            projectObjectBlock(
+                id: "B10000000000000000000600",
+                label: "Resources",
+                in: projectText
+            )
+        )
+        let testResourcesBlock = try XCTUnwrap(
+            projectObjectBlock(
+                id: "8A2B3C4D5E6F701000000600",
+                label: "Resources",
+                in: projectText
+            )
+        )
+        XCTAssertTrue(
+            extensionResourcesBlock.contains("B10000000000000000000004 /* SampleThumbnails in Resources */"),
+            "Thumbnail extension target must embed SampleThumbnails for Files thumbnails."
+        )
+        XCTAssertFalse(
+            testResourcesBlock.contains("SampleThumbnails in Resources"),
+            "SampleThumbnails should not be routed only into the test bundle."
+        )
         XCTAssertTrue(projectText.contains("TaptionEncoderThumbnailExtension.appex in Embed Foundation Extensions"))
         XCTAssertTrue(projectText.contains("com.apple.product-type.app-extension"))
         XCTAssertTrue(projectText.contains("PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder.thumbnail"))
@@ -1871,11 +1895,62 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(sourceNotice.contains("Generated codec-conformance fixture"))
         XCTAssertFalse(sourceNotice.contains("Generated with FFmpeg"))
         XCTAssertFalse(sourceNotice.contains("mpeg_demuxer_crash.mpg"))
+        XCTAssertFalse(sourceNotice.contains("real/VC-RV10/thankyou.rm"))
+        XCTAssertFalse(sourceNotice.contains("real/VC-RV20/Dolby7.5fps1.rm"))
+        XCTAssertFalse(sourceNotice.contains("snow-chroma-bug.avi"))
         XCTAssertFalse(sourceNotice.contains("audible tone track when"))
         XCTAssertTrue(sourceNotice.contains("Derived from Chromium bear.mp4"))
         XCTAssertTrue(sourceNotice.contains("original"))
         XCTAssertTrue(sourceNotice.contains("source audio"))
         XCTAssertFalse(sourceNotice.contains("Y41P.avi"))
+    }
+
+    func testBundledSampleThumbnailResourcesCoverSeededVideos() throws {
+        let testVideosURL = bundledTestVideosURL()
+        let thumbnailsURL = testVideosURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(SampleThumbnailCatalog.resourceSubdirectory, isDirectory: true)
+        let videoFilenames = try FileManager.default
+            .contentsOfDirectory(atPath: testVideosURL.path)
+            .filter { !$0.hasPrefix(".") && $0 != TaptionTestVideoSeeder.sourceNoticeFilename }
+            .sorted()
+        let thumbnailFilenames = try FileManager.default
+            .contentsOfDirectory(atPath: thumbnailsURL.path)
+            .filter { $0.hasSuffix(".png") }
+            .sorted()
+
+        XCTAssertEqual(Set(videoFilenames), SampleThumbnailCatalog.expectedSampleFilenames)
+        XCTAssertEqual(thumbnailFilenames.count, videoFilenames.count)
+
+        for filename in videoFilenames {
+            let sampleURL = testVideosURL.appendingPathComponent(filename)
+            let resourceName = try XCTUnwrap(SampleThumbnailCatalog.resourceName(for: sampleURL), filename)
+            let thumbnailURL = thumbnailsURL.appendingPathComponent("\(resourceName).png")
+            let data = try Data(contentsOf: thumbnailURL)
+            let image = try XCTUnwrap(UIImage(data: data), filename)
+
+            XCTAssertEqual(image.size.width, 320, filename)
+            XCTAssertEqual(image.size.height, 180, filename)
+            XCTAssertGreaterThan(data.count, 128, filename)
+        }
+
+        let visiblePreviewSamples = [
+            "H.261.h261",
+            "R210.avi",
+            "RealVideo 1.0.rm",
+            "RealVideo.rm",
+            "RoQ Video.roq",
+            "Snow.avi"
+        ]
+        for filename in visiblePreviewSamples {
+            let sampleURL = testVideosURL.appendingPathComponent(filename)
+            let resourceName = try XCTUnwrap(SampleThumbnailCatalog.resourceName(for: sampleURL), filename)
+            let thumbnailURL = thumbnailsURL.appendingPathComponent("\(resourceName).png")
+            let metrics = try visiblePixelMetrics(fromPNGData: try Data(contentsOf: thumbnailURL))
+
+            XCTAssertGreaterThan(metrics.nonBlackRatio, 0.2, filename)
+            XCTAssertGreaterThan(metrics.standardDeviation, 4, filename)
+        }
     }
 
     func testBundledAvailableNowSamplesInspectToExpectedLaunchCodecs() async throws {
@@ -7673,6 +7748,15 @@ final class CodecRoutePlannerTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("TaptionEncoder/TestVideos", isDirectory: true)
+    }
+
+    private func projectObjectBlock(id: String, label: String, in projectText: String) -> String? {
+        let needle = "\t\t\(id) /* \(label) */ = {"
+        guard let start = projectText.range(of: needle),
+              let end = projectText[start.upperBound...].range(of: "\n\t\t};") else {
+            return nil
+        }
+        return String(projectText[start.lowerBound..<end.upperBound])
     }
 
     private func filteredBundledAvailableNowSampleFilenames() -> [String] {

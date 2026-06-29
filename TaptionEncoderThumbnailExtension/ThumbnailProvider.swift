@@ -16,6 +16,15 @@ final class ThumbnailProvider: QLThumbnailProvider {
         let targetSize = TaptionThumbnailSupport.targetSize(for: request)
         let targetScale = max(request.scale, 1)
 
+        if let sampleImage = SampleThumbnailCatalog.image(
+            for: sourceURL,
+            size: targetSize,
+            scale: targetScale
+        ) {
+            handler(TaptionThumbnailSupport.reply(for: sampleImage, sourceURL: sourceURL, size: targetSize), nil)
+            return
+        }
+
         if TaptionThumbnailSupport.canRenderFrameWithAVFoundation(sourceURL) {
             TaptionThumbnailSupport.avFoundationImage(
                 for: sourceURL,

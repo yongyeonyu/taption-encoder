@@ -51,6 +51,7 @@
 		4A2B3C4D5E6F701000000013 /* LoadedFilesPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000113 /* LoadedFilesPanelView.swift */; };
 		4A2B3C4D5E6F701000000014 /* HomeQueueModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000114 /* HomeQueueModels.swift */; };
 		4A2B3C4D5E6F701000000015 /* HomeMenuSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000115 /* HomeMenuSheetView.swift */; };
+		4A2B3C4D5E6F701000000016 /* SampleThumbnailCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000116 /* SampleThumbnailCatalog.swift */; };
 		5A2B3C4D5E6F701000000001 /* SwiftVLC in Frameworks */ = {isa = PBXBuildFile; productRef = 5A2B3C4D5E6F701000000102 /* SwiftVLC */; };
 		6A2B3C4D5E6F701000000001 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = 6A2B3C4D5E6F701000000102 /* GoogleMobileAds */; };
 		6A2B3C4D5E6F701000000002 /* GoogleUserMessagingPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = 6A2B3C4D5E6F701000000103 /* GoogleUserMessagingPlatform */; };
@@ -80,9 +81,12 @@
 		8A2B3C4D5E6F701000000003 /* ProjectDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000103 /* ProjectDocumentTests.swift */; };
 		AA2B3C4D5E6F701000000001 /* TestVideoSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2B3C4D5E6F701000000101 /* TestVideoSeeder.swift */; };
 		AA2B3C4D5E6F701000000002 /* TestVideos in Resources */ = {isa = PBXBuildFile; fileRef = AA2B3C4D5E6F701000000102 /* TestVideos */; };
+		AA2B3C4D5E6F701000000003 /* SampleThumbnails in Resources */ = {isa = PBXBuildFile; fileRef = AA2B3C4D5E6F701000000103 /* SampleThumbnails */; };
 		9A2B3C4D5E6F701000000001 /* OpenSourceNotices in Resources */ = {isa = PBXBuildFile; fileRef = 9A2B3C4D5E6F701000000101 /* OpenSourceNotices */; };
 		B10000000000000000000001 /* ThumbnailProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000101 /* ThumbnailProvider.swift */; };
 		B10000000000000000000002 /* TaptionEncoderThumbnailExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B10000000000000000000100 /* TaptionEncoderThumbnailExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B10000000000000000000003 /* SampleThumbnailCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000116 /* SampleThumbnailCatalog.swift */; };
+		B10000000000000000000004 /* SampleThumbnails in Resources */ = {isa = PBXBuildFile; fileRef = AA2B3C4D5E6F701000000103 /* SampleThumbnails */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -165,6 +169,7 @@
 		4A2B3C4D5E6F701000000113 /* LoadedFilesPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadedFilesPanelView.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000114 /* HomeQueueModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeQueueModels.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000115 /* HomeMenuSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeMenuSheetView.swift; sourceTree = "<group>"; };
+		4A2B3C4D5E6F701000000116 /* SampleThumbnailCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleThumbnailCatalog.swift; sourceTree = "<group>"; };
 		7A2B3C4D5E6F701000000101 /* CodecAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecAlgorithm.swift; sourceTree = "<group>"; };
 		7A2B3C4D5E6F701000000102 /* HW_AV1HEVCCodecAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HW_AV1HEVCCodecAlgorithm.swift; sourceTree = "<group>"; };
 		7A2B3C4D5E6F701000000103 /* SW_AV1HEVCCodecAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SW_AV1HEVCCodecAlgorithm.swift; sourceTree = "<group>"; };
@@ -192,6 +197,7 @@
 		8A2B3C4D5E6F701000000103 /* ProjectDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDocumentTests.swift; sourceTree = "<group>"; };
 		AA2B3C4D5E6F701000000101 /* TestVideoSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestVideoSeeder.swift; sourceTree = "<group>"; };
 		AA2B3C4D5E6F701000000102 /* TestVideos */ = {isa = PBXFileReference; lastKnownFileType = folder; path = TestVideos; sourceTree = "<group>"; };
+		AA2B3C4D5E6F701000000103 /* SampleThumbnails */ = {isa = PBXFileReference; lastKnownFileType = folder; path = SampleThumbnails; sourceTree = "<group>"; };
 		9A2B3C4D5E6F701000000101 /* OpenSourceNotices */ = {isa = PBXFileReference; lastKnownFileType = folder; path = OpenSourceNotices; sourceTree = "<group>"; };
 		B10000000000000000000100 /* TaptionEncoderThumbnailExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TaptionEncoderThumbnailExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10000000000000000000101 /* ThumbnailProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailProvider.swift; sourceTree = "<group>"; };
@@ -250,6 +256,7 @@
 				2A2B3C4D5E6F701000000300 /* Core */,
 				1A2B3C4D5E6F701000000103 /* Assets.xcassets */,
 				AA2B3C4D5E6F701000000102 /* TestVideos */,
+				AA2B3C4D5E6F701000000103 /* SampleThumbnails */,
 				9A2B3C4D5E6F701000000101 /* OpenSourceNotices */,
 			);
 			path = TaptionEncoder;
@@ -379,6 +386,7 @@
 		4A2B3C4D5E6F701000000203 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				4A2B3C4D5E6F701000000116 /* SampleThumbnailCatalog.swift */,
 				4A2B3C4D5E6F701000000204 /* UI */,
 			);
 			path = Shared;
@@ -639,6 +647,7 @@
 			files = (
 				1A2B3C4D5E6F701000000003 /* Assets.xcassets in Resources */,
 				AA2B3C4D5E6F701000000002 /* TestVideos in Resources */,
+				AA2B3C4D5E6F701000000003 /* SampleThumbnails in Resources */,
 				9A2B3C4D5E6F701000000001 /* OpenSourceNotices in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -654,6 +663,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B10000000000000000000004 /* SampleThumbnails in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -705,10 +715,11 @@
 				4A2B3C4D5E6F701000000010 /* VideoDocumentPicker.swift in Sources */,
 				4A2B3C4D5E6F701000000011 /* ImportedPhotoVideo.swift in Sources */,
 				4A2B3C4D5E6F701000000012 /* ImportableVideoTypes.swift in Sources */,
-				4A2B3C4D5E6F701000000013 /* LoadedFilesPanelView.swift in Sources */,
-				4A2B3C4D5E6F701000000014 /* HomeQueueModels.swift in Sources */,
-				4A2B3C4D5E6F701000000015 /* HomeMenuSheetView.swift in Sources */,
-				7A2B3C4D5E6F701000000001 /* CodecAlgorithm.swift in Sources */,
+					4A2B3C4D5E6F701000000013 /* LoadedFilesPanelView.swift in Sources */,
+					4A2B3C4D5E6F701000000014 /* HomeQueueModels.swift in Sources */,
+					4A2B3C4D5E6F701000000015 /* HomeMenuSheetView.swift in Sources */,
+					4A2B3C4D5E6F701000000016 /* SampleThumbnailCatalog.swift in Sources */,
+					7A2B3C4D5E6F701000000001 /* CodecAlgorithm.swift in Sources */,
 				7A2B3C4D5E6F701000000002 /* HW_AV1HEVCCodecAlgorithm.swift in Sources */,
 				7A2B3C4D5E6F701000000003 /* SW_AV1HEVCCodecAlgorithm.swift in Sources */,
 				7A2B3C4D5E6F701000000004 /* HW_CodecCapabilityProbe.swift in Sources */,
@@ -747,6 +758,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B10000000000000000000001 /* ThumbnailProvider.swift in Sources */,
+				B10000000000000000000003 /* SampleThumbnailCatalog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

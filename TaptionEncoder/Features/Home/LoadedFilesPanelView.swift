@@ -551,6 +551,10 @@ enum QueueVideoThumbnailRenderer {
         pixelSize: CGSize = defaultPixelSize,
         timeout: Duration = .seconds(6)
     ) async throws -> UIImage {
+        if let sampleThumbnail = SampleThumbnailCatalog.image(for: sourceURL) {
+            return sampleThumbnail
+        }
+
         do {
             return try await mediaThumbnailImage(for: sourceURL, pixelSize: pixelSize, timeout: timeout)
         } catch {
