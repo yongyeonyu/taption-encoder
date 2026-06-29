@@ -1556,6 +1556,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             .deletingLastPathComponent()
         let plistURL = rootURL
             .appendingPathComponent("TaptionEncoder/Info.plist")
+        let thumbnailProviderURL = rootURL
+            .appendingPathComponent("TaptionEncoderThumbnailExtension/ThumbnailProvider.swift")
         let plistData = try Data(contentsOf: plistURL)
         let plist = try XCTUnwrap(
             PropertyListSerialization.propertyList(
@@ -1570,6 +1572,16 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertNil(plist["UTImportedTypeDeclarations"])
         let documentTypes = try XCTUnwrap(
             plist["CFBundleDocumentTypes"] as? [[String: Any]]
+        )
+        let legacyDocumentType = try XCTUnwrap(
+            documentTypes.first { documentType in
+                (documentType["LSItemContentTypes"] as? [String])?.contains("com.taption.legacy-video") == true
+            }
+        )
+        let standardVideoDocumentType = try XCTUnwrap(
+            documentTypes.first { documentType in
+                (documentType["LSItemContentTypes"] as? [String])?.contains("public.movie") == true
+            }
         )
         let plistExtensions = Set(
             declarations.flatMap { declaration -> [String] in
@@ -1629,18 +1641,53 @@ final class CodecRoutePlannerTests: XCTestCase {
             "public.3gpp",
             "public.3gpp2"
         ]
+        let thumbnailProviderText = try String(contentsOf: thumbnailProviderURL, encoding: .utf8)
+        let thumbnailExtensionLiterals = Set(
+            thumbnailProviderText
+                .split(separator: "\n")
+                .compactMap { line -> String? in
+                    let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard trimmedLine.hasPrefix("\"") else {
+                        return nil
+                    }
+                    let valueStart = trimmedLine.index(after: trimmedLine.startIndex)
+                    guard let valueEnd = trimmedLine[valueStart...].firstIndex(of: "\"") else {
+                        return nil
+                    }
+                    return String(trimmedLine[valueStart..<valueEnd])
+                }
+        )
+        let thumbnailLegacyExtensions = thumbnailExtensionLiterals.subtracting(systemHandledExtensions)
 
         XCTAssertTrue(
             plistExtensions.isSuperset(of: externalPlayerExtensions),
             "Missing Info.plist legacy video extensions: \(externalPlayerExtensions.subtracting(plistExtensions).sorted().joined(separator: ", "))"
         )
+        XCTAssertEqual(
+            plistExtensions,
+            externalPlayerExtensions,
+            "Info.plist should only claim currently supported Taption Encoder-only video extensions."
+        )
         XCTAssertTrue(
             plistExtensions.isDisjoint(with: systemHandledExtensions),
             "Info.plist should not claim default-player video extensions: \(plistExtensions.intersection(systemHandledExtensions).sorted().joined(separator: ", "))"
         )
+        XCTAssertEqual(
+            thumbnailLegacyExtensions,
+            externalPlayerExtensions,
+            "Thumbnail extension should only generate legacy posters for currently supported Taption Encoder-only video extensions."
+        )
+        XCTAssertTrue(
+            thumbnailExtensionLiterals.isSuperset(of: systemHandledExtensions),
+            "Thumbnail extension should preserve frame thumbnails for system-handled video extensions."
+        )
         XCTAssertTrue(documentContentTypes.isSuperset(of: ["com.taption.legacy-video"]))
         XCTAssertTrue(documentContentTypes.isSuperset(of: standardVideoContentTypes))
         XCTAssertEqual(documentHandlerRanks, ["Owner", "Alternate"])
+        XCTAssertEqual(legacyDocumentType["LSHandlerRank"] as? String, "Owner")
+        XCTAssertEqual(legacyDocumentType["CFBundleTypeRole"] as? String, "Viewer")
+        XCTAssertEqual(standardVideoDocumentType["LSHandlerRank"] as? String, "Alternate")
+        XCTAssertEqual(standardVideoDocumentType["CFBundleTypeRole"] as? String, "Viewer")
         XCTAssertEqual(documentIconFiles, ["AppIcon60x60"])
         XCTAssertEqual(exportedIdentifiers, ["com.taption.legacy-video"])
         XCTAssertTrue(exportedConformance.isSuperset(of: ["public.movie", "public.video"]))
@@ -1660,6 +1707,60 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("dvr-ms"))
         XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("vc1"))
         XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("h261"))
+    }
+
+    func testQuickLookThumbnailExtensionCoversDocumentBrowserVideoTypes() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let appPlistURL = rootURL.appendingPathComponent("TaptionEncoder/Info.plist")
+        let extensionPlistURL = rootURL.appendingPathComponent("TaptionEncoderThumbnailExtension/Info.plist")
+        let projectURL = rootURL.appendingPathComponent("TaptionEncoder.xcodeproj/project.pbxproj")
+        let appPlist = try XCTUnwrap(
+            PropertyListSerialization.propertyList(
+                from: try Data(contentsOf: appPlistURL),
+                options: [],
+                format: nil
+            ) as? [String: Any]
+        )
+        let extensionPlist = try XCTUnwrap(
+            PropertyListSerialization.propertyList(
+                from: try Data(contentsOf: extensionPlistURL),
+                options: [],
+                format: nil
+            ) as? [String: Any]
+        )
+        let documentTypes = try XCTUnwrap(
+            appPlist["CFBundleDocumentTypes"] as? [[String: Any]]
+        )
+        let documentContentTypes = Set(
+            documentTypes.flatMap { documentType in
+                documentType["LSItemContentTypes"] as? [String] ?? []
+            }
+        )
+        let extensionInfo = try XCTUnwrap(extensionPlist["NSExtension"] as? [String: Any])
+        let attributes = try XCTUnwrap(extensionInfo["NSExtensionAttributes"] as? [String: Any])
+        let supportedContentTypes = Set(
+            try XCTUnwrap(attributes["QLSupportedContentTypes"] as? [String])
+        )
+        let projectText = try String(contentsOf: projectURL, encoding: .utf8)
+
+        XCTAssertEqual(
+            extensionInfo["NSExtensionPointIdentifier"] as? String,
+            "com.apple.quicklook.thumbnail"
+        )
+        XCTAssertEqual(
+            extensionInfo["NSExtensionPrincipalClass"] as? String,
+            "$(PRODUCT_MODULE_NAME).ThumbnailProvider"
+        )
+        XCTAssertTrue(
+            supportedContentTypes.isSuperset(of: documentContentTypes),
+            "Thumbnail extension must cover every Files-visible video type: \(documentContentTypes.subtracting(supportedContentTypes).sorted().joined(separator: ", "))"
+        )
+        XCTAssertTrue(projectText.contains("TaptionEncoderThumbnailExtension.appex in Embed Foundation Extensions"))
+        XCTAssertTrue(projectText.contains("com.apple.product-type.app-extension"))
+        XCTAssertTrue(projectText.contains("PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder.thumbnail"))
+        XCTAssertTrue(projectText.contains("APPLICATION_EXTENSION_API_ONLY = YES"))
     }
 
     func testBundledTestVideosMatchCurrentLaunchVideoSupport() throws {
@@ -1772,7 +1873,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     func testQueuePreviewVideoViewProducesVideoOutputForFirstBundledSample() async throws {
         #if targetEnvironment(simulator)
         let sampleURL = bundledTestVideosURL().appendingPathComponent("ASUS V1.avi")
-        let player = Player(instance: QueuePreviewPlayerFactory.softwareDecodeInstance)
+        let player = QueuePreviewPlayerFactory.makePreviewPlayer()
         let media = try Media(url: sampleURL)
         QueuePreviewPlayerFactory.configureSoftwareDecodeOptions(on: media, sourceURL: sampleURL)
 
@@ -1824,12 +1925,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         #if targetEnvironment(simulator)
         let sampleFilenames = [
             "AV1.mp4",
-            "Ut Video.avi"
+            "Ut Video.avi",
+            "Apple Animation.mov"
         ]
 
         for filename in sampleFilenames {
             let sampleURL = bundledTestVideosURL().appendingPathComponent(filename)
-            let player = Player(instance: QueuePreviewPlayerFactory.softwareDecodeInstance)
+            let player = QueuePreviewPlayerFactory.makePreviewPlayer()
             let media = try Media(url: sampleURL)
             QueuePreviewPlayerFactory.configureSoftwareDecodeOptions(on: media, sourceURL: sampleURL)
 
@@ -1874,6 +1976,30 @@ final class CodecRoutePlannerTests: XCTestCase {
         #else
         throw XCTSkip("Preview visual regression test is simulator-scoped.")
         #endif
+    }
+
+    func testQueuePreviewFactoryKeepsQuickTimeDefaultDemuxAndFallsBackToAVFormat() {
+        let movURL = URL(fileURLWithPath: "/tmp/Apple Animation.mov")
+        let aviURL = URL(fileURLWithPath: "/tmp/ASUS V1.avi")
+
+        XCTAssertEqual(QueuePreviewPlayerFactory.previewDemuxModes(for: movURL), [.automatic, .avformat])
+        XCTAssertFalse(
+            QueuePreviewPlayerFactory
+                .softwareDecodeOptions(for: movURL, demuxMode: .automatic)
+                .contains(":demux=avformat")
+        )
+        XCTAssertTrue(
+            QueuePreviewPlayerFactory
+                .softwareDecodeOptions(for: movURL, demuxMode: .avformat)
+                .contains(":demux=avformat")
+        )
+
+        XCTAssertEqual(QueuePreviewPlayerFactory.previewDemuxModes(for: aviURL), [.avformat, .automatic])
+        XCTAssertTrue(
+            QueuePreviewPlayerFactory
+                .softwareDecodeOptions(for: aviURL, demuxMode: .automatic)
+                .contains(":demux=avformat")
+        )
     }
 
     func testBundledProResSampleKeepsHardwareGate() async throws {

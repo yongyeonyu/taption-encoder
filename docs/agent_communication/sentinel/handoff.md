@@ -1,5 +1,7 @@
 # Sentinel Handoffs Index
 
+- **Latest Handoff**: [docs/agent_communication/sentinel/handoffs/20260630-004045-watchdog-handoff-probe.md](file:///Users/u_mo_c/Documents/taption_encoder/docs/agent_communication/sentinel/handoffs/20260630-004045-watchdog-handoff-probe.md) (2026-06-30 00:40 - Watchdog Handoff Probe Verification)
+- [docs/agent_communication/sentinel/handoffs/20260629-222958-watchdog-handoff-probe.md](file:///Users/u_mo_c/Documents/taption_encoder/docs/agent_communication/sentinel/handoffs/20260629-222958-watchdog-handoff-probe.md) (2026-06-29 22:29 - Watchdog Handoff Probe Verification)
 - **Latest Valid Taption Encoder Handoff**: [docs/archive/agent_communication/handoffs/20260629-041703-playback-triage.md](file:///Users/u_mo_c/Documents/taption_encoder/docs/archive/agent_communication/handoffs/20260629-041703-playback-triage.md) (2026-06-29 13:17 - Taption Encoder preview playback failure triage)
 - [docs/archive/agent_communication/handoffs/20260629-encoder-only-route-probe.md](file:///Users/u_mo_c/Documents/taption_encoder/docs/archive/agent_communication/handoffs/20260629-encoder-only-route-probe.md) (2026-06-29 13:16 - Taption Encoder route sanity probe)
 - [docs/archive/agent_communication/handoffs/20260629-131430-hangyeol-handoff.md](file:///Users/u_mo_c/Documents/taption_encoder/docs/archive/agent_communication/handoffs/20260629-131430-hangyeol-handoff.md) (2026-06-29 13:14 - Hangyeol preview playback failure triage handoff)

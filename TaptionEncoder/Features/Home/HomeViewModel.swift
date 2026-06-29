@@ -1300,7 +1300,6 @@ final class HomeViewModel: ObservableObject {
 
     private func currentReviewPreview(for id: String) -> QueueVideoPreview? {
         guard let review = currentReview ?? state.preparedEncodingReview,
-              review.videoInfo.isRouteEncodable,
               isPreviewableInCurrentBuild(asset: review.job.asset),
               id == review.source.displayName
                 || id == review.source.url.absoluteString

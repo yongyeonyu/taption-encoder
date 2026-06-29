@@ -245,10 +245,12 @@ struct HomeView: View {
         ) { preview in
             QueueVideoPreviewView(
                 preview: preview,
+                adUnitID: viewModel.bannerAdUnitID,
                 onClose: { viewModel.dismissPreview() },
                 onPrevious: { viewModel.openPreviousPreview() },
                 onNext: { viewModel.openNextPreview() }
             )
+            .id(preview.id)
         }
         .photosPicker(
             isPresented: $isPhotosPickerPresented,
@@ -857,12 +859,13 @@ private struct QueuePreviewGestureFeedback: Equatable {
 
 private struct QueueVideoPreviewView: View {
     var preview: QueueVideoPreview
+    var adUnitID: String
     var onClose: () -> Void
     var onPrevious: () -> Void
     var onNext: () -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var player = Player(instance: QueuePreviewPlayerFactory.softwareDecodeInstance)
+    @State private var player = QueuePreviewPlayerFactory.makePreviewPlayer()
     @State private var playbackError: String?
     @State private var isLoading = true
     @State private var didRequestShutdown = false
@@ -887,11 +890,19 @@ private struct QueueVideoPreviewView: View {
 
                 videoGestureLayer(containerSize: proxy.size)
 
+                previewTopBanner(
+                    containerSize: proxy.size,
+                    safeAreaInsets: proxy.safeAreaInsets
+                )
+
                 if areControlsVisible {
                     controlsBackdrop
                         .transition(.opacity)
 
-                    controlsOverlay
+                    controlsOverlay(
+                        containerSize: proxy.size,
+                        safeAreaInsets: proxy.safeAreaInsets
+                    )
                         .transition(.opacity)
                 }
 
@@ -969,11 +980,45 @@ private struct QueueVideoPreviewView: View {
         .allowsHitTesting(false)
     }
 
-    private var controlsOverlay: some View {
+    private func previewTopBanner(
+        containerSize: CGSize,
+        safeAreaInsets: EdgeInsets
+    ) -> some View {
+        VStack(spacing: 0) {
+            AdMobBannerSlotView(
+                adUnitID: adUnitID,
+                displayScale: previewBannerScale(containerSize: containerSize)
+            )
+            .padding(.top, max(safeAreaInsets.top, 8))
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color.black.opacity(0.82),
+                        Color.black.opacity(0.58),
+                        Color.black.opacity(0.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .allowsHitTesting(false)
+            )
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .ignoresSafeArea(edges: .top)
+    }
+
+    private func controlsOverlay(
+        containerSize: CGSize,
+        safeAreaInsets: EdgeInsets
+    ) -> some View {
         VStack(spacing: 0) {
             previewHeader
                 .padding(.horizontal, 16)
-                .padding(.top, 14)
+                .padding(.top, previewHeaderTopPadding(containerSize: containerSize, safeAreaInsets: safeAreaInsets))
 
             Spacer(minLength: 0)
 
@@ -981,6 +1026,21 @@ private struct QueueVideoPreviewView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 18)
         }
+    }
+
+    private func previewBannerScale(containerSize: CGSize) -> CGFloat {
+        let widthFitScale = max(min((containerSize.width - 24) / 320, 1), 0.72)
+        let heightScale = containerSize.width > containerSize.height ? 0.78 : 1
+        return min(widthFitScale, heightScale)
+    }
+
+    private func previewHeaderTopPadding(
+        containerSize: CGSize,
+        safeAreaInsets: EdgeInsets
+    ) -> CGFloat {
+        max(safeAreaInsets.top, 8)
+            + (50 * previewBannerScale(containerSize: containerSize))
+            + 24
     }
 
     private var previewHeader: some View {
@@ -1260,18 +1320,24 @@ private struct QueueVideoPreviewView: View {
             try? await Task.sleep(nanoseconds: 120_000_000)
             await waitForVideoSurfaceAttachment()
             try Task.checkCancellation()
-            let media = try makePreviewMedia()
-            try player.play(media)
-            if !(await waitForVideoOutput()) {
+            let didProduceVideoOutput = try await playPreviewWithFallbacks()
+            if !didProduceVideoOutput {
+                player.stop()
+                playbackError = "Preview video output is unavailable on this device."
                 AppLogger.warning(
-                    "Queue preview started without a video output",
+                    "Queue preview failed to produce a video output",
                     category: .ui,
                     metadata: [
                         "name": preview.displayName,
+                        "codec": preview.codecBadge,
+                        "container": preview.sourceURL.pathExtension.lowercased(),
                         "activeVideoOutputs": "\(player.activeVideoOutputs)",
                         "hasVideoOutput": "\(player.hasVideoOutput)"
                     ]
                 )
+                isLoading = false
+                showControls(scheduleAutoHide: false)
+                return
             }
             isLoading = false
             showControls(scheduleAutoHide: false)
@@ -1593,9 +1659,69 @@ private struct QueueVideoPreviewView: View {
         return CGSize(width: width, height: width / CGFloat(aspectRatio))
     }
 
-    private func makePreviewMedia() throws -> Media {
+    private func playPreviewWithFallbacks() async throws -> Bool {
+        let demuxModes = QueuePreviewPlayerFactory.previewDemuxModes(for: preview.sourceURL)
+        for (index, demuxMode) in demuxModes.enumerated() {
+            player.stop()
+            try? await Task.sleep(nanoseconds: index == 0 ? 80_000_000 : 180_000_000)
+
+            let media = try makePreviewMedia(demuxMode: demuxMode)
+            AppLogger.info(
+                "Queue preview playback attempt started",
+                category: .ui,
+                metadata: [
+                    "name": preview.displayName,
+                    "attempt": "\(index + 1)",
+                    "demux": demuxMode.logValue
+                ]
+            )
+            try player.play(media)
+            if await waitForVideoOutput() {
+                AppLogger.info(
+                    "Queue preview video output ready",
+                    category: .ui,
+                    metadata: [
+                        "name": preview.displayName,
+                        "attempt": "\(index + 1)",
+                        "demux": demuxMode.logValue,
+                        "activeVideoOutputs": "\(player.activeVideoOutputs)",
+                        "hasVideoOutput": "\(player.hasVideoOutput)"
+                    ]
+                )
+                return true
+            }
+
+            AppLogger.warning(
+                "Queue preview playback attempt had no video output",
+                category: .ui,
+                metadata: [
+                    "name": preview.displayName,
+                    "attempt": "\(index + 1)",
+                    "demux": demuxMode.logValue,
+                    "activeVideoOutputs": "\(player.activeVideoOutputs)",
+                    "hasVideoOutput": "\(player.hasVideoOutput)"
+                ]
+            )
+        }
+        return false
+    }
+
+    private func makePreviewMedia(demuxMode: QueuePreviewDemuxMode) throws -> Media {
         let media = try Media(url: preview.sourceURL)
-        QueuePreviewPlayerFactory.configureSoftwareDecodeOptions(on: media, sourceURL: preview.sourceURL)
+        let options = QueuePreviewPlayerFactory.configureSoftwareDecodeOptions(
+            on: media,
+            sourceURL: preview.sourceURL,
+            demuxMode: demuxMode
+        )
+        AppLogger.info(
+            "Queue preview media configured",
+            category: .ui,
+            metadata: [
+                "name": preview.displayName,
+                "demux": demuxMode.logValue,
+                "options": options.joined(separator: "|")
+            ]
+        )
         return media
     }
 
@@ -1649,7 +1775,7 @@ private struct QueueVideoPreviewView: View {
 
     @MainActor
     private func waitForVideoOutput() async -> Bool {
-        for _ in 0..<30 {
+        for _ in 0..<80 {
             if player.hasVideoOutput || player.activeVideoOutputs > 0 {
                 return true
             }
@@ -1936,43 +2062,105 @@ private enum QueuePreviewAudioSessionController {
     }
 }
 
+enum QueuePreviewDemuxMode: Equatable {
+    case automatic
+    case avformat
+
+    var logValue: String {
+        switch self {
+        case .automatic:
+            return "automatic"
+        case .avformat:
+            return "avformat"
+        }
+    }
+}
+
 enum QueuePreviewPlayerFactory {
     static let softwareDecodeInstance = makeSoftwareDecodeInstance(applicationName: "Taption Encoder Preview")
     static let thumbnailDecodeInstance = makeSoftwareDecodeInstance(applicationName: "Taption Encoder Thumbnail")
 
-    static func configureSoftwareDecodeOptions(on media: Media, sourceURL: URL, allowsAudio: Bool = true) {
-        media.addOption(":avcodec-hw=none")
-        media.addOption(":no-sub-autodetect-file")
-        media.addOption(":no-drop-late-frames")
-        media.addOption(":no-skip-frames")
-        if !allowsAudio {
-            media.addOption(":no-audio")
+    @MainActor
+    static func makePreviewPlayer() -> Player {
+        Player(
+            instance: makeSoftwareDecodeInstance(
+                applicationName: "Taption Encoder Preview \(UUID().uuidString)"
+            )
+        )
+    }
+
+    @discardableResult
+    static func configureSoftwareDecodeOptions(
+        on media: Media,
+        sourceURL: URL,
+        allowsAudio: Bool = true,
+        demuxMode: QueuePreviewDemuxMode = .automatic
+    ) -> [String] {
+        let options = softwareDecodeOptions(
+            for: sourceURL,
+            allowsAudio: allowsAudio,
+            demuxMode: demuxMode
+        )
+        for option in options {
+            media.addOption(option)
         }
-        if shouldUseAVFormatDemux(for: sourceURL) {
-            media.addOption(":demux=avformat")
-        }
-        if sourceURL.pathExtension.lowercased() == "h261" {
-            media.addOption(":avformat-format=h261")
+        return options
+    }
+
+    static func previewDemuxModes(for sourceURL: URL) -> [QueuePreviewDemuxMode] {
+        switch sourceURL.pathExtension.lowercased() {
+        case "mov", "qt":
+            return [.automatic, .avformat]
+        case "avi", "divx":
+            return [.avformat, .automatic]
+        default:
+            return [.automatic]
         }
     }
 
-    private static func shouldUseAVFormatDemux(for sourceURL: URL) -> Bool {
-        switch sourceURL.pathExtension.lowercased() {
-        case "avi", "mov", "qt":
+    static func softwareDecodeOptions(
+        for sourceURL: URL,
+        allowsAudio: Bool = true,
+        demuxMode: QueuePreviewDemuxMode = .automatic
+    ) -> [String] {
+        var options = [
+            ":no-sub-autodetect-file",
+            ":no-drop-late-frames",
+            ":no-skip-frames"
+        ]
+        if !allowsAudio {
+            options.append(":no-audio")
+        }
+        if shouldUseAVFormatDemux(for: sourceURL, demuxMode: demuxMode) {
+            options.append(":demux=avformat")
+        }
+        if sourceURL.pathExtension.lowercased() == "h261" {
+            options.append(":avformat-format=h261")
+        }
+        return options
+    }
+
+    private static func shouldUseAVFormatDemux(
+        for sourceURL: URL,
+        demuxMode: QueuePreviewDemuxMode
+    ) -> Bool {
+        switch demuxMode {
+        case .avformat:
             return true
-        default:
-            return false
+        case .automatic:
+            switch sourceURL.pathExtension.lowercased() {
+            case "avi", "divx", "h261", "h263", "m1v", "m2v", "vc1":
+                return true
+            default:
+                return false
+            }
         }
     }
 
     private static func makeSoftwareDecodeInstance(applicationName: String) -> VLCInstance {
-        let arguments = VLCInstance.defaultArguments + [
-            "--avcodec-hw=none"
-        ]
-
         do {
             return try VLCInstance(
-                arguments: arguments,
+                arguments: VLCInstance.defaultArguments,
                 applicationName: applicationName,
                 httpUserAgent: "TaptionEncoder/1.0"
             )

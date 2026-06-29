@@ -474,7 +474,6 @@ private struct SW_VLCMediaInspector: MediaInspecting {
     }
 
     private func configureParseOptions(on media: Media, sourceURL: URL) {
-        media.addOption(":avcodec-hw=none")
         let fileExtension = sourceURL.pathExtension.lowercased()
         if ["avi", "mov", "qt", "h261"].contains(fileExtension) {
             media.addOption(":demux=avformat")
@@ -595,130 +594,133 @@ private struct SW_VLCMediaInspector: MediaInspecting {
     }
 
     private func videoCodec(from codec: Int) -> TaptionVideoCodec {
-        switch normalizedFourCC(codec) {
-        case "av01", "av1":
-            return .av1
-        case "vp80", "vp8":
-            return .vp8
-        case "vp90", "vp9":
-            return .vp9
-        case "h264", "avc1", "avc3":
-            return .h264
-        case "hevc", "hvc1", "hev1":
-            return .hevc
-        case "dvh1", "dvhe":
-            return .dolbyVisionHEVC
-        case "mp4v", "fmp4":
-            return .mpeg4Visual
-        case "mp2v", "mpeg":
-            return .mpeg2
-        case "mp1v":
-            return .mpeg1
-        case "h263", "s263":
-            return .h263
-        case "h261":
-            return .h261
-        case "flv1":
-            return .flashVideo
-        case "mp42":
-            return .microsoftMPEG4V2
-        case "mp43", "div3", "div4", "div5", "mpg3":
-            return .microsoftMPEG4V3
-        case "jpeg", "dmb1", "mjpg", "mjpa", "mjpb":
-            return .motionJPEG
-        case "mjp2", "avj2":
-            return .jpeg2000
-        case "mjls":
-            return .jpegLS
-        case "ljpg":
-            return .losslessJPEG
-        case "rle":
-            return .animation
-        case "cvid":
-            return .cinepak
-        case "rpza":
-            return .quickTimeVideo
-        case "smc":
-            return .quickTimeGraphics
-        case "svq1":
-            return .sorensonVideo
-        case "svq3":
-            return .sorensonVideo3
-        case "theo", "thra":
-            return .theora
-        case "rv10":
-            return .realVideo1
-        case "rv20", "rv30", "rv40", "rv60":
-            return .realVideo
-        case "roq":
-            return .roqVideo
-        case "dvc":
-            return .dv
-        case "dvcp", "dvpp", "dv5n", "dv5p":
-            return .dvcPro
-        case "dvhp", "dvhq", "dvh6", "dvh5", "dvh3", "dvh2":
-            return .dvcProHD
-        case "wvc1", "vc1":
-            return .vc1
-        case "ap4x", "ap4h", "apch", "apcn", "apcs", "apco":
-            return .proRes
-        case "aprn", "aprh":
-            return .proResRaw
-        case "wmv1", "wmv2", "wmv3":
-            return .wmv
-        case "msvc", "cram":
-            return .microsoftVideo1
-        case "mrle", "msrl":
-            return .microsoftRLE
-        case "asv1":
-            return .asusV1
-        case "asv2":
-            return .asusV2
-        case "fsv1", "flashsv":
-            return .flashScreenVideo
-        case "fsv2", "flashsv2":
-            return .flashScreenVideo2
-        case "zmbv":
-            return .zmbv
-        case "cljr":
-            return .cljr
-        case "snow":
-            return .snow
-        case "ffv1":
-            return .ffv1
-        case "hfyu", "ffvh":
-            return .huffYUV
-        case "uly0", "uly2", "uly4", "ulrg", "ulra":
-            return .utVideo
-        case "magy":
-            return .magicYUV
-        case "cfhd":
-            return .cineForm
-        case "avdn", "dnxhd", "dnxhr":
-            return .dnxhd
-        case "png", "png1", "mpng":
-            return .pngVideo
-        case "r10k", "r10g":
-            return .r10k
-        case "v210":
-            return .v210
-        case "r210":
-            return .r210
-        case "y41p":
-            return .y41p
-        case "raw ", "raw", "rawv", "iyuv", "i420", "yuy2":
-            return .rawVideo
-        case "v410":
-            return .v410
-        case "v308":
-            return .v308
-        case "v408":
-            return .v408
-        case "yuv4":
-            return .yuv4
-        default:
-            return .unknown
+        for fourCC in normalizedFourCCCandidates(codec) {
+            switch fourCC {
+            case "av01", "av1":
+                return .av1
+            case "vp80", "vp8":
+                return .vp8
+            case "vp90", "vp9":
+                return .vp9
+            case "h264", "avc1", "avc3":
+                return .h264
+            case "hevc", "hvc1", "hev1":
+                return .hevc
+            case "dvh1", "dvhe":
+                return .dolbyVisionHEVC
+            case "mp4v", "fmp4":
+                return .mpeg4Visual
+            case "mp2v", "mpeg":
+                return .mpeg2
+            case "mp1v":
+                return .mpeg1
+            case "h263", "s263":
+                return .h263
+            case "h261":
+                return .h261
+            case "flv1":
+                return .flashVideo
+            case "mp42":
+                return .microsoftMPEG4V2
+            case "mp43", "div3", "div4", "div5", "mpg3":
+                return .microsoftMPEG4V3
+            case "jpeg", "dmb1", "mjpg", "mjpa", "mjpb":
+                return .motionJPEG
+            case "mjp2", "avj2":
+                return .jpeg2000
+            case "mjls":
+                return .jpegLS
+            case "ljpg":
+                return .losslessJPEG
+            case "rle":
+                return .animation
+            case "cvid":
+                return .cinepak
+            case "rpza":
+                return .quickTimeVideo
+            case "smc":
+                return .quickTimeGraphics
+            case "svq1":
+                return .sorensonVideo
+            case "svq3":
+                return .sorensonVideo3
+            case "theo", "thra":
+                return .theora
+            case "rv10":
+                return .realVideo1
+            case "rv20", "rv30", "rv40", "rv60":
+                return .realVideo
+            case "roq":
+                return .roqVideo
+            case "dvc":
+                return .dv
+            case "dvcp", "dvpp", "dv5n", "dv5p":
+                return .dvcPro
+            case "dvhp", "dvhq", "dvh6", "dvh5", "dvh3", "dvh2":
+                return .dvcProHD
+            case "wvc1", "vc1":
+                return .vc1
+            case "ap4x", "ap4h", "apch", "apcn", "apcs", "apco":
+                return .proRes
+            case "aprn", "aprh":
+                return .proResRaw
+            case "wmv1", "wmv2", "wmv3":
+                return .wmv
+            case "msvc", "cram":
+                return .microsoftVideo1
+            case "mrle", "msrl":
+                return .microsoftRLE
+            case "asv1":
+                return .asusV1
+            case "asv2":
+                return .asusV2
+            case "fsv1", "flashsv":
+                return .flashScreenVideo
+            case "fsv2", "flashsv2":
+                return .flashScreenVideo2
+            case "zmbv":
+                return .zmbv
+            case "cljr":
+                return .cljr
+            case "snow":
+                return .snow
+            case "ffv1":
+                return .ffv1
+            case "hfyu", "ffvh":
+                return .huffYUV
+            case "uly0", "uly2", "uly4", "ulrg", "ulra":
+                return .utVideo
+            case "magy":
+                return .magicYUV
+            case "cfhd":
+                return .cineForm
+            case "avdn", "dnxhd", "dnxhr":
+                return .dnxhd
+            case "png", "png1", "mpng":
+                return .pngVideo
+            case "r10k", "r10g":
+                return .r10k
+            case "v210":
+                return .v210
+            case "r210":
+                return .r210
+            case "y41p":
+                return .y41p
+            case "raw ", "raw", "rawv", "iyuv", "i420", "yuy2":
+                return .rawVideo
+            case "v410":
+                return .v410
+            case "v308":
+                return .v308
+            case "v408":
+                return .v408
+            case "yuv4":
+                return .yuv4
+            default:
+                continue
+            }
         }
+        return .unknown
     }
 
     private func audioCodec(from codec: Int) -> TaptionAudioCodec {
@@ -739,46 +741,49 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             break
         }
 
-        switch normalizedFourCC(codec) {
-        case "aac", "mp4a", "aach", "aacl":
-            return .aac
-        case "aace":
-            return .xheAAC
-        case "alac":
-            return .alac
-        case "opus":
-            return .opus
-        case "mp3", ".mp3":
-            return .mp3
-        case "mp2", ".mp2":
-            return .mp2
-        case "ac-3":
-            return .ac3
-        case "ec-3", "eac3":
-            return .eac3
-        case "dtsc", "dtsh", "dtsl", "dtsx":
-            return .dts
-        case "mlpa":
-            return .trueHD
-        case "flac":
-            return .flac
-        case "samr", "sawb":
-            return .amr
-        case "ilbc":
-            return .ilbc
-        case "lpcm", "sowt", "twos", "in24", "in32", "fl32", "fl64", "raw":
-            return .pcm
-        case "alaw":
-            return .aLaw
-        case "ulaw":
-            return .muLaw
-        case "vorb", "vrbs":
-            return .vorbis
-        case "wma1", "wma2", "wmap", "wmav":
-            return .wma
-        default:
-            return .unknown
+        for fourCC in normalizedFourCCCandidates(codec) {
+            switch fourCC {
+            case "aac", "mp4a", "aach", "aacl":
+                return .aac
+            case "aace":
+                return .xheAAC
+            case "alac":
+                return .alac
+            case "opus":
+                return .opus
+            case "mp3", ".mp3":
+                return .mp3
+            case "mp2", ".mp2":
+                return .mp2
+            case "ac-3":
+                return .ac3
+            case "ec-3", "eac3":
+                return .eac3
+            case "dtsc", "dtsh", "dtsl", "dtsx":
+                return .dts
+            case "mlpa":
+                return .trueHD
+            case "flac":
+                return .flac
+            case "samr", "sawb":
+                return .amr
+            case "ilbc":
+                return .ilbc
+            case "lpcm", "sowt", "twos", "in24", "in32", "fl32", "fl64", "raw":
+                return .pcm
+            case "alaw":
+                return .aLaw
+            case "ulaw":
+                return .muLaw
+            case "vorb", "vrbs":
+                return .vorbis
+            case "wma1", "wma2", "wmap", "wmav":
+                return .wma
+            default:
+                continue
+            }
         }
+        return .unknown
     }
 
     private func frameRate(from value: Double?) -> TaptionRationalFrameRate? {
@@ -807,13 +812,33 @@ private struct SW_VLCMediaInspector: MediaInspecting {
     }
 
     private func normalizedFourCC(_ code: Int) -> String {
+        normalizedFourCCCandidates(code).first ?? ""
+    }
+
+    private func normalizedFourCCCandidates(_ code: Int) -> [String] {
         let value = UInt32(truncatingIfNeeded: code)
-        return String(bytes: [
+        let littleEndian = fourCCString(bytes: [
             UInt8(value & 0xFF),
             UInt8((value >> 8) & 0xFF),
             UInt8((value >> 16) & 0xFF),
             UInt8((value >> 24) & 0xFF)
-        ], encoding: .ascii)?
+        ])
+        let bigEndian = fourCCString(bytes: [
+            UInt8((value >> 24) & 0xFF),
+            UInt8((value >> 16) & 0xFF),
+            UInt8((value >> 8) & 0xFF),
+            UInt8(value & 0xFF)
+        ])
+
+        var candidates: [String] = []
+        for candidate in [littleEndian, bigEndian] where !candidate.isEmpty && !candidates.contains(candidate) {
+            candidates.append(candidate)
+        }
+        return candidates
+    }
+
+    private func fourCCString(bytes: [UInt8]) -> String {
+        String(bytes: bytes, encoding: .ascii)?
             .trimmingCharacters(in: .controlCharacters.union(.whitespacesAndNewlines))
             .lowercased() ?? ""
     }

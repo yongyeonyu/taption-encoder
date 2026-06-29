@@ -143,17 +143,9 @@
 					<string>wmv</string>
 					<string>asf</string>
 					<string>dvr-ms</string>
-					<string>nut</string>
-					<string>roq</string>
+						<string>roq</string>
 					<string>rm</string>
 					<string>rmvb</string>
-					<string>ts</string>
-					<string>mts</string>
-					<string>m2ts</string>
-					<string>m2t</string>
-					<string>tp</string>
-					<string>trp</string>
-					<string>tod</string>
 					<string>mxf</string>
 					<string>mpg</string>
 					<string>mpeg</string>
@@ -163,7 +155,6 @@
 					<string>dat</string>
 					<string>dv</string>
 					<string>dif</string>
-					<string>lrf</string>
 					<string>ogg</string>
 					<string>ogv</string>
 					<string>ogm</string>
