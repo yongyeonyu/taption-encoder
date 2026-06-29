@@ -13,9 +13,10 @@ Policy for this folder:
 - Generated-only test-pattern fixtures are not bundled. If no official/public
   source file is found for an executable codec, the codec remains unsupported
   by the default sample bundle until a real source is available.
-- Preview verification samples include a short audible tone track when the
-  container can carry audio. Current audio exceptions are raw `H.261.h261` and
-  `RoQ Video.roq`.
+- When source media includes readable audio, bundled derivatives preserve that
+  source audio content through codec/container-appropriate re-encoding. Samples
+  without readable source audio may carry generated preview audio; current
+  no-audio exceptions are raw `H.261.h261` and `RoQ Video.roq`.
 
 Official Chromium media test data:
 - AV1.mp4
@@ -26,12 +27,14 @@ Official Chromium media test data:
   https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear-320x240.webm
 - H.264 AVC.mp4
   https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear.mp4
+- MPEG-1.mpg
+  Derived from Chromium bear.mp4; video re-encoded to MPEG-1 and the original
+  AAC source audio looped/re-encoded to MP2.
+  https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear.mp4
 - H.265 HEVC.mp4
   https://chromium.googlesource.com/chromium/src/+/main/media/test/data/bear-hevc-frag.mp4
 
 Official FFmpeg samples archive:
-- MPEG-1.mpg
-  https://samples.ffmpeg.org/MPEG1/mpeg_demuxer_crash.mpg
 - MPEG-2.mpg
   https://samples.ffmpeg.org/archive/all/mpeg+mpeg2video+ac3++resolutionchange.mpg
 - MPEG-4 Visual.mov

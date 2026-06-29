@@ -1764,6 +1764,37 @@ final class CodecRoutePlannerTests: XCTestCase {
         let supportedContentTypes = Set(
             try XCTUnwrap(attributes["QLSupportedContentTypes"] as? [String])
         )
+        let appTypeDeclarations = try XCTUnwrap(
+            appPlist["UTExportedTypeDeclarations"] as? [[String: Any]]
+        )
+        let appLegacyDeclaration = try XCTUnwrap(
+            appTypeDeclarations.first { declaration in
+                declaration["UTTypeIdentifier"] as? String == "com.taption.legacy-video"
+            }
+        )
+        let appLegacyTagSpecification = try XCTUnwrap(
+            appLegacyDeclaration["UTTypeTagSpecification"] as? [String: Any]
+        )
+        let appLegacyFileExtensions = Set(
+            try XCTUnwrap(appLegacyTagSpecification["public.filename-extension"] as? [String])
+        )
+        let extensionImportedDeclarations = try XCTUnwrap(
+            extensionPlist["UTImportedTypeDeclarations"] as? [[String: Any]]
+        )
+        let extensionLegacyDeclaration = try XCTUnwrap(
+            extensionImportedDeclarations.first { declaration in
+                declaration["UTTypeIdentifier"] as? String == "com.taption.legacy-video"
+            }
+        )
+        let extensionLegacyConformance = Set(
+            try XCTUnwrap(extensionLegacyDeclaration["UTTypeConformsTo"] as? [String])
+        )
+        let extensionLegacyTagSpecification = try XCTUnwrap(
+            extensionLegacyDeclaration["UTTypeTagSpecification"] as? [String: Any]
+        )
+        let extensionLegacyFileExtensions = Set(
+            try XCTUnwrap(extensionLegacyTagSpecification["public.filename-extension"] as? [String])
+        )
         let projectText = try String(contentsOf: projectURL, encoding: .utf8)
         let filesResolvedContentTypes: Set<String> = [
             "com.apple.m4v-video",
@@ -1798,6 +1829,10 @@ final class CodecRoutePlannerTests: XCTestCase {
             supportedContentTypes.isSuperset(of: filesResolvedContentTypes),
             "Thumbnail extension must also cover system UTIs resolved from supported file extensions: \(filesResolvedContentTypes.subtracting(supportedContentTypes).sorted().joined(separator: ", "))"
         )
+        XCTAssertNil(extensionPlist["UTExportedTypeDeclarations"])
+        XCTAssertEqual(extensionLegacyFileExtensions, appLegacyFileExtensions)
+        XCTAssertTrue(extensionLegacyFileExtensions.contains("h261"))
+        XCTAssertTrue(extensionLegacyConformance.isSuperset(of: ["public.movie", "public.video"]))
         XCTAssertTrue(projectText.contains("TaptionEncoderThumbnailExtension.appex in Embed Foundation Extensions"))
         XCTAssertTrue(projectText.contains("com.apple.product-type.app-extension"))
         XCTAssertTrue(projectText.contains("PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder.thumbnail"))
@@ -1835,6 +1870,11 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertFalse(sourceNotice.contains("Generated codec-conformance fixture"))
         XCTAssertFalse(sourceNotice.contains("Generated with FFmpeg"))
+        XCTAssertFalse(sourceNotice.contains("mpeg_demuxer_crash.mpg"))
+        XCTAssertFalse(sourceNotice.contains("audible tone track when"))
+        XCTAssertTrue(sourceNotice.contains("Derived from Chromium bear.mp4"))
+        XCTAssertTrue(sourceNotice.contains("original"))
+        XCTAssertTrue(sourceNotice.contains("source audio"))
         XCTAssertFalse(sourceNotice.contains("Y41P.avi"))
     }
 
