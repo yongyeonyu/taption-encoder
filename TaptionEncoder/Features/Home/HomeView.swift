@@ -1,4 +1,5 @@
 import Darwin
+import AVFoundation
 import SwiftUI
 import SwiftVLC
 import PhotosUI
@@ -241,7 +242,9 @@ struct HomeView: View {
         ) { preview in
             QueueVideoPreviewView(
                 preview: preview,
-                onClose: { viewModel.dismissPreview() }
+                onClose: { viewModel.dismissPreview() },
+                onPrevious: { viewModel.openPreviousPreview() },
+                onNext: { viewModel.openNextPreview() }
             )
         }
         .photosPicker(
@@ -289,6 +292,15 @@ struct HomeView: View {
                     }
                 }
             }
+        }
+        .onOpenURL { url in
+            AppLogger.info(
+                "External video URL opened",
+                category: .fileImport,
+                metadata: ["name": url.lastPathComponent]
+            )
+            AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
+            viewModel.openExternalPlayerFile(url: url)
         }
         .task {
             await AdMobBootstrapper.refreshOnActive()
@@ -786,10 +798,30 @@ enum QueuePreviewPlaybackMath {
     }
 }
 
+enum QueuePreviewControlsVisibilityPolicy {
+    static func shouldHideOnBackgroundTap(
+        isLoading: Bool,
+        hasPlaybackError: Bool,
+        areControlsVisible: Bool,
+        isPlaying: Bool,
+        isScrubbing: Bool,
+        isDragging: Bool
+    ) -> Bool {
+        !isLoading
+            && !hasPlaybackError
+            && areControlsVisible
+            && isPlaying
+            && !isScrubbing
+            && !isDragging
+    }
+}
+
 private enum QueuePreviewDragMode: Equatable {
     case seek(startPosition: Double)
     case brightness(startValue: CGFloat)
     case volume(startValue: Float)
+    case previousItem
+    case nextItem
 }
 
 private struct QueuePreviewGestureFeedback: Equatable {
@@ -800,6 +832,8 @@ private struct QueuePreviewGestureFeedback: Equatable {
 private struct QueueVideoPreviewView: View {
     var preview: QueueVideoPreview
     var onClose: () -> Void
+    var onPrevious: () -> Void
+    var onNext: () -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var player = Player(instance: QueuePreviewPlayerFactory.softwareDecodeInstance)
@@ -812,7 +846,6 @@ private struct QueueVideoPreviewView: View {
     @State private var dragMode: QueuePreviewDragMode?
     @State private var dragSeekPreviewPosition: Double?
     @State private var gestureFeedback: QueuePreviewGestureFeedback?
-    @State private var controlsHideTask: Task<Void, Never>?
     @State private var gestureFeedbackTask: Task<Void, Never>?
     @State private var didAttachVideoSurface = false
 
@@ -859,7 +892,7 @@ private struct QueueVideoPreviewView: View {
         }
         .onChange(of: player.isPlaying) { _, isPlaying in
             if isPlaying {
-                scheduleControlsAutoHide()
+                showControls(scheduleAutoHide: false)
             } else {
                 showControls(scheduleAutoHide: false)
             }
@@ -873,7 +906,6 @@ private struct QueueVideoPreviewView: View {
     private func videoSurface(containerSize: CGSize) -> some View {
         let fittedSize = fittedVideoSize(in: containerSize)
         VideoView(player)
-            .id(preview.id)
             .frame(width: fittedSize.width, height: fittedSize.height)
             .background(Color.black)
             .onAppear {
@@ -939,6 +971,7 @@ private struct QueueVideoPreviewView: View {
                         previewBadge(systemImage: "video", text: preview.codecBadge)
                         previewBadge(systemImage: "point.3.connected.trianglepath.dotted", text: preview.pathBadge)
                         previewBadge(systemImage: "aspectratio", text: preview.videoInfo.resolution)
+                        previewBadge(systemImage: "speaker.wave.2", text: preview.videoInfo.audio)
                     }
                 }
             }
@@ -981,6 +1014,8 @@ private struct QueueVideoPreviewView: View {
 
     private var transportControls: some View {
         VStack(spacing: 9) {
+            playlistContextRow
+
             Slider(
                 value: Binding(
                     get: { displayedSliderPosition },
@@ -1004,42 +1039,59 @@ private struct QueueVideoPreviewView: View {
             .disabled(!player.isSeekable && player.duration == nil)
             .tint(Color.white)
 
-            HStack(spacing: 16) {
+            HStack(spacing: 8) {
                 Button(action: skipBackward) {
                     Image(systemName: "gobackward.10")
                         .font(.system(size: 21, weight: .semibold))
-                        .frame(width: 44, height: 38)
+                        .frame(width: 38, height: 38)
                 }
                 .accessibilityLabel("Rewind 10 seconds")
+
+                Button(action: previousItem) {
+                    Image(systemName: "backward.end.fill")
+                        .font(.system(size: 21, weight: .semibold))
+                        .frame(width: 38, height: 38)
+                }
+                .disabled(preview.playlist?.hasPrevious != true)
+                .opacity(preview.playlist?.hasPrevious == true ? 1 : 0.36)
+                .accessibilityLabel("Previous file")
 
                 Button(action: togglePlayback) {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: 24, weight: .bold))
-                        .frame(width: 48, height: 40)
+                        .frame(width: 42, height: 40)
                 }
                 .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+
+                Button(action: nextItem) {
+                    Image(systemName: "forward.end.fill")
+                        .font(.system(size: 21, weight: .semibold))
+                        .frame(width: 38, height: 38)
+                }
+                .disabled(preview.playlist?.hasNext != true)
+                .opacity(preview.playlist?.hasNext == true ? 1 : 0.36)
+                .accessibilityLabel("Next file")
 
                 Button(action: skipForward) {
                     Image(systemName: "goforward.10")
                         .font(.system(size: 21, weight: .semibold))
-                        .frame(width: 44, height: 38)
+                        .frame(width: 38, height: 38)
                 }
                 .accessibilityLabel("Forward 10 seconds")
 
-                Text(displayedCurrentTimeText)
+                Spacer(minLength: 4)
+
+                Text("\(displayedCurrentTimeText) / \(durationText)")
                     .font(.caption.monospacedDigit().weight(.semibold))
                     .foregroundStyle(Color.white.opacity(0.88))
-
-                Spacer(minLength: 8)
-
-                Text(durationText)
-                    .font(.caption.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.74))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .layoutPriority(1)
             }
             .foregroundStyle(Color.white)
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 10)
         .padding(.vertical, 12)
         .background(Color.black.opacity(0.58))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -1047,6 +1099,28 @@ private struct QueueVideoPreviewView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
         )
+    }
+
+    @ViewBuilder
+    private var playlistContextRow: some View {
+        if let playlist = preview.playlist {
+            HStack(spacing: 10) {
+                Text(playlist.positionText)
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.82))
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                if let nextName = playlist.nextName {
+                    Label(nextName, systemImage: "forward.end.fill")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.white.opacity(0.78))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -1084,6 +1158,8 @@ private struct QueueVideoPreviewView: View {
                 .font(.system(size: 20, weight: .semibold))
             Text(feedback.text)
                 .font(.headline.monospacedDigit().weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
         }
         .foregroundStyle(Color.white)
         .padding(.horizontal, 16)
@@ -1105,6 +1181,8 @@ private struct QueueVideoPreviewView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
         }
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
         .foregroundStyle(Color.white.opacity(0.86))
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
@@ -1140,11 +1218,19 @@ private struct QueueVideoPreviewView: View {
 
     @MainActor
     private func startPlayback() async {
+        didRequestShutdown = false
         playbackError = nil
         isLoading = true
+        withAnimation(.easeInOut(duration: 0.12)) {
+            areControlsVisible = true
+        }
         player.aspectRatio = .default
+        QueuePreviewAudioSessionController.activateForPreview(id: preview.id)
+        configurePlayerAudioForPreview()
 
         do {
+            player.stop()
+            try? await Task.sleep(nanoseconds: 120_000_000)
             await waitForVideoSurfaceAttachment()
             try Task.checkCancellation()
             let media = try makePreviewMedia()
@@ -1161,7 +1247,7 @@ private struct QueueVideoPreviewView: View {
                 )
             }
             isLoading = false
-            showControls(scheduleAutoHide: true)
+            showControls(scheduleAutoHide: false)
         } catch is CancellationError {
             isLoading = false
         } catch {
@@ -1191,7 +1277,7 @@ private struct QueueVideoPreviewView: View {
 
     private func togglePlayback() {
         player.togglePlayPause()
-        showControls(scheduleAutoHide: player.isPlaybackRequestedActive)
+        showControls(scheduleAutoHide: false)
     }
 
     private func skipBackward() {
@@ -1204,12 +1290,26 @@ private struct QueueVideoPreviewView: View {
         showGestureFeedback(systemImage: "goforward.10", text: "+10s")
     }
 
+    private func previousItem() {
+        guard preview.playlist?.hasPrevious == true else {
+            return
+        }
+        onPrevious()
+    }
+
+    private func nextItem() {
+        guard preview.playlist?.hasNext == true else {
+            return
+        }
+        onNext()
+    }
+
     private func seekBy(seconds: Double) {
         let offset = Duration.seconds(seconds)
         if (try? player.seek(by: offset, fast: true)) == nil {
             _ = player.jump(by: offset)
         }
-        showControls(scheduleAutoHide: true)
+        showControls(scheduleAutoHide: false)
     }
 
     private func finishScrubbing() {
@@ -1221,7 +1321,7 @@ private struct QueueVideoPreviewView: View {
         }
         isScrubbing = false
         scrubberPosition = target
-        showControls(scheduleAutoHide: true)
+        showControls(scheduleAutoHide: false)
     }
 
     private func tapGesture(containerSize: CGSize) -> some Gesture {
@@ -1253,7 +1353,7 @@ private struct QueueVideoPreviewView: View {
         guard containerSize.width > 0 else {
             return
         }
-        showControls(scheduleAutoHide: true)
+        showControls(scheduleAutoHide: false)
         if location.x < containerSize.width / 2 {
             skipBackward()
         } else {
@@ -1309,6 +1409,18 @@ private struct QueueVideoPreviewView: View {
                 text: "\(Int((min(volume, 1) * 100).rounded()))%",
                 autoDismiss: false
             )
+        case .previousItem:
+            showGestureFeedback(
+                systemImage: "backward.end.fill",
+                text: preview.playlist?.previousName ?? "Previous",
+                autoDismiss: false
+            )
+        case .nextItem:
+            showGestureFeedback(
+                systemImage: "forward.end.fill",
+                text: preview.playlist?.nextName ?? "Next",
+                autoDismiss: false
+            )
         }
     }
 
@@ -1317,22 +1429,27 @@ private struct QueueVideoPreviewView: View {
             dragMode = nil
             dragSeekPreviewPosition = nil
             dismissGestureFeedbackAfterDelay()
-            showControls(scheduleAutoHide: true)
+            showControls(scheduleAutoHide: false)
         }
 
-        guard case .seek(let startPosition) = dragMode else {
+        switch dragMode {
+        case .seek(let startPosition):
+            let targetPosition = QueuePreviewPlaybackMath.horizontalDragPosition(
+                startPosition: startPosition,
+                translation: value.translation.width,
+                containerWidth: containerSize.width
+            )
+            if player.isSeekable, player.duration != nil {
+                try? player.seek(to: PlaybackPosition(targetPosition))
+            } else {
+                _ = player.seek(toPosition: PlaybackPosition(targetPosition), fast: true)
+            }
+        case .previousItem:
+            previousItem()
+        case .nextItem:
+            nextItem()
+        case .brightness, .volume, .none:
             return
-        }
-
-        let targetPosition = QueuePreviewPlaybackMath.horizontalDragPosition(
-            startPosition: startPosition,
-            translation: value.translation.width,
-            containerWidth: containerSize.width
-        )
-        if player.isSeekable, player.duration != nil {
-            try? player.seek(to: PlaybackPosition(targetPosition))
-        } else {
-            _ = player.seek(toPosition: PlaybackPosition(targetPosition), fast: true)
         }
     }
 
@@ -1344,6 +1461,17 @@ private struct QueueVideoPreviewView: View {
         let verticalDistance = abs(value.translation.height)
 
         if horizontalDistance > verticalDistance * 1.2 {
+            let edgeWidth = min(max(containerSize.width * 0.18, 56), 96)
+            if value.startLocation.x < edgeWidth,
+               value.translation.width > 0,
+               preview.playlist?.hasPrevious == true {
+                return .previousItem
+            }
+            if value.startLocation.x > containerSize.width - edgeWidth,
+               value.translation.width < 0,
+               preview.playlist?.hasNext == true {
+                return .nextItem
+            }
             return .seek(startPosition: player.position)
         }
 
@@ -1358,45 +1486,38 @@ private struct QueueVideoPreviewView: View {
     }
 
     private func toggleControls() {
-        if areControlsVisible {
-            controlsHideTask?.cancel()
-            withAnimation(.easeInOut(duration: 0.18)) {
-                areControlsVisible = false
-            }
+        guard !isLoading, playbackError == nil else {
+            showControls(scheduleAutoHide: false)
+            return
+        }
+
+        if QueuePreviewControlsVisibilityPolicy.shouldHideOnBackgroundTap(
+            isLoading: isLoading,
+            hasPlaybackError: playbackError != nil,
+            areControlsVisible: areControlsVisible,
+            isPlaying: player.isPlaying,
+            isScrubbing: isScrubbing,
+            isDragging: dragMode != nil
+        ) {
+            hideControls()
         } else {
-            showControls(scheduleAutoHide: true)
+            showControls(scheduleAutoHide: false)
         }
     }
 
-    private func showControls(scheduleAutoHide: Bool) {
+    private func showControls(scheduleAutoHide _: Bool) {
         withAnimation(.easeInOut(duration: 0.18)) {
             areControlsVisible = true
         }
-        controlsHideTask?.cancel()
-        guard scheduleAutoHide,
-              player.isPlaybackRequestedActive,
-              playbackError == nil,
-              !isLoading else {
-            return
-        }
-        scheduleControlsAutoHide()
     }
 
-    private func scheduleControlsAutoHide() {
-        controlsHideTask?.cancel()
-        guard player.isPlaybackRequestedActive,
-              playbackError == nil,
-              !isLoading else {
+    private func hideControls() {
+        guard !isScrubbing, dragMode == nil else {
             return
         }
-        controlsHideTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 3_000_000_000)
-            guard !Task.isCancelled else {
-                return
-            }
-            withAnimation(.easeInOut(duration: 0.22)) {
-                areControlsVisible = false
-            }
+
+        withAnimation(.easeInOut(duration: 0.18)) {
+            areControlsVisible = false
         }
     }
 
@@ -1451,6 +1572,34 @@ private struct QueueVideoPreviewView: View {
         return media
     }
 
+    private func configurePlayerAudioForPreview() {
+        player.role = .video
+        player.isMuted = false
+        do {
+            try player.setAudioVolume(.unity)
+        } catch {
+            AppLogger.warning(
+                "Queue preview player volume setup failed",
+                category: .ui,
+                metadata: [
+                    "name": preview.displayName,
+                    "error": String(describing: error)
+                ]
+            )
+        }
+
+        AppLogger.info(
+            "Queue preview player audio configured",
+            category: .ui,
+            metadata: [
+                "name": preview.displayName,
+                "muted": "\(player.isMuted)",
+                "volume": String(format: "%.2f", player.volume),
+                "role": "\(player.role)"
+            ]
+        )
+    }
+
     @MainActor
     private func waitForVideoSurfaceAttachment() async {
         for _ in 0..<20 {
@@ -1490,11 +1639,84 @@ private struct QueueVideoPreviewView: View {
             return
         }
         didRequestShutdown = true
-        controlsHideTask?.cancel()
         gestureFeedbackTask?.cancel()
         AppOrientationController.shared.restorePortrait()
+        let sessionID = preview.id
         Task { @MainActor in
             await player.shutdown()
+            QueuePreviewAudioSessionController.deactivateAfterPreview(id: sessionID)
+        }
+    }
+}
+
+@MainActor
+private enum QueuePreviewAudioSessionController {
+    private static var activePreviewID: String?
+
+    static func activateForPreview(id: String) {
+        activePreviewID = id
+        let session = AVAudioSession.sharedInstance()
+
+        do {
+            try session.setCategory(
+                .playback,
+                mode: .moviePlayback,
+                options: [.allowAirPlay, .allowBluetoothA2DP]
+            )
+            try session.setActive(true)
+            logAudioSessionActivated(session, fallback: false)
+        } catch {
+            AppLogger.warning(
+                "Queue preview preferred audio session setup failed; retrying basic playback",
+                category: .ui,
+                metadata: ["error": String(describing: error)]
+            )
+            activateBasicPlaybackSession(session)
+        }
+    }
+
+    private static func activateBasicPlaybackSession(_ session: AVAudioSession) {
+        do {
+            try session.setCategory(.playback, mode: .moviePlayback)
+            try session.setActive(true)
+            logAudioSessionActivated(session, fallback: true)
+        } catch {
+            AppLogger.error(
+                "Queue preview audio session activation failed",
+                category: .ui,
+                metadata: ["error": String(describing: error)]
+            )
+        }
+    }
+
+    private static func logAudioSessionActivated(_ session: AVAudioSession, fallback: Bool) {
+        AppLogger.info(
+            "Queue preview audio session activated",
+            category: .ui,
+            metadata: [
+                "category": session.category.rawValue,
+                "fallback": "\(fallback)",
+                "mode": session.mode.rawValue,
+                "outputVolume": String(format: "%.2f", session.outputVolume)
+            ]
+        )
+    }
+
+    static func deactivateAfterPreview(id: String) {
+        guard activePreviewID == id else {
+            return
+        }
+        activePreviewID = nil
+
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            AppLogger.info("Queue preview audio session deactivated", category: .ui)
+        } catch {
+            AppLogger.warning(
+                "Queue preview audio session deactivation failed",
+                category: .ui,
+                metadata: ["error": String(describing: error)]
+            )
         }
     }
 }

@@ -14,6 +14,14 @@ private struct ActiveStarCharge: Equatable {
 
 @MainActor
 final class HomeViewModel: ObservableObject {
+    private static let previewKnownNoVideoOutputCodecs: Set<TaptionVideoCodec> = [
+        .losslessJPEG,
+        .microsoftRLE,
+        .r10k,
+        .r210,
+        .snow
+    ]
+
     @Published private(set) var state: HomeScreenState
     @Published private(set) var selectedOutput: TaptionOutputSelection
     @Published private(set) var folderAccessPrompt: PendingFolderAccessPrompt?
@@ -923,6 +931,15 @@ final class HomeViewModel: ObservableObject {
         startFolderFlow(url: firstURL)
     }
 
+    func openExternalPlayerFile(url: URL) {
+        AppLogger.info(
+            "External player file routed into preview flow",
+            category: .fileImport,
+            metadata: ["name": url.lastPathComponent]
+        )
+        startFilesFlow(url: url)
+    }
+
     func startFilesFlow(url: URL) {
         AppLogger.info(
             "Single file flow started",
@@ -988,7 +1005,7 @@ final class HomeViewModel: ObservableObject {
             fileURLs: selectedURLs
         )
         beginSecurityScopedAccessIfNeeded(for: selectedURLs)
-        prepareCurrentFolderItem(autoStartAfterPrepare: false)
+        preflightCurrentBatchThenPrepareFirst(displayName: "Selected files")
     }
 
     func startFolderFlow(url: URL) {
@@ -1112,6 +1129,14 @@ final class HomeViewModel: ObservableObject {
             )
         }
         activePreview = nil
+    }
+
+    func openPreviousPreview() {
+        openAdjacentPreview(offset: -1)
+    }
+
+    func openNextPreview() {
+        openAdjacentPreview(offset: 1)
     }
 
     func selectFileCard(id: String) {
@@ -1247,9 +1272,36 @@ final class HomeViewModel: ObservableObject {
         return true
     }
 
+    private func openAdjacentPreview(offset: Int) {
+        guard offset != 0,
+              let activePreview,
+              let batch = folderBatch,
+              let currentIndex = batch.fileURLs.firstIndex(of: activePreview.sourceURL),
+              let targetURL = adjacentPreviewURL(in: batch, currentIndex: currentIndex, offset: offset) else {
+            AppLogger.info(
+                "Queue preview adjacent navigation ignored",
+                category: .ui,
+                metadata: ["direction": offset < 0 ? "previous" : "next"]
+            )
+            return
+        }
+
+        AppLogger.info(
+            "Queue preview adjacent navigation requested",
+            category: .ui,
+            metadata: [
+                "direction": offset < 0 ? "previous" : "next",
+                "from": activePreview.displayName,
+                "to": targetURL.lastPathComponent
+            ]
+        )
+        _ = openBatchPreviewForFileCard(id: targetURL.absoluteString)
+    }
+
     private func currentReviewPreview(for id: String) -> QueueVideoPreview? {
         guard let review = currentReview ?? state.preparedEncodingReview,
               review.videoInfo.isRouteEncodable,
+              isPreviewableInCurrentBuild(asset: review.job.asset),
               id == review.source.displayName
                 || id == review.source.url.absoluteString
                 || id == review.source.id.uuidString else {
@@ -1266,7 +1318,8 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func batchPreview(for url: URL) -> QueueVideoPreview? {
-        guard let item = folderBatch?.itemStates[url],
+        guard let batch = folderBatch,
+              let item = batch.itemStates[url],
               item.isPreviewable,
               let videoInfo = item.videoInfo,
               item.asset?.videoTrack != nil else {
@@ -1278,8 +1331,63 @@ final class HomeViewModel: ObservableObject {
             displayName: url.lastPathComponent,
             sourceURL: url,
             videoInfo: videoInfo,
-            displaySize: item.asset?.videoTrack?.displaySize
+            displaySize: item.asset?.videoTrack?.displaySize,
+            playlist: batchPreviewPlaylist(for: url, in: batch)
         )
+    }
+
+    private func batchPreviewPlaylist(
+        for url: URL,
+        in batch: FolderEncodingBatch
+    ) -> QueueVideoPreviewPlaylist? {
+        guard let currentIndex = batch.fileURLs.firstIndex(of: url) else {
+            return nil
+        }
+
+        let previewCandidateURLs = batch.fileURLs.filter { candidateURL in
+            isQueuePreviewNavigationCandidate(batch.itemStates[candidateURL] ?? .queued)
+        }
+        guard let candidateIndex = previewCandidateURLs.firstIndex(of: url),
+              previewCandidateURLs.count > 1 else {
+            return nil
+        }
+
+        let previousURL = adjacentPreviewURL(in: batch, currentIndex: currentIndex, offset: -1)
+        let nextURL = adjacentPreviewURL(in: batch, currentIndex: currentIndex, offset: 1)
+        return QueueVideoPreviewPlaylist(
+            currentIndex: candidateIndex,
+            totalCount: previewCandidateURLs.count,
+            previousID: previousURL?.absoluteString,
+            previousName: previousURL?.lastPathComponent,
+            nextID: nextURL?.absoluteString,
+            nextName: nextURL?.lastPathComponent
+        )
+    }
+
+    private func adjacentPreviewURL(
+        in batch: FolderEncodingBatch,
+        currentIndex: Int,
+        offset: Int
+    ) -> URL? {
+        guard offset != 0 else {
+            return nil
+        }
+
+        var index = currentIndex + offset
+        while batch.fileURLs.indices.contains(index) {
+            let url = batch.fileURLs[index]
+            if isQueuePreviewNavigationCandidate(batch.itemStates[url] ?? .queued) {
+                return url
+            }
+            index += offset
+        }
+        return nil
+    }
+
+    private func isQueuePreviewNavigationCandidate(_ item: BatchItemRuntime) -> Bool {
+        item.isPreviewable
+            && item.videoInfo != nil
+            && item.asset?.videoTrack != nil
     }
 
     private var canOpenFolderPreviewInCurrentState: Bool {
@@ -1300,9 +1408,35 @@ final class HomeViewModel: ObservableObject {
             metadata: [
                 "name": preview.displayName,
                 "codec": preview.codecBadge,
-                "path": preview.pathBadge
+                "path": preview.pathBadge,
+                "position": preview.playlist?.positionText ?? "single"
             ]
         )
+    }
+
+    private func openPreviewAfterImportIfAvailable(for review: PreparedEncodingReview) {
+        guard activePreview == nil else {
+            return
+        }
+
+        if let batch = folderBatch {
+            if let preview = batchPreview(for: review.source.url) {
+                presentPreview(preview)
+                return
+            }
+
+            if let firstPreviewURL = batch.fileURLs.first(where: { url in
+                isQueuePreviewNavigationCandidate(batch.itemStates[url] ?? .queued)
+            }),
+               let preview = batchPreview(for: firstPreviewURL) {
+                presentPreview(preview)
+            }
+            return
+        }
+
+        if let preview = currentReviewPreview(for: review.source.url.absoluteString) {
+            presentPreview(preview)
+        }
     }
 
     func watchAdForStar() {
@@ -1947,7 +2081,9 @@ final class HomeViewModel: ObservableObject {
                     statusText: review.videoInfo.readinessStatusText,
                     detailText: review.videoInfo.readinessDetailText,
                     progress: nil,
-                    isActive: true
+                    isActive: true,
+                    isEnabled: review.videoInfo.isRouteEncodable,
+                    isPreviewable: isPreviewableInCurrentBuild(asset: job.asset)
                 )
 
                 activeTask = nil
@@ -1960,6 +2096,7 @@ final class HomeViewModel: ObservableObject {
                 } else {
                     state = .readyToStart(review)
                     trace.finish("ready")
+                    openPreviewAfterImportIfAvailable(for: review)
                 }
             } catch is CancellationError {
                 AppLogger.warning(
@@ -3336,6 +3473,10 @@ final class HomeViewModel: ObservableObject {
 
     private func isPreviewableInCurrentBuild(asset: TaptionVideoAsset) -> Bool {
         guard let videoTrack = asset.videoTrack else {
+            return false
+        }
+
+        guard !Self.previewKnownNoVideoOutputCodecs.contains(videoTrack.codec) else {
             return false
         }
 

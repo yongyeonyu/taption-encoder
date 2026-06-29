@@ -31,6 +31,7 @@ min_seconds = float(sys.argv[3])
 max_seconds = float(sys.argv[4])
 size_limit = int(sys.argv[5])
 size_exceptions = set(sys.argv[6:])
+audio_exceptions = {"H.261.h261", "RoQ Video.roq"}
 
 failures = []
 large_exceptions = []
@@ -102,6 +103,13 @@ for path in video_files:
         failures.append(f"{path.name}: no readable video stream")
         continue
 
+    audio_stream = next(
+        (stream for stream in streams if stream.get("codec_type") == "audio" and stream.get("codec_name") != "unknown"),
+        None,
+    )
+    if audio_stream is None and path.name not in audio_exceptions:
+        failures.append(f"{path.name}: no readable audio stream")
+
     format_info = data.get("format", {})
     duration = parse_duration(format_info.get("duration")) or parse_duration(video_stream.get("duration"))
     fps = parse_rate(video_stream.get("avg_frame_rate")) or parse_rate(video_stream.get("r_frame_rate"))
@@ -125,7 +133,14 @@ for path in video_files:
         else:
             failures.append(f"{path.name}: size {size} exceeds {size_limit} bytes")
 
-    verified_rows.append((path.name, video_stream.get("codec_name", "unknown"), duration, inferred_duration, size))
+    verified_rows.append((
+        path.name,
+        video_stream.get("codec_name", "unknown"),
+        audio_stream.get("codec_name", "none") if audio_stream else "none",
+        duration,
+        inferred_duration,
+        size
+    ))
 
 if failures:
     print("bundled test video verification failed:", file=sys.stderr)
@@ -140,8 +155,9 @@ if large_exceptions:
     print("size exceptions: " + ", ".join(large_exceptions))
 else:
     print("size exceptions: none")
+print("audio exceptions: " + ", ".join(sorted(audio_exceptions)))
 print("verified rows:")
-for name, codec, duration, inferred_duration, size in verified_rows:
+for name, codec, audio_codec, duration, inferred_duration, size in verified_rows:
     duration_text = f"{duration:.3f}s" if duration is not None else f"inferred {inferred_duration:.3f}s"
-    print(f"- {name}: {codec}, {duration_text}, {size} bytes")
+    print(f"- {name}: {codec}, audio={audio_codec}, {duration_text}, {size} bytes")
 PY

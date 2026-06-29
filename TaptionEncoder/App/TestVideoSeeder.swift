@@ -74,11 +74,14 @@ enum TaptionTestVideoSeeder {
         fileManager: FileManager = .default
     ) {
         do {
-            guard let sourceURL = bundle.url(forResource: bundledFolderName, withExtension: nil) else {
+            guard let sourceURL = bundledSamplesURL(bundle: bundle, fileManager: fileManager) else {
                 AppLogger.warning(
                     "Bundled test videos folder was not found",
                     category: .app,
-                    metadata: ["folder": bundledFolderName]
+                    metadata: [
+                        "folder": bundledFolderName,
+                        "resourceURL": bundle.resourceURL?.path ?? "none"
+                    ]
                 )
                 return
             }
@@ -98,6 +101,7 @@ enum TaptionTestVideoSeeder {
                     "removedExistingFolder": "\(result.removedExistingFolder)"
                 ]
             )
+            logMissingExpectedSamplesIfNeeded(result.copiedFilenames)
         } catch {
             AppLogger.error(
                 "Test video sample seeding failed",
@@ -163,5 +167,43 @@ enum TaptionTestVideoSeeder {
             throw CocoaError(.fileNoSuchFile)
         }
         return documentsURL
+    }
+
+    private static func bundledSamplesURL(bundle: Bundle, fileManager: FileManager) -> URL? {
+        if let sourceURL = bundle.url(forResource: bundledFolderName, withExtension: nil) {
+            return sourceURL
+        }
+
+        guard let resourceURL = bundle.resourceURL else {
+            return nil
+        }
+
+        let fallbackURL = resourceURL.appendingPathComponent(bundledFolderName, isDirectory: true)
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: fallbackURL.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            return nil
+        }
+        return fallbackURL
+    }
+
+    private static func logMissingExpectedSamplesIfNeeded(_ copiedFilenames: [String]) {
+        let copied = Set(copiedFilenames)
+        let expected = Set(expectedBundledVideoSampleFilenames)
+            .union([sourceNoticeFilename])
+        let missing = expected.subtracting(copied).sorted()
+        guard !missing.isEmpty else {
+            return
+        }
+
+        AppLogger.warning(
+            "Test video sample seeding missed expected files",
+            category: .app,
+            metadata: [
+                "missing": missing.joined(separator: ", "),
+                "expected": "\(expected.count)",
+                "copied": "\(copied.count)"
+            ]
+        )
     }
 }

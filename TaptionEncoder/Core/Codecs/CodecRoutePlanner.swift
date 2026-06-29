@@ -268,7 +268,7 @@ enum TaptionCodecRoutePlanner {
         route: TaptionCodecRoute,
         requestedMode: TaptionEncoderMode
     ) -> TaptionCodecRouteSelection {
-        TaptionCodecRouteSelection(
+        return TaptionCodecRouteSelection(
             route: route,
             requestedMode: requestedMode,
             selectedMode: .hardware,
@@ -297,7 +297,17 @@ enum TaptionCodecRoutePlanner {
         }
 
         if hardwareEncode {
-            let decodeBackend = hardwareDecode ? .appleAVAssetExport : softwareDecodeBackend(for: route.sourceCodec)
+            let decodeBackend: TaptionEncodingBackend
+            if hardwareDecode {
+                decodeBackend = .appleAVAssetExport
+            } else if let softwareBackend = softwareDecodeBackend(for: route.sourceCodec) {
+                decodeBackend = softwareBackend
+            } else {
+                return implementedRouteWaitingForSoftwareBackendSelection(
+                    route: route,
+                    requestedMode: requestedMode
+                )
+            }
             return TaptionCodecRouteSelection(
                 route: route,
                 requestedMode: requestedMode,
@@ -337,7 +347,7 @@ enum TaptionCodecRoutePlanner {
         requestedMode: TaptionEncoderMode,
         hardwareSupport: TaptionCodecHardwareSupportProfile
     ) -> TaptionCodecRouteSelection {
-        TaptionCodecRouteSelection(
+        return TaptionCodecRouteSelection(
             route: route,
             requestedMode: requestedMode,
             selectedMode: .automatic,
@@ -354,11 +364,17 @@ enum TaptionCodecRoutePlanner {
         requestedMode: TaptionEncoderMode,
         reason: String
     ) -> TaptionCodecRouteSelection {
-        TaptionCodecRouteSelection(
+        guard let decodeBackend = softwareDecodeBackend(for: route.sourceCodec) else {
+            return implementedRouteWaitingForSoftwareBackendSelection(
+                route: route,
+                requestedMode: requestedMode
+            )
+        }
+        return TaptionCodecRouteSelection(
             route: route,
             requestedMode: requestedMode,
             selectedMode: .software,
-            decodeBackend: softwareDecodeBackend(for: route.sourceCodec),
+            decodeBackend: decodeBackend,
             encodeBackend: .customSoftware,
             executionKind: .software,
             support: .implemented,
@@ -391,7 +407,7 @@ enum TaptionCodecRoutePlanner {
             return .appleAVAssetExport
         }
         if SW_CodecSupportCatalog.softwareFallbackPreferred(for: codec) {
-            return softwareDecodeBackend(for: codec)
+            return SW_SoftwareCodecBackendRegistry.preferredVideoDecodeBackend(for: codec)
         }
         return nil
     }
@@ -406,8 +422,24 @@ enum TaptionCodecRoutePlanner {
         return SW_SoftwareCodecBackendRegistry.preferredVideoEncodeBackend(for: codec)
     }
 
-    private static func softwareDecodeBackend(for codec: TaptionVideoCodec) -> TaptionEncodingBackend {
-        SW_SoftwareCodecBackendRegistry.preferredVideoDecodeBackend(for: codec) ?? .customSoftware
+    private static func softwareDecodeBackend(for codec: TaptionVideoCodec) -> TaptionEncodingBackend? {
+        SW_SoftwareCodecBackendRegistry.currentExecutableVideoDecodeBackend(for: codec)
+    }
+
+    private static func implementedRouteWaitingForSoftwareBackendSelection(
+        route: TaptionCodecRoute,
+        requestedMode: TaptionEncoderMode
+    ) -> TaptionCodecRouteSelection {
+        TaptionCodecRouteSelection(
+            route: route,
+            requestedMode: requestedMode,
+            selectedMode: .automatic,
+            decodeBackend: nil,
+            encodeBackend: .customSoftware,
+            executionKind: .planned,
+            support: .planned,
+            reason: "The route has an implementation entry, but the required software decode backend is not executable in the current build."
+        )
     }
 
     private static func plannedRouteReason(

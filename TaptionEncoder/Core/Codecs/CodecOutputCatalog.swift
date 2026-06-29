@@ -270,8 +270,6 @@ enum TaptionLaunchSupportCatalog {
         TaptionLaunchInputVideoSupportItem(codec: .sorensonVideo3, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .quickTimeVideo, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .theora, availability: .availableNow),
-        TaptionLaunchInputVideoSupportItem(codec: .realVideo1, availability: .availableNow),
-        TaptionLaunchInputVideoSupportItem(codec: .realVideo, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .roqVideo, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .wmv, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .microsoftVideo1, availability: .availableNow),

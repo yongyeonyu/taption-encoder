@@ -13,6 +13,9 @@ Policy for this folder:
 - Generated-only test-pattern fixtures are not bundled. If no official/public
   source file is found for an executable codec, the codec remains unsupported
   by the default sample bundle until a real source is available.
+- Preview verification samples include a short audible tone track when the
+  container can carry audio. Current audio exceptions are raw `H.261.h261` and
+  `RoQ Video.roq`.
 
 Official Chromium media test data:
 - AV1.mp4

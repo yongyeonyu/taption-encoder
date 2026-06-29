@@ -18,6 +18,22 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         application.isIdleTimerDisabled = false
         AppLogger.info("Idle timer restored because app is no longer active", category: .app)
     }
+
+    func application(
+        _ application: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        AppLogger.info(
+            "Application received external URL",
+            category: .fileImport,
+            metadata: ["name": url.lastPathComponent]
+        )
+        Task { @MainActor in
+            AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
+        }
+        return false
+    }
 }
 
 @MainActor

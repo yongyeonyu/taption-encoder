@@ -431,6 +431,9 @@ final class AdMobConsentManager {
 #endif
 
 enum AdMobBootstrapper {
+    @MainActor
+    private static var appOpenAdSuppressedUntil: Date?
+
     static func start() {
         #if canImport(GoogleMobileAds)
         AppLogger.info("AdMob bootstrap started", category: .ads)
@@ -449,8 +452,22 @@ enum AdMobBootstrapper {
         #endif
     }
 
+    @MainActor
+    static func suppressAppOpenAdsForExternalPlayback(seconds: TimeInterval = 20) {
+        appOpenAdSuppressedUntil = Date().addingTimeInterval(seconds)
+        AppLogger.info(
+            "App open ads suppressed for external playback",
+            category: .ads,
+            metadata: ["seconds": String(format: "%.0f", seconds)]
+        )
+    }
+
     static func showAppOpenAdIfAvailable() async {
         #if canImport(GoogleMobileAds)
+        if await isAppOpenAdSuppressed {
+            AppLogger.info("App open ad skipped for external playback", category: .ads)
+            return
+        }
         let configuration = AdMobRuntimeConfiguration.current()
         guard !configuration.appOpenAdUnitID.isEmpty,
               await ensureReadyForAds() else {
@@ -459,6 +476,18 @@ enum AdMobBootstrapper {
         AppLogger.info("App open ad show requested", category: .ads)
         await AdMobAppOpenAdManager.shared.showIfAvailable(adUnitID: configuration.appOpenAdUnitID)
         #endif
+    }
+
+    @MainActor
+    private static var isAppOpenAdSuppressed: Bool {
+        guard let until = appOpenAdSuppressedUntil else {
+            return false
+        }
+        if until > Date() {
+            return true
+        }
+        appOpenAdSuppressedUntil = nil
+        return false
     }
 
     #if canImport(GoogleMobileAds)

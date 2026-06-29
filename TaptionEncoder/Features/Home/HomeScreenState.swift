@@ -768,6 +768,7 @@ struct QueueVideoPreview: Identifiable, Equatable {
     var sourceURL: URL
     var videoInfo: LoadedVideoInfo
     var displaySize: TaptionPixelSize?
+    var playlist: QueueVideoPreviewPlaylist? = nil
 
     var codecBadge: String {
         videoInfo.inputSummary
@@ -784,6 +785,30 @@ struct QueueVideoPreview: Identifiable, Equatable {
             return nil
         }
         return Double(displaySize.width) / Double(displaySize.height)
+    }
+}
+
+struct QueueVideoPreviewPlaylist: Equatable {
+    var currentIndex: Int
+    var totalCount: Int
+    var previousID: String?
+    var previousName: String?
+    var nextID: String?
+    var nextName: String?
+
+    var positionText: String {
+        guard totalCount > 0 else {
+            return "1 / 1"
+        }
+        return "\(min(max(currentIndex + 1, 1), totalCount)) / \(totalCount)"
+    }
+
+    var hasPrevious: Bool {
+        previousID != nil
+    }
+
+    var hasNext: Bool {
+        nextID != nil
     }
 }
 

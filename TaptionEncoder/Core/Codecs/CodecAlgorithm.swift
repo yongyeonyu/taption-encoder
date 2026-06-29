@@ -303,8 +303,6 @@ enum TaptionCodecRegistry {
         TaptionCodecRoute(sourceCodec: .sorensonVideo3, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .quickTimeVideo, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .theora, outputCodec: .hevc),
-        TaptionCodecRoute(sourceCodec: .realVideo1, outputCodec: .hevc),
-        TaptionCodecRoute(sourceCodec: .realVideo, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .roqVideo, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .wmv, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .microsoftVideo1, outputCodec: .hevc),
@@ -540,20 +538,6 @@ enum TaptionCodecRegistry {
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "Theora to H.265 Software"
-        ),
-        TaptionCodecAlgorithmDescriptor(
-            sourceCodec: .realVideo1,
-            outputCodec: .hevc,
-            mode: .software,
-            backend: .softwareVLCDecoder,
-            displayName: "RealVideo 1.0 to H.265 Software"
-        ),
-        TaptionCodecAlgorithmDescriptor(
-            sourceCodec: .realVideo,
-            outputCodec: .hevc,
-            mode: .software,
-            backend: .softwareVLCDecoder,
-            displayName: "RealVideo to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
             sourceCodec: .roqVideo,

@@ -1773,8 +1773,7 @@ extension SW_AV1HEVCTranscoder {
                 lastFrameProgressUptime = ProcessInfo.processInfo.systemUptime
             }
 
-            if audioContext == nil,
-               configuration.limitsToExpectedFrameCount,
+            if configuration.limitsToExpectedFrameCount,
                context.didReachExpectedFrameCount,
                !stopRequested {
                 stopRequested = true
@@ -1784,28 +1783,50 @@ extension SW_AV1HEVCTranscoder {
             let state = libvlc_media_player_get_state(player)
             if sawAnyFrame {
                 let audioDidDrain = audioContext?.didDrain ?? true
+                let audioDidWriteSamples = audioContext?.didWriteAnySamples ?? true
                 let playbackPosition = libvlc_media_player_get_position(player)
                 let playbackTimeMilliseconds = libvlc_media_player_get_time(player)
                 let playbackTimeSeconds = playbackTimeMilliseconds > 0
                     ? Double(playbackTimeMilliseconds) / 1000.0
                     : 0
                 let idleDuration = ProcessInfo.processInfo.systemUptime - lastFrameProgressUptime
+                let settleDuration = max(1.0, configuration.frameDuration.seconds * 12)
+                let stallDuration = max(8.0, configuration.frameDuration.seconds * 180)
+                let audioReadyToFinish = audioDidDrain || (audioDidWriteSamples && idleDuration > settleDuration)
                 if (state == libvlc_Stopped || state == libvlc_Stopping),
-                   audioDidDrain,
+                   audioReadyToFinish,
                    idleDuration > max(0.5, configuration.frameDuration.seconds * 6) {
                     break
                 }
                 if stopRequested,
-                   audioDidDrain,
-                   idleDuration > max(1.0, configuration.frameDuration.seconds * 12) {
+                   audioReadyToFinish,
+                   idleDuration > settleDuration {
                     break
                 }
                 if configuration.limitsToExpectedFrameCount {
                     let isNearPlaybackEnd = playbackPosition >= 0.995
                         || playbackTimeSeconds >= max(configuration.duration.seconds - 0.25, 0)
                     if isNearPlaybackEnd,
-                       audioDidDrain,
+                       audioReadyToFinish,
                        idleDuration > max(0.5, configuration.frameDuration.seconds * 6) {
+                        break
+                    }
+                }
+                if idleDuration > stallDuration,
+                   audioDidWriteSamples {
+                    if !stopRequested {
+                        AppLogger.warning(
+                            "Software \(sourceCodecLabel) decoder stopped producing frames; finalizing partial decoded stream",
+                            category: .encoding,
+                            metadata: [
+                                "source": sourceURL.lastPathComponent,
+                                "frames": "\(frameCount)",
+                                "idleSeconds": String(format: "%.2f", idleDuration)
+                            ]
+                        )
+                        stopRequested = true
+                        _ = libvlc_media_player_stop_async(player)
+                    } else {
                         break
                     }
                 }

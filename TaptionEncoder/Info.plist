@@ -20,19 +20,39 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
+			<string>Legacy Video Files</string>
+			<key>CFBundleTypeIconFiles</key>
+			<array>
+				<string>AppIcon60x60</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.taption.legacy-video</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
 			<string>Video Files</string>
+			<key>CFBundleTypeIconFiles</key>
+			<array>
+				<string>AppIcon60x60</string>
+			</array>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>LSHandlerRank</key>
 			<string>Alternate</string>
 			<key>LSItemContentTypes</key>
 			<array>
-				<string>public.audiovisual-content</string>
-				<string>public.video</string>
 				<string>public.movie</string>
+				<string>public.video</string>
 				<string>public.mpeg-4</string>
 				<string>com.apple.quicktime-movie</string>
-				<string>com.taption.video</string>
+				<string>public.3gpp</string>
+				<string>public.3gpp2</string>
 			</array>
 		</dict>
 	</array>
@@ -51,6 +71,8 @@
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>UIFileSharingEnabled</key>
+	<true/>
+	<key>UISupportsDocumentBrowser</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Taption Encoder needs access to selected videos for local conversion.</string>
@@ -94,28 +116,26 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>UTImportedTypeDeclarations</key>
+	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.movie</string>
+				<string>public.video</string>
 			</array>
 			<key>UTTypeDescription</key>
-			<string>Taption video file</string>
+			<string>Taption legacy video file</string>
+			<key>UTTypeIconFile</key>
+			<string>AppIcon60x60</string>
 			<key>UTTypeIdentifier</key>
-			<string>com.taption.video</string>
+			<string>com.taption.legacy-video</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
 				<array>
 					<string>264</string>
 					<string>265</string>
-					<string>3g2</string>
-					<string>mp4</string>
-					<string>mov</string>
-					<string>qt</string>
-					<string>m4v</string>
 					<string>mkv</string>
 					<string>webm</string>
 					<string>avi</string>
@@ -141,9 +161,6 @@
 					<string>vob</string>
 					<string>mod</string>
 					<string>dat</string>
-					<string>3gp</string>
-					<string>3gpp</string>
-					<string>3gpp2</string>
 					<string>dv</string>
 					<string>dif</string>
 					<string>lrf</string>
@@ -165,8 +182,6 @@
 					<string>m2v</string>
 					<string>vc1</string>
 				</array>
-				<key>public.mime-type</key>
-				<string>video/*</string>
 			</dict>
 		</dict>
 	</array>
