@@ -1632,11 +1632,27 @@ final class CodecRoutePlannerTests: XCTestCase {
             "mp4",
             "qt"
         ]
+        let legacySystemContentTypes: Set<String> = [
+            "public.avi",
+            "org.smpte.mxf",
+            "public.dv-movie",
+            "com.microsoft.advanced-systems-format",
+            "com.microsoft.windows-media-wmv",
+            "com.real.realmedia",
+            "com.real.realmedia-vbr",
+            "org.webmproject.webm",
+            "com.adobe.flash.video",
+            "public.mpeg",
+            "public.mpeg-2-video",
+            "org.xiph.ogv",
+            "org.xiph.ogg-audio"
+        ]
         let externalPlayerExtensions = launchExtensions.subtracting(systemHandledExtensions)
         let standardVideoContentTypes: Set<String> = [
             "public.movie",
             "public.video",
             "public.mpeg-4",
+            "com.apple.m4v-video",
             "com.apple.quicktime-movie",
             "public.3gpp",
             "public.3gpp2"
@@ -1682,10 +1698,15 @@ final class CodecRoutePlannerTests: XCTestCase {
             "Thumbnail extension should preserve frame thumbnails for system-handled video extensions."
         )
         XCTAssertTrue(documentContentTypes.isSuperset(of: ["com.taption.legacy-video"]))
+        XCTAssertTrue(documentContentTypes.isSuperset(of: legacySystemContentTypes))
         XCTAssertTrue(documentContentTypes.isSuperset(of: standardVideoContentTypes))
         XCTAssertEqual(documentHandlerRanks, ["Owner", "Alternate"])
         XCTAssertEqual(legacyDocumentType["LSHandlerRank"] as? String, "Owner")
         XCTAssertEqual(legacyDocumentType["CFBundleTypeRole"] as? String, "Viewer")
+        XCTAssertTrue(
+            Set(legacyDocumentType["LSItemContentTypes"] as? [String] ?? []).isSuperset(of: legacySystemContentTypes),
+            "Legacy document type should claim Files-resolved Taption Encoder video UTIs."
+        )
         XCTAssertEqual(standardVideoDocumentType["LSHandlerRank"] as? String, "Alternate")
         XCTAssertEqual(standardVideoDocumentType["CFBundleTypeRole"] as? String, "Viewer")
         XCTAssertEqual(documentIconFiles, ["AppIcon60x60"])
@@ -1744,6 +1765,22 @@ final class CodecRoutePlannerTests: XCTestCase {
             try XCTUnwrap(attributes["QLSupportedContentTypes"] as? [String])
         )
         let projectText = try String(contentsOf: projectURL, encoding: .utf8)
+        let filesResolvedContentTypes: Set<String> = [
+            "com.apple.m4v-video",
+            "public.avi",
+            "org.smpte.mxf",
+            "public.dv-movie",
+            "com.microsoft.advanced-systems-format",
+            "com.microsoft.windows-media-wmv",
+            "com.real.realmedia",
+            "com.real.realmedia-vbr",
+            "org.webmproject.webm",
+            "com.adobe.flash.video",
+            "public.mpeg",
+            "public.mpeg-2-video",
+            "org.xiph.ogv",
+            "org.xiph.ogg-audio"
+        ]
 
         XCTAssertEqual(
             extensionInfo["NSExtensionPointIdentifier"] as? String,
@@ -1756,6 +1793,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(
             supportedContentTypes.isSuperset(of: documentContentTypes),
             "Thumbnail extension must cover every Files-visible video type: \(documentContentTypes.subtracting(supportedContentTypes).sorted().joined(separator: ", "))"
+        )
+        XCTAssertTrue(
+            supportedContentTypes.isSuperset(of: filesResolvedContentTypes),
+            "Thumbnail extension must also cover system UTIs resolved from supported file extensions: \(filesResolvedContentTypes.subtracting(supportedContentTypes).sorted().joined(separator: ", "))"
         )
         XCTAssertTrue(projectText.contains("TaptionEncoderThumbnailExtension.appex in Embed Foundation Extensions"))
         XCTAssertTrue(projectText.contains("com.apple.product-type.app-extension"))
