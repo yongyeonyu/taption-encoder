@@ -30,6 +30,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var rewardedAdState: AdLoadState
     @Published private(set) var isWatchingStarAd: Bool
     @Published private(set) var activePreview: QueueVideoPreview?
+    @Published private(set) var folderPreviewContext: FolderPreviewContext?
 
     private let environment: AppEnvironment
     private var activeTask: Task<Void, Never>?
@@ -63,6 +64,7 @@ final class HomeViewModel: ObservableObject {
         self.rewardedAdState = .idle
         self.isWatchingStarAd = false
         self.activePreview = nil
+        self.folderPreviewContext = nil
         AppLogger.info(
             "HomeViewModel initialized",
             category: .app,
@@ -778,6 +780,13 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
+    var folderPreviewFileSnapshots: [EncodingFileCardSnapshot] {
+        guard folderPreviewContext != nil else {
+            return []
+        }
+        return folderBatch?.cardSnapshots() ?? []
+    }
+
     func restorePendingSavesIfNeeded() async {
         guard !hasRestoredPendingSaves else {
             return
@@ -952,6 +961,7 @@ final class HomeViewModel: ObservableObject {
         dismissPreview()
         selectionInspectionTask?.cancel()
         folderBatch = nil
+        folderPreviewContext = nil
         currentReview = nil
         lastBatchFileCards = []
         let source = HomeSelectedSource(
@@ -999,6 +1009,7 @@ final class HomeViewModel: ObservableObject {
         selectionInspectionTask?.cancel()
         currentReview = nil
         lastBatchFileCards = []
+        folderPreviewContext = nil
         folderBatch = FolderEncodingBatch(
             folderName: "Selected files",
             sourceKind: .files,
@@ -1031,6 +1042,7 @@ final class HomeViewModel: ObservableObject {
         selectionInspectionTask?.cancel()
         currentReview = nil
         lastBatchFileCards = []
+        folderPreviewContext = nil
         folderBatch = nil
         beginSecurityScopedAccessIfNeeded(for: url)
 
@@ -1055,7 +1067,12 @@ final class HomeViewModel: ObservableObject {
                 sourceKind: .folder,
                 fileURLs: fileURLs
             )
-            preflightCurrentBatchThenPrepareFirst(displayName: url.lastPathComponent)
+            folderPreviewContext = FolderPreviewContext(
+                id: url.standardizedFileURL.absoluteString,
+                folderName: url.lastPathComponent,
+                fileCount: fileURLs.count
+            )
+            state = .idle
         } catch {
             AppLogger.error(
                 "Folder flow failed",
@@ -1086,6 +1103,7 @@ final class HomeViewModel: ObservableObject {
         dismissPreview()
         selectionInspectionTask?.cancel()
         folderBatch = nil
+        folderPreviewContext = nil
         currentReview = nil
         lastBatchFileCards = []
         let source = HomeSelectedSource(
@@ -1116,6 +1134,47 @@ final class HomeViewModel: ObservableObject {
         }
 
         presentPreview(preview)
+    }
+
+    func selectFolderPreviewFile(id: String) {
+        selectFileCard(id: id)
+    }
+
+    func importFolderPreviewBatch() {
+        guard let context = folderPreviewContext,
+              folderBatch != nil else {
+            AppLogger.warning("Folder preview import ignored because no preview batch exists", category: .folderImport)
+            return
+        }
+        AppLogger.info(
+            "Folder preview import accepted",
+            category: .folderImport,
+            metadata: [
+                "name": context.folderName,
+                "count": "\(context.fileCount)"
+            ]
+        )
+        folderPreviewContext = nil
+        preflightCurrentBatchThenPrepareFirst(displayName: context.folderName)
+    }
+
+    func dismissFolderPreviewBrowser() {
+        guard let context = folderPreviewContext else {
+            return
+        }
+        AppLogger.info(
+            "Folder preview browser dismissed",
+            category: .folderImport,
+            metadata: ["name": context.folderName]
+        )
+        folderPreviewContext = nil
+        folderBatch = nil
+        selectionInspectionTask?.cancel()
+        selectionInspectionTask = nil
+        stopSecurityScopedAccess()
+        if !state.isBusy {
+            state = .idle
+        }
     }
 
     func dismissPreview() {
@@ -1734,6 +1793,7 @@ final class HomeViewModel: ObservableObject {
         activeStarCharge = nil
         shouldAutoResumeBatchAfterStarEarn = false
         folderAccessPrompt = nil
+        folderPreviewContext = nil
         clearPendingSaveExportPrompt()
         pendingSaveQueue = []
         pendingSaveAccessURLs = [:]
@@ -1783,6 +1843,7 @@ final class HomeViewModel: ObservableObject {
         activeStarCharge = nil
         shouldAutoResumeBatchAfterStarEarn = false
         lastBatchFileCards = []
+        folderPreviewContext = nil
         folderBatch = nil
         inspectedMediaCache.removeAll()
         state = .failed(HomeEncodingError(title: "Import failed", message: message))

@@ -244,6 +244,216 @@ private struct EncodingFileCardView: View {
     }
 }
 
+struct FolderPreviewBrowserView: View {
+    var context: FolderPreviewContext
+    var files: [EncodingFileCardSnapshot]
+    var onSelect: (String) -> Void
+    var onImportAll: () -> Void
+    var onClose: () -> Void
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 118, maximum: 168), spacing: 10, alignment: .top)
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: 10) {
+                    ForEach(files) { file in
+                        FolderPreviewTileView(
+                            file: file,
+                            onSelect: { onSelect(file.id) }
+                        )
+                    }
+                }
+                .padding(12)
+            }
+
+            bottomBar
+        }
+        .background(TaptionTheme.appBackground.ignoresSafeArea())
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(context.folderName)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                Text(context.countText)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(TaptionTheme.mutedText)
+            }
+
+            Spacer(minLength: 8)
+
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.white.opacity(0.88))
+            .background(Color.white.opacity(0.10))
+            .clipShape(Circle())
+            .accessibilityLabel("Close")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(TaptionTheme.surface)
+    }
+
+    private var bottomBar: some View {
+        HStack(spacing: 10) {
+            Button(action: onImportAll) {
+                Label("Import All", systemImage: "tray.and.arrow.down.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.black.opacity(0.88))
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .padding(12)
+        .background(TaptionTheme.surface)
+    }
+}
+
+private struct FolderPreviewTileView: View {
+    var file: EncodingFileCardSnapshot
+    var onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: 7) {
+                FolderPreviewThumbnailView(
+                    sourceURL: file.thumbnailSourceURL,
+                    canAttemptThumbnail: file.isInteractable
+                )
+                .overlay(alignment: .topTrailing) {
+                    if file.isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(Color.white, TaptionTheme.accent)
+                            .padding(6)
+                    }
+                }
+
+                Text(file.fileName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.76)
+                    .frame(height: 32, alignment: .topLeading)
+
+                Text(file.statusText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(file.isInteractable ? TaptionTheme.mutedText : TaptionTheme.disabledText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(file.isSelected ? TaptionTheme.selectedSurface : TaptionTheme.elevatedSurface)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(file.isSelected ? Color.white.opacity(0.36) : TaptionTheme.border, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct FolderPreviewThumbnailView: View {
+    var sourceURL: URL?
+    var canAttemptThumbnail: Bool
+
+    @State private var thumbnailImage: UIImage?
+    @State private var isLoading = false
+    @State private var didFail = false
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.black.opacity(0.34))
+
+            if let thumbnailImage {
+                Image(uiImage: thumbnailImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            } else if isLoading {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .tint(TaptionTheme.mutedText)
+            } else {
+                Image(systemName: didFail ? "film" : "photo.on.rectangle.angled")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(TaptionTheme.mutedText)
+            }
+        }
+        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+        )
+        .task(id: thumbnailTaskID) {
+            await loadThumbnail()
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var thumbnailTaskID: String {
+        "\(canAttemptThumbnail)-\(sourceURL?.absoluteString ?? "none")"
+    }
+
+    @MainActor
+    private func loadThumbnail() async {
+        thumbnailImage = nil
+        didFail = false
+
+        guard canAttemptThumbnail,
+              let sourceURL else {
+            isLoading = false
+            return
+        }
+
+        isLoading = true
+        defer {
+            isLoading = false
+        }
+
+        do {
+            thumbnailImage = try await QueueVideoThumbnailRenderer.thumbnailImage(
+                for: sourceURL,
+                pixelSize: CGSize(width: 320, height: 180)
+            )
+        } catch {
+            if !Task.isCancelled {
+                didFail = true
+                AppLogger.debug(
+                    "Folder preview thumbnail generation failed",
+                    category: .ui,
+                    metadata: [
+                        "name": sourceURL.lastPathComponent,
+                        "error": String(describing: error)
+                    ]
+                )
+            }
+        }
+    }
+}
+
 private struct QueueFileThumbnailView: View {
     var sourceURL: URL?
     var canAttemptThumbnail: Bool

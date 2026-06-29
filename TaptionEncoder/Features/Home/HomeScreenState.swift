@@ -956,6 +956,16 @@ struct PendingFolderAccessPrompt: Identifiable, Equatable {
     }
 }
 
+struct FolderPreviewContext: Identifiable, Equatable {
+    var id: String
+    var folderName: String
+    var fileCount: Int
+
+    var countText: String {
+        fileCount == 1 ? "1 video" : "\(fileCount) videos"
+    }
+}
+
 struct PendingSaveExportPrompt: Identifiable, Equatable {
     var id: UUID {
         job.id

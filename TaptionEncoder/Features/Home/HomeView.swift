@@ -139,7 +139,7 @@ struct HomeView: View {
         }
         .sheet(isPresented: $isFolderImporterPresented) {
             VideoDocumentPicker(
-                contentTypes: [.folder] + ImportableVideoTypes.all,
+                contentTypes: [.folder],
                 allowsMultipleSelection: false,
                 onPick: { urls in
                     AppLogger.info(
@@ -159,6 +159,26 @@ struct HomeView: View {
                 }
             )
             .ignoresSafeArea()
+        }
+        .sheet(
+            item: Binding(
+                get: { viewModel.folderPreviewContext },
+                set: { context in
+                    if context == nil {
+                        viewModel.dismissFolderPreviewBrowser()
+                    }
+                }
+            )
+        ) { context in
+            FolderPreviewBrowserView(
+                context: context,
+                files: viewModel.folderPreviewFileSnapshots,
+                onSelect: { viewModel.selectFolderPreviewFile(id: $0) },
+                onImportAll: { viewModel.importFolderPreviewBatch() },
+                onClose: { viewModel.dismissFolderPreviewBrowser() }
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
         .sheet(item: $activeMenuSheet) { sheet in
             HomeMenuSheetView(sheet: sheet)

@@ -6655,6 +6655,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         viewModel.handleFolderPickerSelection(urls: [folderURL])
+        XCTAssertEqual(viewModel.folderPreviewContext?.folderName, "PickedFolder")
+        XCTAssertEqual(viewModel.folderPreviewContext?.fileCount, 1)
+        XCTAssertEqual(viewModel.folderPreviewFileSnapshots.first?.id, sourceURL.absoluteString)
+        XCTAssertEqual(viewModel.folderPreviewFileSnapshots.first?.sourceKind, .folder)
+        XCTAssertEqual(viewModel.folderPreviewFileSnapshots.first?.thumbnailSourceURL, sourceURL)
+
+        viewModel.importFolderPreviewBatch()
         try await waitForReadyToStartState(in: viewModel)
 
         guard case .readyToStart(let review) = viewModel.state else {
@@ -6875,6 +6882,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         viewModel.startFolderFlow(url: directoryURL)
+        XCTAssertEqual(viewModel.folderPreviewContext?.fileCount, 3)
+        viewModel.importFolderPreviewBatch()
         try await waitForReadyToStartState(in: viewModel)
         XCTAssertEqual(viewModel.activePreview?.sourceURL, supportedFirstURL)
 
@@ -6933,6 +6942,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         viewModel.startFolderFlow(url: directoryURL)
+        XCTAssertEqual(viewModel.folderPreviewContext?.fileCount, 3)
+        viewModel.importFolderPreviewBatch()
         try await waitForReadyToStartState(in: viewModel)
 
         let middleSnapshot = viewModel.fileCardSnapshots.first { $0.fileName == nonPreviewableURL.lastPathComponent }
