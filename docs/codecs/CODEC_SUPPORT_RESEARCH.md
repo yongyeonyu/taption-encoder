@@ -87,7 +87,7 @@ Audio should be copied when compatible with the output container and quality pol
 | AMR / iLBC / G.722 / G.723.1 / G.726 / ADPCM / WMA | `amr`, `ilbc`, `g722`, `g723`, `g726`, `adpcm`, `wma` | SW/imported decoder target |
 | MLP / TTA / Nellymoser / RealAudio / RoQ DPCM | `mlp`, `tta`, `nellymoser`, `realAudio`, `roqDPCM` | Legacy and archive SW/imported decoder target |
 
-Current audio fixture coverage is tracked in `docs/AUDIO_CODEC_FIXTURES.md`. The local smoke set generated AAC, PCM, A-law, mu-law, ALAC, Opus, MP3, MP2, AC3, EAC3, DTS, TrueHD, FLAC, Vorbis, iLBC, G.722, G.723.1, G.726, MLP, TTA, Nellymoser, RealAudio 1.0, RoQ DPCM, WavPack, WMA, and ADPCM samples with audio signal verification after SW/HW H.265 conversion. xHE-AAC, AMR-NB, and AMR-WB remain alternate-generator or real-sample targets because the current local FFmpeg build does not provide those encoders.
+Current audio fixture coverage is tracked in `docs/codecs/AUDIO_CODEC_FIXTURES.md`. The local smoke set generated AAC, PCM, A-law, mu-law, ALAC, Opus, MP3, MP2, AC3, EAC3, DTS, TrueHD, FLAC, Vorbis, iLBC, G.722, G.723.1, G.726, MLP, TTA, Nellymoser, RealAudio 1.0, RoQ DPCM, WavPack, WMA, and ADPCM samples with audio signal verification after SW/HW H.265 conversion. xHE-AAC, AMR-NB, and AMR-WB remain alternate-generator or real-sample targets because the current local FFmpeg build does not provide those encoders.
 
 The app core now includes an audio route planner:
 
@@ -156,9 +156,9 @@ The app should expose a Device Info menu that shows:
 
 The implementation now has `HW_CodecCapabilityProbe` as the core provider for this screen, including VideoToolbox video probes and Apple-native audio capability rows. `CodecRoutePlanner` remains the app-side route selector that reports `HW`, `SW`, `HW/SW`, `Planned`, or `Unsupported` per imported file.
 
-Route-selection simulation is tracked in `docs/DEVICE_CODEC_ROUTE_SIMULATION.md` and can be regenerated with `Scripts/simulate_codec_route_planner.sh`.
+Route-selection simulation is tracked in `docs/codecs/DEVICE_CODEC_ROUTE_SIMULATION.md` and can be regenerated with `Scripts/simulate_codec_route_planner.sh`.
 
-Apple device-family simulation is tracked in `docs/APPLE_DEVICE_CODEC_MATRIX.md` and implemented in `HW_AppleDeviceCodecProfiles.swift`. The catalog currently covers the oldest iPadOS 18 A10 class, A12/A13/A14/A15/A16 HEVC classes, iPhone/iPad ProRes classes, A17 Pro/A18 AV1-decode classes, and modern M3/M4 iPad AV1/ProRes classes. These profiles are simulation inputs only; real-device `HW_CodecCapabilityProbe` output remains the app authority.
+Apple device-family simulation is tracked in `docs/codecs/APPLE_DEVICE_CODEC_MATRIX.md` and implemented in `HW_AppleDeviceCodecProfiles.swift`. The catalog currently covers the oldest iPadOS 18 A10 class, A12/A13/A14/A15/A16 HEVC classes, iPhone/iPad ProRes classes, A17 Pro/A18 AV1-decode classes, and modern M3/M4 iPad AV1/ProRes classes. These profiles are simulation inputs only; real-device `HW_CodecCapabilityProbe` output remains the app authority.
 
 ## Current Implementation State
 

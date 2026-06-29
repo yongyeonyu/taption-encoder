@@ -1,8 +1,8 @@
 # Taption Encoder
 
-Taption Encoder is a free iOS video encoder app intended to make phone-based conversion simple. The current shipped baseline is release `01.00.01`, mapped to Apple marketing version `1.0.1` and build `19`. The product direction remains practical all-input-to-H.265 conversion through hardware, software, or mixed codec paths, old-device compatibility where practical, background encoding where the OS allows it, and multi-video assembly into one H.265 output with lightweight editing.
+Taption Encoder is a free iOS video encoder app intended to make phone-based conversion simple. The current release train is `01.00.02`, mapped to Apple marketing version `1.0.2` and build `20`. The product direction remains practical all-input-to-H.265 conversion through hardware, software, or mixed codec paths, old-device compatibility where practical, background encoding where the OS allows it, and multi-video assembly into one H.265 output with lightweight editing.
 
-Release `01.00.01` establishes the focused standalone H.265 / HEVC encoder app. Later releases expand toward "almost any video in, H.265 out" plus simple multi-camera merge workflows. Output video codec is a product constraint: H.265 / HEVC is the only supported video output codec. Routes such as `H.264 -> AV1` or `AV1 -> H.264` are not product routes.
+Release `01.00.02` keeps the focused standalone H.265 / HEVC encoder scope and stabilizes preview playback, bundled samples, and project documentation. Later releases expand toward "almost any video in, H.265 out" plus simple multi-camera merge workflows. Output video codec is a product constraint: H.265 / HEVC is the only supported video output codec. Routes such as `H.264 -> AV1` or `AV1 -> H.264` are not product routes.
 
 Product path: **AV1 to H.265 first, broad inputs to H.265 next, H.265-only output final.**
 
@@ -18,18 +18,12 @@ Product path: **AV1 to H.265 first, broad inputs to H.265 next, H.265-only outpu
 
 ## Release Status
 
-- Current release label: `01.00.01`
-- Apple version/build: `1.0.1 (19)`
-- Release commit: `f5af6b3` (`Prepare Taption Encoder 1.0.1 build 19`)
-- Release date: 2026-06-27
-- App Store Connect/TestFlight upload: export/upload succeeded and the uploaded package entered processing.
-- Device install proof: paired iPhone 14 Pro and iPad Pro 12.9-inch (6th generation) both reported `com.taption.encoder` version `1.0.1`, build `19`.
-- Verification proof:
-  - `Scripts/run_core_codec_truth_checks.sh` passed.
-  - App-scheme XCTest passed with parallel testing disabled: 209 tests, 0 failures.
-  - `Scripts/verify_codec_fixture_evidence.sh` passed with 90 fixtures and 180 verified transcodes.
-  - Release archive/export upload succeeded for `build/TestFlight-01.00.01-19/TaptionEncoder.xcarchive`.
-  - GoogleMobileAds and UserMessagingPlatform SDK dSYM upload warnings did not block the successful app upload.
+- Current release label: `01.00.02`
+- Apple version/build: `1.0.2 (20)`
+- Release date: 2026-06-29
+- App Store Connect/TestFlight upload: export/upload succeeded for `build/TestFlight-01.00.02-20/TaptionEncoder.xcarchive`; App Store Connect reported the uploaded package is processing.
+- Device install proof: verify real-device install separately from TestFlight/App Store Connect state.
+- Verification proof: current `01.00.02` proof is recorded in `docs/verification/RELEASE_01.00.02.md`.
 
 ## Source Core To Port
 
@@ -45,17 +39,18 @@ Next implementation pass should isolate the media conversion core before importi
 
 ## Planning
 
-- App architecture, product plan, UI design, and roadmap: [`docs/APP_ARCHITECTURE.md`](docs/APP_ARCHITECTURE.md)
-- Detailed execution plan from launch to completed product: [`docs/DEVELOPMENT_PLAN.md`](docs/DEVELOPMENT_PLAN.md)
-- Phase-by-phase implementation guide for app development: [`docs/DETAILED_DEVELOPMENT_PLAN.md`](docs/DETAILED_DEVELOPMENT_PLAN.md)
-- Codec/container/audio support research: [`docs/CODEC_SUPPORT_RESEARCH.md`](docs/CODEC_SUPPORT_RESEARCH.md)
-- Apple device-family hardware codec matrix: [`docs/APPLE_DEVICE_CODEC_MATRIX.md`](docs/APPLE_DEVICE_CODEC_MATRIX.md)
-- Generated fixture policy and script: [`docs/VIDEO_CODEC_FIXTURES.md`](docs/VIDEO_CODEC_FIXTURES.md)
-- Audio fixture policy and script: [`docs/AUDIO_CODEC_FIXTURES.md`](docs/AUDIO_CODEC_FIXTURES.md)
-- Device codec route simulation: [`docs/DEVICE_CODEC_ROUTE_SIMULATION.md`](docs/DEVICE_CODEC_ROUTE_SIMULATION.md)
-- Local H.265 transcode fixture results: [`docs/HEVC_TRANSCODE_TEST_RESULTS.md`](docs/HEVC_TRANSCODE_TEST_RESULTS.md)
-- Release action items and launch blockers: [`docs/ACTION_ITEMS.md`](docs/ACTION_ITEMS.md)
-- Release closeout for `01.00.01`: [`docs/RELEASE_01.00.01.md`](docs/RELEASE_01.00.01.md)
+- App architecture, product plan, UI design, and roadmap: [`docs/architecture/APP_ARCHITECTURE.md`](../architecture/APP_ARCHITECTURE.md)
+- Detailed execution plan from launch to completed product: [`docs/planning/DEVELOPMENT_PLAN.md`](../planning/DEVELOPMENT_PLAN.md)
+- Phase-by-phase implementation guide for app development: [`docs/planning/DETAILED_DEVELOPMENT_PLAN.md`](../planning/DETAILED_DEVELOPMENT_PLAN.md)
+- Codec/container/audio support research: [`docs/codecs/CODEC_SUPPORT_RESEARCH.md`](../codecs/CODEC_SUPPORT_RESEARCH.md)
+- Apple device-family hardware codec matrix: [`docs/codecs/APPLE_DEVICE_CODEC_MATRIX.md`](../codecs/APPLE_DEVICE_CODEC_MATRIX.md)
+- Generated fixture policy and script: [`docs/codecs/VIDEO_CODEC_FIXTURES.md`](../codecs/VIDEO_CODEC_FIXTURES.md)
+- Audio fixture policy and script: [`docs/codecs/AUDIO_CODEC_FIXTURES.md`](../codecs/AUDIO_CODEC_FIXTURES.md)
+- Device codec route simulation: [`docs/codecs/DEVICE_CODEC_ROUTE_SIMULATION.md`](../codecs/DEVICE_CODEC_ROUTE_SIMULATION.md)
+- Local H.265 transcode fixture results: [`docs/verification/HEVC_TRANSCODE_TEST_RESULTS.md`](../verification/HEVC_TRANSCODE_TEST_RESULTS.md)
+- Release action items and launch blockers: [`docs/planning/ACTION_ITEMS.md`](../planning/ACTION_ITEMS.md)
+- Release closeout for `01.00.01`: [`docs/archive/releases/RELEASE_01.00.01.md`](../archive/releases/RELEASE_01.00.01.md)
+- Current release proof for `01.00.02`: [`docs/verification/RELEASE_01.00.02.md`](../verification/RELEASE_01.00.02.md)
 
 ## Release 01.00.01 Scope
 

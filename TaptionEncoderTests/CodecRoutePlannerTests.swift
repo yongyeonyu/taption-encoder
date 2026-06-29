@@ -1777,7 +1777,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         QueuePreviewPlayerFactory.configureSoftwareDecodeOptions(on: media, sourceURL: sampleURL)
 
         let hostingController = UIHostingController(
-            rootView: VideoView(player)
+            rootView: TaptionPreviewPlayerSurface(player: player)
                 .aspectRatio(4.0 / 3.0, contentMode: .fit)
                 .frame(width: 320, height: 240)
                 .background(Color.black)
@@ -1816,6 +1816,63 @@ final class CodecRoutePlannerTests: XCTestCase {
         await player.shutdown()
         #else
         throw XCTSkip("Preview drawable smoke test is simulator-scoped.")
+        #endif
+    }
+
+    @MainActor
+    func testPreviewRegressionSamplesProduceVisibleVideoSnapshots() async throws {
+        #if targetEnvironment(simulator)
+        let sampleFilenames = [
+            "AV1.mp4",
+            "Ut Video.avi"
+        ]
+
+        for filename in sampleFilenames {
+            let sampleURL = bundledTestVideosURL().appendingPathComponent(filename)
+            let player = Player(instance: QueuePreviewPlayerFactory.softwareDecodeInstance)
+            let media = try Media(url: sampleURL)
+            QueuePreviewPlayerFactory.configureSoftwareDecodeOptions(on: media, sourceURL: sampleURL)
+
+            let hostingController = UIHostingController(
+                rootView: TaptionPreviewPlayerSurface(player: player)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 320, height: 240)
+                    .background(Color.black)
+            )
+            let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 240))
+            window.rootViewController = hostingController
+            window.makeKeyAndVisible()
+            hostingController.view.frame = window.bounds
+            hostingController.view.setNeedsLayout()
+            hostingController.view.layoutIfNeeded()
+            try await Task.sleep(nanoseconds: 250_000_000)
+
+            try player.play(media)
+            try await waitForCondition(timeout: 8) {
+                player.hasVideoOutput || player.activeVideoOutputs > 0
+            }
+
+            let snapshotURL = temporaryTestURL(fileName: "\(filename)-preview.png")
+            defer {
+                try? FileManager.default.removeItem(at: snapshotURL)
+                window.isHidden = true
+            }
+
+            try await waitForPreviewSnapshot(
+                player: player,
+                snapshotURL: snapshotURL,
+                timeout: 5
+            )
+
+            let imageData = try Data(contentsOf: snapshotURL)
+            let metrics = try visiblePixelMetrics(fromPNGData: imageData)
+            XCTAssertGreaterThan(metrics.nonBlackRatio, 0.02, filename)
+            XCTAssertGreaterThan(metrics.standardDeviation, 3.0, filename)
+
+            await player.shutdown()
+        }
+        #else
+        throw XCTSkip("Preview visual regression test is simulator-scoped.")
         #endif
     }
 
@@ -7409,6 +7466,64 @@ final class CodecRoutePlannerTests: XCTestCase {
         let filteredFilenames = filenames.filter { $0 == sampleFilter }
         XCTAssertFalse(filteredFilenames.isEmpty, sampleFilter)
         return filteredFilenames
+    }
+
+    private func visiblePixelMetrics(fromPNGData data: Data) throws -> (nonBlackRatio: Double, standardDeviation: Double) {
+        guard let image = UIImage(data: data)?.cgImage else {
+            throw NSError(
+                domain: "TaptionEncoderTests",
+                code: -1202,
+                userInfo: [NSLocalizedDescriptionKey: "Snapshot image data could not be decoded."]
+            )
+        }
+
+        let width = image.width
+        let height = image.height
+        let bytesPerPixel = 4
+        let bytesPerRow = width * bytesPerPixel
+        var pixels = [UInt8](repeating: 0, count: height * bytesPerRow)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            throw NSError(
+                domain: "TaptionEncoderTests",
+                code: -1203,
+                userInfo: [NSLocalizedDescriptionKey: "Snapshot pixel buffer could not be created."]
+            )
+        }
+
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        var channelCount = 0
+        var nonBlackCount = 0
+        var sum = 0.0
+        var squaredSum = 0.0
+
+        for offset in stride(from: 0, to: pixels.count, by: bytesPerPixel) {
+            for channelOffset in 0..<3 {
+                let value = Double(pixels[offset + channelOffset])
+                if value > 8 {
+                    nonBlackCount += 1
+                }
+                sum += value
+                squaredSum += value * value
+                channelCount += 1
+            }
+        }
+
+        let mean = sum / Double(channelCount)
+        let variance = max(0, squaredSum / Double(channelCount) - mean * mean)
+        return (
+            nonBlackRatio: Double(nonBlackCount) / Double(channelCount),
+            standardDeviation: sqrt(variance)
+        )
     }
 
     @MainActor

@@ -14,6 +14,9 @@ struct HomeView: View {
     @State private var activeMenuSheet: HomeMenuSheet?
     @State private var isOutputSizePopoverPresented = false
     @State private var outputSizeDraftMB: Double?
+    #if DEBUG
+    @State private var didOpenDebugPreviewFile = false
+    #endif
 
     init(environment: AppEnvironment = .phase0) {
         _viewModel = StateObject(wrappedValue: HomeViewModel(environment: environment))
@@ -306,8 +309,31 @@ struct HomeView: View {
             await AdMobBootstrapper.refreshOnActive()
             await viewModel.restorePendingSavesIfNeeded()
             await viewModel.refreshStarsIfNeeded()
+            #if DEBUG
+            openDebugPreviewFileIfRequested()
+            #endif
         }
     }
+
+    #if DEBUG
+    private func openDebugPreviewFileIfRequested() {
+        guard !didOpenDebugPreviewFile,
+              let previewFilePath = ProcessInfo.processInfo.environment["TAPTION_PREVIEW_FILE"],
+              !previewFilePath.isEmpty else {
+            return
+        }
+
+        didOpenDebugPreviewFile = true
+        let previewURL = URL(fileURLWithPath: previewFilePath)
+        AppLogger.info(
+            "Debug preview file opened",
+            category: .fileImport,
+            metadata: ["name": previewURL.lastPathComponent]
+        )
+        AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
+        viewModel.openExternalPlayerFile(url: previewURL)
+    }
+    #endif
 
     private func header(metrics: HomeLayoutMetrics) -> some View {
         HStack(spacing: 10 * metrics.contentScale) {
@@ -905,7 +931,7 @@ private struct QueueVideoPreviewView: View {
     @ViewBuilder
     private func videoSurface(containerSize: CGSize) -> some View {
         let fittedSize = fittedVideoSize(in: containerSize)
-        VideoView(player)
+        TaptionPreviewPlayerSurface(player: player)
             .frame(width: fittedSize.width, height: fittedSize.height)
             .background(Color.black)
             .onAppear {
@@ -966,17 +992,17 @@ private struct QueueVideoPreviewView: View {
                     .lineLimit(2)
                     .minimumScaleFactor(0.72)
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 7) {
-                        previewBadge(systemImage: "video", text: preview.codecBadge)
-                        previewBadge(systemImage: "point.3.connected.trianglepath.dotted", text: preview.pathBadge)
-                        previewBadge(systemImage: "aspectratio", text: preview.videoInfo.resolution)
-                        previewBadge(systemImage: "speaker.wave.2", text: preview.videoInfo.audio)
-                    }
+                PreviewBadgeFlowLayout(horizontalSpacing: 7, verticalSpacing: 7) {
+                    previewBadge(systemImage: "video", text: preview.codecBadge)
+                    previewBadge(systemImage: "point.3.connected.trianglepath.dotted", text: preview.pathBadge)
+                    previewBadge(systemImage: "aspectratio", text: preview.videoInfo.resolution)
+                    previewBadge(systemImage: "speaker.wave.2", text: preview.videoInfo.audio)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: 8)
+            Spacer(minLength: 6)
 
             Button(action: closePreview) {
                 Image(systemName: "xmark.circle.fill")
@@ -1179,10 +1205,11 @@ private struct QueueVideoPreviewView: View {
             Text(text)
                 .font(.caption.weight(.semibold))
                 .lineLimit(1)
-                .minimumScaleFactor(0.72)
+                .minimumScaleFactor(0.62)
+                .allowsTightening(true)
+                .layoutPriority(1)
         }
         .lineLimit(1)
-        .fixedSize(horizontal: true, vertical: false)
         .foregroundStyle(Color.white.opacity(0.86))
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
@@ -1649,6 +1676,194 @@ private struct QueueVideoPreviewView: View {
     }
 }
 
+struct TaptionPreviewPlayerSurface: UIViewRepresentable {
+    let player: Player
+
+    func makeUIView(context _: Context) -> TaptionPreviewPlayerSurfaceView {
+        let view = TaptionPreviewPlayerSurfaceView()
+        view.attach(to: player)
+        return view
+    }
+
+    func updateUIView(_ uiView: TaptionPreviewPlayerSurfaceView, context _: Context) {
+        uiView.attach(to: player)
+    }
+
+    static func dismantleUIView(_ uiView: TaptionPreviewPlayerSurfaceView, coordinator _: ()) {
+        uiView.detach()
+    }
+}
+
+@MainActor
+final class TaptionPreviewPlayerSurfaceView: UIView {
+    private weak var attachedPlayer: Player?
+    private var pipController: PiPController?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .black
+        clipsToBounds = true
+        isUserInteractionEnabled = false
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func attach(to player: Player) {
+        guard attachedPlayer !== player else {
+            layoutPreviewLayer()
+            return
+        }
+
+        detach()
+        attachedPlayer = player
+
+        let controller = PiPController(player: player)
+        controller.layer.videoGravity = .resizeAspect
+        controller.layer.backgroundColor = UIColor.black.cgColor
+        layer.addSublayer(controller.layer)
+        pipController = controller
+        layoutPreviewLayer()
+    }
+
+    func detach() {
+        pipController?.stop()
+        pipController?.layer.removeFromSuperlayer()
+        pipController = nil
+        attachedPlayer = nil
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        layoutPreviewLayer()
+    }
+
+    deinit {
+        let controller = pipController
+        Task { @MainActor in
+            controller?.stop()
+            controller?.layer.removeFromSuperlayer()
+        }
+    }
+
+    private func layoutPreviewLayer() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        pipController?.layer.frame = bounds
+        CATransaction.commit()
+    }
+}
+
+private struct PreviewBadgeFlowLayout: Layout {
+    var horizontalSpacing: CGFloat
+    var verticalSpacing: CGFloat
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache _: inout ()
+    ) -> CGSize {
+        let maxWidth = proposal.width ?? .greatestFiniteMagnitude
+        let rows = rows(for: subviews, maxWidth: maxWidth)
+        let width = rows.reduce(CGFloat.zero) { max($0, $1.size.width) }
+        let height = rows.reduce(CGFloat.zero) { $0 + $1.size.height }
+            + CGFloat(max(0, rows.count - 1)) * verticalSpacing
+
+        return CGSize(
+            width: maxWidth.isFinite ? min(width, maxWidth) : width,
+            height: height
+        )
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal _: ProposedViewSize,
+        subviews: Subviews,
+        cache _: inout ()
+    ) {
+        let rows = rows(for: subviews, maxWidth: bounds.width)
+        var y = bounds.minY
+
+        for row in rows {
+            var x = bounds.minX
+
+            for item in row.items {
+                subviews[item.index].place(
+                    at: CGPoint(x: x, y: y),
+                    proposal: ProposedViewSize(
+                        width: min(item.size.width, bounds.width),
+                        height: item.size.height
+                    )
+                )
+                x += item.size.width + horizontalSpacing
+            }
+
+            y += row.size.height + verticalSpacing
+        }
+    }
+
+    private func rows(for subviews: Subviews, maxWidth: CGFloat) -> [PreviewBadgeRow] {
+        guard !subviews.isEmpty else {
+            return []
+        }
+
+        let effectiveMaxWidth = maxWidth.isFinite && maxWidth > 0
+            ? maxWidth
+            : .greatestFiniteMagnitude
+        var rows: [PreviewBadgeRow] = []
+        var currentItems: [PreviewBadgeItem] = []
+        var currentSize = CGSize.zero
+
+        for index in subviews.indices {
+            let itemSize = size(for: subviews[index], maxWidth: effectiveMaxWidth)
+            let item = PreviewBadgeItem(index: index, size: itemSize)
+            let nextWidth = currentItems.isEmpty
+                ? itemSize.width
+                : currentSize.width + horizontalSpacing + itemSize.width
+
+            if !currentItems.isEmpty && nextWidth > effectiveMaxWidth {
+                rows.append(PreviewBadgeRow(items: currentItems, size: currentSize))
+                currentItems = [item]
+                currentSize = itemSize
+            } else {
+                currentItems.append(item)
+                currentSize.width = nextWidth
+                currentSize.height = max(currentSize.height, itemSize.height)
+            }
+        }
+
+        if !currentItems.isEmpty {
+            rows.append(PreviewBadgeRow(items: currentItems, size: currentSize))
+        }
+
+        return rows
+    }
+
+    private func size(for subview: Subviews.Element, maxWidth: CGFloat) -> CGSize {
+        let ideal = subview.sizeThatFits(.unspecified)
+        guard maxWidth.isFinite, ideal.width > maxWidth else {
+            return ideal
+        }
+
+        let constrained = subview.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
+        return CGSize(
+            width: min(constrained.width, maxWidth),
+            height: constrained.height
+        )
+    }
+
+    private struct PreviewBadgeRow {
+        var items: [PreviewBadgeItem]
+        var size: CGSize
+    }
+
+    private struct PreviewBadgeItem {
+        var index: Int
+        var size: CGSize
+    }
+}
+
 @MainActor
 private enum QueuePreviewAudioSessionController {
     private static var activePreviewID: String?
@@ -1723,9 +1938,9 @@ private enum QueuePreviewAudioSessionController {
 
 enum QueuePreviewPlayerFactory {
     static let softwareDecodeInstance = makeSoftwareDecodeInstance(applicationName: "Taption Encoder Preview")
+    static let thumbnailDecodeInstance = makeSoftwareDecodeInstance(applicationName: "Taption Encoder Thumbnail")
 
     static func configureSoftwareDecodeOptions(on media: Media, sourceURL: URL, allowsAudio: Bool = true) {
-        media.addOption(":codec=avcodec")
         media.addOption(":avcodec-hw=none")
         media.addOption(":no-sub-autodetect-file")
         media.addOption(":no-drop-late-frames")
@@ -1733,15 +1948,25 @@ enum QueuePreviewPlayerFactory {
         if !allowsAudio {
             media.addOption(":no-audio")
         }
-        if sourceURL.pathExtension.lowercased() == "h261" {
+        if shouldUseAVFormatDemux(for: sourceURL) {
             media.addOption(":demux=avformat")
+        }
+        if sourceURL.pathExtension.lowercased() == "h261" {
             media.addOption(":avformat-format=h261")
+        }
+    }
+
+    private static func shouldUseAVFormatDemux(for sourceURL: URL) -> Bool {
+        switch sourceURL.pathExtension.lowercased() {
+        case "avi", "mov", "qt":
+            return true
+        default:
+            return false
         }
     }
 
     private static func makeSoftwareDecodeInstance(applicationName: String) -> VLCInstance {
         let arguments = VLCInstance.defaultArguments + [
-            "--codec=avcodec",
             "--avcodec-hw=none"
         ]
 

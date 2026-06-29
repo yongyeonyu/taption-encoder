@@ -99,7 +99,8 @@ Official FFmpeg samples archive:
 - Microsoft RLE.avi
   http://fate-suite.ffmpeg.org/msrle/Search-RLE.avi
 - QuickTime Graphics.mov
-  https://samples.ffmpeg.org/V-codecs/SMC/aletrek-smc.mov
+  https://samples.ffmpeg.org/V-codecs/SMC/quiz.mov
+  Video stream copied and looped to 5 seconds; AAC test audio added.
 - Raw Video.avi
   https://samples.ffmpeg.org/archive/video/rawvideo/avi+rawvideo+++wmv_green_squares_wmp_grey.avi
 

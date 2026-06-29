@@ -52,7 +52,12 @@ struct AVFoundationMediaInspector: MediaInspecting {
                 fingerprint: fingerprint(for: url)
             )
             if shouldFallbackToSoftwareInspection(for: url, inspectedAsset: inspectedAsset) {
-                return try await SW_VLCMediaInspector().inspectVideo(at: url)
+                let softwareAsset = try await SW_VLCMediaInspector().inspectVideo(at: url)
+                return mergedSoftwareAsset(
+                    softwareAsset,
+                    fallbackAudioTracks: inspectedAsset.audioTracks,
+                    fallbackDuration: inspectedAsset.duration
+                )
             }
             return inspectedAsset
         } catch {
@@ -61,6 +66,25 @@ struct AVFoundationMediaInspector: MediaInspecting {
             }
             return try await SW_VLCMediaInspector().inspectVideo(at: url)
         }
+    }
+
+    private func mergedSoftwareAsset(
+        _ softwareAsset: TaptionVideoAsset,
+        fallbackAudioTracks: [TaptionAudioTrackInfo],
+        fallbackDuration: TimeInterval?
+    ) -> TaptionVideoAsset {
+        guard softwareAsset.audioTracks.isEmpty || softwareAsset.duration == nil else {
+            return softwareAsset
+        }
+
+        var mergedAsset = softwareAsset
+        if mergedAsset.audioTracks.isEmpty {
+            mergedAsset.audioTracks = fallbackAudioTracks
+        }
+        if mergedAsset.duration == nil {
+            mergedAsset.duration = fallbackDuration
+        }
+        return mergedAsset
     }
 
     private func inspectVideoTrack(_ track: AVAssetTrack) async throws -> TaptionVideoTrackInfo {
@@ -382,6 +406,7 @@ struct AVFoundationMediaInspector: MediaInspecting {
 private struct SW_VLCMediaInspector: MediaInspecting {
     func inspectVideo(at url: URL) async throws -> TaptionVideoAsset {
         let media = try Media(url: url)
+        configureParseOptions(on: media, sourceURL: url)
         do {
             _ = try await media.parse(timeout: .seconds(10))
         } catch {
@@ -445,6 +470,17 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             return mpegVideoTrackInfo(for: url)
         default:
             return nil
+        }
+    }
+
+    private func configureParseOptions(on media: Media, sourceURL: URL) {
+        media.addOption(":avcodec-hw=none")
+        let fileExtension = sourceURL.pathExtension.lowercased()
+        if ["avi", "mov", "qt", "h261"].contains(fileExtension) {
+            media.addOption(":demux=avformat")
+        }
+        if fileExtension == "h261" {
+            media.addOption(":avformat-format=h261")
         }
     }
 
@@ -686,6 +722,23 @@ private struct SW_VLCMediaInspector: MediaInspecting {
     }
 
     private func audioCodec(from codec: Int) -> TaptionAudioCodec {
+        switch UInt32(truncatingIfNeeded: codec) {
+        case 0x0001:
+            return .pcm
+        case 0x0002, 0x0011:
+            return .adpcm
+        case 0x0006:
+            return .aLaw
+        case 0x0007:
+            return .muLaw
+        case 0x0050:
+            return .mp2
+        case 0x0055:
+            return .mp3
+        default:
+            break
+        }
+
         switch normalizedFourCC(codec) {
         case "aac", "mp4a", "aach", "aacl":
             return .aac

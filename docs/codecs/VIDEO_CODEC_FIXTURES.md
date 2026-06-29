@@ -56,7 +56,7 @@ The app-scheme unit tests parse `Samples/CodecFixtures/generated_smoke/fixtures.
 Audio codec coverage lives in:
 
 ```text
-docs/AUDIO_CODEC_FIXTURES.md
+docs/codecs/AUDIO_CODEC_FIXTURES.md
 ```
 
 Generate the audio-focused set with:
@@ -132,11 +132,11 @@ Collect real samples for each family:
 The broader codec/container research and support tiers live in:
 
 ```text
-docs/CODEC_SUPPORT_RESEARCH.md
+docs/codecs/CODEC_SUPPORT_RESEARCH.md
 ```
 
 The latest checked-in summary of the local smoke H.265 transcode gate lives in:
 
 ```text
-docs/HEVC_TRANSCODE_TEST_RESULTS.md
+docs/verification/HEVC_TRANSCODE_TEST_RESULTS.md
 ```

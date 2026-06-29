@@ -25,7 +25,7 @@ The product path is:
 - Business model: free app supported by ads.
 - Core value: easy phone-based encoding, old-device software encoding support, source-like output defaults, and later multi-video merge/edit workflows.
 
-This plan is more detailed than `docs/DEVELOPMENT_PLAN.md`. Use this document as the phase-by-phase engineering execution guide.
+This plan is more detailed than `docs/planning/DEVELOPMENT_PLAN.md`. Use this document as the phase-by-phase engineering execution guide.
 
 ## Global Product Rules
 
@@ -204,7 +204,7 @@ Architecture protocols:
 
 Documentation:
 
-- Keep `README.md`, `APP_ARCHITECTURE.md`, `DEVELOPMENT_PLAN.md`, `DETAILED_DEVELOPMENT_PLAN.md`, and `ACTION_ITEMS.md` aligned.
+- Keep `docs/overview/README.md`, `docs/architecture/APP_ARCHITECTURE.md`, `docs/planning/DEVELOPMENT_PLAN.md`, `docs/planning/DETAILED_DEVELOPMENT_PLAN.md`, and `docs/planning/ACTION_ITEMS.md` aligned.
 - Move confirmed decisions from `P0 Decisions Needed` to `Confirmed Product Policies`.
 
 ### Files To Create Or Move
@@ -1295,9 +1295,9 @@ Every phase must satisfy these gates before it is considered complete.
 
 Documentation gate:
 
-- Update `README.md` if product surface changes.
-- Update `APP_ARCHITECTURE.md` if architecture changes.
-- Update `ACTION_ITEMS.md` when decisions move from open to confirmed.
+- Update `docs/overview/README.md` if product surface changes.
+- Update `docs/architecture/APP_ARCHITECTURE.md` if architecture changes.
+- Update `docs/planning/ACTION_ITEMS.md` when decisions move from open to confirmed.
 - Update this document when phase scope changes.
 
 Build gate:

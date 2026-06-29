@@ -8,7 +8,7 @@ This document describes the current route-selection simulation for Taption Encod
 
 The final product must run on many iPhone and iPad generations. The app should always prefer hardware codecs when available, then fall back to software or mixed paths. Because real Apple devices differ by chip, OS version, resolution, bit depth, profile, thermal state, and active encoder availability, the app uses runtime probing on device and capability-profile simulation in development.
 
-Apple device-family simulation profiles, model-identifier seed profiles, and reusable route simulation summaries are defined in `HW_AppleDeviceCodecProfiles.swift` and documented in `docs/APPLE_DEVICE_CODEC_MATRIX.md`.
+Apple device-family simulation profiles, model-identifier seed profiles, and reusable route simulation summaries are defined in `HW_AppleDeviceCodecProfiles.swift` and documented in `docs/codecs/APPLE_DEVICE_CODEC_MATRIX.md`.
 
 ## Script
 

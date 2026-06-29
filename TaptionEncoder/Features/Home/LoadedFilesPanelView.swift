@@ -372,7 +372,7 @@ enum QueueVideoThumbnailRenderer {
             crop: true,
             seekMode: .fast,
             timeout: timeout,
-            instance: QueuePreviewPlayerFactory.softwareDecodeInstance
+            instance: QueuePreviewPlayerFactory.thumbnailDecodeInstance
         )
         guard let image = UIImage(data: data) else {
             throw QueueVideoThumbnailRendererError.mediaThumbnailFailed("UIImage decode failed")

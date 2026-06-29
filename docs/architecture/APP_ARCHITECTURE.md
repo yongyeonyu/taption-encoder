@@ -121,7 +121,7 @@ Output remains H.265 while input format support expands. This phase adds a backe
 
 Current baseline artifacts:
 
-- `docs/CODEC_SUPPORT_RESEARCH.md` defines the Apple-native, software, generated-fixture, and real-world-sample codec target matrix.
+- `docs/codecs/CODEC_SUPPORT_RESEARCH.md` defines the Apple-native, software, generated-fixture, and real-world-sample codec target matrix.
 - `Scripts/generate_video_codec_fixtures.sh` creates the local synthetic video/audio fixture set.
 - `Scripts/generate_audio_codec_fixtures.sh` creates audio-family-specific samples for AAC, PCM variants, ALAC, Opus, MP3/MP2, AC3/EAC3, DTS, TrueHD, FLAC, Vorbis, iLBC, WavPack, WMA, ADPCM, and related fallback targets.
 - `Scripts/simulate_codec_route_planner.sh` verifies HW-first, HW/SW mixed, and SW fallback selection across simulated capability profiles.

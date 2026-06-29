@@ -143,10 +143,10 @@ bootstrap_prompt() {
 
 작업 전 반드시 읽으세요:
 1. AGENTS.md
-2. docs/ACTION_ITEMS.md
-3. docs/APP_ARCHITECTURE.md
-4. docs/VIDEO_CODEC_FIXTURES.md
-5. README.md
+2. docs/planning/ACTION_ITEMS.md
+3. docs/architecture/APP_ARCHITECTURE.md
+4. docs/codecs/VIDEO_CODEC_FIXTURES.md
+5. docs/overview/README.md
 6. docs/agent_communication/cooperation.md
 
 역할:

@@ -66,7 +66,7 @@ Taption Encoder without making the owner micromanage every split.
 
 ### Dex
 
-- Reads `AGENTS.md`, `docs/ACTION_ITEMS.md`, and relevant owner files first.
+- Reads `AGENTS.md`, `docs/planning/ACTION_ITEMS.md`, and relevant owner files first.
 - Chooses the narrowest implementation path.
 - Decides what is safe to delegate, with delegation as the default for
   non-trivial work.
@@ -194,7 +194,7 @@ DEX_TASK_PACKET
 ```text
 DEX_TASK_PACKET
 역할: 잼민이
-범위: AGENTS.md, docs/ACTION_ITEMS.md, README.md, docs/agent_communication/cooperation.md
+범위: AGENTS.md, docs/planning/ACTION_ITEMS.md, docs/overview/README.md, docs/agent_communication/cooperation.md
 요청: wording cleanup or handoff draft only
 출력:
 1. changed docs
@@ -299,10 +299,10 @@ reliable path rather than treating chat ACK as required proof.
 
 작업 전 반드시 읽으세요:
 1. AGENTS.md
-2. docs/ACTION_ITEMS.md
-3. docs/APP_ARCHITECTURE.md
-4. docs/VIDEO_CODEC_FIXTURES.md
-5. README.md
+2. docs/planning/ACTION_ITEMS.md
+3. docs/architecture/APP_ARCHITECTURE.md
+4. docs/codecs/VIDEO_CODEC_FIXTURES.md
+5. docs/overview/README.md
 6. docs/agent_communication/cooperation.md
 
 역할:
