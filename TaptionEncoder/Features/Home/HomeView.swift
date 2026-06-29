@@ -16,6 +16,7 @@ struct HomeView: View {
     @State private var outputSizeDraftMB: Double?
     #if DEBUG
     @State private var didOpenDebugPreviewFile = false
+    @State private var didOpenDebugSampleLibrary = false
     #endif
 
     init(environment: AppEnvironment = .phase0) {
@@ -337,6 +338,7 @@ struct HomeView: View {
             await viewModel.refreshStarsIfNeeded()
             #if DEBUG
             openDebugPreviewFileIfRequested()
+            openDebugSampleLibraryIfRequested()
             #endif
         }
     }
@@ -358,6 +360,22 @@ struct HomeView: View {
         )
         AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
         viewModel.openExternalPlayerFile(url: previewURL)
+    }
+
+    private func openDebugSampleLibraryIfRequested() {
+        guard !didOpenDebugSampleLibrary,
+              debugSampleLibraryRequested else {
+            return
+        }
+
+        didOpenDebugSampleLibrary = true
+        AppLogger.info("Debug sample library opened", category: .folderImport)
+        viewModel.openSampleLibrary()
+    }
+
+    private var debugSampleLibraryRequested: Bool {
+        ProcessInfo.processInfo.environment["TAPTION_OPEN_SAMPLE_LIBRARY"] == "1"
+            || ProcessInfo.processInfo.arguments.contains("--taption-open-sample-library")
     }
     #endif
 
