@@ -18,6 +18,15 @@ enum SupportedVideoFileExtensions {
     }
 }
 
+enum ExternalVideoOpenPolicy {
+    static func canHandle(url: URL) -> Bool {
+        guard url.isFileURL else {
+            return false
+        }
+        return SupportedVideoFileExtensions.contains(url.pathExtension)
+    }
+}
+
 enum ImportableVideoTypes {
     static let fileExtensions = SupportedVideoFileExtensions.fileExtensions
 

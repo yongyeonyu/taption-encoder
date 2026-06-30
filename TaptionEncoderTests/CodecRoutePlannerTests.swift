@@ -1906,6 +1906,14 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("h261"))
     }
 
+    func testExternalVideoOpenPolicyHandlesOnlySupportedFileURLs() {
+        XCTAssertTrue(ExternalVideoOpenPolicy.canHandle(url: URL(fileURLWithPath: "/tmp/Movie.MP4")))
+        XCTAssertTrue(ExternalVideoOpenPolicy.canHandle(url: URL(fileURLWithPath: "/tmp/Legacy.AVI")))
+        XCTAssertTrue(ExternalVideoOpenPolicy.canHandle(url: URL(fileURLWithPath: "/tmp/Clip.h261")))
+        XCTAssertFalse(ExternalVideoOpenPolicy.canHandle(url: URL(fileURLWithPath: "/tmp/notes.txt")))
+        XCTAssertFalse(ExternalVideoOpenPolicy.canHandle(url: URL(string: "https://example.com/movie.mp4")!))
+    }
+
     func testQuickLookThumbnailExtensionCoversDocumentBrowserVideoTypes() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -3071,7 +3079,9 @@ final class CodecRoutePlannerTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
+        let appURL = rootURL.appendingPathComponent("TaptionEncoder/TaptionEncoderApp.swift")
         let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
+        let appText = try String(contentsOf: appURL, encoding: .utf8)
         let openURLStart = try XCTUnwrap(homeViewText.range(of: ".onOpenURL { url in"))
         let openURLEnd = try XCTUnwrap(
             homeViewText[openURLStart.lowerBound...].range(of: "\n        .task {")
@@ -3085,6 +3095,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         XCTAssertLessThan(suppressionRange.lowerBound, previewRoutingRange.lowerBound)
+        XCTAssertTrue(appText.contains("let canHandleURL = ExternalVideoOpenPolicy.canHandle(url: url)"))
+        XCTAssertTrue(appText.contains("return canHandleURL"))
     }
 
     func testDeviceCodecCapabilitiesExposeInstalledDeviceSupportFlags() {

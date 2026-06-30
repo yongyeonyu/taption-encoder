@@ -24,15 +24,21 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         open url: URL,
         options: [UIApplication.OpenURLOptionsKey: Any] = [:]
     ) -> Bool {
+        let canHandleURL = ExternalVideoOpenPolicy.canHandle(url: url)
         AppLogger.info(
             "Application received external URL",
             category: .fileImport,
-            metadata: ["name": url.lastPathComponent]
+            metadata: [
+                "name": url.lastPathComponent,
+                "handled": "\(canHandleURL)"
+            ]
         )
-        Task { @MainActor in
-            AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
+        if canHandleURL {
+            Task { @MainActor in
+                AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
+            }
         }
-        return false
+        return canHandleURL
     }
 }
 
