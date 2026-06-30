@@ -26,6 +26,9 @@ struct TaptionEncodingLiveActivityWidget: Widget {
                             .font(.caption)
                             .bold()
                     }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                    .padding(.top, 6)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     VStack(alignment: .trailing, spacing: 2) {
@@ -36,9 +39,13 @@ struct TaptionEncodingLiveActivityWidget: Widget {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+                    .padding(.top, 6)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     TaptionEncodingCompactProgressView(state: context.state)
+                        .padding(.top, 4)
                 }
             } compactLeading: {
                 Image(systemName: "film.stack")
@@ -59,10 +66,12 @@ struct TaptionEncodingLiveActivityWidget: Widget {
 }
 
 private struct TaptionEncodingLockScreenView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     var state: TaptionEncodingLiveActivityAttributes.ContentState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(state.statusText)
@@ -94,16 +103,17 @@ private struct TaptionEncodingLockScreenView: View {
             ProgressView(value: state.fractionCompleted)
                 .tint(.cyan)
 
-            HStack(spacing: 10) {
-                Label(state.countText, systemImage: "list.bullet.rectangle")
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .minimumScaleFactor(0.78)
-                Label(state.remainingText, systemImage: "hourglass")
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .minimumScaleFactor(0.78)
-                Spacer(minLength: 0)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    countLabel
+                    remainingLabel
+                    Spacer(minLength: 0)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    countLabel
+                    remainingLabel
+                }
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
@@ -117,8 +127,22 @@ private struct TaptionEncodingLockScreenView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
-        .padding(.top, 9)
-        .padding(.bottom, 5)
+        .padding(.top, horizontalSizeClass == .regular ? 18 : 15)
+        .padding(.bottom, 8)
+    }
+
+    private var countLabel: some View {
+        Label(state.countText, systemImage: "list.bullet.rectangle")
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .minimumScaleFactor(0.78)
+    }
+
+    private var remainingLabel: some View {
+        Label(state.remainingText, systemImage: "hourglass")
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .minimumScaleFactor(0.78)
     }
 }
 
@@ -133,11 +157,13 @@ private struct TaptionEncodingCompactProgressView: View {
                     .bold()
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .minimumScaleFactor(0.78)
                 Spacer()
                 Text(state.sourceName)
                     .font(.caption2)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .minimumScaleFactor(0.72)
                     .foregroundStyle(.secondary)
             }
             ProgressView(value: state.fractionCompleted)
@@ -146,10 +172,12 @@ private struct TaptionEncodingCompactProgressView: View {
                 Text(state.codecPathText)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .minimumScaleFactor(0.72)
                 Spacer()
                 Text(state.outputText)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .minimumScaleFactor(0.72)
                     .layoutPriority(1)
             }
             .font(.caption2)
