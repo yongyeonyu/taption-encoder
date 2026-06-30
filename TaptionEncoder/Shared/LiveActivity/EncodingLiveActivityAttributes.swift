@@ -141,7 +141,7 @@ struct TaptionEncodingLiveActivityLayoutMetrics: Hashable {
         if isSupplementalSmallFamily {
             return TaptionEncodingLiveActivityLayoutMetrics(
                 horizontalPadding: 12,
-                topPadding: 56,
+                topPadding: 72,
                 bottomPadding: 12,
                 verticalSpacing: 4
             )
@@ -149,7 +149,7 @@ struct TaptionEncodingLiveActivityLayoutMetrics: Hashable {
 
         return TaptionEncodingLiveActivityLayoutMetrics(
             horizontalPadding: isRegularWidth ? 20 : 16,
-            topPadding: isRegularWidth ? 96 : 76,
+            topPadding: isRegularWidth ? 124 : 92,
             bottomPadding: isRegularWidth ? 16 : 14,
             verticalSpacing: isRegularWidth ? 7 : 5
         )

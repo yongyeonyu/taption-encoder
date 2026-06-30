@@ -93,15 +93,15 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         XCTAssertEqual(compact.horizontalPadding, 16)
-        XCTAssertEqual(compact.topPadding, 76)
+        XCTAssertEqual(compact.topPadding, 92)
         XCTAssertEqual(compact.bottomPadding, 14)
         XCTAssertEqual(regular.horizontalPadding, 20)
-        XCTAssertEqual(regular.topPadding, 96)
+        XCTAssertEqual(regular.topPadding, 124)
         XCTAssertEqual(regular.bottomPadding, 16)
-        XCTAssertEqual(supplementalSmall.topPadding, 56)
+        XCTAssertEqual(supplementalSmall.topPadding, 72)
         XCTAssertEqual(supplementalSmall.bottomPadding, 12)
         XCTAssertGreaterThan(regular.topPadding, compact.topPadding)
-        XCTAssertGreaterThanOrEqual(regular.topPadding - compact.topPadding, 20)
+        XCTAssertGreaterThanOrEqual(regular.topPadding - compact.topPadding, 28)
         XCTAssertGreaterThan(compact.topPadding, compact.bottomPadding)
         XCTAssertGreaterThan(supplementalSmall.topPadding, supplementalSmall.bottomPadding)
     }
@@ -3062,6 +3062,12 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(adProvidersText.contains("beginVideoPlaybackAdSuppression(reason:"))
         XCTAssertTrue(adProvidersText.contains("endVideoPlaybackAdSuppression(reason:"))
         XCTAssertTrue(adProvidersText.contains("if activeVideoPlaybackSuppressionCount > 0"))
+        XCTAssertTrue(adProvidersText.contains("shouldSkipNonBannerAdRequest(placement: String, action: String)"))
+        XCTAssertTrue(adProvidersText.contains("Non-banner ad request skipped during video playback"))
+        XCTAssertTrue(adProvidersText.contains("placement: \"rewarded\", action: \"load\""))
+        XCTAssertTrue(adProvidersText.contains("placement: \"interstitial\", action: \"load\""))
+        XCTAssertTrue(adProvidersText.contains("placement: \"appOpen\", action: \"load\""))
+        XCTAssertTrue(adProvidersText.contains("placement: \"allNonBanner\", action: \"preload\""))
         XCTAssertTrue(adProvidersText.contains("App open ad skipped for external playback"))
     }
 

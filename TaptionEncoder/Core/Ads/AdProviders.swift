@@ -199,6 +199,9 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
         guard await AdMobBootstrapper.ensureReadyForAds() else {
             return .unavailable
         }
+        if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "preload") {
+            return .unavailable
+        }
         return await AdMobRewardedAdManager.shared.loadIfNeeded(
             adUnitID: configuration.rewardedSaveAdUnitID
         )
@@ -210,6 +213,9 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
     func retryRewardedAdNow() async -> AdLoadState {
         #if canImport(GoogleMobileAds)
         guard await AdMobBootstrapper.ensureReadyForAds() else {
+            return .unavailable
+        }
+        if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "retry") {
             return .unavailable
         }
         return await AdMobRewardedAdManager.shared.loadIfNeeded(
@@ -224,6 +230,9 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
     func showRewardedAd() async -> RewardedAdShowResult {
         #if canImport(GoogleMobileAds)
         guard await AdMobBootstrapper.ensureReadyForAds() else {
+            return .unavailable
+        }
+        if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "show") {
             return .unavailable
         }
         return await AdMobRewardedAdManager.shared.show(
@@ -247,6 +256,9 @@ struct AdMobSessionEndAdProvider: SessionEndAdProviding {
         guard await AdMobBootstrapper.ensureReadyForAds() else {
             return
         }
+        if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "interstitial", action: "preload") {
+            return
+        }
         _ = await AdMobInterstitialAdManager.shared.loadIfNeeded(adUnitID: configuration.sessionEndInterstitialAdUnitID)
         #endif
     }
@@ -254,6 +266,9 @@ struct AdMobSessionEndAdProvider: SessionEndAdProviding {
     func showSessionEndAd(reason: SessionEndAdReason) async {
         #if canImport(GoogleMobileAds)
         guard await AdMobBootstrapper.ensureReadyForAds() else {
+            return
+        }
+        if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "interstitial", action: "show") {
             return
         }
         await AdMobInterstitialAdManager.shared.showIfAvailable(
@@ -490,6 +505,23 @@ enum AdMobBootstrapper {
         )
     }
 
+    @MainActor
+    static func shouldSkipNonBannerAdRequest(placement: String, action: String) -> Bool {
+        guard activeVideoPlaybackSuppressionCount > 0 else {
+            return false
+        }
+        AppLogger.info(
+            "Non-banner ad request skipped during video playback",
+            category: .ads,
+            metadata: [
+                "placement": placement,
+                "action": action,
+                "count": "\(activeVideoPlaybackSuppressionCount)"
+            ]
+        )
+        return true
+    }
+
     static func showAppOpenAdIfAvailable() async {
         #if canImport(GoogleMobileAds)
         if await isAppOpenAdSuppressed {
@@ -536,6 +568,9 @@ enum AdMobBootstrapper {
 
     @MainActor
     private static func preloadAllPlacements() async {
+        guard !shouldSkipNonBannerAdRequest(placement: "allNonBanner", action: "preload") else {
+            return
+        }
         let configuration = AdMobRuntimeConfiguration.current()
         AppLogger.info(
             "AdMob preload started",
@@ -855,6 +890,9 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
         adUnitID: String,
         bypassScheduledRetry: Bool = false
     ) async -> AdLoadState {
+        guard !AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "load") else {
+            return .unavailable
+        }
         guard !adUnitID.isEmpty else {
             AppLogger.warning("Rewarded ad load skipped because ad unit is empty", category: .ads)
             lastKnownState = .unavailable
@@ -941,6 +979,9 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
     }
 
     func show(adUnitID: String) async -> RewardedAdShowResult {
+        guard !AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "show") else {
+            return .unavailable
+        }
         guard activeContinuation == nil else {
             AppLogger.warning(
                 "Rewarded ad show skipped because another rewarded ad is active",
@@ -1030,7 +1071,8 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
 
     private func fillPreparedAdCacheIfNeeded(adUnitID: String) {
         pruneExpiredPreparedAds()
-        guard !adUnitID.isEmpty,
+        guard !AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "cacheFill"),
+              !adUnitID.isEmpty,
               !isLoading,
               !isWaitingForRetry,
               !isCacheFillScheduled,
@@ -1091,7 +1133,8 @@ final class AdMobRewardedAdManager: NSObject, FullScreenContentDelegate {
     }
 
     private func scheduleRetry(adUnitID: String) {
-        guard !adUnitID.isEmpty,
+        guard !AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "retrySchedule"),
+              !adUnitID.isEmpty,
               retryCount < 6 else {
             return
         }
@@ -1198,6 +1241,9 @@ final class AdMobInterstitialAdManager: NSObject, FullScreenContentDelegate {
     private var isShowing = false
 
     func loadIfNeeded(adUnitID: String) async -> AdLoadState {
+        guard !AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "interstitial", action: "load") else {
+            return .unavailable
+        }
         guard !adUnitID.isEmpty else {
             AppLogger.warning("Interstitial ad load skipped because ad unit is empty", category: .ads)
             return .unavailable
@@ -1238,6 +1284,9 @@ final class AdMobInterstitialAdManager: NSObject, FullScreenContentDelegate {
     }
 
     func showIfAvailable(adUnitID: String, reason: SessionEndAdReason) async {
+        guard !AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "interstitial", action: "show") else {
+            return
+        }
         guard !isShowing else {
             AppLogger.info("Interstitial ad show skipped because another ad is showing", category: .ads)
             return
@@ -1309,6 +1358,9 @@ final class AdMobAppOpenAdManager: NSObject, FullScreenContentDelegate {
     private let timeoutInterval: TimeInterval = 4 * 3_600
 
     func loadIfNeeded(adUnitID: String) async {
+        guard !AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "appOpen", action: "load") else {
+            return
+        }
         guard !adUnitID.isEmpty,
               !isLoading,
               !isAdAvailable(for: adUnitID) else {
@@ -1343,6 +1395,9 @@ final class AdMobAppOpenAdManager: NSObject, FullScreenContentDelegate {
     }
 
     func showIfAvailable(adUnitID: String) async {
+        guard !AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "appOpen", action: "show") else {
+            return
+        }
         guard !isShowing else {
             AppLogger.info("App open ad show skipped because another app open ad is showing", category: .ads)
             return
