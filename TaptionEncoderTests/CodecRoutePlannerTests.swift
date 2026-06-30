@@ -84,6 +84,30 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(state.remainingText, "--:--")
     }
 
+    func testEncodingLiveActivityLockScreenMetricsLeaveTopBreathingRoom() {
+        let compact = TaptionEncodingLiveActivityLayoutMetrics.lockScreen(isRegularWidth: false)
+        let regular = TaptionEncodingLiveActivityLayoutMetrics.lockScreen(isRegularWidth: true)
+        let supplementalSmall = TaptionEncodingLiveActivityLayoutMetrics.lockScreen(
+            isRegularWidth: false,
+            isSupplementalSmallFamily: true
+        )
+
+        XCTAssertEqual(compact.horizontalPadding, 16)
+        XCTAssertEqual(compact.topPadding, 22)
+        XCTAssertEqual(compact.bottomPadding, 12)
+        XCTAssertEqual(regular.horizontalPadding, 20)
+        XCTAssertEqual(regular.topPadding, 26)
+        XCTAssertEqual(regular.bottomPadding, 14)
+        XCTAssertEqual(supplementalSmall.topPadding, 14)
+        XCTAssertGreaterThan(regular.topPadding, compact.topPadding)
+        XCTAssertGreaterThan(compact.topPadding, compact.bottomPadding)
+    }
+
+    func testEncodingLiveActivityDynamicIslandMetricsStayCompact() {
+        XCTAssertEqual(TaptionEncodingLiveActivityLayoutMetrics.dynamicIslandExpandedTopPadding, 7)
+        XCTAssertEqual(TaptionEncodingLiveActivityLayoutMetrics.dynamicIslandBottomTopPadding, 5)
+    }
+
     func testBatteryEncodingGateBlocksAtOrBelowLimit() {
         let settings = BatteryEncodingSettings(
             batteryLimitPercent: 30,

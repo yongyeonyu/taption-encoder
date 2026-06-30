@@ -28,7 +28,7 @@ struct TaptionEncodingLiveActivityWidget: Widget {
                     }
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
-                    .padding(.top, 6)
+                    .padding(.top, CGFloat(TaptionEncodingLiveActivityLayoutMetrics.dynamicIslandExpandedTopPadding))
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     VStack(alignment: .trailing, spacing: 2) {
@@ -41,20 +41,24 @@ struct TaptionEncodingLiveActivityWidget: Widget {
                     }
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
-                    .padding(.top, 6)
+                    .padding(.top, CGFloat(TaptionEncodingLiveActivityLayoutMetrics.dynamicIslandExpandedTopPadding))
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     TaptionEncodingCompactProgressView(state: context.state)
-                        .padding(.top, 4)
+                        .padding(.top, CGFloat(TaptionEncodingLiveActivityLayoutMetrics.dynamicIslandBottomTopPadding))
+                        .padding(.horizontal, 2)
                 }
             } compactLeading: {
                 Image(systemName: "film.stack")
+                    .font(.caption.bold())
                     .foregroundStyle(.cyan)
             } compactTrailing: {
                 Text(context.state.percentText)
                     .font(.caption2)
                     .bold()
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
             } minimal: {
                 ProgressView(value: context.state.fractionCompleted)
                     .progressViewStyle(.circular)
@@ -66,12 +70,18 @@ struct TaptionEncodingLiveActivityWidget: Widget {
 }
 
 private struct TaptionEncodingLockScreenView: View {
+    @Environment(\.activityFamily) private var activityFamily
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var state: TaptionEncodingLiveActivityAttributes.ContentState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        let metrics = TaptionEncodingLiveActivityLayoutMetrics.lockScreen(
+            isRegularWidth: horizontalSizeClass == .regular,
+            isSupplementalSmallFamily: activityFamily == .small
+        )
+
+        VStack(alignment: .leading, spacing: CGFloat(metrics.verticalSpacing)) {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(state.statusText)
@@ -118,17 +128,30 @@ private struct TaptionEncodingLockScreenView: View {
             .font(.caption2)
             .foregroundStyle(.secondary)
 
-            Text("\(state.codecPathText) -> \(state.outputText)")
-                .font(.caption2)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .minimumScaleFactor(0.72)
-                .foregroundStyle(.secondary)
+            ViewThatFits(in: .horizontal) {
+                Text("\(state.codecPathText) -> \(state.outputText)")
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .minimumScaleFactor(0.72)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(state.codecPathText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .minimumScaleFactor(0.78)
+                    Text(state.outputText)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .minimumScaleFactor(0.78)
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.top, horizontalSizeClass == .regular ? 18 : 15)
-        .padding(.bottom, 8)
+        .padding(.horizontal, CGFloat(metrics.horizontalPadding))
+        .padding(.top, CGFloat(metrics.topPadding))
+        .padding(.bottom, CGFloat(metrics.bottomPadding))
     }
 
     private var countLabel: some View {

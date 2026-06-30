@@ -124,3 +124,34 @@ struct TaptionEncodingActivitySnapshot: Codable, Hashable {
         return timeText(seconds)
     }
 }
+
+struct TaptionEncodingLiveActivityLayoutMetrics: Hashable {
+    var horizontalPadding: Double
+    var topPadding: Double
+    var bottomPadding: Double
+    var verticalSpacing: Double
+
+    static let dynamicIslandExpandedTopPadding = 7.0
+    static let dynamicIslandBottomTopPadding = 5.0
+
+    static func lockScreen(
+        isRegularWidth: Bool,
+        isSupplementalSmallFamily: Bool = false
+    ) -> TaptionEncodingLiveActivityLayoutMetrics {
+        if isSupplementalSmallFamily {
+            return TaptionEncodingLiveActivityLayoutMetrics(
+                horizontalPadding: 12,
+                topPadding: 14,
+                bottomPadding: 10,
+                verticalSpacing: 5
+            )
+        }
+
+        return TaptionEncodingLiveActivityLayoutMetrics(
+            horizontalPadding: isRegularWidth ? 20 : 16,
+            topPadding: isRegularWidth ? 26 : 22,
+            bottomPadding: isRegularWidth ? 14 : 12,
+            verticalSpacing: isRegularWidth ? 7 : 6
+        )
+    }
+}
