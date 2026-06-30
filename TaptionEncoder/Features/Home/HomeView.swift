@@ -2186,6 +2186,15 @@ private struct QueueMiniPlayerView: View {
                 }
 
                 HStack(spacing: 4) {
+                    Button(action: togglePictureInPicture) {
+                        Image(systemName: isPictureInPictureActive ? "pip.exit" : "pip.enter")
+                            .font(.system(size: 13, weight: .semibold))
+                            .frame(width: 30, height: 30)
+                    }
+                    .disabled(!canTogglePictureInPicture)
+                    .opacity(canTogglePictureInPicture ? 1 : 0.38)
+                    .accessibilityLabel(isPictureInPictureActive ? "Exit Picture in Picture" : "Picture in Picture")
+
                     Button(action: onExpand) {
                         Image(systemName: "arrow.up.left.and.arrow.down.right")
                             .font(.system(size: 13, weight: .semibold))
@@ -2305,6 +2314,40 @@ private struct QueueMiniPlayerView: View {
 
     private func togglePlayback() {
         player.togglePlayPause()
+    }
+
+    private var isPictureInPictureActive: Bool {
+        pipController?.isActive == true
+    }
+
+    private var canTogglePictureInPicture: Bool {
+        guard let pipController else {
+            return false
+        }
+        return pipController.isPossible || pipController.isActive
+    }
+
+    private func togglePictureInPicture() {
+        guard let pipController, canTogglePictureInPicture else {
+            AppLogger.info(
+                "Queue mini player PiP ignored because controller is unavailable",
+                category: .ui,
+                metadata: ["name": preview.displayName]
+            )
+            return
+        }
+
+        let wasActive = pipController.isActive
+        pipController.toggle()
+        AppLogger.info(
+            wasActive ? "Queue mini player PiP exit requested" : "Queue mini player PiP requested",
+            category: .ui,
+            metadata: [
+                "name": preview.displayName,
+                "possible": "\(pipController.isPossible)",
+                "active": "\(pipController.isActive)"
+            ]
+        )
     }
 
     private func beginVideoPlaybackAdSuppressionIfNeeded() {
