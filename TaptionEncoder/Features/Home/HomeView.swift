@@ -94,6 +94,7 @@ struct HomeView: View {
                         startActionTitle: viewModel.startActionTitle,
                         showsSaveAction: viewModel.showsSaveAction,
                         saveActionTitle: viewModel.saveActionTitle,
+                        showsWorkAction: !isVideoPlaybackOverlayActive,
                         watchAdButtonTitle: viewModel.watchAdButtonTitle,
                         showsWatchAdAction: !isVideoPlaybackOverlayActive,
                         canWatchAd: viewModel.canWatchAdForStar,

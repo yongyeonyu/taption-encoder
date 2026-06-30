@@ -7,6 +7,7 @@ struct EncodingProgressView: View {
     var startActionTitle: String = "Start"
     var showsSaveAction: Bool = false
     var saveActionTitle: String = "Save"
+    var showsWorkAction: Bool = true
     var watchAdButtonTitle: String = "Watch Ad (+1 Star)"
     var showsWatchAdAction: Bool = true
     var canWatchAd: Bool = false
@@ -110,10 +111,11 @@ struct EncodingProgressView: View {
     }
 
     private var showsPrimaryAction: Bool {
-        resolvedCanStartEncoding
+        showsWorkAction
+            && (resolvedCanStartEncoding
             || showsSaveAction
             || state.preparedEncodingReview != nil
-            || state.canCancel
+            || state.canCancel)
     }
 
     @ViewBuilder

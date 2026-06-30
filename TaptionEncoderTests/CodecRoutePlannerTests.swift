@@ -3088,11 +3088,14 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("viewModel.restorePreview(preview)"))
         XCTAssertTrue(homeViewText.contains("queueMiniPlayer"))
         XCTAssertTrue(homeViewText.contains("let isVideoPlaybackOverlayActive = miniPlayerPreview != nil || viewModel.activePreview != nil"))
+        XCTAssertTrue(homeViewText.contains("showsWorkAction: !isVideoPlaybackOverlayActive"))
         XCTAssertTrue(homeViewText.contains("showsWatchAdAction: !isVideoPlaybackOverlayActive"))
         XCTAssertTrue(homeViewText.contains("beginVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(homeViewText.contains("endVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(viewModelText.contains("func restorePreview(_ preview: QueueVideoPreview)"))
+        XCTAssertTrue(progressViewText.contains("var showsWorkAction: Bool = true"))
         XCTAssertTrue(progressViewText.contains("var showsWatchAdAction: Bool = true"))
+        XCTAssertTrue(progressViewText.contains("showsWorkAction\n            && (resolvedCanStartEncoding"))
         XCTAssertTrue(progressViewText.contains("if showsWatchAdAction {\n                        watchAdButton"))
     }
 
