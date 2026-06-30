@@ -359,7 +359,11 @@ struct HomeView: View {
             metadata: ["name": previewURL.lastPathComponent]
         )
         AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
-        viewModel.openExternalPlayerFile(url: previewURL)
+        if debugAutoStartEncodingRequested {
+            viewModel.openDebugFileAndStartEncoding(url: previewURL)
+        } else {
+            viewModel.openExternalPlayerFile(url: previewURL)
+        }
     }
 
     private func openDebugSampleLibraryIfRequested() {
@@ -376,6 +380,11 @@ struct HomeView: View {
     private var debugSampleLibraryRequested: Bool {
         ProcessInfo.processInfo.environment["TAPTION_OPEN_SAMPLE_LIBRARY"] == "1"
             || ProcessInfo.processInfo.arguments.contains("--taption-open-sample-library")
+    }
+
+    private var debugAutoStartEncodingRequested: Bool {
+        ProcessInfo.processInfo.environment["TAPTION_AUTO_START_ENCODING"] == "1"
+            || ProcessInfo.processInfo.arguments.contains("--taption-auto-start-encoding")
     }
     #endif
 

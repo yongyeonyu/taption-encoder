@@ -957,11 +957,29 @@ final class HomeViewModel: ObservableObject {
         startFilesFlow(url: url)
     }
 
+    #if DEBUG
+    func openDebugFileAndStartEncoding(url: URL) {
+        AppLogger.info(
+            "Debug file routed into auto-start encoding flow",
+            category: .fileImport,
+            metadata: ["name": url.lastPathComponent]
+        )
+        startFilesFlow(url: url, autoStartAfterPrepare: true)
+    }
+    #endif
+
     func startFilesFlow(url: URL) {
+        startFilesFlow(url: url, autoStartAfterPrepare: false)
+    }
+
+    private func startFilesFlow(url: URL, autoStartAfterPrepare: Bool) {
         AppLogger.info(
             "Single file flow started",
             category: .fileImport,
-            metadata: ["name": url.lastPathComponent]
+            metadata: [
+                "name": url.lastPathComponent,
+                "autoStart": "\(autoStartAfterPrepare)"
+            ]
         )
         guard canStartNewSourceFlow() else {
             return
@@ -978,7 +996,7 @@ final class HomeViewModel: ObservableObject {
             url: url
         )
         beginSecurityScopedAccessIfNeeded(for: url)
-        prepareEncodingFlow(source: source)
+        prepareEncodingFlow(source: source, autoStartAfterPrepare: autoStartAfterPrepare)
     }
 
     func startFilesFlow(urls: [URL]) {
