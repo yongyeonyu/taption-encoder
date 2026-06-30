@@ -15,6 +15,8 @@ struct HomeView: View {
     @State private var isOutputSizePopoverPresented = false
     @State private var outputSizeDraftMB: Double?
     @State private var miniPlayerPreview: QueueVideoPreview?
+    @State private var lastExternalVideoOpenURL: URL?
+    @State private var lastExternalVideoOpenDate: Date?
     #if DEBUG
     @State private var didOpenDebugPreviewFile = false
     @State private var didOpenDebugSampleLibrary = false
@@ -358,15 +360,13 @@ struct HomeView: View {
             }
         }
         .onOpenURL { url in
-            AppLogger.info(
-                "External video URL opened",
-                category: .fileImport,
-                metadata: ["name": url.lastPathComponent]
-            )
-            AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
-            viewModel.openExternalPlayerFile(url: url)
+            handleExternalVideoOpen(url: url, source: "scene")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .taptionExternalVideoOpenRequested)) { _ in
+            drainPendingExternalVideoOpens(source: "delegate")
         }
         .task {
+            drainPendingExternalVideoOpens(source: "pending")
             await AdMobBootstrapper.refreshOnActive()
             await viewModel.restorePendingSavesIfNeeded()
             await viewModel.refreshStarsIfNeeded()
@@ -375,6 +375,42 @@ struct HomeView: View {
             openDebugSampleLibraryIfRequested()
             #endif
         }
+    }
+
+    private func drainPendingExternalVideoOpens(source: String) {
+        for url in ExternalVideoOpenInbox.drainPendingURLs() {
+            handleExternalVideoOpen(url: url, source: source)
+        }
+    }
+
+    private func handleExternalVideoOpen(url: URL, source: String) {
+        let now = Date()
+        if lastExternalVideoOpenURL == url,
+           let lastExternalVideoOpenDate,
+           now.timeIntervalSince(lastExternalVideoOpenDate) < 1 {
+            AppLogger.info(
+                "Duplicate external video URL ignored",
+                category: .fileImport,
+                metadata: [
+                    "name": url.lastPathComponent,
+                    "source": source
+                ]
+            )
+            return
+        }
+
+        lastExternalVideoOpenURL = url
+        lastExternalVideoOpenDate = now
+        AppLogger.info(
+            "External video URL opened",
+            category: .fileImport,
+            metadata: [
+                "name": url.lastPathComponent,
+                "source": source
+            ]
+        )
+        AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
+        viewModel.openExternalPlayerFile(url: url)
     }
 
     #if DEBUG

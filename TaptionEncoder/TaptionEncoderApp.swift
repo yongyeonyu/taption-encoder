@@ -1,6 +1,28 @@
 import SwiftUI
 import UIKit
 
+extension Notification.Name {
+    static let taptionExternalVideoOpenRequested = Notification.Name("TaptionExternalVideoOpenRequested")
+}
+
+@MainActor
+enum ExternalVideoOpenInbox {
+    private static var pendingURLs: [URL] = []
+
+    static func enqueue(_ url: URL, postsNotification: Bool = true) {
+        pendingURLs.append(url)
+        if postsNotification {
+            NotificationCenter.default.post(name: .taptionExternalVideoOpenRequested, object: nil)
+        }
+    }
+
+    static func drainPendingURLs() -> [URL] {
+        let urls = pendingURLs
+        pendingURLs.removeAll()
+        return urls
+    }
+}
+
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
@@ -36,6 +58,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         if canHandleURL {
             Task { @MainActor in
                 AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
+                ExternalVideoOpenInbox.enqueue(url)
             }
         }
         return canHandleURL

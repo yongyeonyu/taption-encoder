@@ -1914,6 +1914,17 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(ExternalVideoOpenPolicy.canHandle(url: URL(string: "https://example.com/movie.mp4")!))
     }
 
+    @MainActor
+    func testExternalVideoOpenInboxRetainsDelegateURLUntilHomeViewDrains() {
+        _ = ExternalVideoOpenInbox.drainPendingURLs()
+        let url = URL(fileURLWithPath: "/tmp/Movie.MP4")
+
+        ExternalVideoOpenInbox.enqueue(url, postsNotification: false)
+
+        XCTAssertEqual(ExternalVideoOpenInbox.drainPendingURLs(), [url])
+        XCTAssertEqual(ExternalVideoOpenInbox.drainPendingURLs(), [])
+    }
+
     func testQuickLookThumbnailExtensionCoversDocumentBrowserVideoTypes() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -3084,18 +3095,35 @@ final class CodecRoutePlannerTests: XCTestCase {
         let appText = try String(contentsOf: appURL, encoding: .utf8)
         let openURLStart = try XCTUnwrap(homeViewText.range(of: ".onOpenURL { url in"))
         let openURLEnd = try XCTUnwrap(
-            homeViewText[openURLStart.lowerBound...].range(of: "\n        .task {")
+            homeViewText[openURLStart.lowerBound...].range(of: "\n        .onReceive(")
         )
         let openURLText = String(homeViewText[openURLStart.lowerBound..<openURLEnd.lowerBound])
+        let handlerStart = try XCTUnwrap(homeViewText.range(of: "private func handleExternalVideoOpen"))
+        let handlerEnd = try XCTUnwrap(
+            homeViewText[handlerStart.lowerBound...].range(of: "\n    #if DEBUG")
+        )
+        let handlerText = String(homeViewText[handlerStart.lowerBound..<handlerEnd.lowerBound])
         let suppressionRange = try XCTUnwrap(
-            openURLText.range(of: "AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()")
+            handlerText.range(of: "AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()")
         )
         let previewRoutingRange = try XCTUnwrap(
-            openURLText.range(of: "viewModel.openExternalPlayerFile(url: url)")
+            handlerText.range(of: "viewModel.openExternalPlayerFile(url: url)")
         )
 
+        XCTAssertTrue(openURLText.contains("handleExternalVideoOpen(url: url, source: \"scene\")"))
+        XCTAssertTrue(
+            homeViewText.contains(".onReceive(NotificationCenter.default.publisher(for: .taptionExternalVideoOpenRequested))")
+        )
+        XCTAssertTrue(homeViewText.contains("drainPendingExternalVideoOpens(source: \"delegate\")"))
+        XCTAssertTrue(homeViewText.contains("drainPendingExternalVideoOpens(source: \"pending\")"))
+        XCTAssertTrue(homeViewText.contains("for url in ExternalVideoOpenInbox.drainPendingURLs()"))
+        XCTAssertTrue(homeViewText.contains("Duplicate external video URL ignored"))
         XCTAssertLessThan(suppressionRange.lowerBound, previewRoutingRange.lowerBound)
+        XCTAssertTrue(appText.contains("static let taptionExternalVideoOpenRequested"))
+        XCTAssertTrue(appText.contains("enum ExternalVideoOpenInbox"))
         XCTAssertTrue(appText.contains("let canHandleURL = ExternalVideoOpenPolicy.canHandle(url: url)"))
+        XCTAssertTrue(appText.contains("ExternalVideoOpenInbox.enqueue(url)"))
+        XCTAssertTrue(appText.contains("NotificationCenter.default.post(name: .taptionExternalVideoOpenRequested"))
         XCTAssertTrue(appText.contains("return canHandleURL"))
     }
 
