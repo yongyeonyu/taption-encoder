@@ -4,7 +4,7 @@
 
 - Company release label: `01.00.02`
 - Apple marketing version: `1.0.2`
-- Apple build number: `21`
+- Apple build number: `22`
 - Bundle identifier: `com.taption.encoder`
 - Release date: 2026-06-30
 
@@ -12,7 +12,7 @@
 
 - Keep H.265 / HEVC as the only video output codec.
 - Keep output containers constrained to MP4 and MOV.
-- Stabilize queue preview playback, preview badge wrapping, thumbnail generation separation, bundled sample audio, and software-inspection fallback metadata.
+- Stabilize queue preview playback, preview badge wrapping, thumbnail generation separation, bundled sample audio, software-inspection fallback metadata, save destination choice, and folder-batch sibling output behavior.
 - Reorganize development documentation so only `AGENTS.md` remains at the project root and typed documents live under `docs/`.
 - Archive old release notes, old reports, completed Taption Encoder handoffs, and rejected Taption-main handoffs under `docs/archive/`.
 
@@ -29,13 +29,20 @@
 - [x] External video player registration verification passed for source and built app Info.plist.
 - [x] External video player flow verification passed in both warm and cold modes on the iPhone 17 Pro simulator.
 - [x] App-scheme XCTest passed with parallel testing disabled.
-- [x] Release archive succeeded at `build/TestFlight-01.00.02-21/TaptionEncoder.xcarchive`; archived app Info.plist reported `com.taption.encoder`, version `1.0.2`, build `21`.
+- [x] Build `22` focused save-destination XCTest passed:
+  - `CodecRoutePlannerTests/testPendingSaveRequestsDestinationPromptBeforeFinalSave`
+  - `CodecRoutePlannerTests/testFolderBatchFolderDestinationSavesIntoSiblingTaptionFolder`
+  - `CodecRoutePlannerTests/testPendingSaveConflictOpensExportPickerWithoutOverwritePrompt`
+- [x] Build `22` pending-save, rewarded-save, and folder-batch regression XCTest passed.
+- [x] Build `22` file/folder picker and queue-preview XCTest passed.
+- [x] Release archive succeeded at `build/TestFlight-01.00.02-22/TaptionEncoder.xcarchive`; archived app Info.plist reported `com.taption.encoder`, version `1.0.2`, build `22`.
 - [x] TestFlight/App Store Connect export/upload succeeded with `Uploaded package is processing`, `Upload succeeded`, and `EXPORT SUCCEEDED`.
 
 ## Upload Notes
 
-- Upload command used `build/TestFlight-01.00.02-21/ExportOptions.plist` with App Store Connect upload destination.
-- Upload produced non-blocking dSYM warnings for `GoogleMobileAds.framework` and `UserMessagingPlatform.framework`, matching the existing release pattern; the app package upload still succeeded.
+- Build `21` upload remains historical proof for the thumbnail-extension fix. Build `22` is the current uploaded package for release `01.00.02`.
+- Upload command used `build/TestFlight-01.00.02-22/ExportOptions.plist` with App Store Connect upload destination.
+- Upload produced non-blocking dSYM warnings for `GoogleMobileAds.framework` UUID `97DFF24C-CF1E-33FD-92D5-232B7ADF89FD` and `UserMessagingPlatform.framework` UUID `80CA0D32-5403-3D46-B37D-77C6EDDC6E16`; the app package upload still succeeded.
 
 ## Boundaries
 
