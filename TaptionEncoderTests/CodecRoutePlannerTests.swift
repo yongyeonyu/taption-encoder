@@ -93,13 +93,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         XCTAssertEqual(compact.horizontalPadding, 16)
-        XCTAssertEqual(compact.topPadding, 38)
-        XCTAssertEqual(compact.bottomPadding, 10)
+        XCTAssertEqual(compact.topPadding, 50)
+        XCTAssertEqual(compact.bottomPadding, 12)
         XCTAssertEqual(regular.horizontalPadding, 20)
-        XCTAssertEqual(regular.topPadding, 44)
-        XCTAssertEqual(regular.bottomPadding, 12)
-        XCTAssertEqual(supplementalSmall.topPadding, 28)
-        XCTAssertEqual(supplementalSmall.bottomPadding, 8)
+        XCTAssertEqual(regular.topPadding, 60)
+        XCTAssertEqual(regular.bottomPadding, 14)
+        XCTAssertEqual(supplementalSmall.topPadding, 36)
+        XCTAssertEqual(supplementalSmall.bottomPadding, 10)
         XCTAssertGreaterThan(regular.topPadding, compact.topPadding)
         XCTAssertGreaterThan(compact.topPadding, compact.bottomPadding)
         XCTAssertGreaterThan(supplementalSmall.topPadding, supplementalSmall.bottomPadding)
@@ -119,6 +119,20 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(widgetSource.contains("activityFamily == .small"))
         XCTAssertTrue(widgetSource.contains("condensedHeader"))
         XCTAssertTrue(widgetSource.contains("condensedDetails"))
+    }
+
+    func testDebugLiveActivityProbeCanStartForLockScreenVerification() throws {
+        let appURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("TaptionEncoder/TaptionEncoderApp.swift")
+        let appSource = try String(contentsOf: appURL, encoding: .utf8)
+
+        XCTAssertTrue(appSource.contains("#if DEBUG"))
+        XCTAssertTrue(appSource.contains("TAPTION_DEBUG_LIVE_ACTIVITY"))
+        XCTAssertTrue(appSource.contains("--taption-debug-live-activity"))
+        XCTAssertTrue(appSource.contains("ActivityKitEncodingLiveActivityCoordinator"))
+        XCTAssertTrue(appSource.contains("Debug Live Activity probe requested"))
     }
 
     func testBatteryEncodingGateBlocksAtOrBelowLimit() {
@@ -3026,6 +3040,30 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(adProvidersText.contains("endVideoPlaybackAdSuppression(reason:"))
         XCTAssertTrue(adProvidersText.contains("if activeVideoPlaybackSuppressionCount > 0"))
         XCTAssertTrue(adProvidersText.contains("App open ad skipped for external playback"))
+    }
+
+    func testQueuePreviewCanMinimizeIntoBannerOnlyFloatingPlayer() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
+        let viewModelURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeViewModel.swift")
+        let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
+        let viewModelText = try String(contentsOf: viewModelURL, encoding: .utf8)
+
+        XCTAssertTrue(homeViewText.contains("@State private var miniPlayerPreview: QueueVideoPreview?"))
+        XCTAssertTrue(homeViewText.contains("QueueMiniPlayerView("))
+        XCTAssertTrue(homeViewText.contains("onMinimize:"))
+        XCTAssertTrue(homeViewText.contains("minimizePreview()"))
+        XCTAssertTrue(homeViewText.contains("Queue preview minimized to floating player"))
+        XCTAssertTrue(homeViewText.contains("TAPTION_AUTO_MINIMIZE_PREVIEW"))
+        XCTAssertTrue(homeViewText.contains("Debug auto mini player requested"))
+        XCTAssertTrue(homeViewText.contains("Button(action: onExpand)"))
+        XCTAssertTrue(homeViewText.contains("viewModel.restorePreview(preview)"))
+        XCTAssertTrue(homeViewText.contains("queueMiniPlayer"))
+        XCTAssertTrue(homeViewText.contains("beginVideoPlaybackAdSuppressionIfNeeded()"))
+        XCTAssertTrue(homeViewText.contains("endVideoPlaybackAdSuppressionIfNeeded()"))
+        XCTAssertTrue(viewModelText.contains("func restorePreview(_ preview: QueueVideoPreview)"))
     }
 
     func testExternalVideoOpenSuppressesAppOpenAdsBeforePreviewRouting() throws {

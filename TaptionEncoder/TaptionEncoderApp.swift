@@ -107,8 +107,7 @@ struct TaptionEncoderApp: App {
 
     var body: some Scene {
         WindowGroup {
-            HomeView()
-                .preferredColorScheme(.dark)
+            rootView
         }
         .onChange(of: scenePhase) { _, newPhase in
             AppLogger.info(
@@ -130,4 +129,60 @@ struct TaptionEncoderApp: App {
             }
         }
     }
+
+    private var rootView: some View {
+        let view = HomeView()
+            .preferredColorScheme(.dark)
+
+        #if DEBUG
+        return view.task {
+            await DebugLiveActivityProbe.startIfRequested()
+        }
+        #else
+        return view
+        #endif
+    }
 }
+
+#if DEBUG
+@MainActor
+private enum DebugLiveActivityProbe {
+    private static let coordinator = ActivityKitEncodingLiveActivityCoordinator()
+    private static var didStart = false
+
+    static func startIfRequested() async {
+        guard !didStart else {
+            return
+        }
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["TAPTION_DEBUG_LIVE_ACTIVITY"] == "1"
+            || ProcessInfo.processInfo.arguments.contains("--taption-debug-live-activity") else {
+            return
+        }
+
+        didStart = true
+        let snapshot = TaptionEncodingActivitySnapshot(
+            sessionID: "debug-live-activity-\(UUID().uuidString)",
+            statusText: "Encoding",
+            sourceName: "iPad Lock Screen Preview.mov",
+            mode: .folder,
+            currentIndex: 2,
+            totalCount: 5,
+            fractionCompleted: 0.42,
+            elapsedSeconds: 65,
+            remainingSeconds: 125,
+            codecPathText: "HW/SW Codec Path",
+            outputText: "H.265 / HEVC MP4"
+        )
+        await coordinator.start(snapshot: snapshot)
+        AppLogger.info(
+            "Debug Live Activity probe requested",
+            category: .encoding,
+            metadata: [
+                "source": snapshot.sourceName,
+                "progress": snapshot.contentState.percentText
+            ]
+        )
+    }
+}
+#endif

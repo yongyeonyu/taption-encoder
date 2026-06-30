@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var activeMenuSheet: HomeMenuSheet?
     @State private var isOutputSizePopoverPresented = false
     @State private var outputSizeDraftMB: Double?
+    @State private var miniPlayerPreview: QueueVideoPreview?
     #if DEBUG
     @State private var didOpenDebugPreviewFile = false
     @State private var didOpenDebugSampleLibrary = false
@@ -60,6 +61,7 @@ struct HomeView: View {
                         },
                         onReset: {
                             AppLogger.info("Reset button tapped", category: .ui)
+                            miniPlayerPreview = nil
                             viewModel.reset()
                         },
                         controlHeight: metrics.controlHeight,
@@ -116,6 +118,16 @@ struct HomeView: View {
                 .frame(width: metrics.canvasWidth, height: metrics.canvasHeight, alignment: .top)
                 .background(TaptionTheme.appBackground)
                 .clipped()
+
+                if let preview = miniPlayerPreview {
+                    miniPlayerOverlay(
+                        preview: preview,
+                        containerSize: geometry.size,
+                        safeAreaInsets: geometry.safeAreaInsets
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(20)
+                }
             }
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
         }
@@ -290,6 +302,10 @@ struct HomeView: View {
                 preview: preview,
                 adUnitID: viewModel.bannerAdUnitID,
                 onClose: { viewModel.dismissPreview() },
+                onMinimize: {
+                    miniPlayerPreview = preview
+                    viewModel.dismissPreview()
+                },
                 onPrevious: { viewModel.openPreviousPreview() },
                 onNext: { viewModel.openNextPreview() }
             )
@@ -405,6 +421,35 @@ struct HomeView: View {
             || ProcessInfo.processInfo.arguments.contains("--taption-auto-start-encoding")
     }
     #endif
+
+    private func miniPlayerOverlay(
+        preview: QueueVideoPreview,
+        containerSize: CGSize,
+        safeAreaInsets: EdgeInsets
+    ) -> some View {
+        let width = min(containerSize.width - 24, containerSize.width < 500 ? 238 : 300)
+        let bottomPadding = max(82, safeAreaInsets.bottom + 82)
+
+        return VStack {
+            Spacer(minLength: 0)
+            HStack {
+                Spacer(minLength: 0)
+                QueueMiniPlayerView(
+                    preview: preview,
+                    onClose: {
+                        miniPlayerPreview = nil
+                    },
+                    onExpand: {
+                        miniPlayerPreview = nil
+                        viewModel.restorePreview(preview)
+                    }
+                )
+                .frame(width: max(210, width))
+                .padding(.trailing, max(12, safeAreaInsets.trailing + 12))
+                .padding(.bottom, bottomPadding)
+            }
+        }
+    }
 
     private func header(metrics: HomeLayoutMetrics) -> some View {
         HStack(spacing: 10 * metrics.contentScale) {
@@ -936,6 +981,7 @@ private struct QueueVideoPreviewView: View {
     var preview: QueueVideoPreview
     var adUnitID: String
     var onClose: () -> Void
+    var onMinimize: () -> Void
     var onPrevious: () -> Void
     var onNext: () -> Void
 
@@ -956,6 +1002,7 @@ private struct QueueVideoPreviewView: View {
     @State private var didBeginVideoPlaybackAdSuppression = false
     #if DEBUG
     @State private var didAttemptDebugAutoPiP = false
+    @State private var didAttemptDebugAutoMiniPlayer = false
     #endif
 
     var body: some View {
@@ -1149,6 +1196,16 @@ private struct QueueVideoPreviewView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Spacer(minLength: 6)
+
+            Button(action: minimizePreview) {
+                Image(systemName: "pip.enter")
+                    .font(.system(size: 24, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(Color.white.opacity(0.94))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Minimize")
 
             Button(action: closePreview) {
                 Image(systemName: "xmark.circle.fill")
@@ -1449,6 +1506,7 @@ private struct QueueVideoPreviewView: View {
             showControls(scheduleAutoHide: false)
             #if DEBUG
             await startDebugAutoPictureInPictureIfRequested()
+            await minimizeDebugPreviewIfRequested()
             #endif
         } catch is CancellationError {
             isLoading = false
@@ -1474,6 +1532,16 @@ private struct QueueVideoPreviewView: View {
         )
         shutdownPlayer()
         onClose()
+        dismiss()
+    }
+
+    private func minimizePreview() {
+        AppLogger.info(
+            "Queue preview minimized to floating player",
+            category: .ui,
+            metadata: ["name": preview.displayName]
+        )
+        onMinimize()
         dismiss()
     }
 
@@ -1569,6 +1637,27 @@ private struct QueueVideoPreviewView: View {
     private var debugAutoStartPictureInPictureRequested: Bool {
         ProcessInfo.processInfo.environment["TAPTION_AUTO_START_PIP"] == "1"
             || ProcessInfo.processInfo.arguments.contains("--taption-auto-start-pip")
+    }
+
+    @MainActor
+    private func minimizeDebugPreviewIfRequested() async {
+        guard !didAttemptDebugAutoMiniPlayer,
+              debugAutoMiniPlayerRequested else {
+            return
+        }
+        didAttemptDebugAutoMiniPlayer = true
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        AppLogger.info(
+            "Debug auto mini player requested",
+            category: .ui,
+            metadata: ["name": preview.displayName]
+        )
+        minimizePreview()
+    }
+
+    private var debugAutoMiniPlayerRequested: Bool {
+        ProcessInfo.processInfo.environment["TAPTION_AUTO_MINIMIZE_PREVIEW"] == "1"
+            || ProcessInfo.processInfo.arguments.contains("--taption-auto-minimize-preview")
     }
     #endif
 
@@ -1996,6 +2085,314 @@ private struct QueueVideoPreviewView: View {
         pipController?.stop()
         endVideoPlaybackAdSuppressionIfNeeded()
         let sessionID = preview.id
+        Task { @MainActor in
+            await player.shutdown()
+            QueuePreviewAudioSessionController.deactivateAfterPreview(id: sessionID)
+        }
+    }
+}
+
+private struct QueueMiniPlayerView: View {
+    var preview: QueueVideoPreview
+    var onClose: () -> Void
+    var onExpand: () -> Void
+
+    @State private var player = QueuePreviewPlayerFactory.makePreviewPlayer()
+    @State private var pipController: PiPController?
+    @State private var isLoading = true
+    @State private var playbackError: String?
+    @State private var didAttachVideoSurface = false
+    @State private var didBeginVideoPlaybackAdSuppression = false
+    @State private var didRequestShutdown = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ZStack(alignment: .topTrailing) {
+                PiPVideoView(
+                    player,
+                    controller: $pipController,
+                    startsAutomaticallyFromInline: false,
+                    managesAudioSession: false
+                )
+                .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .background(Color.black)
+                .onAppear {
+                    didAttachVideoSurface = true
+                    AppLogger.info(
+                        "Queue mini player video surface appeared",
+                        category: .ui,
+                        metadata: ["name": preview.displayName]
+                    )
+                }
+                .onDisappear {
+                    didAttachVideoSurface = false
+                }
+
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(.white)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.black.opacity(0.18))
+                }
+
+                if let playbackError {
+                    Text(playbackError)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.white.opacity(0.92))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.7)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.black.opacity(0.62))
+                }
+
+                HStack(spacing: 4) {
+                    Button(action: onExpand) {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .frame(width: 30, height: 30)
+                    }
+                    .accessibilityLabel("Expand")
+
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 13, weight: .semibold))
+                            .frame(width: 30, height: 30)
+                    }
+                    .accessibilityLabel("Close")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.white)
+                .background(Color.black.opacity(0.54))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .padding(6)
+            }
+
+            HStack(spacing: 8) {
+                Button(action: togglePlayback) {
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.white)
+                .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(preview.displayName)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.white.opacity(0.94))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(QueuePreviewPlaybackMath.formattedTime(player.currentTime))
+                        .font(.caption2.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(Color.white.opacity(0.66))
+                        .lineLimit(1)
+                }
+                .layoutPriority(1)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(Color.black.opacity(0.94))
+        }
+        .background(Color.black)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.white.opacity(0.16), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.42), radius: 16, x: 0, y: 8)
+        .onAppear {
+            beginVideoPlaybackAdSuppressionIfNeeded()
+            QueuePreviewAudioSessionController.activateForPreview(id: miniSessionID)
+            configurePlayerAudioForMiniPlayback()
+        }
+        .task(id: preview.id) {
+            await startMiniPlayback()
+        }
+        .onDisappear {
+            shutdownMiniPlayer()
+        }
+    }
+
+    private var miniSessionID: String {
+        "\(preview.id).mini"
+    }
+
+    @MainActor
+    private func startMiniPlayback() async {
+        didRequestShutdown = false
+        playbackError = nil
+        isLoading = true
+        player.aspectRatio = .default
+
+        do {
+            player.stop()
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            await waitForVideoSurfaceAttachment()
+            try Task.checkCancellation()
+            let didProduceVideoOutput = try await playMiniPreviewWithFallbacks()
+            if !didProduceVideoOutput {
+                player.stop()
+                playbackError = "Preview unavailable"
+                AppLogger.warning(
+                    "Queue mini player failed to produce a video output",
+                    category: .ui,
+                    metadata: [
+                        "name": preview.displayName,
+                        "codec": preview.codecBadge,
+                        "container": preview.sourceURL.pathExtension.lowercased(),
+                        "activeVideoOutputs": "\(player.activeVideoOutputs)",
+                        "hasVideoOutput": "\(player.hasVideoOutput)"
+                    ]
+                )
+            }
+            isLoading = false
+        } catch is CancellationError {
+            isLoading = false
+        } catch {
+            playbackError = "Preview unavailable"
+            isLoading = false
+            AppLogger.error(
+                "Queue mini player playback failed",
+                category: .ui,
+                metadata: [
+                    "name": preview.displayName,
+                    "error": String(describing: error)
+                ]
+            )
+        }
+    }
+
+    private func togglePlayback() {
+        player.togglePlayPause()
+    }
+
+    private func beginVideoPlaybackAdSuppressionIfNeeded() {
+        guard !didBeginVideoPlaybackAdSuppression else {
+            return
+        }
+        didBeginVideoPlaybackAdSuppression = true
+        AdMobBootstrapper.beginVideoPlaybackAdSuppression(reason: "queueMiniPlayer")
+    }
+
+    private func endVideoPlaybackAdSuppressionIfNeeded() {
+        guard didBeginVideoPlaybackAdSuppression else {
+            return
+        }
+        didBeginVideoPlaybackAdSuppression = false
+        AdMobBootstrapper.endVideoPlaybackAdSuppression(reason: "queueMiniPlayer")
+    }
+
+    private func playMiniPreviewWithFallbacks() async throws -> Bool {
+        let demuxModes = QueuePreviewPlayerFactory.previewDemuxModes(for: preview.sourceURL)
+        for (index, demuxMode) in demuxModes.enumerated() {
+            let media = try makeMiniPreviewMedia(demuxMode: demuxMode)
+            try player.play(media)
+            AppLogger.info(
+                "Queue mini player playback attempt started",
+                category: .ui,
+                metadata: [
+                    "name": preview.displayName,
+                    "attempt": "\(index + 1)",
+                    "demux": demuxMode.logValue
+                ]
+            )
+            if await waitForVideoOutput() {
+                AppLogger.info(
+                    "Queue mini player video output ready",
+                    category: .ui,
+                    metadata: [
+                        "name": preview.displayName,
+                        "attempt": "\(index + 1)",
+                        "demux": demuxMode.logValue,
+                        "activeVideoOutputs": "\(player.activeVideoOutputs)",
+                        "hasVideoOutput": "\(player.hasVideoOutput)"
+                    ]
+                )
+                return true
+            }
+
+            player.stop()
+        }
+        return false
+    }
+
+    private func makeMiniPreviewMedia(demuxMode: QueuePreviewDemuxMode) throws -> Media {
+        let media = try Media(url: preview.sourceURL)
+        let options = QueuePreviewPlayerFactory.configureSoftwareDecodeOptions(
+            on: media,
+            sourceURL: preview.sourceURL,
+            demuxMode: demuxMode
+        )
+        AppLogger.info(
+            "Queue mini player media configured",
+            category: .ui,
+            metadata: [
+                "name": preview.displayName,
+                "demux": demuxMode.logValue,
+                "options": options.joined(separator: "|")
+            ]
+        )
+        return media
+    }
+
+    private func configurePlayerAudioForMiniPlayback() {
+        player.role = .video
+        player.isMuted = false
+        do {
+            try player.setAudioVolume(.unity)
+        } catch {
+            AppLogger.warning(
+                "Queue mini player volume setup failed",
+                category: .ui,
+                metadata: [
+                    "name": preview.displayName,
+                    "error": String(describing: error)
+                ]
+            )
+        }
+    }
+
+    @MainActor
+    private func waitForVideoSurfaceAttachment() async {
+        for _ in 0..<20 {
+            if didAttachVideoSurface {
+                try? await Task.sleep(nanoseconds: 120_000_000)
+                return
+            }
+            if Task.isCancelled {
+                return
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+    }
+
+    @MainActor
+    private func waitForVideoOutput() async -> Bool {
+        for _ in 0..<80 {
+            if player.hasVideoOutput || player.activeVideoOutputs > 0 {
+                return true
+            }
+            if Task.isCancelled {
+                return false
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        return player.hasVideoOutput || player.activeVideoOutputs > 0
+    }
+
+    private func shutdownMiniPlayer() {
+        guard !didRequestShutdown else {
+            return
+        }
+        didRequestShutdown = true
+        pipController?.stop()
+        endVideoPlaybackAdSuppressionIfNeeded()
+        let sessionID = miniSessionID
         Task { @MainActor in
             await player.shutdown()
             QueuePreviewAudioSessionController.deactivateAfterPreview(id: sessionID)

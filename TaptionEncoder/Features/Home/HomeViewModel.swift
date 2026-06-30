@@ -1370,6 +1370,15 @@ final class HomeViewModel: ObservableObject {
         activePreview = nil
     }
 
+    func restorePreview(_ preview: QueueVideoPreview) {
+        AppLogger.info(
+            "Queue mini player restored to full preview",
+            category: .ui,
+            metadata: ["name": preview.displayName]
+        )
+        presentPreview(preview)
+    }
+
     func openPreviousPreview() {
         openAdjacentPreview(offset: -1)
     }
