@@ -93,19 +93,32 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         XCTAssertEqual(compact.horizontalPadding, 16)
-        XCTAssertEqual(compact.topPadding, 30)
-        XCTAssertEqual(compact.bottomPadding, 12)
+        XCTAssertEqual(compact.topPadding, 38)
+        XCTAssertEqual(compact.bottomPadding, 10)
         XCTAssertEqual(regular.horizontalPadding, 20)
-        XCTAssertEqual(regular.topPadding, 36)
-        XCTAssertEqual(regular.bottomPadding, 14)
-        XCTAssertEqual(supplementalSmall.topPadding, 18)
+        XCTAssertEqual(regular.topPadding, 44)
+        XCTAssertEqual(regular.bottomPadding, 12)
+        XCTAssertEqual(supplementalSmall.topPadding, 28)
+        XCTAssertEqual(supplementalSmall.bottomPadding, 8)
         XCTAssertGreaterThan(regular.topPadding, compact.topPadding)
         XCTAssertGreaterThan(compact.topPadding, compact.bottomPadding)
+        XCTAssertGreaterThan(supplementalSmall.topPadding, supplementalSmall.bottomPadding)
     }
 
     func testEncodingLiveActivityDynamicIslandMetricsStayCompact() {
         XCTAssertEqual(TaptionEncodingLiveActivityLayoutMetrics.dynamicIslandExpandedTopPadding, 10)
         XCTAssertEqual(TaptionEncodingLiveActivityLayoutMetrics.dynamicIslandBottomTopPadding, 7)
+    }
+
+    func testEncodingLiveActivityLockScreenSmallFamilyUsesCondensedLayout() throws {
+        let widgetURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("TaptionEncoderLiveActivityExtension/EncodingLiveActivityWidget.swift")
+        let widgetSource = try String(contentsOf: widgetURL, encoding: .utf8)
+        XCTAssertTrue(widgetSource.contains("activityFamily == .small"))
+        XCTAssertTrue(widgetSource.contains("condensedHeader"))
+        XCTAssertTrue(widgetSource.contains("condensedDetails"))
     }
 
     func testBatteryEncodingGateBlocksAtOrBelowLimit() {
@@ -2991,6 +3004,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(previewText.contains("startsAutomaticallyFromInline: true"))
         XCTAssertTrue(previewText.contains("managesAudioSession: false"))
         XCTAssertTrue(previewText.contains("Button(action: togglePictureInPicture)"))
+        XCTAssertTrue(previewText.contains("startDebugAutoPictureInPictureIfRequested()"))
+        XCTAssertTrue(previewText.contains("TAPTION_AUTO_START_PIP"))
         XCTAssertTrue(previewText.contains("beginVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(previewText.contains("endVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(previewText.contains("AdMobBannerSlotView("))

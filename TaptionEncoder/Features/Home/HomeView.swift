@@ -954,6 +954,9 @@ private struct QueueVideoPreviewView: View {
     @State private var didAttachVideoSurface = false
     @State private var pipController: PiPController?
     @State private var didBeginVideoPlaybackAdSuppression = false
+    #if DEBUG
+    @State private var didAttemptDebugAutoPiP = false
+    #endif
 
     var body: some View {
         GeometryReader { proxy in
@@ -1444,6 +1447,9 @@ private struct QueueVideoPreviewView: View {
             }
             isLoading = false
             showControls(scheduleAutoHide: false)
+            #if DEBUG
+            await startDebugAutoPictureInPictureIfRequested()
+            #endif
         } catch is CancellationError {
             isLoading = false
         } catch {
@@ -1507,6 +1513,64 @@ private struct QueueVideoPreviewView: View {
         )
         showControls(scheduleAutoHide: false)
     }
+
+    #if DEBUG
+    @MainActor
+    private func startDebugAutoPictureInPictureIfRequested() async {
+        guard !didAttemptDebugAutoPiP,
+              debugAutoStartPictureInPictureRequested else {
+            return
+        }
+        didAttemptDebugAutoPiP = true
+
+        for _ in 0..<30 {
+            if pipController?.isPossible == true {
+                break
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        guard let pipController else {
+            AppLogger.warning(
+                "Debug auto PiP skipped because controller is unavailable",
+                category: .ui,
+                metadata: ["name": preview.displayName]
+            )
+            return
+        }
+
+        AppLogger.info(
+            "Debug auto PiP requested",
+            category: .ui,
+            metadata: [
+                "name": preview.displayName,
+                "possible": "\(pipController.isPossible)",
+                "active": "\(pipController.isActive)"
+            ]
+        )
+
+        guard pipController.isPossible else {
+            return
+        }
+
+        pipController.start()
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        AppLogger.info(
+            "Debug auto PiP state checked",
+            category: .ui,
+            metadata: [
+                "name": preview.displayName,
+                "possible": "\(pipController.isPossible)",
+                "active": "\(pipController.isActive)"
+            ]
+        )
+    }
+
+    private var debugAutoStartPictureInPictureRequested: Bool {
+        ProcessInfo.processInfo.environment["TAPTION_AUTO_START_PIP"] == "1"
+            || ProcessInfo.processInfo.arguments.contains("--taption-auto-start-pip")
+    }
+    #endif
 
     private func skipBackward() {
         seekBy(seconds: -QueuePreviewPlaybackMath.skipIntervalSeconds)

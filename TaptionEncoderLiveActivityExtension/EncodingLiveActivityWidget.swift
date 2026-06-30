@@ -76,43 +76,86 @@ private struct TaptionEncodingLockScreenView: View {
     var state: TaptionEncodingLiveActivityAttributes.ContentState
 
     var body: some View {
+        let isSupplementalSmallFamily = activityFamily == .small
         let metrics = TaptionEncodingLiveActivityLayoutMetrics.lockScreen(
             isRegularWidth: horizontalSizeClass == .regular,
-            isSupplementalSmallFamily: activityFamily == .small
+            isSupplementalSmallFamily: isSupplementalSmallFamily
         )
 
         VStack(alignment: .leading, spacing: CGFloat(metrics.verticalSpacing)) {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(state.statusText)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                        .minimumScaleFactor(0.78)
-                    Text(state.sourceName)
-                        .font(.caption)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .minimumScaleFactor(0.78)
-                        .foregroundStyle(.secondary)
-                }
-                .layoutPriority(1)
-
-                Spacer(minLength: 4)
-
-                Text(state.percentText)
-                    .font(.title3)
-                    .bold()
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .fixedSize(horizontal: true, vertical: false)
+            if isSupplementalSmallFamily {
+                condensedHeader
+            } else {
+                standardHeader
             }
 
             ProgressView(value: state.fractionCompleted)
                 .tint(.cyan)
 
+            if isSupplementalSmallFamily {
+                condensedDetails
+            } else {
+                standardDetails
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, CGFloat(metrics.horizontalPadding))
+        .padding(.top, CGFloat(metrics.topPadding))
+        .padding(.bottom, CGFloat(metrics.bottomPadding))
+    }
+
+    private var standardHeader: some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(state.statusText)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .minimumScaleFactor(0.78)
+                Text(state.sourceName)
+                    .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .minimumScaleFactor(0.78)
+                    .foregroundStyle(.secondary)
+            }
+            .layoutPriority(1)
+
+            Spacer(minLength: 4)
+
+            percentText
+        }
+    }
+
+    private var condensedHeader: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(state.statusText)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .minimumScaleFactor(0.78)
+                .layoutPriority(1)
+
+            Spacer(minLength: 4)
+
+            percentText
+        }
+    }
+
+    private var percentText: some View {
+        Text(state.percentText)
+            .font(.title3)
+            .bold()
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var standardDetails: some View {
+        VStack(alignment: .leading, spacing: 2) {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) {
                     countLabel
@@ -125,8 +168,6 @@ private struct TaptionEncodingLockScreenView: View {
                     remainingLabel
                 }
             }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
 
             ViewThatFits(in: .horizontal) {
                 Text("\(state.codecPathText) -> \(state.outputText)")
@@ -145,13 +186,19 @@ private struct TaptionEncodingLockScreenView: View {
                         .minimumScaleFactor(0.78)
                 }
             }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, CGFloat(metrics.horizontalPadding))
-        .padding(.top, CGFloat(metrics.topPadding))
-        .padding(.bottom, CGFloat(metrics.bottomPadding))
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+    }
+
+    private var condensedDetails: some View {
+        HStack(spacing: 8) {
+            countLabel
+            remainingLabel
+            Spacer(minLength: 0)
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
     }
 
     private var countLabel: some View {
