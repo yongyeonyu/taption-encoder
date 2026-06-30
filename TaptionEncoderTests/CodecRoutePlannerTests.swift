@@ -3148,6 +3148,26 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(appText.contains("return canHandleURL"))
     }
 
+    func testExternalVideoPlayerFlowVerifierCoversRealOpenURLPath() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let scriptURL = rootURL.appendingPathComponent("Scripts/verify_external_video_player_flow.sh")
+        let scriptText = try String(contentsOf: scriptURL, encoding: .utf8)
+
+        XCTAssertTrue(scriptText.contains("xcrun simctl openurl"))
+        XCTAssertTrue(scriptText.contains("SIMCTL_CHILD_TAPTION_AUTO_MINIMIZE_PREVIEW=1"))
+        XCTAssertTrue(scriptText.contains("External video URL opened"))
+        XCTAssertTrue(scriptText.contains("source=scene"))
+        XCTAssertTrue(scriptText.contains("External player file routed into preview flow"))
+        XCTAssertTrue(scriptText.contains("Security scoped access started"))
+        XCTAssertTrue(scriptText.contains("Queue preview opened"))
+        XCTAssertTrue(scriptText.contains("Queue preview minimized to floating player"))
+        XCTAssertTrue(scriptText.contains("Queue mini player video output ready"))
+        XCTAssertTrue(scriptText.contains("Full-screen ads suppressed during video playback"))
+        XCTAssertTrue(scriptText.contains("xcrun simctl io \"$DEVICE\" screenshot"))
+    }
+
     func testDeviceCodecCapabilitiesExposeInstalledDeviceSupportFlags() {
         let supportedVideo = TaptionCodecHardwareCapability(
             videoCodec: .hevc,
