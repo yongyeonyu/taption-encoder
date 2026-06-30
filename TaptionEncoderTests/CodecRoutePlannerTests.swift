@@ -93,19 +93,19 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         XCTAssertEqual(compact.horizontalPadding, 16)
-        XCTAssertEqual(compact.topPadding, 22)
+        XCTAssertEqual(compact.topPadding, 30)
         XCTAssertEqual(compact.bottomPadding, 12)
         XCTAssertEqual(regular.horizontalPadding, 20)
-        XCTAssertEqual(regular.topPadding, 26)
+        XCTAssertEqual(regular.topPadding, 36)
         XCTAssertEqual(regular.bottomPadding, 14)
-        XCTAssertEqual(supplementalSmall.topPadding, 14)
+        XCTAssertEqual(supplementalSmall.topPadding, 18)
         XCTAssertGreaterThan(regular.topPadding, compact.topPadding)
         XCTAssertGreaterThan(compact.topPadding, compact.bottomPadding)
     }
 
     func testEncodingLiveActivityDynamicIslandMetricsStayCompact() {
-        XCTAssertEqual(TaptionEncodingLiveActivityLayoutMetrics.dynamicIslandExpandedTopPadding, 7)
-        XCTAssertEqual(TaptionEncodingLiveActivityLayoutMetrics.dynamicIslandBottomTopPadding, 5)
+        XCTAssertEqual(TaptionEncodingLiveActivityLayoutMetrics.dynamicIslandExpandedTopPadding, 10)
+        XCTAssertEqual(TaptionEncodingLiveActivityLayoutMetrics.dynamicIslandBottomTopPadding, 7)
     }
 
     func testBatteryEncodingGateBlocksAtOrBelowLimit() {
@@ -1845,14 +1845,14 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(documentContentTypes.isSuperset(of: ["com.taption.legacy-video"]))
         XCTAssertTrue(documentContentTypes.isSuperset(of: legacySystemContentTypes))
         XCTAssertTrue(documentContentTypes.isSuperset(of: standardVideoContentTypes))
-        XCTAssertEqual(documentHandlerRanks, ["Owner", "Alternate"])
+        XCTAssertEqual(documentHandlerRanks, ["Owner", "Default"])
         XCTAssertEqual(legacyDocumentType["LSHandlerRank"] as? String, "Owner")
         XCTAssertEqual(legacyDocumentType["CFBundleTypeRole"] as? String, "Viewer")
         XCTAssertTrue(
             Set(legacyDocumentType["LSItemContentTypes"] as? [String] ?? []).isSuperset(of: legacySystemContentTypes),
             "Legacy document type should claim Files-resolved Taption Encoder video UTIs."
         )
-        XCTAssertEqual(standardVideoDocumentType["LSHandlerRank"] as? String, "Alternate")
+        XCTAssertEqual(standardVideoDocumentType["LSHandlerRank"] as? String, "Default")
         XCTAssertEqual(standardVideoDocumentType["CFBundleTypeRole"] as? String, "Viewer")
         XCTAssertEqual(documentIconFiles, ["AppIcon60x60"])
         XCTAssertEqual(exportedIdentifiers, ["com.taption.legacy-video"])
@@ -1861,6 +1861,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(plist["LSSupportsOpeningDocumentsInPlace"] as? Bool, true)
         XCTAssertEqual(plist["UIFileSharingEnabled"] as? Bool, true)
         XCTAssertEqual(plist["UISupportsDocumentBrowser"] as? Bool, true)
+        XCTAssertEqual(
+            Set(try XCTUnwrap(plist["UIBackgroundModes"] as? [String])),
+            ["audio", "processing"]
+        )
         XCTAssertTrue(SupportedVideoFileExtensions.contains(".mp4"))
         XCTAssertTrue(SupportedVideoFileExtensions.contains("qt"))
         XCTAssertTrue(SupportedVideoFileExtensions.contains("M4V"))
@@ -2182,7 +2186,11 @@ final class CodecRoutePlannerTests: XCTestCase {
         QueuePreviewPlayerFactory.configureSoftwareDecodeOptions(on: media, sourceURL: sampleURL)
 
         let hostingController = UIHostingController(
-            rootView: TaptionPreviewPlayerSurface(player: player)
+            rootView: PiPVideoView(
+                player,
+                startsAutomaticallyFromInline: true,
+                managesAudioSession: false
+            )
                 .aspectRatio(4.0 / 3.0, contentMode: .fit)
                 .frame(width: 320, height: 240)
                 .background(Color.black)
@@ -2240,7 +2248,11 @@ final class CodecRoutePlannerTests: XCTestCase {
             QueuePreviewPlayerFactory.configureSoftwareDecodeOptions(on: media, sourceURL: sampleURL)
 
             let hostingController = UIHostingController(
-                rootView: TaptionPreviewPlayerSurface(player: player)
+                rootView: PiPVideoView(
+                    player,
+                    startsAutomaticallyFromInline: true,
+                    managesAudioSession: false
+                )
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 320, height: 240)
                     .background(Color.black)
@@ -2958,6 +2970,52 @@ final class CodecRoutePlannerTests: XCTestCase {
                 isDragging: true
             )
         )
+    }
+
+    func testQueuePreviewPlayerUsesPictureInPictureSurfaceAndBannerOnlyAds() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
+        let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
+        let previewStart = try XCTUnwrap(
+            homeViewText.range(of: "private struct QueueVideoPreviewView: View")
+        )
+        let previewEnd = try XCTUnwrap(
+            homeViewText.range(of: "private struct PreviewBadgeFlowLayout")
+        )
+        let previewText = String(homeViewText[previewStart.lowerBound..<previewEnd.lowerBound])
+
+        XCTAssertTrue(previewText.contains("PiPVideoView("))
+        XCTAssertTrue(previewText.contains("controller: $pipController"))
+        XCTAssertTrue(previewText.contains("startsAutomaticallyFromInline: true"))
+        XCTAssertTrue(previewText.contains("managesAudioSession: false"))
+        XCTAssertTrue(previewText.contains("Button(action: togglePictureInPicture)"))
+        XCTAssertTrue(previewText.contains("AdMobBannerSlotView("))
+        XCTAssertFalse(previewText.localizedCaseInsensitiveContains("rewarded"))
+        XCTAssertFalse(previewText.localizedCaseInsensitiveContains("interstitial"))
+        XCTAssertFalse(previewText.localizedCaseInsensitiveContains("appOpen"))
+    }
+
+    func testExternalVideoOpenSuppressesAppOpenAdsBeforePreviewRouting() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
+        let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
+        let openURLStart = try XCTUnwrap(homeViewText.range(of: ".onOpenURL { url in"))
+        let openURLEnd = try XCTUnwrap(
+            homeViewText[openURLStart.lowerBound...].range(of: "\n        .task {")
+        )
+        let openURLText = String(homeViewText[openURLStart.lowerBound..<openURLEnd.lowerBound])
+        let suppressionRange = try XCTUnwrap(
+            openURLText.range(of: "AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()")
+        )
+        let previewRoutingRange = try XCTUnwrap(
+            openURLText.range(of: "viewModel.openExternalPlayerFile(url: url)")
+        )
+
+        XCTAssertLessThan(suppressionRange.lowerBound, previewRoutingRange.lowerBound)
     }
 
     func testDeviceCodecCapabilitiesExposeInstalledDeviceSupportFlags() {

@@ -131,8 +131,8 @@ struct TaptionEncodingLiveActivityLayoutMetrics: Hashable {
     var bottomPadding: Double
     var verticalSpacing: Double
 
-    static let dynamicIslandExpandedTopPadding = 7.0
-    static let dynamicIslandBottomTopPadding = 5.0
+    static let dynamicIslandExpandedTopPadding = 10.0
+    static let dynamicIslandBottomTopPadding = 7.0
 
     static func lockScreen(
         isRegularWidth: Bool,
@@ -141,17 +141,17 @@ struct TaptionEncodingLiveActivityLayoutMetrics: Hashable {
         if isSupplementalSmallFamily {
             return TaptionEncodingLiveActivityLayoutMetrics(
                 horizontalPadding: 12,
-                topPadding: 14,
-                bottomPadding: 10,
-                verticalSpacing: 5
+                topPadding: 18,
+                bottomPadding: 9,
+                verticalSpacing: 4
             )
         }
 
         return TaptionEncodingLiveActivityLayoutMetrics(
             horizontalPadding: isRegularWidth ? 20 : 16,
-            topPadding: isRegularWidth ? 26 : 22,
+            topPadding: isRegularWidth ? 36 : 30,
             bottomPadding: isRegularWidth ? 14 : 12,
-            verticalSpacing: isRegularWidth ? 7 : 6
+            verticalSpacing: isRegularWidth ? 6 : 5
         )
     }
 }

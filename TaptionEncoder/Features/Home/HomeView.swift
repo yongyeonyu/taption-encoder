@@ -952,6 +952,7 @@ private struct QueueVideoPreviewView: View {
     @State private var gestureFeedback: QueuePreviewGestureFeedback?
     @State private var gestureFeedbackTask: Task<Void, Never>?
     @State private var didAttachVideoSurface = false
+    @State private var pipController: PiPController?
 
     var body: some View {
         GeometryReader { proxy in
@@ -1017,7 +1018,12 @@ private struct QueueVideoPreviewView: View {
     @ViewBuilder
     private func videoSurface(containerSize: CGSize) -> some View {
         let fittedSize = fittedVideoSize(in: containerSize)
-        TaptionPreviewPlayerSurface(player: player)
+        PiPVideoView(
+            player,
+            controller: $pipController,
+            startsAutomaticallyFromInline: true,
+            managesAudioSession: false
+        )
             .frame(width: fittedSize.width, height: fittedSize.height)
             .background(Color.black)
             .onAppear {
@@ -1240,6 +1246,15 @@ private struct QueueVideoPreviewView: View {
                 }
                 .accessibilityLabel("Forward 10 seconds")
 
+                Button(action: togglePictureInPicture) {
+                    Image(systemName: isPictureInPictureActive ? "pip.exit" : "pip.enter")
+                        .font(.system(size: 21, weight: .semibold))
+                        .frame(width: 38, height: 38)
+                }
+                .disabled(!canTogglePictureInPicture)
+                .opacity(canTogglePictureInPicture ? 1 : 0.36)
+                .accessibilityLabel(isPictureInPictureActive ? "Exit Picture in Picture" : "Picture in Picture")
+
                 Spacer(minLength: 4)
 
                 Text("\(displayedCurrentTimeText) / \(durationText)")
@@ -1378,6 +1393,17 @@ private struct QueueVideoPreviewView: View {
         QueuePreviewPlaybackMath.seconds(from: player.duration)
     }
 
+    private var isPictureInPictureActive: Bool {
+        pipController?.isActive == true
+    }
+
+    private var canTogglePictureInPicture: Bool {
+        guard let pipController else {
+            return false
+        }
+        return pipController.isPossible || pipController.isActive
+    }
+
     @MainActor
     private func startPlayback() async {
         didRequestShutdown = false
@@ -1445,6 +1471,22 @@ private struct QueueVideoPreviewView: View {
 
     private func togglePlayback() {
         player.togglePlayPause()
+        showControls(scheduleAutoHide: false)
+    }
+
+    private func togglePictureInPicture() {
+        guard let pipController, canTogglePictureInPicture else {
+            showGestureFeedback(systemImage: "pip", text: "PiP unavailable")
+            showControls(scheduleAutoHide: false)
+            return
+        }
+
+        let wasActive = pipController.isActive
+        pipController.toggle()
+        showGestureFeedback(
+            systemImage: wasActive ? "pip.exit" : "pip.enter",
+            text: wasActive ? "Inline" : "Picture in Picture"
+        )
         showControls(scheduleAutoHide: false)
     }
 
@@ -1869,90 +1911,12 @@ private struct QueueVideoPreviewView: View {
         didRequestShutdown = true
         gestureFeedbackTask?.cancel()
         AppOrientationController.shared.restorePortrait()
+        pipController?.stop()
         let sessionID = preview.id
         Task { @MainActor in
             await player.shutdown()
             QueuePreviewAudioSessionController.deactivateAfterPreview(id: sessionID)
         }
-    }
-}
-
-struct TaptionPreviewPlayerSurface: UIViewRepresentable {
-    let player: Player
-
-    func makeUIView(context _: Context) -> TaptionPreviewPlayerSurfaceView {
-        let view = TaptionPreviewPlayerSurfaceView()
-        view.attach(to: player)
-        return view
-    }
-
-    func updateUIView(_ uiView: TaptionPreviewPlayerSurfaceView, context _: Context) {
-        uiView.attach(to: player)
-    }
-
-    static func dismantleUIView(_ uiView: TaptionPreviewPlayerSurfaceView, coordinator _: ()) {
-        uiView.detach()
-    }
-}
-
-@MainActor
-final class TaptionPreviewPlayerSurfaceView: UIView {
-    private weak var attachedPlayer: Player?
-    private var pipController: PiPController?
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        backgroundColor = .black
-        clipsToBounds = true
-        isUserInteractionEnabled = false
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    func attach(to player: Player) {
-        guard attachedPlayer !== player else {
-            layoutPreviewLayer()
-            return
-        }
-
-        detach()
-        attachedPlayer = player
-
-        let controller = PiPController(player: player)
-        controller.layer.videoGravity = .resizeAspect
-        controller.layer.backgroundColor = UIColor.black.cgColor
-        layer.addSublayer(controller.layer)
-        pipController = controller
-        layoutPreviewLayer()
-    }
-
-    func detach() {
-        pipController?.stop()
-        pipController?.layer.removeFromSuperlayer()
-        pipController = nil
-        attachedPlayer = nil
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        layoutPreviewLayer()
-    }
-
-    deinit {
-        let controller = pipController
-        Task { @MainActor in
-            controller?.stop()
-            controller?.layer.removeFromSuperlayer()
-        }
-    }
-
-    private func layoutPreviewLayer() {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        pipController?.layer.frame = bounds
-        CATransaction.commit()
     }
 }
 
