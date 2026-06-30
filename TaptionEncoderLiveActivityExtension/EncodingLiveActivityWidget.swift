@@ -62,40 +62,63 @@ private struct TaptionEncodingLockScreenView: View {
     var state: TaptionEncodingLiveActivityAttributes.ContentState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(state.statusText)
-                        .font(.headline)
-                    Text(state.sourceName)
                         .font(.subheadline)
+                        .fontWeight(.semibold)
                         .lineLimit(1)
+                        .truncationMode(.tail)
+                        .minimumScaleFactor(0.78)
+                    Text(state.sourceName)
+                        .font(.caption)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .minimumScaleFactor(0.78)
                         .foregroundStyle(.secondary)
                 }
-                Spacer(minLength: 12)
+                .layoutPriority(1)
+
+                Spacer(minLength: 4)
+
                 Text(state.percentText)
-                    .font(.title2)
+                    .font(.title3)
                     .bold()
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .fixedSize(horizontal: true, vertical: false)
             }
 
             ProgressView(value: state.fractionCompleted)
                 .tint(.cyan)
 
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 Label(state.countText, systemImage: "list.bullet.rectangle")
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .minimumScaleFactor(0.78)
                 Label(state.remainingText, systemImage: "hourglass")
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .minimumScaleFactor(0.78)
                 Spacer(minLength: 0)
             }
-            .font(.caption)
+            .font(.caption2)
             .foregroundStyle(.secondary)
 
             Text("\(state.codecPathText) -> \(state.outputText)")
                 .font(.caption2)
                 .lineLimit(1)
+                .truncationMode(.tail)
+                .minimumScaleFactor(0.72)
                 .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.top, 9)
+        .padding(.bottom, 5)
     }
 }
 
@@ -109,18 +132,25 @@ private struct TaptionEncodingCompactProgressView: View {
                     .font(.caption)
                     .bold()
                     .lineLimit(1)
+                    .truncationMode(.tail)
                 Spacer()
                 Text(state.sourceName)
                     .font(.caption2)
                     .lineLimit(1)
+                    .truncationMode(.middle)
                     .foregroundStyle(.secondary)
             }
             ProgressView(value: state.fractionCompleted)
                 .tint(.cyan)
-            HStack {
+            HStack(spacing: 6) {
                 Text(state.codecPathText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                 Spacer()
                 Text(state.outputText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .layoutPriority(1)
             }
             .font(.caption2)
             .foregroundStyle(.secondary)
