@@ -10,13 +10,150 @@ import PhotosUI
 import UniformTypeIdentifiers
 import UIKit
 
+private enum HomeSystemDocumentPickerMode: String {
+    case files
+    case folder
+
+    var allowedContentTypes: [UTType] {
+        switch self {
+        case .files:
+            return ImportableVideoTypes.all
+        case .folder:
+            return [.folder]
+        }
+    }
+
+    var allowsMultipleSelection: Bool {
+        switch self {
+        case .files:
+            return true
+        case .folder:
+            return false
+        }
+    }
+}
+
+private struct HomeSystemDocumentPickerPresenter: UIViewControllerRepresentable {
+    @Binding var mode: HomeSystemDocumentPickerMode?
+    var onCompletion: (HomeSystemDocumentPickerMode, Result<[URL], Error>) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        UIViewController()
+    }
+
+    func updateUIViewController(_ viewController: UIViewController, context: Context) {
+        context.coordinator.parent = self
+        guard let mode else {
+            return
+        }
+
+        context.coordinator.present(mode: mode, anchoredBy: viewController)
+    }
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        var parent: HomeSystemDocumentPickerPresenter
+        var presentedMode: HomeSystemDocumentPickerMode?
+
+        init(parent: HomeSystemDocumentPickerPresenter) {
+            self.parent = parent
+        }
+
+        func present(mode: HomeSystemDocumentPickerMode, anchoredBy anchor: UIViewController) {
+            guard presentedMode != mode else {
+                return
+            }
+
+            presentedMode = mode
+            DispatchQueue.main.async { [weak self, weak anchor] in
+                self?.presentPicker(mode: mode, anchoredBy: anchor)
+            }
+        }
+
+        func documentPicker(
+            _ controller: UIDocumentPickerViewController,
+            didPickDocumentsAt urls: [URL]
+        ) {
+            complete(.success(urls))
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            complete(.success([]))
+        }
+
+        private func presentPicker(
+            mode: HomeSystemDocumentPickerMode,
+            anchoredBy anchor: UIViewController?
+        ) {
+            guard parent.mode == mode else {
+                presentedMode = nil
+                return
+            }
+
+            let picker = UIDocumentPickerViewController(
+                forOpeningContentTypes: mode.allowedContentTypes,
+                asCopy: false
+            )
+            picker.allowsMultipleSelection = mode.allowsMultipleSelection
+            picker.delegate = self
+            if #available(iOS 14.0, *) {
+                picker.shouldShowFileExtensions = true
+            }
+
+            guard let presenter = Self.topMostPresenter(preferredAnchor: anchor) else {
+                AppLogger.warning(
+                    "System document picker presenter unavailable",
+                    category: .fileImport,
+                    metadata: ["mode": mode.rawValue]
+                )
+                presentedMode = nil
+                parent.mode = nil
+                return
+            }
+
+            presenter.present(picker, animated: true)
+        }
+
+        private static func topMostPresenter(preferredAnchor anchor: UIViewController?) -> UIViewController? {
+            let anchorRoot = anchor?.view.window?.rootViewController
+            let sceneRoot = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+                .filter { $0.activationState == .foregroundActive || $0.activationState == .foregroundInactive }
+                .flatMap(\.windows)
+                .first { $0.isKeyWindow }?
+                .rootViewController
+
+            guard var presenter = anchorRoot ?? sceneRoot else {
+                return nil
+            }
+
+            while let presented = presenter.presentedViewController,
+                  !presented.isBeingDismissed {
+                presenter = presented
+            }
+
+            return presenter
+        }
+
+        private func complete(_ result: Result<[URL], Error>) {
+            guard let mode = presentedMode ?? parent.mode else {
+                return
+            }
+            presentedMode = nil
+            parent.mode = nil
+            parent.onCompletion(mode, result)
+        }
+    }
+}
+
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
     @State private var activeImportBrowser: HomeImportBrowserMode?
     @State private var didCompleteImportBrowserSelection = false
-    @State private var importBrowserPermissionMode: HomeImportBrowserMode?
-    @State private var isImportBrowserLocationPickerPresented = false
-    @State private var didRequestStartupImportBrowserAccess = false
+    @State private var activeSystemDocumentPicker: HomeSystemDocumentPickerMode?
     @State private var isPhotosPickerPresented = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var activeMenuSheet: HomeMenuSheet?
@@ -159,11 +296,12 @@ struct HomeView: View {
             matching: .videos,
             preferredItemEncoding: .current
         )
-        .fileImporter(
-            isPresented: $isImportBrowserLocationPickerPresented,
-            allowedContentTypes: [.folder],
-            allowsMultipleSelection: false,
-            onCompletion: handleImportBrowserLocationPickerResult
+        .background(
+            HomeSystemDocumentPickerPresenter(
+                mode: $activeSystemDocumentPicker,
+                onCompletion: handleSystemDocumentPickerResult
+            )
+            .frame(width: 0, height: 0)
         )
         .onChange(of: selectedPhotoItem) { _, newItem in
             handleSelectedPhotoItemChange(newItem)
@@ -179,7 +317,6 @@ struct HomeView: View {
             await AdMobBootstrapper.refreshOnActive()
             await viewModel.restorePendingSavesIfNeeded()
             await viewModel.refreshStarsIfNeeded()
-            requestStartupImportBrowserAccessIfNeeded()
             #if DEBUG
             openDebugPreviewFileIfRequested()
             openDebugPreviewSampleIfRequested()
@@ -348,12 +485,12 @@ struct HomeView: View {
 
     private func openFilesImportBrowser() {
         AppLogger.info("File button tapped", category: .ui)
-        requestImportBrowserLocationAccess(for: .files)
+        activeSystemDocumentPicker = .files
     }
 
     private func openFolderImportBrowser() {
         AppLogger.info("Folder button tapped", category: .ui)
-        requestImportBrowserLocationAccess(for: .folder)
+        activeSystemDocumentPicker = .folder
     }
 
     private func presentPhotosPicker() {
@@ -368,61 +505,61 @@ struct HomeView: View {
         viewModel.reset()
     }
 
-    private func requestStartupImportBrowserAccessIfNeeded() {
-        guard !didRequestStartupImportBrowserAccess,
-              importBrowserPermissionMode == nil,
-              activeImportBrowser == nil,
-              viewModel.state.canSelectSource else {
-            return
+    private func handleSystemDocumentPickerResult(
+        mode: HomeSystemDocumentPickerMode,
+        result: Result<[URL], Error>
+    ) {
+        switch mode {
+        case .files:
+            handleFilePickerResult(result)
+        case .folder:
+            handleFolderPickerResult(result)
         }
-
-        didRequestStartupImportBrowserAccess = true
-        requestImportBrowserLocationAccess(for: .folder)
     }
 
-    private func requestImportBrowserLocationAccess(for mode: HomeImportBrowserMode) {
-        importBrowserPermissionMode = mode
-        isImportBrowserLocationPickerPresented = true
-    }
-
-    private func handleImportBrowserLocationPickerResult(_ result: Result<[URL], Error>) {
-        guard let mode = importBrowserPermissionMode else {
-            return
-        }
-
-        importBrowserPermissionMode = nil
+    private func handleFilePickerResult(_ result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
-            guard let rootURL = urls.first?.standardizedFileURL else {
-                viewModel.openImportBrowser(mode: mode)
-                activeImportBrowser = mode
+            let selectedURLs = urls.map(\.standardizedFileURL)
+            guard !selectedURLs.isEmpty else {
                 return
             }
             AppLogger.info(
-                "Import browser location access granted",
+                "File picker selection completed",
                 category: .fileImport,
                 metadata: [
-                    "mode": mode.rawValue,
-                    "name": rootURL.lastPathComponent
+                    "count": "\(selectedURLs.count)",
+                    "names": selectedURLs.map(\.lastPathComponent).joined(separator: "|")
                 ]
             )
-            viewModel.openImportBrowserRoot(
-                url: rootURL,
-                mode: mode,
-                authorizedRootURL: rootURL
-            )
-            activeImportBrowser = mode
+            viewModel.handleFolderPickerSelection(urls: selectedURLs)
         case .failure(let error):
             AppLogger.warning(
-                "Import browser location access failed",
+                "File picker selection failed",
                 category: .fileImport,
-                metadata: [
-                    "mode": mode.rawValue,
-                    "error": error.localizedDescription
-                ]
+                metadata: ["error": error.localizedDescription]
             )
-            viewModel.openImportBrowser(mode: mode)
-            activeImportBrowser = mode
+        }
+    }
+
+    private func handleFolderPickerResult(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let folderURL = urls.first?.standardizedFileURL else {
+                return
+            }
+            AppLogger.info(
+                "Folder picker selection completed",
+                category: .folderImport,
+                metadata: ["name": folderURL.lastPathComponent]
+            )
+            viewModel.handleFolderPickerSelection(urls: [folderURL])
+        case .failure(let error):
+            AppLogger.warning(
+                "Folder picker selection failed",
+                category: .folderImport,
+                metadata: ["error": error.localizedDescription]
+            )
         }
     }
 
