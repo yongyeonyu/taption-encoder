@@ -23,6 +23,7 @@ enum ExternalVideoOpenInbox {
     }
 }
 
+@MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
@@ -56,10 +57,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             ]
         )
         if canHandleURL {
-            Task { @MainActor in
-                AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
-                ExternalVideoOpenInbox.enqueue(url)
-            }
+            AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
+            ExternalVideoOpenInbox.enqueue(url)
         }
         return canHandleURL
     }
