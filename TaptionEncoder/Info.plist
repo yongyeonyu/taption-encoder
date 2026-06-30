@@ -82,16 +82,22 @@
 	<false/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.video</string>
-	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<true/>
-	<key>UIFileSharingEnabled</key>
-	<true/>
-	<key>UISupportsDocumentBrowser</key>
-	<true/>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Taption Encoder needs access to selected videos for local conversion.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Taption Encoder saves converted H.265 videos as new Photos assets.</string>
+		<key>LSSupportsOpeningDocumentsInPlace</key>
+		<true/>
+		<key>BGTaskSchedulerPermittedIdentifiers</key>
+		<array>
+			<string>com.taption.encoder.encoding.*</string>
+		</array>
+		<key>UIFileSharingEnabled</key>
+		<true/>
+		<key>UISupportsDocumentBrowser</key>
+		<true/>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Taption Encoder needs access to selected videos for local conversion.</string>
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>Taption Encoder saves converted H.265 videos as new Photos assets.</string>
+		<key>NSSupportsLiveActivities</key>
+		<true/>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>
@@ -111,11 +117,15 @@
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
-	</dict>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
-	<key>UILaunchScreen</key>
-	<dict/>
+		</dict>
+		<key>UIApplicationSupportsIndirectInputEvents</key>
+		<true/>
+		<key>UIBackgroundModes</key>
+		<array>
+			<string>processing</string>
+		</array>
+		<key>UILaunchScreen</key>
+		<dict/>
 	<key>UIRequiresFullScreen</key>
 	<true/>
 	<key>UISupportedInterfaceOrientations</key>

@@ -48,6 +48,8 @@ final class HomeViewModel: ObservableObject {
     private var activeStarCharge: ActiveStarCharge?
     private var shouldAutoResumeBatchAfterStarEarn = false
     private var rewardedAdStatePollingTask: Task<Void, Never>?
+    private var activeEncodingActivitySessionID: UUID?
+    private var lastEncodingActivitySnapshot: TaptionEncodingActivitySnapshot?
     private let pendingSaveExportStagingRootDirectoryURL = FileManager.default.temporaryDirectory
         .appendingPathComponent("TaptionEncoderPendingSaveExports", isDirectory: true)
 
@@ -336,7 +338,13 @@ final class HomeViewModel: ObservableObject {
     }
 
     var backgroundSummary: String {
-        "Encoding keeps the device awake. If the screen is locked manually, iOS grants limited background time."
+        if #available(iOS 26.0, *) {
+            if environment.liveActivityCoordinator.areActivitiesEnabled {
+                return "Background encoding can continue after lock. Progress appears on the Lock Screen and Dynamic Island."
+            }
+            return "Background encoding can continue after lock. Turn on Live Activities in iOS settings to show Lock Screen progress."
+        }
+        return "Keep Taption Encoder open for reliable encoding on this iOS version."
     }
 
     var showsSaveAction: Bool {
@@ -1833,6 +1841,7 @@ final class HomeViewModel: ObservableObject {
         currentReview = nil
         activeStarCharge = nil
         shouldAutoResumeBatchAfterStarEarn = false
+        cancelEncodingActivity()
         folderAccessPrompt = nil
         folderPreviewContext = nil
         clearPendingSaveExportPrompt()
@@ -1866,6 +1875,10 @@ final class HomeViewModel: ObservableObject {
         }
         AppLogger.warning("Cancel requested", category: .encoding)
         state = .cancelling
+        endEncodingActivity(
+            statusText: "Cancelling",
+            fractionCompleted: lastEncodingActivitySnapshot?.fractionCompleted ?? 0
+        )
         activeTask?.cancel()
     }
 
@@ -1883,6 +1896,10 @@ final class HomeViewModel: ObservableObject {
         currentReview = nil
         activeStarCharge = nil
         shouldAutoResumeBatchAfterStarEarn = false
+        endEncodingActivity(
+            statusText: "Failed",
+            fractionCompleted: lastEncodingActivitySnapshot?.fractionCompleted ?? 0
+        )
         lastBatchFileCards = []
         folderPreviewContext = nil
         folderBatch = nil
@@ -2357,6 +2374,7 @@ final class HomeViewModel: ObservableObject {
             isActive: true
         )
         state = .encoding(initialProgress)
+        startEncodingActivity(for: review, progress: initialProgress)
 
         activeTask = Task { [weak self] in
             guard let self else {
@@ -2419,6 +2437,7 @@ final class HomeViewModel: ObservableObject {
                             isActive: true
                         )
                         self.state = .encoding(snapshot)
+                        self.updateEncodingActivity(for: review, progress: snapshot)
                     }
                 }
 
@@ -2465,6 +2484,14 @@ final class HomeViewModel: ObservableObject {
                     progress: completedProgress,
                     isActive: true
                 )
+                updateEncodingActivity(
+                    for: review,
+                    progress: completedProgress,
+                    statusText: restorablePendingState.requiresRewardedAd ? "Ready to save" : "Saving"
+                )
+                if restorablePendingState.requiresRewardedAd && folderBatch == nil {
+                    endEncodingActivity(statusText: "Ready to save", fractionCompleted: 1)
+                }
                 activeTask = nil
                 state = .pendingSave(pendingJob)
                 trace.finish("pending_save_started", metadata: ["pendingSave": pendingJob.id.uuidString])
@@ -2485,6 +2512,7 @@ final class HomeViewModel: ObservableObject {
                     isActive: false
                 )
                 state = .cancelled
+                endEncodingActivity(statusText: "Cancelled", fractionCompleted: lastEncodingActivitySnapshot?.fractionCompleted ?? 0)
                 activeTask = nil
                 currentReview = nil
                 folderBatch = nil
@@ -2517,6 +2545,7 @@ final class HomeViewModel: ObservableObject {
                     title: "Encoding failed",
                     message: error.localizedDescription
                 ))
+                endEncodingActivity(statusText: "Failed", fractionCompleted: lastEncodingActivitySnapshot?.fractionCompleted ?? 0)
                 activeTask = nil
                 stopSecurityScopedAccess()
                 requestSessionEndAd(reason: .failedEncoding)
@@ -2547,6 +2576,7 @@ final class HomeViewModel: ObservableObject {
                     title: "Encoding failed",
                     message: error.localizedDescription
                 ))
+                endEncodingActivity(statusText: "Failed", fractionCompleted: lastEncodingActivitySnapshot?.fractionCompleted ?? 0)
                 activeTask = nil
                 stopSecurityScopedAccess()
                 requestSessionEndAd(reason: .failedEncoding)
@@ -2837,6 +2867,7 @@ final class HomeViewModel: ObservableObject {
             detailOverride: completedSaveDetail,
             fileSizeBytes: fileSizeInBytes(at: completedOutputURL)
         ))
+        endEncodingActivity(statusText: "Save Complete", fractionCompleted: 1)
         stopSecurityScopedAccess()
         activeTask = nil
     }
@@ -3135,6 +3166,7 @@ final class HomeViewModel: ObservableObject {
         batch.completedCount += 1
         batch.currentIndex += 1
         folderBatch = batch
+        updateEncodingActivityForFolderBatch(statusText: "Saved", batch: batch)
 
         guard batch.hasRemainingFiles else {
             finishFolderBatch()
@@ -3163,6 +3195,7 @@ final class HomeViewModel: ObservableObject {
         batch.currentIndex += 1
         batch.lastFailureMessage = "\(source.displayName): \(errorMessage)"
         folderBatch = batch
+        updateEncodingActivityForFolderBatch(statusText: "Failed", batch: batch)
 
         guard batch.hasRemainingFiles else {
             finishFolderBatch()
@@ -3202,6 +3235,7 @@ final class HomeViewModel: ObservableObject {
                 detailOverride: folderCompletionMessage(for: batch)
             ))
         }
+        endEncodingActivity(statusText: "Folder complete", fractionCompleted: 1)
         stopSecurityScopedAccess()
         if batch.failedCount > 0 {
             requestSessionEndAd(reason: .failedEncoding)
@@ -3320,6 +3354,141 @@ final class HomeViewModel: ObservableObject {
             message += " Last issue: \(lastFailureMessage)"
         }
         return message
+    }
+
+    private func startEncodingActivity(
+        for review: PreparedEncodingReview,
+        progress: EncodingProgressSnapshot
+    ) {
+        let snapshot = encodingActivitySnapshot(for: review, progress: progress)
+        let backgroundSnapshot = backgroundSnapshot(from: snapshot)
+        lastEncodingActivitySnapshot = snapshot
+        Task { @MainActor [environment] in
+            await environment.liveActivityCoordinator.start(snapshot: snapshot)
+            await environment.backgroundCoordinator.updateBackgroundEncoding(
+                planID: review.job.plan.id,
+                snapshot: backgroundSnapshot
+            )
+        }
+    }
+
+    private func updateEncodingActivity(
+        for review: PreparedEncodingReview,
+        progress: EncodingProgressSnapshot,
+        statusText: String? = nil
+    ) {
+        let snapshot = encodingActivitySnapshot(
+            for: review,
+            progress: progress,
+            statusText: statusText
+        )
+        let backgroundSnapshot = backgroundSnapshot(from: snapshot)
+        lastEncodingActivitySnapshot = snapshot
+        Task { @MainActor [environment] in
+            await environment.liveActivityCoordinator.update(snapshot: snapshot)
+            await environment.backgroundCoordinator.updateBackgroundEncoding(
+                planID: review.job.plan.id,
+                snapshot: backgroundSnapshot
+            )
+        }
+    }
+
+    private func updateEncodingActivityForFolderBatch(
+        statusText: String,
+        batch: FolderEncodingBatch
+    ) {
+        let sessionID = activeEncodingActivitySessionID ?? UUID()
+        activeEncodingActivitySessionID = sessionID
+        let completedOrFailed = min(batch.completedCount + batch.failedCount, batch.totalCount)
+        let fraction = Double(completedOrFailed) / Double(max(batch.totalCount, 1))
+        let snapshot = TaptionEncodingActivitySnapshot(
+            sessionID: sessionID.uuidString,
+            statusText: statusText,
+            sourceName: batch.folderName,
+            mode: .folder,
+            currentIndex: min(max(batch.currentIndex, 1), max(batch.totalCount, 1)),
+            totalCount: batch.totalCount,
+            fractionCompleted: fraction,
+            elapsedSeconds: lastEncodingActivitySnapshot?.elapsedSeconds ?? 0,
+            remainingSeconds: lastEncodingActivitySnapshot?.remainingSeconds,
+            codecPathText: lastEncodingActivitySnapshot?.codecPathText ?? "Automatic Codec Path",
+            outputText: lastEncodingActivitySnapshot?.outputText ?? selectedOutput.summary
+        )
+        lastEncodingActivitySnapshot = snapshot
+        Task { @MainActor [environment] in
+            await environment.liveActivityCoordinator.update(snapshot: snapshot)
+        }
+    }
+
+    private func endEncodingActivity(
+        statusText: String,
+        fractionCompleted: Double
+    ) {
+        guard var snapshot = lastEncodingActivitySnapshot else {
+            cancelEncodingActivity()
+            return
+        }
+        snapshot.statusText = statusText
+        snapshot.fractionCompleted = min(max(fractionCompleted, 0), 1)
+        if snapshot.fractionCompleted >= 1 {
+            snapshot.currentIndex = snapshot.totalCount
+            snapshot.remainingSeconds = 0
+        }
+        lastEncodingActivitySnapshot = snapshot
+        activeEncodingActivitySessionID = nil
+        Task { @MainActor [environment] in
+            await environment.liveActivityCoordinator.end(snapshot: snapshot, dismissalDelay: 12)
+        }
+    }
+
+    private func cancelEncodingActivity() {
+        activeEncodingActivitySessionID = nil
+        lastEncodingActivitySnapshot = nil
+        Task { @MainActor [environment] in
+            await environment.liveActivityCoordinator.cancel()
+        }
+    }
+
+    private func encodingActivitySnapshot(
+        for review: PreparedEncodingReview,
+        progress: EncodingProgressSnapshot,
+        statusText: String? = nil
+    ) -> TaptionEncodingActivitySnapshot {
+        let isFolder = folderBatch != nil
+        let sessionID: UUID
+        if isFolder {
+            sessionID = activeEncodingActivitySessionID ?? UUID()
+            activeEncodingActivitySessionID = sessionID
+        } else {
+            sessionID = review.job.plan.id
+            activeEncodingActivitySessionID = sessionID
+        }
+
+        let batch = folderBatch
+        return TaptionEncodingActivitySnapshot(
+            sessionID: sessionID.uuidString,
+            statusText: statusText ?? progress.stageTitle,
+            sourceName: batch?.folderName ?? review.source.displayName,
+            mode: isFolder ? .folder : .single,
+            currentIndex: batch.map { min(max($0.currentIndex + 1, 1), max($0.totalCount, 1)) } ?? 1,
+            totalCount: batch?.totalCount ?? 1,
+            fractionCompleted: progress.fractionCompleted,
+            elapsedSeconds: progress.elapsedTime,
+            remainingSeconds: progress.estimatedRemainingTime,
+            codecPathText: isFolder ? (review.folderQueue?.statusText ?? progress.backendLabel) : review.videoInfo.codecPathTitle,
+            outputText: review.videoInfo.outputSummary
+        )
+    }
+
+    private func backgroundSnapshot(
+        from snapshot: TaptionEncodingActivitySnapshot
+    ) -> TaptionBackgroundEncodingSnapshot {
+        let state = snapshot.contentState
+        return TaptionBackgroundEncodingSnapshot(
+            title: snapshot.title,
+            subtitle: "\(state.percentText) \(state.statusText) - \(state.sourceName)",
+            fractionCompleted: snapshot.fractionCompleted
+        )
     }
 
     private func startingProgressSnapshot(for review: PreparedEncodingReview) -> EncodingProgressSnapshot {

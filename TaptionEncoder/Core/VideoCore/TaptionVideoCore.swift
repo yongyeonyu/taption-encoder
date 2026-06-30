@@ -139,7 +139,19 @@ struct TaptionVideoCore {
             didBeginBackgroundEncoding = services.backgroundCoordinator != nil
             trace.mark("background_task_ready")
 
-            var result = try await services.encoder.encode(plan: job.plan, progress: progress)
+            var result = try await services.encoder.encode(plan: job.plan) { [services] encodingProgress in
+                Task {
+                    await services.backgroundCoordinator?.updateBackgroundEncoding(
+                        planID: job.plan.id,
+                        snapshot: TaptionBackgroundEncodingSnapshot(
+                            title: "Taption Encoder",
+                            subtitle: job.asset.displayName,
+                            fractionCompleted: encodingProgress.fractionCompleted
+                        )
+                    )
+                }
+                progress(encodingProgress)
+            }
             trace.mark(
                 "encoder_completed",
                 metadata: [

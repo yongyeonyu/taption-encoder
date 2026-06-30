@@ -29,6 +29,77 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(adUnitIDs.contains { $0.hasPrefix(AdMobRuntimeConfiguration.googleDemoAdUnitPrefix) })
     }
 
+    func testEncodingActivitySnapshotFormatsLiveActivityContent() {
+        let snapshot = TaptionEncodingActivitySnapshot(
+            sessionID: UUID().uuidString,
+            statusText: "Encoding",
+            sourceName: "Camera Imports",
+            mode: .folder,
+            currentIndex: 2,
+            totalCount: 5,
+            fractionCompleted: 0.424,
+            elapsedSeconds: 65,
+            remainingSeconds: 125,
+            codecPathText: "Hardware Decode + Software Encode",
+            outputText: "H.265 / HEVC MP4"
+        )
+
+        let state = snapshot.contentState
+
+        XCTAssertEqual(state.statusText, "Encoding")
+        XCTAssertEqual(state.sourceName, "Camera Imports")
+        XCTAssertEqual(state.modeText, "Folder")
+        XCTAssertEqual(state.countText, "2 of 5")
+        XCTAssertEqual(state.percentText, "42%")
+        XCTAssertEqual(state.elapsedText, "01:05")
+        XCTAssertEqual(state.remainingText, "02:05")
+        XCTAssertEqual(state.codecPathText, "Hardware Decode + Software Encode")
+        XCTAssertEqual(state.outputText, "H.265 / HEVC MP4")
+    }
+
+    func testEncodingActivitySnapshotClampsInvalidProgressInputs() {
+        let snapshot = TaptionEncodingActivitySnapshot(
+            sessionID: UUID().uuidString,
+            statusText: "Encoding",
+            sourceName: "Clip.mov",
+            mode: .single,
+            currentIndex: 0,
+            totalCount: 0,
+            fractionCompleted: 1.7,
+            elapsedSeconds: -8,
+            remainingSeconds: nil,
+            codecPathText: "Automatic Codec Path",
+            outputText: "H.265 / HEVC MOV"
+        )
+
+        let state = snapshot.contentState
+
+        XCTAssertEqual(snapshot.currentIndex, 1)
+        XCTAssertEqual(snapshot.totalCount, 1)
+        XCTAssertEqual(snapshot.fractionCompleted, 1)
+        XCTAssertEqual(snapshot.elapsedSeconds, 0)
+        XCTAssertEqual(state.countText, "Single video")
+        XCTAssertEqual(state.percentText, "100%")
+        XCTAssertEqual(state.elapsedText, "00:00")
+        XCTAssertEqual(state.remainingText, "--:--")
+    }
+
+    func testBackgroundEncodingSnapshotClampsProgressFraction() {
+        let lowSnapshot = TaptionBackgroundEncodingSnapshot(
+            title: "Taption Encoder",
+            subtitle: "Queued",
+            fractionCompleted: -0.25
+        )
+        let highSnapshot = TaptionBackgroundEncodingSnapshot(
+            title: "Taption Encoder",
+            subtitle: "Done",
+            fractionCompleted: 2.1
+        )
+
+        XCTAssertEqual(lowSnapshot.fractionCompleted, 0)
+        XCTAssertEqual(highSnapshot.fractionCompleted, 1)
+    }
+
     func testAV1ToHEVCUsesSoftwareWhenNoHardwareIsAvailable() {
         let selection = selectAV1ToHEVC(profile: .softwareOnly)
 

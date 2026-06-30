@@ -32,9 +32,26 @@ enum TaptionBackgroundEncodingSupport: String, Codable, Equatable {
     case availableWhenUserChooses
 }
 
+struct TaptionBackgroundEncodingSnapshot: Codable, Equatable {
+    var title: String
+    var subtitle: String
+    var fractionCompleted: Double
+
+    init(
+        title: String,
+        subtitle: String,
+        fractionCompleted: Double
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.fractionCompleted = min(max(fractionCompleted, 0), 1)
+    }
+}
+
 protocol TaptionBackgroundEncodingCoordinating {
     var support: TaptionBackgroundEncodingSupport { get }
     func beginBackgroundEncoding(plan: TaptionEncodingPlan) async throws
+    func updateBackgroundEncoding(planID: UUID, snapshot: TaptionBackgroundEncodingSnapshot) async
     func endBackgroundEncoding(planID: UUID) async
 }
 

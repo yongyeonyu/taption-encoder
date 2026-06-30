@@ -17,6 +17,7 @@ struct AppEnvironment {
     var starPurchaseProvider: StarPurchaseProviding
     var sessionEndAdProvider: SessionEndAdProviding
     var backgroundCoordinator: BackgroundEncodingCoordinating
+    var liveActivityCoordinator: EncodingLiveActivityCoordinating
     var projectDocumentStore: ProjectDocumentStoring
 
     init(
@@ -36,6 +37,7 @@ struct AppEnvironment {
         starPurchaseProvider: StarPurchaseProviding,
         sessionEndAdProvider: SessionEndAdProviding,
         backgroundCoordinator: BackgroundEncodingCoordinating,
+        liveActivityCoordinator: EncodingLiveActivityCoordinating = NoopEncodingLiveActivityCoordinator(),
         projectDocumentStore: ProjectDocumentStoring
     ) {
         self.configuration = configuration
@@ -54,6 +56,7 @@ struct AppEnvironment {
         self.starPurchaseProvider = starPurchaseProvider
         self.sessionEndAdProvider = sessionEndAdProvider
         self.backgroundCoordinator = backgroundCoordinator
+        self.liveActivityCoordinator = liveActivityCoordinator
         self.projectDocumentStore = projectDocumentStore
     }
 
@@ -86,6 +89,7 @@ struct AppEnvironment {
             ),
             sessionEndAdProvider: AdMobSessionEndAdProvider(configuration: adMobConfiguration),
             backgroundCoordinator: UIApplicationBackgroundEncodingCoordinator(),
+            liveActivityCoordinator: ActivityKitEncodingLiveActivityCoordinator(),
             projectDocumentStore: FCPXMLProjectDocumentStore()
         )
     }
