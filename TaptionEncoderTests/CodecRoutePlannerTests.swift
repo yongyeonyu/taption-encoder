@@ -93,15 +93,15 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         XCTAssertEqual(compact.horizontalPadding, 16)
-        XCTAssertEqual(compact.topPadding, 64)
-        XCTAssertEqual(compact.bottomPadding, 12)
+        XCTAssertEqual(compact.topPadding, 76)
+        XCTAssertEqual(compact.bottomPadding, 14)
         XCTAssertEqual(regular.horizontalPadding, 20)
-        XCTAssertEqual(regular.topPadding, 78)
-        XCTAssertEqual(regular.bottomPadding, 14)
-        XCTAssertEqual(supplementalSmall.topPadding, 46)
-        XCTAssertEqual(supplementalSmall.bottomPadding, 10)
+        XCTAssertEqual(regular.topPadding, 96)
+        XCTAssertEqual(regular.bottomPadding, 16)
+        XCTAssertEqual(supplementalSmall.topPadding, 56)
+        XCTAssertEqual(supplementalSmall.bottomPadding, 12)
         XCTAssertGreaterThan(regular.topPadding, compact.topPadding)
-        XCTAssertGreaterThanOrEqual(regular.topPadding - compact.topPadding, 14)
+        XCTAssertGreaterThanOrEqual(regular.topPadding - compact.topPadding, 20)
         XCTAssertGreaterThan(compact.topPadding, compact.bottomPadding)
         XCTAssertGreaterThan(supplementalSmall.topPadding, supplementalSmall.bottomPadding)
     }
@@ -120,6 +120,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(widgetSource.contains("activityFamily == .small"))
         XCTAssertTrue(widgetSource.contains("condensedHeader"))
         XCTAssertTrue(widgetSource.contains("condensedDetails"))
+        XCTAssertTrue(widgetSource.contains(".supplementalActivityFamilies([.small, .medium])"))
     }
 
     func testDebugLiveActivityProbeCanStartForLockScreenVerification() throws {

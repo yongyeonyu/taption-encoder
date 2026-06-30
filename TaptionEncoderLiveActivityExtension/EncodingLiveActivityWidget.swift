@@ -66,6 +66,7 @@ struct TaptionEncodingLiveActivityWidget: Widget {
             }
             .keylineTint(.cyan)
         }
+        .supplementalActivityFamilies([.small, .medium])
     }
 }
 
