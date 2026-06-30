@@ -3184,6 +3184,29 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(scriptText.contains("xcrun simctl io \"$DEVICE\" screenshot"))
     }
 
+    func testExternalPlayerRegistrationVerifierCoversInstalledDocumentOwnership() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let scriptURL = rootURL.appendingPathComponent("Scripts/verify_external_player_registration.sh")
+        let scriptText = try String(contentsOf: scriptURL, encoding: .utf8)
+
+        XCTAssertTrue(scriptText.contains("TaptionEncoder/Info.plist"))
+        XCTAssertTrue(scriptText.contains("TAPTION_ENCODER_APP_PATH"))
+        XCTAssertTrue(scriptText.contains("CFBundleDocumentTypes"))
+        XCTAssertTrue(scriptText.contains("\"LSHandlerRank\""))
+        XCTAssertTrue(scriptText.contains("\"Owner\""))
+        XCTAssertTrue(scriptText.contains("\"CFBundleTypeRole\""))
+        XCTAssertTrue(scriptText.contains("\"Viewer\""))
+        XCTAssertTrue(scriptText.contains("\"LSSupportsOpeningDocumentsInPlace\""))
+        XCTAssertTrue(scriptText.contains("\"UIFileSharingEnabled\""))
+        XCTAssertTrue(scriptText.contains("\"UISupportsDocumentBrowser\""))
+        XCTAssertTrue(scriptText.contains("\"com.taption.legacy-video\""))
+        XCTAssertTrue(scriptText.contains("\"public.movie\""))
+        XCTAssertTrue(scriptText.contains("\"public.video\""))
+        XCTAssertTrue(scriptText.contains("external player registration verified"))
+    }
+
     func testPictureInPictureProbeVerifierCoversSimulatorAndDeviceLaunches() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
