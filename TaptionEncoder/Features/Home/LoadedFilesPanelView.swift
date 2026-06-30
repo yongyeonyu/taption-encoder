@@ -1,12 +1,19 @@
 import SwiftUI
 import SwiftVLC
 import UIKit
+import UniformTypeIdentifiers
 
 struct LoadedFilesPanelView: View {
     var files: [EncodingFileCardSnapshot]
     var contentScale: CGFloat
     var panelHeight: CGFloat
     var onSelect: (String) -> Void
+    var onToggleSelection: (String) -> Void
+    var onDelete: (String) -> Void
+    var onMove: (String, String) -> Void
+    var onMoveEnded: () -> Void
+
+    @State private var draggedFileID: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -19,7 +26,19 @@ struct LoadedFilesPanelView: View {
                             EncodingFileCardView(
                                 file: file,
                                 contentScale: contentScale,
-                                onSelect: { onSelect(file.id) }
+                                onSelect: { onSelect(file.id) },
+                                onToggleSelection: { onToggleSelection(file.id) },
+                                onDelete: { onDelete(file.id) },
+                                onDragStarted: { draggedFileID = file.id }
+                            )
+                            .onDrop(
+                                of: [UTType.plainText],
+                                delegate: QueueFileDropDelegate(
+                                    targetID: file.id,
+                                    draggedFileID: $draggedFileID,
+                                    onMove: onMove,
+                                    onMoveEnded: onMoveEnded
+                                )
                             )
                         }
                     }
@@ -56,18 +75,26 @@ private struct EncodingFileCardView: View {
     var file: EncodingFileCardSnapshot
     var contentScale: CGFloat
     var onSelect: () -> Void
+    var onToggleSelection: () -> Void
+    var onDelete: () -> Void
+    var onDragStarted: () -> Void
 
     var body: some View {
-        Button(action: onSelect) {
-            cardContent
-        }
-        .buttonStyle(.plain)
-        .disabled(!file.isInteractable)
+        cardContent
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .onTapGesture {
+                if file.isInteractable {
+                    onSelect()
+                }
+            }
+            .simultaneousGesture(swipeGesture)
         .opacity(file.isInteractable ? 1 : 0.58)
     }
 
     private var cardContent: some View {
         HStack(alignment: .top, spacing: 9 * contentScale) {
+            dragHandle
+
             QueueFileThumbnailView(
                 sourceURL: file.thumbnailSourceURL,
                 canAttemptThumbnail: file.isInteractable,
@@ -91,8 +118,27 @@ private struct EncodingFileCardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
+    private var dragHandle: some View {
+        Image(systemName: "line.3.horizontal")
+            .font(.system(size: 17 * contentScale, weight: .bold))
+            .foregroundStyle(file.isMultiSelected ? TaptionTheme.accent : TaptionTheme.mutedText)
+            .frame(width: 28 * contentScale, height: 48 * contentScale)
+            .contentShape(Rectangle())
+            .onDrag {
+                onDragStarted()
+                return NSItemProvider(object: file.id as NSString)
+            }
+            .accessibilityLabel("Move queue item")
+    }
+
     private var headerRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8 * contentScale) {
+            if file.isMultiSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 13 * contentScale, weight: .bold))
+                    .foregroundStyle(TaptionTheme.accent)
+            }
+
             Text(file.fileName)
                 .font(contentScale < 0.9 ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
                 .foregroundStyle(file.isInteractable ? Color.white.opacity(0.92) : TaptionTheme.disabledText)
@@ -156,12 +202,18 @@ private struct EncodingFileCardView: View {
         guard file.isInteractable else {
             return TaptionTheme.elevatedSurface.opacity(0.55)
         }
+        if file.isMultiSelected {
+            return TaptionTheme.selectedSurface.opacity(0.95)
+        }
         return file.isSelected ? TaptionTheme.selectedSurface : TaptionTheme.elevatedSurface
     }
 
     private var cardBorder: Color {
         guard file.isInteractable else {
             return Color.white.opacity(0.08)
+        }
+        if file.isMultiSelected {
+            return TaptionTheme.accent.opacity(0.82)
         }
         return file.isSelected ? Color.white.opacity(0.35) : TaptionTheme.border
     }
@@ -180,6 +232,24 @@ private struct EncodingFileCardView: View {
         default:
             return 2
         }
+    }
+
+    private var swipeGesture: some Gesture {
+        DragGesture(minimumDistance: 28, coordinateSpace: .local)
+            .onEnded { value in
+                let horizontal = value.translation.width
+                let vertical = value.translation.height
+                guard abs(horizontal) > 46,
+                      abs(horizontal) > abs(vertical) * 1.35 else {
+                    return
+                }
+
+                if horizontal < 0 {
+                    onToggleSelection()
+                } else {
+                    onDelete()
+                }
+            }
     }
 
     private func infoGrid(_ info: LoadedVideoInfo) -> some View {
@@ -241,6 +311,31 @@ private struct EncodingFileCardView: View {
             return "--:--"
         }
         return formatTime(seconds)
+    }
+}
+
+private struct QueueFileDropDelegate: DropDelegate {
+    let targetID: String
+    @Binding var draggedFileID: String?
+    var onMove: (String, String) -> Void
+    var onMoveEnded: () -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedFileID,
+              draggedFileID != targetID else {
+            return
+        }
+        onMove(draggedFileID, targetID)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        onMoveEnded()
+        draggedFileID = nil
+        return true
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
     }
 }
 

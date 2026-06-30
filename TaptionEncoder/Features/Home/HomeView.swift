@@ -392,7 +392,13 @@ struct HomeView: View {
             files: viewModel.fileCardSnapshots,
             contentScale: metrics.contentScale,
             panelHeight: metrics.filePanelHeight,
-            onSelect: { viewModel.openPreviewForFileCard(id: $0) }
+            onSelect: { viewModel.openPreviewForFileCard(id: $0) },
+            onToggleSelection: { viewModel.toggleQueueFileSelection(id: $0) },
+            onDelete: { viewModel.deleteQueueFile(id: $0) },
+            onMove: { draggedID, targetID in
+                viewModel.moveQueueFiles(draggedID: draggedID, before: targetID)
+            },
+            onMoveEnded: { viewModel.finishQueueMove() }
         )
     }
 

@@ -3116,8 +3116,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("viewModel.restorePreview(preview)"))
         XCTAssertTrue(homeViewText.contains("queueMiniPlayer"))
         XCTAssertTrue(homeViewText.contains("let isFullScreenVideoPlaybackActive = viewModel.activePreview != nil"))
-        XCTAssertTrue(homeViewText.contains("showsWorkAction: !isFullScreenVideoPlaybackActive"))
-        XCTAssertTrue(homeViewText.contains("showsWatchAdAction: !isFullScreenVideoPlaybackActive"))
+        XCTAssertTrue(homeViewText.contains("showsPlaybackActions: !isFullScreenVideoPlaybackActive"))
+        XCTAssertTrue(homeViewText.contains("showsWorkAction: showsPlaybackActions"))
+        XCTAssertTrue(homeViewText.contains("showsWatchAdAction: showsPlaybackActions"))
         XCTAssertTrue(homeViewText.contains("beginVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(homeViewText.contains("endVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(viewModelText.contains("func restorePreview(_ preview: QueueVideoPreview)"))
@@ -5144,6 +5145,7 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         let reconciliation = HW_DeviceCodecReportReconciler.reconcile(report: report)
 
+        XCTAssertEqual(report.modelDisplayName, "iPhone 15 Pro (iPhone16,1)")
         XCTAssertTrue(reconciliation.isKnownModel)
         XCTAssertTrue(reconciliation.isConsistentWithStaticMatrix)
         XCTAssertEqual(reconciliation.matchedMarketingName, "iPhone 15 Pro")
@@ -5152,6 +5154,16 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(Set(reconciliation.expectedHardwareEncodeCodecs), expectedEncode)
         XCTAssertTrue(reconciliation.missingExpectedDecodeCodecs.isEmpty)
         XCTAssertTrue(reconciliation.unexpectedDecodeCodecs.isEmpty)
+    }
+
+    func testDeviceCodecReportDisplaysIPhone14ProMarketingName() {
+        let report = syntheticDeviceCodecReport(
+            modelIdentifier: "iPhone15,2",
+            decodeCodecs: [.h264, .hevc, .proRes],
+            encodeCodecs: [.h264, .hevc, .proRes]
+        )
+
+        XCTAssertEqual(report.modelDisplayName, "iPhone 14 Pro (iPhone15,2)")
     }
 
     func testDeviceCodecReportReconciliationFlagsUnknownAndDivergentReports() {
@@ -7883,6 +7895,151 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
+    func testQueueSwipeSelectionAndDeleteSelectedItems() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let fileURLs = ["a.mp4", "b.mp4", "c.mp4", "d.mp4"].map {
+            directoryURL.appendingPathComponent($0)
+        }
+        for url in fileURLs {
+            try Data("source".utf8).write(to: url)
+        }
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+
+        viewModel.toggleQueueFileSelection(id: fileURLs[1].absoluteString)
+        viewModel.toggleQueueFileSelection(id: fileURLs[2].absoluteString)
+
+        XCTAssertEqual(
+            viewModel.fileCardSnapshots.filter(\.isMultiSelected).map(\.fileName),
+            ["b.mp4", "c.mp4"]
+        )
+
+        viewModel.deleteQueueFile(id: fileURLs[1].absoluteString)
+
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.fileName), ["a.mp4", "d.mp4"])
+        XCTAssertTrue(viewModel.fileCardSnapshots.allSatisfy { !$0.isMultiSelected })
+        XCTAssertEqual(viewModel.activePreview?.sourceURL, fileURLs[0])
+    }
+
+    @MainActor
+    func testQueueDragHandleMovesSelectedItemsAsGroup() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let fileURLs = ["a.mp4", "b.mp4", "c.mp4", "d.mp4"].map {
+            directoryURL.appendingPathComponent($0)
+        }
+        for url in fileURLs {
+            try Data("source".utf8).write(to: url)
+        }
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+
+        viewModel.toggleQueueFileSelection(id: fileURLs[1].absoluteString)
+        viewModel.toggleQueueFileSelection(id: fileURLs[2].absoluteString)
+        viewModel.moveQueueFiles(
+            draggedID: fileURLs[1].absoluteString,
+            before: fileURLs[0].absoluteString
+        )
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.fileName), ["b.mp4", "c.mp4", "a.mp4", "d.mp4"])
+
+        viewModel.finishQueueMove()
+        try await waitForCondition(timeout: 2) {
+            viewModel.state.preparedEncodingReview?.source.url == fileURLs[1]
+        }
+
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.fileName), ["b.mp4", "c.mp4", "a.mp4", "d.mp4"])
+        XCTAssertEqual(
+            viewModel.fileCardSnapshots.filter(\.isMultiSelected).map(\.fileName),
+            ["b.mp4", "c.mp4"]
+        )
+        XCTAssertEqual(viewModel.activePreview?.sourceURL, fileURLs[1])
+    }
+
+    @MainActor
+    func testQueueDragHandleMovesSelectedItemsDownAsGroup() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let fileURLs = ["a.mp4", "b.mp4", "c.mp4", "d.mp4"].map {
+            directoryURL.appendingPathComponent($0)
+        }
+        for url in fileURLs {
+            try Data("source".utf8).write(to: url)
+        }
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+
+        viewModel.toggleQueueFileSelection(id: fileURLs[1].absoluteString)
+        viewModel.toggleQueueFileSelection(id: fileURLs[2].absoluteString)
+        viewModel.moveQueueFiles(
+            draggedID: fileURLs[1].absoluteString,
+            before: fileURLs[3].absoluteString
+        )
+
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.fileName), ["a.mp4", "d.mp4", "b.mp4", "c.mp4"])
+        XCTAssertEqual(
+            viewModel.fileCardSnapshots.filter(\.isMultiSelected).map(\.fileName),
+            ["b.mp4", "c.mp4"]
+        )
+    }
+
+    func testQueueCardGestureControlsAreWiredForSelectionDeleteAndDrag() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let loadedFilesPanelURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/LoadedFilesPanelView.swift")
+        let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
+        let loadedFilesPanelText = try String(contentsOf: loadedFilesPanelURL, encoding: .utf8)
+        let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
+
+        XCTAssertTrue(loadedFilesPanelText.contains("Image(systemName: \"line.3.horizontal\")"))
+        XCTAssertTrue(loadedFilesPanelText.contains(".onDrag {"))
+        XCTAssertTrue(loadedFilesPanelText.contains(".onDrop("))
+        XCTAssertTrue(loadedFilesPanelText.contains("QueueFileDropDelegate"))
+        XCTAssertTrue(loadedFilesPanelText.contains("DragGesture(minimumDistance: 28"))
+        XCTAssertTrue(loadedFilesPanelText.contains("if horizontal < 0"))
+        XCTAssertTrue(loadedFilesPanelText.contains("onToggleSelection()"))
+        XCTAssertTrue(loadedFilesPanelText.contains("onDelete()"))
+        XCTAssertTrue(homeViewText.contains("viewModel.toggleQueueFileSelection(id: $0)"))
+        XCTAssertTrue(homeViewText.contains("viewModel.deleteQueueFile(id: $0)"))
+        XCTAssertTrue(homeViewText.contains("viewModel.moveQueueFiles(draggedID: draggedID, before: targetID)"))
+        XCTAssertTrue(homeViewText.contains("viewModel.finishQueueMove()"))
+    }
+
+    @MainActor
     func testSingleFileImportAutoOpensPreview() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
@@ -7904,6 +8061,41 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertEqual(viewModel.activePreview?.sourceURL, sourceURL)
         XCTAssertEqual(viewModel.activePreview?.displayName, "single.mp4")
+    }
+
+    @MainActor
+    func testAlbumImportQueuesWithoutAutoOpeningPreview() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let sourceURL = directoryURL.appendingPathComponent("album.mov")
+        try Data("source".utf8).write(to: sourceURL)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+
+        viewModel.startPhotosFlow(url: sourceURL, displayName: "Album Clip.mov")
+        try await waitForReadyToStartState(in: viewModel)
+
+        XCTAssertNil(viewModel.activePreview)
+        XCTAssertEqual(viewModel.fileCardSnapshots.count, 1)
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.fileName, "Album Clip.mov")
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.sourceKind, .photos)
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Ready")
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.isPreviewable, true)
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.thumbnailSourceURL, sourceURL)
+
+        viewModel.openPreviewForFileCard(id: "Album Clip.mov")
+        try await waitForCondition(timeout: 2) {
+            viewModel.activePreview?.sourceURL == sourceURL
+        }
+        XCTAssertEqual(viewModel.activePreview?.displayName, "Album Clip.mov")
     }
 
     @MainActor

@@ -391,7 +391,7 @@ private struct DeviceInfoSheetContentView: View {
                 SheetInfoCard(
                     title: "Device",
                     rows: [
-                        ("Model", report.modelIdentifier),
+                        ("Model", report.modelDisplayName),
                         ("OS", "\(report.systemName) \(report.systemVersion)"),
                         ("Probe", "\(report.probeResolution.width)x\(report.probeResolution.height)"),
                         ("Checked", generatedAtText)

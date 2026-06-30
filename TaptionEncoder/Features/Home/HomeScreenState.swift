@@ -754,6 +754,7 @@ struct EncodingFileCardSnapshot: Identifiable, Equatable {
     var progress: EncodingProgressSnapshot?
     var isActive: Bool
     var isSelected: Bool
+    var isMultiSelected: Bool = false
     var isEnabled: Bool
     var isPreviewable: Bool = false
 

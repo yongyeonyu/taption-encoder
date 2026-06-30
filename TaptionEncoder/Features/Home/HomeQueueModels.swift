@@ -164,6 +164,7 @@ struct FolderEncodingBatch {
     var stopMessage: String?
     var itemStates: [URL: BatchItemRuntime]
     var selectedURL: URL?
+    var multiSelectedURLs: Set<URL>
     var selectedSaveDestination: TaptionSaveDestinationKind?
     var outputFolderURL: URL?
 
@@ -178,6 +179,7 @@ struct FolderEncodingBatch {
         self.sourceKind = sourceKind
         self.fileURLs = fileURLs
         self.selectedURL = fileURLs.first
+        self.multiSelectedURLs = []
         self.selectedSaveDestination = nil
         self.outputFolderURL = nil
         self.itemStates = Dictionary(
@@ -241,6 +243,7 @@ struct FolderEncodingBatch {
                 progress: item.progress,
                 isActive: item.isActive,
                 isSelected: selectedURL == url,
+                isMultiSelected: multiSelectedURLs.contains(url),
                 isEnabled: item.isEnabled,
                 isPreviewable: item.isPreviewable
             )

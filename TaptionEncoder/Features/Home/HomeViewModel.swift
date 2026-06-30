@@ -73,6 +73,7 @@ final class HomeViewModel: ObservableObject {
     private var activeTask: Task<Void, Never>?
     private var folderBatch: FolderEncodingBatch?
     private var currentReview: PreparedEncodingReview?
+    private var standaloneSelectedQueueIDs: Set<String> = []
     private var pendingSaveQueue: [PendingSaveJob] = []
     private var lastBatchFileCards: [EncodingFileCardSnapshot] = []
     private var selectionInspectionTask: Task<Void, Never>?
@@ -1116,6 +1117,7 @@ final class HomeViewModel: ObservableObject {
         selectionInspectionTask?.cancel()
         previewInspectionTask?.cancel()
         currentReview = nil
+        standaloneSelectedQueueIDs.removeAll()
         lastBatchFileCards = []
         folderPreviewContext = nil
         folderBatch = nil
@@ -1304,6 +1306,7 @@ final class HomeViewModel: ObservableObject {
         selectionInspectionTask?.cancel()
         previewInspectionTask?.cancel()
         currentReview = nil
+        standaloneSelectedQueueIDs.removeAll()
         lastBatchFileCards = []
         folderPreviewContext = nil
         folderBatch = FolderEncodingBatch(
@@ -1360,6 +1363,7 @@ final class HomeViewModel: ObservableObject {
         selectionInspectionTask?.cancel()
         previewInspectionTask?.cancel()
         currentReview = nil
+        standaloneSelectedQueueIDs.removeAll()
         lastBatchFileCards = []
         folderPreviewContext = nil
         folderBatch = FolderEncodingBatch(
@@ -1419,6 +1423,7 @@ final class HomeViewModel: ObservableObject {
         folderBatch = nil
         folderPreviewContext = nil
         currentReview = nil
+        standaloneSelectedQueueIDs.removeAll()
         lastBatchFileCards = []
         let source = HomeSelectedSource(
             kind: .files,
@@ -1464,6 +1469,7 @@ final class HomeViewModel: ObservableObject {
         activeTask?.cancel()
         selectionInspectionTask?.cancel()
         currentReview = nil
+        standaloneSelectedQueueIDs.removeAll()
         lastBatchFileCards = []
         folderPreviewContext = nil
         folderBatch = FolderEncodingBatch(
@@ -1607,13 +1613,151 @@ final class HomeViewModel: ObservableObject {
         folderBatch = nil
         folderPreviewContext = nil
         currentReview = nil
+        standaloneSelectedQueueIDs.removeAll()
         lastBatchFileCards = []
         let source = HomeSelectedSource(
             kind: .photos,
             displayName: displayName,
             url: url
         )
-        prepareEncodingFlow(source: source)
+        prepareEncodingFlow(source: source, autoOpenPreviewAfterPrepare: false)
+    }
+
+    func toggleQueueFileSelection(id: String) {
+        guard !state.isBusy else {
+            AppLogger.info("Queue selection ignored because encoder is busy", category: .ui)
+            return
+        }
+
+        if var batch = folderBatch,
+           let selectedURL = queueURL(for: id, in: batch) {
+            if batch.multiSelectedURLs.contains(selectedURL) {
+                batch.multiSelectedURLs.remove(selectedURL)
+            } else {
+                batch.multiSelectedURLs.insert(selectedURL)
+            }
+            folderBatch = batch
+            objectWillChange.send()
+            AppLogger.info(
+                "Queue item selection toggled",
+                category: .ui,
+                metadata: [
+                    "name": selectedURL.lastPathComponent,
+                    "selectedCount": "\(batch.multiSelectedURLs.count)"
+                ]
+            )
+            return
+        }
+
+        guard standaloneQueueMatches(id: id) else {
+            AppLogger.warning("Queue selection ignored because item was not found", category: .ui)
+            return
+        }
+        if standaloneSelectedQueueIDs.contains(id) {
+            standaloneSelectedQueueIDs.remove(id)
+        } else {
+            standaloneSelectedQueueIDs.insert(id)
+        }
+        objectWillChange.send()
+        AppLogger.info(
+            "Standalone queue item selection toggled",
+            category: .ui,
+            metadata: ["id": id, "selectedCount": "\(standaloneSelectedQueueIDs.count)"]
+        )
+    }
+
+    func moveQueueFiles(draggedID: String, before targetID: String) {
+        guard !state.isBusy else {
+            return
+        }
+        guard var batch = folderBatch,
+              let draggedURL = queueURL(for: draggedID, in: batch),
+              let targetURL = queueURL(for: targetID, in: batch),
+              draggedURL != targetURL else {
+            return
+        }
+
+        let movingURLs: [URL]
+        if batch.multiSelectedURLs.contains(draggedURL) {
+            movingURLs = batch.fileURLs.filter { batch.multiSelectedURLs.contains($0) }
+        } else {
+            movingURLs = [draggedURL]
+        }
+        guard !movingURLs.contains(targetURL) else {
+            return
+        }
+
+        let originalMovingIndices = movingURLs.compactMap { batch.fileURLs.firstIndex(of: $0) }
+        guard let firstMovingIndex = originalMovingIndices.min(),
+              let targetOriginalIndex = batch.fileURLs.firstIndex(of: targetURL) else {
+            return
+        }
+
+        var reorderedURLs = batch.fileURLs.filter { !movingURLs.contains($0) }
+        guard let targetIndex = reorderedURLs.firstIndex(of: targetURL) else {
+            return
+        }
+        let insertionIndex = targetOriginalIndex > firstMovingIndex ? targetIndex + 1 : targetIndex
+        reorderedURLs.insert(contentsOf: movingURLs, at: insertionIndex)
+        batch.fileURLs = reorderedURLs
+        batch.currentIndex = queueCurrentIndex(for: batch)
+        folderBatch = batch
+        objectWillChange.send()
+    }
+
+    func finishQueueMove() {
+        guard !state.isBusy,
+              var batch = folderBatch else {
+            return
+        }
+        batch.currentIndex = firstQueueIndex(for: batch)
+        folderBatch = batch
+
+        guard let currentURL = batch.currentFileURL,
+              currentReview?.source.url != currentURL else {
+            return
+        }
+
+        AppLogger.info(
+            "Queue order committed",
+            category: .ui,
+            metadata: ["next": currentURL.lastPathComponent]
+        )
+        dismissPreview()
+        currentReview = nil
+        activeTask?.cancel()
+        activeTask = nil
+        prepareCurrentFolderItem(autoStartAfterPrepare: false, allowsBusyState: true)
+    }
+
+    func deleteQueueFile(id: String) {
+        guard !state.isBusy else {
+            AppLogger.info("Queue delete ignored because encoder is busy", category: .ui)
+            return
+        }
+
+        if let batch = folderBatch,
+           let targetURL = queueURL(for: id, in: batch) {
+            let deleteURLs = batch.multiSelectedURLs.isEmpty
+                ? [targetURL]
+                : batch.fileURLs.filter { batch.multiSelectedURLs.contains($0) }
+            deleteQueueURLs(deleteURLs)
+            return
+        }
+
+        guard standaloneQueueMatches(id: id) else {
+            AppLogger.warning("Queue delete ignored because item was not found", category: .ui)
+            return
+        }
+
+        AppLogger.info("Standalone queue item deleted", category: .ui, metadata: ["id": id])
+        dismissPreview()
+        activeTask?.cancel()
+        activeTask = nil
+        currentReview = nil
+        standaloneSelectedQueueIDs.removeAll()
+        state = .idle
+        stopSecurityScopedAccess()
     }
 
     func openPreviewForFileCard(id: String) {
@@ -2283,6 +2427,7 @@ final class HomeViewModel: ObservableObject {
         selectionInspectionTask?.cancel()
         selectionInspectionTask = nil
         currentReview = nil
+        standaloneSelectedQueueIDs.removeAll()
         activeStarCharge = nil
         shouldAutoResumeBatchAfterStarEarn = false
         cancelEncodingActivity()
@@ -2410,6 +2555,7 @@ final class HomeViewModel: ObservableObject {
     private func prepareEncodingFlow(
         source: HomeSelectedSource,
         autoStartAfterPrepare: Bool = false,
+        autoOpenPreviewAfterPrepare: Bool = true,
         allowsBusyState: Bool = false,
         preinspectedAsset: TaptionVideoAsset? = nil
     ) {
@@ -2658,7 +2804,9 @@ final class HomeViewModel: ObservableObject {
                 } else {
                     state = .readyToStart(review)
                     trace.finish("ready")
-                    openPreviewAfterImportIfAvailable(for: review)
+                    if autoOpenPreviewAfterPrepare {
+                        openPreviewAfterImportIfAvailable(for: review)
+                    }
                 }
             } catch is CancellationError {
                 AppLogger.warning(
@@ -4124,6 +4272,114 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
+    private func queueURL(for id: String, in batch: FolderEncodingBatch) -> URL? {
+        batch.fileURLs.first { url in
+            url.absoluteString == id || url.lastPathComponent == id
+        }
+    }
+
+    private func queueCurrentIndex(for batch: FolderEncodingBatch) -> Int {
+        if let reviewURL = currentReview?.source.url,
+           let reviewIndex = batch.fileURLs.firstIndex(of: reviewURL) {
+            return reviewIndex
+        }
+        if let selectedURL = batch.selectedURL,
+           let selectedIndex = batch.fileURLs.firstIndex(of: selectedURL) {
+            return selectedIndex
+        }
+        return batch.fileURLs.firstIndex { url in
+            let item = batch.itemStates[url]
+            return item?.isEnabled != false
+        } ?? 0
+    }
+
+    private func firstQueueIndex(for batch: FolderEncodingBatch) -> Int {
+        batch.fileURLs.firstIndex { url in
+            let item = batch.itemStates[url]
+            return item?.isEnabled != false
+        } ?? 0
+    }
+
+    private func standaloneQueueMatches(id: String) -> Bool {
+        guard let review = currentReview ?? state.preparedEncodingReview else {
+            return false
+        }
+        return id == review.source.displayName
+            || id == review.source.url.absoluteString
+            || id == review.source.id.uuidString
+    }
+
+    private func deleteQueueURLs(_ urls: [URL]) {
+        guard var batch = folderBatch else {
+            return
+        }
+        let deletingURLs = Set(urls)
+        guard !deletingURLs.isEmpty else {
+            return
+        }
+
+        AppLogger.info(
+            "Queue items deleted",
+            category: .ui,
+            metadata: [
+                "count": "\(deletingURLs.count)",
+                "names": batch.fileURLs
+                    .filter { deletingURLs.contains($0) }
+                    .map(\.lastPathComponent)
+                    .joined(separator: "|")
+            ]
+        )
+
+        let removedActivePreview = activePreview.map { deletingURLs.contains($0.sourceURL) } ?? false
+        batch.fileURLs.removeAll { deletingURLs.contains($0) }
+        for url in deletingURLs {
+            batch.itemStates.removeValue(forKey: url)
+        }
+        batch.multiSelectedURLs.subtract(deletingURLs)
+
+        if let selectedURL = batch.selectedURL,
+           deletingURLs.contains(selectedURL) {
+            batch.selectedURL = batch.fileURLs.first { url in
+                let item = batch.itemStates[url]
+                return item?.isEnabled != false || item?.isPreviewable == true
+            } ?? batch.fileURLs.first
+        }
+
+        guard !batch.fileURLs.isEmpty else {
+            dismissPreview()
+            activeTask?.cancel()
+            activeTask = nil
+            selectionInspectionTask?.cancel()
+            selectionInspectionTask = nil
+            previewInspectionTask?.cancel()
+            previewInspectionTask = nil
+            currentReview = nil
+            folderBatch = nil
+            state = .idle
+            stopSecurityScopedAccess()
+            objectWillChange.send()
+            return
+        }
+
+        batch.currentIndex = queueCurrentIndex(for: batch)
+        folderBatch = batch
+        if removedActivePreview {
+            dismissPreview()
+        }
+
+        guard let currentURL = batch.currentFileURL,
+              currentReview?.source.url != currentURL else {
+            objectWillChange.send()
+            return
+        }
+
+        dismissPreview()
+        activeTask?.cancel()
+        activeTask = nil
+        currentReview = nil
+        prepareCurrentFolderItem(autoStartAfterPrepare: false, allowsBusyState: true)
+    }
+
     private func pendingSaveQueueCardSnapshots() -> [EncodingFileCardSnapshot] {
         let activeJobID = pendingSaveRecoveryJob?.id
         return pendingSaveQueue.map { job in
@@ -4399,6 +4655,7 @@ final class HomeViewModel: ObservableObject {
             progress: progress,
             isActive: isActive,
             isSelected: isSelected,
+            isMultiSelected: standaloneQueueIsSelected(source),
             isEnabled: isEnabled,
             isPreviewable: isPreviewable
         )
@@ -4414,6 +4671,7 @@ final class HomeViewModel: ObservableObject {
         progress: EncodingProgressSnapshot?,
         isActive: Bool,
         isSelected: Bool,
+        isMultiSelected: Bool = false,
         isEnabled: Bool,
         isPreviewable: Bool = false
     ) -> EncodingFileCardSnapshot {
@@ -4428,9 +4686,16 @@ final class HomeViewModel: ObservableObject {
             progress: progress,
             isActive: isActive,
             isSelected: isSelected,
+            isMultiSelected: isMultiSelected,
             isEnabled: isEnabled,
             isPreviewable: isPreviewable
         )
+    }
+
+    private func standaloneQueueIsSelected(_ source: HomeSelectedSource) -> Bool {
+        standaloneSelectedQueueIDs.contains(source.displayName)
+            || standaloneSelectedQueueIDs.contains(source.url.absoluteString)
+            || standaloneSelectedQueueIDs.contains(source.id.uuidString)
     }
 
     private func completedProgressSnapshot(label: String) -> EncodingProgressSnapshot {

@@ -89,6 +89,13 @@ struct TaptionDeviceCodecCapabilityReport: Codable, Equatable {
 }
 
 extension TaptionDeviceCodecCapabilityReport {
+    var modelDisplayName: String {
+        guard let marketingName = HW_AppleDeviceCodecModelMatrix.model(identifier: modelIdentifier)?.marketingName else {
+            return modelIdentifier
+        }
+        return "\(marketingName) (\(modelIdentifier))"
+    }
+
     var hardwareSupportProfile: TaptionCodecHardwareSupportProfile {
         TaptionCodecHardwareSupportProfile(
             name: modelIdentifier,
