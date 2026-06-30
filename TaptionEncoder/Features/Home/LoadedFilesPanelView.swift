@@ -326,63 +326,17 @@ struct FolderPreviewBrowserView: View {
     }
 }
 
-enum HomeImportBrowserMode: String, Identifiable {
-    case files
-    case folder
-
-    var id: String {
-        rawValue
-    }
-
-    var title: String {
-        switch self {
-        case .files:
-            return "Files"
-        case .folder:
-            return "Folder"
-        }
-    }
-
-    var countText: String {
-        switch self {
-        case .files:
-            return "Choose videos"
-        case .folder:
-            return "Choose one folder"
-        }
-    }
-
-    var primaryTitle: String {
-        switch self {
-        case .files:
-            return "Choose Files"
-        case .folder:
-            return "Choose Folder"
-        }
-    }
-
-    var primarySystemImage: String {
-        switch self {
-        case .files:
-            return "doc.on.doc"
-        case .folder:
-            return "folder"
-        }
-    }
-
-    var tileStatus: String {
-        switch self {
-        case .files:
-            return "Multi-select"
-        case .folder:
-            return "Batch"
-        }
-    }
-}
-
 struct HomeImportBrowserView: View {
     var mode: HomeImportBrowserMode
-    var onChoose: () -> Void
+    var context: HomeImportBrowserContext?
+    var folders: [HomeImportBrowserFolderSnapshot]
+    var files: [HomeImportBrowserFileSnapshot]
+    var onChooseLocation: () -> Void
+    var onOpenFolder: (String) -> Void
+    var onToggleFile: (String) -> Void
+    var onBack: () -> Void
+    var onUp: () -> Void
+    var onImport: () -> Void
     var onClose: () -> Void
 
     private let columns = [
@@ -395,12 +349,28 @@ struct HomeImportBrowserView: View {
 
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 10) {
-                    HomeImportBrowserTileView(
-                        title: mode.primaryTitle,
-                        statusText: mode.tileStatus,
-                        systemImage: mode.primarySystemImage,
-                        onSelect: onChoose
-                    )
+                    if context?.hasLocation == true {
+                        ForEach(folders) { folder in
+                            HomeImportBrowserFolderTileView(
+                                folder: folder,
+                                onSelect: { onOpenFolder(folder.id) }
+                            )
+                        }
+
+                        ForEach(files) { file in
+                            HomeImportBrowserFileTileView(
+                                file: file,
+                                isSelectable: mode == .files,
+                                onSelect: { onToggleFile(file.id) }
+                            )
+                        }
+                    } else {
+                        HomeImportBrowserLocationTileView(
+                            title: mode.emptyTitle,
+                            statusText: mode.emptySubtitle,
+                            onSelect: onChooseLocation
+                        )
+                    }
                 }
                 .padding(12)
             }
@@ -412,16 +382,32 @@ struct HomeImportBrowserView: View {
 
     private var header: some View {
         HStack(spacing: 12) {
+            ImportBrowserHeaderButton(
+                systemImage: "chevron.left",
+                isEnabled: context?.canGoBack == true,
+                accessibilityLabel: "Back",
+                action: onBack
+            )
+
+            ImportBrowserHeaderButton(
+                systemImage: "arrow.up",
+                isEnabled: context?.canGoUp == true,
+                accessibilityLabel: "Up",
+                action: onUp
+            )
+
             VStack(alignment: .leading, spacing: 3) {
-                Text(mode.title)
+                Text(context?.pathText ?? mode.title)
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(Color.white.opacity(0.92))
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
 
-                Text(mode.countText)
+                Text(context?.countText ?? mode.emptySubtitle)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(TaptionTheme.mutedText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
             }
 
             Spacer(minLength: 8)
@@ -444,26 +430,70 @@ struct HomeImportBrowserView: View {
 
     private var bottomBar: some View {
         HStack(spacing: 10) {
-            Button(action: onChoose) {
-                Label(mode.primaryTitle, systemImage: mode.primarySystemImage)
+            Button(action: onChooseLocation) {
+                Label("Change Location", systemImage: "folder.badge.plus")
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Color.black.opacity(0.88))
-            .background(Color.white)
+            .foregroundStyle(Color.white.opacity(0.9))
+            .background(Color.white.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            Button(action: onImport) {
+                Label(mode.importTitle, systemImage: mode == .files ? "checkmark.circle.fill" : "tray.and.arrow.down.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canImport)
+            .foregroundStyle(canImport ? Color.black.opacity(0.88) : TaptionTheme.disabledText)
+            .background(canImport ? Color.white : Color.white.opacity(0.12))
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .padding(12)
         .background(TaptionTheme.surface)
     }
+
+    private var canImport: Bool {
+        guard context?.hasLocation == true else {
+            return false
+        }
+        switch mode {
+        case .files:
+            return (context?.selectedFileCount ?? 0) > 0
+        case .folder:
+            return true
+        }
+    }
 }
 
-private struct HomeImportBrowserTileView: View {
+private struct ImportBrowserHeaderButton: View {
+    var systemImage: String
+    var isEnabled: Bool
+    var accessibilityLabel: String
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .bold))
+                .frame(width: 34, height: 34)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .foregroundStyle(isEnabled ? Color.white.opacity(0.9) : TaptionTheme.disabledText)
+        .background(Color.white.opacity(isEnabled ? 0.12 : 0.06))
+        .clipShape(Circle())
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+private struct HomeImportBrowserLocationTileView: View {
     var title: String
     var statusText: String
-    var systemImage: String
     var onSelect: () -> Void
 
     var body: some View {
@@ -473,7 +503,7 @@ private struct HomeImportBrowserTileView: View {
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(Color.black.opacity(0.34))
 
-                    Image(systemName: systemImage)
+                    Image(systemName: "folder.badge.plus")
                         .font(.system(size: 24, weight: .semibold))
                         .foregroundStyle(TaptionTheme.mutedText)
                 }
@@ -507,6 +537,102 @@ private struct HomeImportBrowserTileView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct HomeImportBrowserFolderTileView: View {
+    var folder: HomeImportBrowserFolderSnapshot
+    var onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: 7) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.black.opacity(0.34))
+
+                    Image(systemName: "folder.fill")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(TaptionTheme.accent)
+                }
+                .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                Text(folder.folderName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.76)
+                    .frame(height: 32, alignment: .topLeading)
+
+                Text(folder.detailText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(TaptionTheme.mutedText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(TaptionTheme.elevatedSurface)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(TaptionTheme.border, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct HomeImportBrowserFileTileView: View {
+    var file: HomeImportBrowserFileSnapshot
+    var isSelectable: Bool
+    var onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: 7) {
+                FolderPreviewThumbnailView(
+                    sourceURL: file.thumbnailSourceURL,
+                    canAttemptThumbnail: true
+                )
+                .overlay(alignment: .topTrailing) {
+                    if file.isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundStyle(Color.white, TaptionTheme.accent)
+                            .padding(6)
+                    }
+                }
+
+                Text(file.fileName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(isSelectable ? 0.9 : 0.66))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.76)
+                    .frame(height: 32, alignment: .topLeading)
+
+                Text(file.detailText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(isSelectable ? TaptionTheme.mutedText : TaptionTheme.disabledText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(file.isSelected ? TaptionTheme.selectedSurface : TaptionTheme.elevatedSurface)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(file.isSelected ? Color.white.opacity(0.36) : TaptionTheme.border, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(!isSelectable)
     }
 }
 

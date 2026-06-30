@@ -3122,8 +3122,10 @@ final class CodecRoutePlannerTests: XCTestCase {
             .deletingLastPathComponent()
         let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
         let loadedFilesURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/LoadedFilesPanelView.swift")
+        let stateURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeScreenState.swift")
         let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
         let loadedFilesText = try String(contentsOf: loadedFilesURL, encoding: .utf8)
+        let stateText = try String(contentsOf: stateURL, encoding: .utf8)
         let sourceBarStart = try XCTUnwrap(homeViewText.range(of: "SourceActionBar("))
         let sourceBarEnd = try XCTUnwrap(
             homeViewText[sourceBarStart.lowerBound...].range(of: "\n                    outputSelector")
@@ -3132,18 +3134,36 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertTrue(homeViewText.contains("@State private var activeImportBrowser: HomeImportBrowserMode?"))
         XCTAssertTrue(homeViewText.contains("@State private var pendingImportPicker: HomeImportBrowserMode?"))
+        XCTAssertTrue(homeViewText.contains("@State private var didCompleteImportBrowserSelection = false"))
+        XCTAssertTrue(sourceBarText.contains("viewModel.openImportBrowser(mode: .files)"))
+        XCTAssertTrue(sourceBarText.contains("viewModel.openImportBrowser(mode: .folder)"))
         XCTAssertTrue(sourceBarText.contains("activeImportBrowser = .files"))
         XCTAssertTrue(sourceBarText.contains("activeImportBrowser = .folder"))
         XCTAssertFalse(sourceBarText.contains("isFileImporterPresented = true"))
         XCTAssertFalse(sourceBarText.contains("isFolderImporterPresented = true"))
         XCTAssertTrue(homeViewText.contains("HomeImportBrowserView("))
-        XCTAssertTrue(homeViewText.contains("presentPendingImportPickerIfNeeded"))
+        XCTAssertTrue(homeViewText.contains("handleImportBrowserDismiss"))
         XCTAssertTrue(homeViewText.contains("case .files:\n            isFileImporterPresented = true"))
         XCTAssertTrue(homeViewText.contains("case .folder:\n            isFolderImporterPresented = true"))
-        XCTAssertTrue(loadedFilesText.contains("enum HomeImportBrowserMode: String, Identifiable"))
+        XCTAssertTrue(homeViewText.contains("contentTypes: [.folder]"))
+        XCTAssertTrue(homeViewText.contains("viewModel.openImportBrowserLocation(url: url, mode: .files)"))
+        XCTAssertTrue(homeViewText.contains("viewModel.openImportBrowserLocation(url: url, mode: .folder)"))
+        XCTAssertTrue(homeViewText.contains("viewModel.navigateImportBrowserIntoFolder(id: $0)"))
+        XCTAssertTrue(homeViewText.contains("viewModel.navigateImportBrowserBack()"))
+        XCTAssertTrue(homeViewText.contains("viewModel.navigateImportBrowserUp()"))
+        XCTAssertTrue(homeViewText.contains("viewModel.toggleImportBrowserFileSelection(id: $0)"))
+        XCTAssertTrue(homeViewText.contains("viewModel.importFromImportBrowser()"))
+        XCTAssertTrue(stateText.contains("enum HomeImportBrowserMode: String, Identifiable, Equatable"))
+        XCTAssertTrue(stateText.contains("struct HomeImportBrowserContext: Identifiable, Equatable"))
+        XCTAssertTrue(stateText.contains("struct HomeImportBrowserFolderSnapshot: Identifiable, Equatable"))
+        XCTAssertTrue(stateText.contains("struct HomeImportBrowserFileSnapshot: Identifiable, Equatable"))
         XCTAssertTrue(loadedFilesText.contains("struct HomeImportBrowserView: View"))
         XCTAssertTrue(loadedFilesText.contains("GridItem(.adaptive(minimum: 118, maximum: 168)"))
-        XCTAssertTrue(loadedFilesText.contains("Label(mode.primaryTitle, systemImage: mode.primarySystemImage)"))
+        XCTAssertTrue(loadedFilesText.contains("ImportBrowserHeaderButton("))
+        XCTAssertTrue(loadedFilesText.contains("HomeImportBrowserFolderTileView("))
+        XCTAssertTrue(loadedFilesText.contains("HomeImportBrowserFileTileView("))
+        XCTAssertTrue(loadedFilesText.contains("Label(\"Change Location\", systemImage: \"folder.badge.plus\")"))
+        XCTAssertTrue(loadedFilesText.contains("Label(mode.importTitle, systemImage: mode == .files ? \"checkmark.circle.fill\" : \"tray.and.arrow.down.fill\")"))
     }
 
     func testExternalVideoOpenSuppressesAppOpenAdsBeforePreviewRouting() throws {
@@ -7623,6 +7643,114 @@ final class CodecRoutePlannerTests: XCTestCase {
             viewModel.folderPreviewFileSnapshots.first(where: { $0.id == secondURL.absoluteString })?.isSelected,
             true
         )
+    }
+
+    @MainActor
+    func testImportBrowserFileModeNavigatesFoldersAndSelectsFiles() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let rootURL = directoryURL.appendingPathComponent("VideoRoot", isDirectory: true)
+        let childURL = rootURL.appendingPathComponent("Child", isDirectory: true)
+        let rootVideoURL = rootURL.appendingPathComponent("root.mp4")
+        let childVideoURL = childURL.appendingPathComponent("child.mp4")
+        try FileManager.default.createDirectory(at: childURL, withIntermediateDirectories: true)
+        try Data("root".utf8).write(to: rootVideoURL)
+        try Data("child".utf8).write(to: childVideoURL)
+        try Data("note".utf8).write(to: rootURL.appendingPathComponent("notes.txt"))
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+
+        viewModel.openImportBrowserLocation(url: rootURL, mode: .files)
+
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "VideoRoot")
+        XCTAssertEqual(viewModel.importBrowserFolders.map(\.folderName), ["Child"])
+        XCTAssertEqual(viewModel.importBrowserFiles.map(\.fileName), ["root.mp4"])
+        XCTAssertEqual(viewModel.importBrowserContext?.selectedFileCount, 0)
+
+        viewModel.navigateImportBrowserIntoFolder(id: childURL.standardizedFileURL.path)
+
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "VideoRoot/Child")
+        XCTAssertEqual(viewModel.importBrowserContext?.canGoBack, true)
+        XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, true)
+        XCTAssertEqual(viewModel.importBrowserFiles.map(\.fileName), ["child.mp4"])
+
+        viewModel.toggleImportBrowserFileSelection(id: childVideoURL.standardizedFileURL.path)
+
+        XCTAssertEqual(viewModel.importBrowserContext?.selectedFileCount, 1)
+        XCTAssertEqual(viewModel.importBrowserFiles.first?.isSelected, true)
+
+        viewModel.navigateImportBrowserUp()
+
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "VideoRoot")
+        XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, false)
+        XCTAssertEqual(viewModel.importBrowserContext?.selectedFileCount, 1)
+
+        viewModel.navigateImportBrowserBack()
+
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "VideoRoot/Child")
+        XCTAssertEqual(viewModel.importBrowserFiles.first?.isSelected, true)
+
+        viewModel.importFromImportBrowser()
+
+        XCTAssertNil(viewModel.importBrowserContext)
+        XCTAssertEqual(viewModel.folderPreviewContext?.folderName, "child.mp4")
+        XCTAssertEqual(viewModel.folderPreviewContext?.fileCount, 1)
+        XCTAssertEqual(viewModel.folderPreviewFileSnapshots.map(\.id), [childVideoURL.absoluteString])
+    }
+
+    @MainActor
+    func testImportBrowserFolderModeCanMoveUpBeforeImportingCurrentFolder() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let rootURL = directoryURL.appendingPathComponent("VideoRoot", isDirectory: true)
+        let childURL = rootURL.appendingPathComponent("Child", isDirectory: true)
+        let rootVideoURL = rootURL.appendingPathComponent("root.mp4")
+        let childVideoURL = childURL.appendingPathComponent("child.mp4")
+        try FileManager.default.createDirectory(at: childURL, withIntermediateDirectories: true)
+        try Data("root".utf8).write(to: rootVideoURL)
+        try Data("child".utf8).write(to: childVideoURL)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+
+        viewModel.openImportBrowserLocation(url: rootURL, mode: .folder)
+
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "VideoRoot")
+        XCTAssertEqual(viewModel.importBrowserFolders.map(\.folderName), ["Child"])
+        XCTAssertEqual(viewModel.importBrowserFiles.map(\.fileName), ["root.mp4"])
+
+        viewModel.navigateImportBrowserIntoFolder(id: childURL.standardizedFileURL.path)
+
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "VideoRoot/Child")
+        XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, true)
+        XCTAssertEqual(viewModel.importBrowserFiles.map(\.fileName), ["child.mp4"])
+
+        viewModel.navigateImportBrowserUp()
+
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "VideoRoot")
+        XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, false)
+
+        viewModel.navigateImportBrowserIntoFolder(id: childURL.standardizedFileURL.path)
+        viewModel.importFromImportBrowser()
+
+        XCTAssertNil(viewModel.importBrowserContext)
+        XCTAssertEqual(viewModel.folderPreviewContext?.folderName, "Child")
+        XCTAssertEqual(viewModel.folderPreviewContext?.fileCount, 1)
+        XCTAssertEqual(viewModel.folderPreviewFileSnapshots.map(\.id), [childVideoURL.absoluteString])
+        XCTAssertEqual(viewModel.folderPreviewFileSnapshots.first?.sourceKind, .folder)
     }
 
     @MainActor

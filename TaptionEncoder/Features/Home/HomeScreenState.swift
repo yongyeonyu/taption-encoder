@@ -960,6 +960,105 @@ struct PendingFolderAccessPrompt: Identifiable, Equatable {
     }
 }
 
+enum HomeImportBrowserMode: String, Identifiable, Equatable {
+    case files
+    case folder
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .files:
+            return "Files"
+        case .folder:
+            return "Folder"
+        }
+    }
+
+    var emptyTitle: String {
+        switch self {
+        case .files:
+            return "Choose Location"
+        case .folder:
+            return "Choose Folder"
+        }
+    }
+
+    var emptySubtitle: String {
+        switch self {
+        case .files:
+            return "Open a folder, then select videos inside Taption Encoder."
+        case .folder:
+            return "Open a folder, then move through subfolders inside Taption Encoder."
+        }
+    }
+
+    var importTitle: String {
+        switch self {
+        case .files:
+            return "Import Selected"
+        case .folder:
+            return "Import This Folder"
+        }
+    }
+
+    var locationPickerTitle: String {
+        switch self {
+        case .files:
+            return "Choose Location"
+        case .folder:
+            return "Choose Folder"
+        }
+    }
+}
+
+struct HomeImportBrowserContext: Identifiable, Equatable {
+    var id: String
+    var mode: HomeImportBrowserMode
+    var rootFolderName: String?
+    var currentFolderName: String?
+    var pathText: String
+    var folderCount: Int
+    var fileCount: Int
+    var selectedFileCount: Int
+    var canGoBack: Bool
+    var canGoUp: Bool
+
+    var hasLocation: Bool {
+        rootFolderName != nil
+    }
+
+    var countText: String {
+        guard hasLocation else {
+            return mode.emptySubtitle
+        }
+
+        let folderText = folderCount == 1 ? "1 folder" : "\(folderCount) folders"
+        let videoText = fileCount == 1 ? "1 video" : "\(fileCount) videos"
+        if mode == .files, selectedFileCount > 0 {
+            let selectedText = selectedFileCount == 1 ? "1 selected" : "\(selectedFileCount) selected"
+            return "\(folderText), \(videoText), \(selectedText)"
+        }
+        return "\(folderText), \(videoText)"
+    }
+}
+
+struct HomeImportBrowserFolderSnapshot: Identifiable, Equatable {
+    var id: String
+    var folderName: String
+    var detailText: String
+}
+
+struct HomeImportBrowserFileSnapshot: Identifiable, Equatable {
+    var id: String
+    var fileName: String
+    var detailText: String
+    var thumbnailSourceURL: URL
+    var isSelected: Bool
+}
+
 struct FolderPreviewContext: Identifiable, Equatable {
     var id: String
     var folderName: String

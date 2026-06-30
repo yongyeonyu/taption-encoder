@@ -15,6 +15,7 @@ struct HomeView: View {
     @State private var isFolderImporterPresented = false
     @State private var activeImportBrowser: HomeImportBrowserMode?
     @State private var pendingImportPicker: HomeImportBrowserMode?
+    @State private var didCompleteImportBrowserSelection = false
     @State private var isPhotosPickerPresented = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var activeMenuSheet: HomeMenuSheet?
@@ -56,10 +57,12 @@ struct HomeView: View {
                         canReset: viewModel.state.canReset,
                         onFiles: {
                             AppLogger.info("File button tapped", category: .ui)
+                            viewModel.openImportBrowser(mode: .files)
                             activeImportBrowser = .files
                         },
                         onFolder: {
                             AppLogger.info("Folder button tapped", category: .ui)
+                            viewModel.openImportBrowser(mode: .folder)
                             activeImportBrowser = .folder
                         },
                         onSamples: {
@@ -147,17 +150,34 @@ struct HomeView: View {
         }
         .sheet(
             item: $activeImportBrowser,
-            onDismiss: presentPendingImportPickerIfNeeded
+            onDismiss: handleImportBrowserDismiss
         ) { mode in
             HomeImportBrowserView(
                 mode: mode,
-                onChoose: {
+                context: viewModel.importBrowserContext,
+                folders: viewModel.importBrowserFolders,
+                files: viewModel.importBrowserFiles,
+                onChooseLocation: {
                     AppLogger.info(
-                        "Import browser choose tapped",
+                        "Import browser choose location tapped",
                         category: .ui,
                         metadata: ["mode": mode.rawValue]
                     )
                     pendingImportPicker = mode
+                    activeImportBrowser = nil
+                },
+                onOpenFolder: { viewModel.navigateImportBrowserIntoFolder(id: $0) },
+                onToggleFile: { viewModel.toggleImportBrowserFileSelection(id: $0) },
+                onBack: { viewModel.navigateImportBrowserBack() },
+                onUp: { viewModel.navigateImportBrowserUp() },
+                onImport: {
+                    AppLogger.info(
+                        "Import browser import tapped",
+                        category: .ui,
+                        metadata: ["mode": mode.rawValue]
+                    )
+                    didCompleteImportBrowserSelection = true
+                    viewModel.importFromImportBrowser()
                     activeImportBrowser = nil
                 },
                 onClose: {
@@ -166,6 +186,7 @@ struct HomeView: View {
                         category: .ui,
                         metadata: ["mode": mode.rawValue]
                     )
+                    viewModel.dismissImportBrowser()
                     activeImportBrowser = nil
                 }
             )
@@ -174,11 +195,11 @@ struct HomeView: View {
         }
         .sheet(isPresented: $isFileImporterPresented) {
             VideoDocumentPicker(
-                contentTypes: ImportableVideoTypes.all,
-                allowsMultipleSelection: true,
+                contentTypes: [.folder],
+                allowsMultipleSelection: false,
                 onPick: { urls in
                     AppLogger.info(
-                        "Document picker returned files",
+                        "File location picker returned folders",
                         category: .fileImport,
                         metadata: [
                             "count": "\(urls.count)",
@@ -186,11 +207,18 @@ struct HomeView: View {
                         ]
                     )
                     isFileImporterPresented = false
-                    viewModel.openFilesPreviewBrowser(urls: urls)
+                    if let url = urls.first {
+                        viewModel.openImportBrowserLocation(url: url, mode: .files)
+                    } else {
+                        viewModel.openImportBrowser(mode: .files)
+                    }
+                    activeImportBrowser = .files
                 },
                 onCancel: {
-                    AppLogger.info("Document picker cancelled", category: .fileImport)
+                    AppLogger.info("File location picker cancelled", category: .fileImport)
                     isFileImporterPresented = false
+                    viewModel.openImportBrowser(mode: .files)
+                    activeImportBrowser = .files
                 }
             )
             .ignoresSafeArea()
@@ -209,11 +237,18 @@ struct HomeView: View {
                         ]
                     )
                     isFolderImporterPresented = false
-                    viewModel.handleFolderPickerSelection(urls: urls)
+                    if let url = urls.first {
+                        viewModel.openImportBrowserLocation(url: url, mode: .folder)
+                    } else {
+                        viewModel.openImportBrowser(mode: .folder)
+                    }
+                    activeImportBrowser = .folder
                 },
                 onCancel: {
                     AppLogger.info("Folder picker cancelled", category: .folderImport)
                     isFolderImporterPresented = false
+                    viewModel.openImportBrowser(mode: .folder)
+                    activeImportBrowser = .folder
                 }
             )
             .ignoresSafeArea()
@@ -489,6 +524,18 @@ struct HomeView: View {
         case .folder:
             isFolderImporterPresented = true
         }
+    }
+
+    private func handleImportBrowserDismiss() {
+        if pendingImportPicker != nil {
+            presentPendingImportPickerIfNeeded()
+            return
+        }
+        if didCompleteImportBrowserSelection {
+            didCompleteImportBrowserSelection = false
+            return
+        }
+        viewModel.dismissImportBrowser()
     }
 
     #if DEBUG

@@ -63,6 +63,9 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var rewardedAdState: AdLoadState
     @Published private(set) var isWatchingStarAd: Bool
     @Published private(set) var activePreview: QueueVideoPreview?
+    @Published private(set) var importBrowserContext: HomeImportBrowserContext?
+    @Published private(set) var importBrowserFolders: [HomeImportBrowserFolderSnapshot]
+    @Published private(set) var importBrowserFiles: [HomeImportBrowserFileSnapshot]
     @Published private(set) var folderPreviewContext: FolderPreviewContext?
     @Published private(set) var batteryEncodingAlert: BatteryEncodingAlert?
 
@@ -81,6 +84,11 @@ final class HomeViewModel: ObservableObject {
     private var hasLoadedStarWallet = false
     private var pendingSaveAccessURLs: [UUID: URL] = [:]
     private var securityScopedURLs: [URL] = []
+    private var importBrowserMode: HomeImportBrowserMode?
+    private var importBrowserRootURL: URL?
+    private var importBrowserCurrentURL: URL?
+    private var importBrowserHistory: [URL] = []
+    private var importBrowserSelectedFileURLs: Set<URL> = []
     private var activeStarCharge: ActiveStarCharge?
     private var shouldAutoResumeBatchAfterStarEarn = false
     private var rewardedAdStatePollingTask: Task<Void, Never>?
@@ -111,6 +119,9 @@ final class HomeViewModel: ObservableObject {
         self.rewardedAdState = .idle
         self.isWatchingStarAd = false
         self.activePreview = nil
+        self.importBrowserContext = nil
+        self.importBrowserFolders = []
+        self.importBrowserFiles = []
         self.folderPreviewContext = nil
         self.batteryEncodingAlert = nil
         observeBatteryPowerChanges()
@@ -1063,7 +1074,157 @@ final class HomeViewModel: ObservableObject {
         startFolderFlow(url: firstURL)
     }
 
+    func openImportBrowser(mode: HomeImportBrowserMode) {
+        guard canStartNewSourceFlow() else {
+            return
+        }
+        guard state.canSelectSource else {
+            AppLogger.warning(
+                "Import browser ignored because source selection is disabled",
+                category: .fileImport,
+                metadata: ["mode": mode.rawValue, "state": "\(state)"]
+            )
+            return
+        }
+
+        if importBrowserMode != mode {
+            clearImportBrowserState(stoppingAccess: true)
+        }
+        importBrowserMode = mode
+        if importBrowserContext == nil {
+            importBrowserContext = HomeImportBrowserContext(
+                id: "empty-\(mode.rawValue)",
+                mode: mode,
+                rootFolderName: nil,
+                currentFolderName: nil,
+                pathText: mode.title,
+                folderCount: 0,
+                fileCount: 0,
+                selectedFileCount: 0,
+                canGoBack: false,
+                canGoUp: false
+            )
+        }
+    }
+
+    func openImportBrowserLocation(url: URL, mode: HomeImportBrowserMode) {
+        guard canStartNewSourceFlow() else {
+            return
+        }
+        guard state.canSelectSource else {
+            AppLogger.warning(
+                "Import browser location ignored because source selection is disabled",
+                category: .fileImport,
+                metadata: ["mode": mode.rawValue, "state": "\(state)"]
+            )
+            return
+        }
+
+        AppLogger.info(
+            "Import browser location opened",
+            category: .fileImport,
+            metadata: ["mode": mode.rawValue, "name": url.lastPathComponent]
+        )
+        dismissPreview()
+        activeTask?.cancel()
+        selectionInspectionTask?.cancel()
+        previewInspectionTask?.cancel()
+        currentReview = nil
+        lastBatchFileCards = []
+        folderPreviewContext = nil
+        folderBatch = nil
+        beginSecurityScopedAccessIfNeeded(for: url)
+        importBrowserMode = mode
+        importBrowserRootURL = url
+        importBrowserCurrentURL = url
+        importBrowserHistory = []
+        importBrowserSelectedFileURLs = []
+        refreshImportBrowser()
+        state = .idle
+    }
+
+    func dismissImportBrowser() {
+        clearImportBrowserState(stoppingAccess: true)
+    }
+
+    func navigateImportBrowserIntoFolder(id: String) {
+        guard let currentURL = importBrowserCurrentURL,
+              let folder = importBrowserFolders.first(where: { $0.id == id }) else {
+            return
+        }
+        importBrowserHistory.append(currentURL)
+        importBrowserCurrentURL = URL(fileURLWithPath: folder.id)
+        refreshImportBrowser()
+    }
+
+    func navigateImportBrowserBack() {
+        guard let previousURL = importBrowserHistory.popLast() else {
+            return
+        }
+        importBrowserCurrentURL = previousURL
+        refreshImportBrowser()
+    }
+
+    func navigateImportBrowserUp() {
+        guard let rootURL = importBrowserRootURL?.standardizedFileURL,
+              let currentURL = importBrowserCurrentURL?.standardizedFileURL,
+              currentURL != rootURL else {
+            return
+        }
+
+        let parentURL = currentURL.deletingLastPathComponent()
+        guard importBrowserURL(parentURL, isInsideRoot: rootURL) else {
+            return
+        }
+        importBrowserHistory.append(currentURL)
+        importBrowserCurrentURL = parentURL
+        refreshImportBrowser()
+    }
+
+    func toggleImportBrowserFileSelection(id: String) {
+        guard importBrowserMode == .files,
+              importBrowserFiles.contains(where: { $0.id == id }) else {
+            return
+        }
+        let url = URL(fileURLWithPath: id).standardizedFileURL
+        if importBrowserSelectedFileURLs.contains(url) {
+            importBrowserSelectedFileURLs.remove(url)
+        } else {
+            importBrowserSelectedFileURLs.insert(url)
+        }
+        refreshImportBrowser()
+    }
+
+    func importFromImportBrowser() {
+        guard let mode = importBrowserMode,
+              let currentURL = importBrowserCurrentURL else {
+            return
+        }
+
+        switch mode {
+        case .files:
+            let selectedURLs = importBrowserSelectedFileURLs.sorted {
+                $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+            }
+            guard !selectedURLs.isEmpty else {
+                AppLogger.warning("Import browser file import ignored because no files are selected", category: .fileImport)
+                return
+            }
+            let rootURL = importBrowserRootURL
+            clearImportBrowserState(stoppingAccess: false)
+            openFilesPreviewBrowser(urls: selectedURLs, securityScopedRootURL: rootURL)
+        case .folder:
+            let rootURL = importBrowserRootURL
+            clearImportBrowserState(stoppingAccess: false)
+            startFolderFlow(url: currentURL, securityScopedRootURL: rootURL)
+        }
+    }
+
     func openFilesPreviewBrowser(urls: [URL]) {
+        openFilesPreviewBrowser(urls: urls, securityScopedRootURL: nil)
+    }
+
+    private func openFilesPreviewBrowser(urls: [URL], securityScopedRootURL: URL?) {
         AppLogger.info(
             "Files preview browser requested",
             category: .fileImport,
@@ -1107,7 +1268,8 @@ final class HomeViewModel: ObservableObject {
             sourceKind: .files,
             fileURLs: selectedURLs
         )
-        beginSecurityScopedAccessIfNeeded(for: selectedURLs)
+        let scopedURLs = ([securityScopedRootURL].compactMap { $0 } + selectedURLs)
+        beginSecurityScopedAccessIfNeeded(for: scopedURLs)
         folderPreviewContext = FolderPreviewContext(
             id: "selected-files-\(UUID().uuidString)",
             folderName: title,
@@ -1214,6 +1376,10 @@ final class HomeViewModel: ObservableObject {
     }
 
     func startFolderFlow(url: URL) {
+        startFolderFlow(url: url, securityScopedRootURL: nil)
+    }
+
+    private func startFolderFlow(url: URL, securityScopedRootURL: URL?) {
         guard canStartNewSourceFlow() else {
             return
         }
@@ -1238,7 +1404,8 @@ final class HomeViewModel: ObservableObject {
         lastBatchFileCards = []
         folderPreviewContext = nil
         folderBatch = nil
-        beginSecurityScopedAccessIfNeeded(for: url)
+        let scopedURLs = ([securityScopedRootURL].compactMap { $0 } + [url])
+        beginSecurityScopedAccessIfNeeded(for: scopedURLs)
 
         do {
             let fileURLs = try videoFileURLs(in: url)
@@ -2107,6 +2274,7 @@ final class HomeViewModel: ObservableObject {
         folderAccessPrompt = nil
         pendingSaveDestinationPrompt = nil
         folderPreviewContext = nil
+        clearImportBrowserState(stoppingAccess: false)
         clearPendingSaveExportPrompt()
         pendingSaveQueue = []
         pendingSaveAccessURLs = [:]
@@ -4493,6 +4661,160 @@ final class HomeViewModel: ObservableObject {
             ]
         )
         return urls
+    }
+
+    private func folderURLs(in folderURL: URL) throws -> [URL] {
+        let keys: [URLResourceKey] = [.isDirectoryKey, .isHiddenKey, .isPackageKey]
+        return try FileManager.default
+            .contentsOfDirectory(
+                at: folderURL,
+                includingPropertiesForKeys: keys,
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]
+            )
+            .filter { url in
+                let values = try? url.resourceValues(forKeys: Set(keys))
+                guard values?.isDirectory == true,
+                      values?.isHidden != true,
+                      values?.isPackage != true else {
+                    return false
+                }
+                return true
+            }
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+    }
+
+    private func refreshImportBrowser() {
+        guard let mode = importBrowserMode else {
+            clearImportBrowserState(stoppingAccess: false)
+            return
+        }
+
+        guard let rootURL = importBrowserRootURL?.standardizedFileURL,
+              var currentURL = importBrowserCurrentURL?.standardizedFileURL else {
+            importBrowserFolders = []
+            importBrowserFiles = []
+            importBrowserContext = HomeImportBrowserContext(
+                id: "empty-\(mode.rawValue)",
+                mode: mode,
+                rootFolderName: nil,
+                currentFolderName: nil,
+                pathText: mode.title,
+                folderCount: 0,
+                fileCount: 0,
+                selectedFileCount: 0,
+                canGoBack: false,
+                canGoUp: false
+            )
+            return
+        }
+
+        if !importBrowserURL(currentURL, isInsideRoot: rootURL) {
+            currentURL = rootURL
+            importBrowserCurrentURL = rootURL
+            importBrowserHistory = []
+        }
+
+        do {
+            let folders = try folderURLs(in: currentURL)
+            let files = try videoFileURLs(in: currentURL)
+            importBrowserSelectedFileURLs = importBrowserSelectedFileURLs.filter { selectedURL in
+                importBrowserURL(selectedURL, isInsideRoot: rootURL)
+                    && FileManager.default.fileExists(atPath: selectedURL.path)
+            }
+            let selectedPaths = Set(importBrowserSelectedFileURLs.map { $0.standardizedFileURL.path })
+
+            importBrowserFolders = folders.map { folderURL in
+                HomeImportBrowserFolderSnapshot(
+                    id: folderURL.standardizedFileURL.path,
+                    folderName: folderURL.lastPathComponent,
+                    detailText: "Folder"
+                )
+            }
+            importBrowserFiles = files.map { fileURL in
+                let standardizedURL = fileURL.standardizedFileURL
+                return HomeImportBrowserFileSnapshot(
+                    id: standardizedURL.path,
+                    fileName: fileURL.lastPathComponent,
+                    detailText: fileSizeText(fileSizeInBytes(at: fileURL)),
+                    thumbnailSourceURL: fileURL,
+                    isSelected: selectedPaths.contains(standardizedURL.path)
+                )
+            }
+            importBrowserContext = HomeImportBrowserContext(
+                id: "\(mode.rawValue)-\(currentURL.path)-\(importBrowserSelectedFileURLs.count)",
+                mode: mode,
+                rootFolderName: rootURL.lastPathComponent,
+                currentFolderName: currentURL.lastPathComponent,
+                pathText: relativeImportBrowserPath(root: rootURL, current: currentURL),
+                folderCount: folders.count,
+                fileCount: files.count,
+                selectedFileCount: importBrowserSelectedFileURLs.count,
+                canGoBack: !importBrowserHistory.isEmpty,
+                canGoUp: currentURL != rootURL
+            )
+        } catch {
+            AppLogger.error(
+                "Import browser refresh failed",
+                category: .fileImport,
+                metadata: [
+                    "mode": mode.rawValue,
+                    "folder": currentURL.lastPathComponent,
+                    "error": error.localizedDescription
+                ]
+            )
+            importBrowserFolders = []
+            importBrowserFiles = []
+            importBrowserContext = HomeImportBrowserContext(
+                id: "\(mode.rawValue)-\(currentURL.path)-error",
+                mode: mode,
+                rootFolderName: rootURL.lastPathComponent,
+                currentFolderName: currentURL.lastPathComponent,
+                pathText: relativeImportBrowserPath(root: rootURL, current: currentURL),
+                folderCount: 0,
+                fileCount: 0,
+                selectedFileCount: importBrowserSelectedFileURLs.count,
+                canGoBack: !importBrowserHistory.isEmpty,
+                canGoUp: currentURL != rootURL
+            )
+        }
+    }
+
+    private func clearImportBrowserState(stoppingAccess: Bool) {
+        importBrowserMode = nil
+        importBrowserRootURL = nil
+        importBrowserCurrentURL = nil
+        importBrowserHistory = []
+        importBrowserSelectedFileURLs = []
+        importBrowserContext = nil
+        importBrowserFolders = []
+        importBrowserFiles = []
+        if stoppingAccess {
+            stopSecurityScopedAccess()
+        }
+    }
+
+    private func relativeImportBrowserPath(root: URL, current: URL) -> String {
+        let rootPath = root.standardizedFileURL.path
+        let currentPath = current.standardizedFileURL.path
+        guard currentPath != rootPath,
+              currentPath.hasPrefix(rootPath + "/") else {
+            return root.lastPathComponent
+        }
+
+        let suffix = currentPath
+            .dropFirst(rootPath.count + 1)
+            .split(separator: "/")
+            .joined(separator: "/")
+        guard !suffix.isEmpty else {
+            return root.lastPathComponent
+        }
+        return "\(root.lastPathComponent)/\(suffix)"
+    }
+
+    private func importBrowserURL(_ url: URL, isInsideRoot rootURL: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        let rootPath = rootURL.standardizedFileURL.path
+        return path == rootPath || path.hasPrefix(rootPath + "/")
     }
 
     private func makeTemporaryOutputURL(for source: HomeSelectedSource) -> URL {
