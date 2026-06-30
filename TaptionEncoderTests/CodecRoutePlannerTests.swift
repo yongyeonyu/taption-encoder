@@ -3068,8 +3068,10 @@ final class CodecRoutePlannerTests: XCTestCase {
             .deletingLastPathComponent()
         let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
         let viewModelURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeViewModel.swift")
+        let progressViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Encoding/EncodingProgressView.swift")
         let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
         let viewModelText = try String(contentsOf: viewModelURL, encoding: .utf8)
+        let progressViewText = try String(contentsOf: progressViewURL, encoding: .utf8)
 
         XCTAssertTrue(homeViewText.contains("@State private var miniPlayerPreview: QueueVideoPreview?"))
         XCTAssertTrue(homeViewText.contains("QueueMiniPlayerView("))
@@ -3085,9 +3087,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("Queue mini player PiP ignored because controller is unavailable"))
         XCTAssertTrue(homeViewText.contains("viewModel.restorePreview(preview)"))
         XCTAssertTrue(homeViewText.contains("queueMiniPlayer"))
+        XCTAssertTrue(homeViewText.contains("let isVideoPlaybackOverlayActive = miniPlayerPreview != nil || viewModel.activePreview != nil"))
+        XCTAssertTrue(homeViewText.contains("showsWatchAdAction: !isVideoPlaybackOverlayActive"))
         XCTAssertTrue(homeViewText.contains("beginVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(homeViewText.contains("endVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(viewModelText.contains("func restorePreview(_ preview: QueueVideoPreview)"))
+        XCTAssertTrue(progressViewText.contains("var showsWatchAdAction: Bool = true"))
+        XCTAssertTrue(progressViewText.contains("if showsWatchAdAction {\n                        watchAdButton"))
     }
 
     func testExternalVideoOpenSuppressesAppOpenAdsBeforePreviewRouting() throws {

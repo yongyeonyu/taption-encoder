@@ -8,6 +8,7 @@ struct EncodingProgressView: View {
     var showsSaveAction: Bool = false
     var saveActionTitle: String = "Save"
     var watchAdButtonTitle: String = "Watch Ad (+1 Star)"
+    var showsWatchAdAction: Bool = true
     var canWatchAd: Bool = false
     var controlHeight: CGFloat = 44
     var contentScale: CGFloat = 1
@@ -35,7 +36,9 @@ struct EncodingProgressView: View {
                     if showsPrimaryAction {
                         actionButton
                     }
-                    watchAdButton
+                    if showsWatchAdAction {
+                        watchAdButton
+                    }
                 }
             }
             .frame(maxHeight: usesExpandedFailureLog ? .infinity : nil, alignment: .top)

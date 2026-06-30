@@ -30,6 +30,7 @@ struct HomeView: View {
         GeometryReader { geometry in
             let metrics = HomeLayoutMetrics(size: geometry.size)
             let reservesFailureLogArea = viewModel.state.reservesFailureLogArea
+            let isVideoPlaybackOverlayActive = miniPlayerPreview != nil || viewModel.activePreview != nil
 
             ZStack {
                 TaptionTheme.appBackground
@@ -94,6 +95,7 @@ struct HomeView: View {
                         showsSaveAction: viewModel.showsSaveAction,
                         saveActionTitle: viewModel.saveActionTitle,
                         watchAdButtonTitle: viewModel.watchAdButtonTitle,
+                        showsWatchAdAction: !isVideoPlaybackOverlayActive,
                         canWatchAd: viewModel.canWatchAdForStar,
                         controlHeight: metrics.controlHeight,
                         contentScale: metrics.contentScale,
