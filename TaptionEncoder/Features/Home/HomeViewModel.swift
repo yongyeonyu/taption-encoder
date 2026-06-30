@@ -56,8 +56,6 @@ final class HomeViewModel: ObservableObject {
 
     @Published private(set) var state: HomeScreenState
     @Published private(set) var selectedOutput: TaptionOutputSelection
-    @Published private(set) var folderAccessPrompt: PendingFolderAccessPrompt?
-    @Published private(set) var pendingSaveExportPrompt: PendingSaveExportPrompt?
     @Published private(set) var pendingSaveDestinationPrompt: PendingSaveDestinationPrompt?
     @Published private(set) var starWalletSnapshot: StarWalletSnapshot
     @Published private(set) var rewardedAdState: AdLoadState
@@ -96,8 +94,6 @@ final class HomeViewModel: ObservableObject {
     private var lastEncodingActivitySnapshot: TaptionEncodingActivitySnapshot?
     private var deferredBatteryStopReason: BatteryEncodingBlockReason?
     private var batteryObservationTokens: [NSObjectProtocol] = []
-    private let pendingSaveExportStagingRootDirectoryURL = FileManager.default.temporaryDirectory
-        .appendingPathComponent("TaptionEncoderPendingSaveExports", isDirectory: true)
 
     init(
         environment: AppEnvironment = .phase0,
@@ -112,8 +108,6 @@ final class HomeViewModel: ObservableObject {
             container: environment.configuration.defaultOutputContainer
         )
         self.state = .idle
-        self.folderAccessPrompt = nil
-        self.pendingSaveExportPrompt = nil
         self.pendingSaveDestinationPrompt = nil
         self.starWalletSnapshot = .empty
         self.rewardedAdState = .idle
@@ -2081,7 +2075,6 @@ final class HomeViewModel: ObservableObject {
         guard let job = nextPendingSaveJobForAction else {
             return
         }
-        clearPendingSaveExportPrompt()
         requestSaveDestinationIfNeeded(for: job)
     }
 
@@ -2161,104 +2154,20 @@ final class HomeViewModel: ObservableObject {
             metadata: [
                 "source": job.sourceName,
                 "destination": "folder",
-                "final": job.state.finalOutputURL?.path ?? "picker"
+                "final": job.state.finalOutputURL?.path ?? "in-app-output"
             ]
         )
 
         guard job.state.finalOutputURL != nil else {
-            clearPendingSaveExportPrompt()
-            pendingSaveExportPrompt = makePendingSaveExportPrompt(for: job)
+            let routedJob = reroutePendingSaveToInternalOutput(job, reason: "missing final output path")
+            persistPendingSaveState(routedJob.state)
+            updatePendingSaveJob(routedJob)
+            state = .pendingSave(routedJob)
+            savePendingJob(routedJob)
             return
         }
 
         savePendingJob(job)
-    }
-
-    func recoverFolderAccessForPendingSave(url: URL) {
-        guard let jobToRecover = folderAccessPrompt?.job ?? pendingSaveRecoveryJob else {
-            return
-        }
-        let recoveryURL = normalizedFolderRecoveryURL(for: url)
-        folderAccessPrompt = nil
-        beginSecurityScopedAccessIfNeeded(for: recoveryURL)
-
-        var updatedState = jobToRecover.state
-        updatedState.accessBookmarkData = makeSecurityScopedBookmarkData(for: recoveryURL)
-        updatedState.saveDestinationWasChosen = true
-        var job = PendingSaveJob(sourceName: jobToRecover.sourceName, state: updatedState)
-        job.saveGateMessage = "Folder access restored. Saving again."
-        pendingSaveAccessURLs[job.id] = recoveryURL
-
-        AppLogger.info(
-            "Folder access recovery selected",
-            category: .saving,
-            metadata: [
-                "source": job.sourceName,
-                "folder": recoveryURL.lastPathComponent
-            ]
-        )
-
-        Task { [weak self] in
-            guard let self else {
-                return
-            }
-            try? await environment.pendingSaveStore.savePendingState(updatedState)
-        }
-        updatePendingSaveJob(job)
-        state = .pendingSave(job)
-        savePendingJob(job)
-    }
-
-    func dismissFolderAccessRecoveryPrompt() {
-        guard folderAccessPrompt != nil else {
-            return
-        }
-        AppLogger.info("Folder access recovery prompt dismissed", category: .saving)
-        folderAccessPrompt = nil
-    }
-
-    func dismissPendingSaveExportPrompt() {
-        guard pendingSaveExportPrompt != nil else {
-            return
-        }
-        AppLogger.info("Pending save export prompt dismissed", category: .saving)
-        clearPendingSaveExportPrompt()
-    }
-
-    func completePendingSaveExport(prompt: PendingSaveExportPrompt, destinationURL: URL) {
-        if pendingSaveExportPrompt?.id == prompt.id {
-            clearPendingSaveExportPrompt(cleanupPresentationFile: false)
-        }
-        var recoveredState = prompt.job.state
-        recoveredState.finalOutputURL = destinationURL
-        recoveredState.saveDestination = .sourceFolder
-        recoveredState.saveDestinationWasChosen = true
-        let job = PendingSaveJob(sourceName: prompt.job.sourceName, state: recoveredState)
-        AppLogger.info(
-            "Pending save export finalized",
-            category: .saving,
-            metadata: [
-                "source": job.sourceName,
-                "saved": destinationURL.lastPathComponent
-            ]
-        )
-        activeTask?.cancel()
-        activeTask = Task { [weak self] in
-            guard let self else {
-                return
-            }
-            await self.finishPendingSaveJob(job, savedURL: destinationURL)
-        }
-    }
-
-    private func clearPendingSaveExportPrompt(cleanupPresentationFile: Bool = true) {
-        let prompt = pendingSaveExportPrompt
-        pendingSaveExportPrompt = nil
-
-        guard cleanupPresentationFile, let prompt else {
-            return
-        }
-        cleanupPendingSaveExportPresentation(for: prompt.job.id)
     }
 
     func reset() {
@@ -2277,11 +2186,9 @@ final class HomeViewModel: ObservableObject {
         activeStarCharge = nil
         shouldAutoResumeBatchAfterStarEarn = false
         cancelEncodingActivity()
-        folderAccessPrompt = nil
         pendingSaveDestinationPrompt = nil
         folderPreviewContext = nil
         clearImportBrowserState(stoppingAccess: false)
-        clearPendingSaveExportPrompt()
         pendingSaveQueue = []
         pendingSaveAccessURLs = [:]
         lastBatchFileCards = []
@@ -2291,7 +2198,6 @@ final class HomeViewModel: ObservableObject {
         rewardedAdStatePollingTask = nil
         state = .idle
         stopSecurityScopedAccess()
-        cleanupAllPendingSaveExportPresentations()
 
         for pendingState in pendingStatesToReset {
             Task {
@@ -3027,7 +2933,7 @@ final class HomeViewModel: ObservableObject {
 
     private func savePendingJob(
         _ job: PendingSaveJob,
-        conflictResolution: PendingSaveConflictResolution = .prompt
+        conflictResolution: PendingSaveConflictResolution = .saveAsUnique
     ) {
         guard !state.isBusy else {
             AppLogger.warning(
@@ -3125,12 +3031,8 @@ final class HomeViewModel: ObservableObject {
                 activeTask = nil
                 trace.finish("cancelled")
             } catch TaptionFinalSaveConflictError.destinationAlreadyExists(let existingURL) {
-                workingJob.saveGateMessage = "Choose where to save the encoded video, then the export will continue."
-                updatePendingSaveJob(workingJob)
-                clearPendingSaveExportPrompt()
-                pendingSaveExportPrompt = makePendingSaveExportPrompt(for: workingJob)
                 AppLogger.warning(
-                    "Final save destination exists; opening export picker",
+                    "Final save destination exists; retrying with unique name",
                     category: .saving,
                     metadata: [
                         "source": workingJob.sourceName,
@@ -3138,68 +3040,35 @@ final class HomeViewModel: ObservableObject {
                         "rewardedAdRequired": "\(workingJob.state.requiresRewardedAd)"
                     ]
                 )
-                markCurrentSaveItem(
-                    statusText: "Needs Save Location",
-                    detailText: workingJob.saveGateMessage,
-                    progress: completedProgressSnapshot(label: "Pending Save"),
-                    isActive: true
-                )
                 state = .pendingSave(workingJob)
                 activeTask = nil
-                trace.finish("needs_save_location", metadata: ["existing": existingURL.lastPathComponent])
+                trace.finish("retry_unique", metadata: ["existing": existingURL.lastPathComponent])
+                savePendingJob(workingJob, conflictResolution: .saveAsUnique)
             } catch {
                 if workingJob.state.saveDestination == .sourceFolder,
                    isFileProviderWritePermissionDenied(error) {
-                    if let batch = folderBatch,
-                       batch.sourceKind == .folder {
-                        workingJob.saveGateMessage = "Choose the parent folder so Taption Encoder can create \(batch.folderName + environment.configuration.outputSuffix)."
-                        updatePendingSaveJob(workingJob)
-                        folderAccessPrompt = PendingFolderAccessPrompt(
-                            job: workingJob,
-                            suggestedDirectoryURL: batch.folderURL?.deletingLastPathComponent()
-                        )
-                        AppLogger.warning(
-                            "Folder batch final save needs parent folder access",
-                            category: .saving,
-                            metadata: [
-                                "source": workingJob.sourceName,
-                                "error": error.localizedDescription,
-                                "targetFolder": batch.outputFolderURL?.lastPathComponent ?? "none"
-                            ]
-                        )
-                        markCurrentSaveItem(
-                            statusText: "Needs Folder Access",
-                            detailText: workingJob.saveGateMessage,
-                            progress: completedProgressSnapshot(label: "Pending Save"),
-                            isActive: true
-                        )
-                        state = .pendingSave(workingJob)
-                        activeTask = nil
-                        trace.finish("needs_folder_access", metadata: ["error": error.localizedDescription])
-                        return
-                    }
-
-                    workingJob.saveGateMessage = "Choose where to save the encoded video, then the export will continue."
-                    updatePendingSaveJob(workingJob)
-                    clearPendingSaveExportPrompt()
-                    pendingSaveExportPrompt = makePendingSaveExportPrompt(for: workingJob)
+                    let routedJob = reroutePendingSaveToInternalOutput(workingJob, reason: error.localizedDescription)
+                    try? await environment.pendingSaveStore.savePendingState(routedJob.state)
+                    updatePendingSaveJob(routedJob)
                     AppLogger.warning(
-                        "Final save needs export picker recovery",
+                        "Final save rerouted to in-app output folder",
                         category: .saving,
                         metadata: [
-                            "source": workingJob.sourceName,
-                            "error": error.localizedDescription
+                            "source": routedJob.sourceName,
+                            "error": error.localizedDescription,
+                            "final": routedJob.state.finalOutputURL?.lastPathComponent ?? "none"
                         ]
                     )
                     markCurrentSaveItem(
-                        statusText: "Needs Save Location",
-                        detailText: workingJob.saveGateMessage,
-                        progress: completedProgressSnapshot(label: "Pending Save"),
+                        statusText: "Saving",
+                        detailText: routedJob.saveGateMessage,
+                        progress: completedProgressSnapshot(label: "Saving"),
                         isActive: true
                     )
-                    state = .pendingSave(workingJob)
+                    state = .pendingSave(routedJob)
                     activeTask = nil
-                    trace.finish("needs_save_location", metadata: ["error": error.localizedDescription])
+                    trace.finish("rerouted_internal_output", metadata: ["error": error.localizedDescription])
+                    savePendingJob(routedJob, conflictResolution: .saveAsUnique)
                     return
                 }
 
@@ -3253,18 +3122,6 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    private func requestFolderAccessRecoveryIfNeeded(for job: PendingSaveJob) {
-        guard job.state.saveDestination == .sourceFolder else {
-            return
-        }
-        folderAccessPrompt = PendingFolderAccessPrompt(job: job)
-        AppLogger.info(
-            "Folder access recovery requested for restored pending save",
-            category: .saving,
-            metadata: ["source": job.sourceName]
-        )
-    }
-
     private func requestSessionEndAd(reason: SessionEndAdReason) {
         AppLogger.info(
             "Session end ad requested",
@@ -3284,9 +3141,15 @@ final class HomeViewModel: ObservableObject {
             state = .pendingSave(routedJob)
             if routedJob.state.saveDestination == .sourceFolder,
                routedJob.state.finalOutputURL == nil {
-                clearPendingSaveExportPrompt()
-                pendingSaveExportPrompt = makePendingSaveExportPrompt(for: routedJob)
+                let internalJob = reroutePendingSaveToInternalOutput(
+                    routedJob,
+                    reason: "missing restored final output path"
+                )
+                persistPendingSaveState(internalJob.state)
+                updatePendingSaveJob(internalJob)
+                state = .pendingSave(internalJob)
                 activeTask = nil
+                savePendingJob(internalJob)
                 return
             }
             savePendingJob(routedJob)
@@ -4261,7 +4124,6 @@ final class HomeViewModel: ObservableObject {
     private func removePendingSaveJob(id: UUID) {
         pendingSaveQueue.removeAll { $0.id == id }
         pendingSaveAccessURLs.removeValue(forKey: id)
-        cleanupPendingSaveExportPresentation(for: id)
     }
 
     private func showNextPendingSaveIfNeeded(afterSaving job: PendingSaveJob) -> Bool {
@@ -4922,6 +4784,39 @@ final class HomeViewModel: ObservableObject {
         return updatedJob
     }
 
+    private func reroutePendingSaveToInternalOutput(
+        _ job: PendingSaveJob,
+        reason: String
+    ) -> PendingSaveJob {
+        var updatedJob = job
+        updatedJob.state.saveDestination = .sourceFolder
+        updatedJob.state.saveDestinationWasChosen = true
+        updatedJob.state.accessBookmarkData = nil
+        updatedJob.state.finalOutputURL = internalOutputURL(for: job)
+        updatedJob.saveGateMessage = "Saving to Taption Encoder Outputs."
+        pendingSaveAccessURLs[updatedJob.id] = TaptionEncoderStorageLocations.exportedVideosDirectoryURL
+        AppLogger.info(
+            "Pending save routed to in-app output folder",
+            category: .saving,
+            metadata: [
+                "source": job.sourceName,
+                "reason": reason,
+                "final": updatedJob.state.finalOutputURL?.lastPathComponent ?? "none"
+            ]
+        )
+        return updatedJob
+    }
+
+    private func internalOutputURL(for job: PendingSaveJob) -> URL {
+        let fileName = job.state.finalOutputURL?.lastPathComponent
+            ?? URL(fileURLWithPath: job.sourceName).lastPathComponent
+        let resolvedFileName = fileName.isEmpty
+            ? "Taption Output.\(selectedOutput.container.defaultFileExtension)"
+            : fileName
+        return TaptionEncoderStorageLocations.exportedVideosDirectoryURL
+            .appendingPathComponent(resolvedFileName)
+    }
+
     private func applySelectedFolderBatchDestination(
         to job: inout TaptionPreparedEncodingJob,
         source: HomeSelectedSource
@@ -5009,118 +4904,6 @@ final class HomeViewModel: ObservableObject {
             return pendingSaveQueue.first
         }
         return nil
-    }
-
-    private func makePendingSaveExportPrompt(for job: PendingSaveJob) -> PendingSaveExportPrompt {
-        PendingSaveExportPrompt(
-            job: job,
-            exportPresentationURL: preparePendingSaveExportPresentationURL(for: job)
-        )
-    }
-
-    private func preparePendingSaveExportPresentationURL(for job: PendingSaveJob) -> URL {
-        let fileManager = FileManager.default
-        let stagingDirectoryURL = pendingSaveExportStagingDirectoryURL(for: job.id)
-        let stagingURL = stagingDirectoryURL.appendingPathComponent(
-            job.state.finalOutputURL?.lastPathComponent ?? job.sourceName
-        )
-
-        do {
-            if fileManager.fileExists(atPath: stagingDirectoryURL.path) {
-                try fileManager.removeItem(at: stagingDirectoryURL)
-            }
-            try fileManager.createDirectory(at: stagingDirectoryURL, withIntermediateDirectories: true)
-
-            do {
-                try fileManager.linkItem(at: job.state.temporaryOutputURL, to: stagingURL)
-                AppLogger.info(
-                    "Pending save export staging prepared with hard link",
-                    category: .saving,
-                    metadata: [
-                        "source": job.sourceName,
-                        "staging": stagingURL.lastPathComponent
-                    ]
-                )
-            } catch {
-                AppLogger.warning(
-                    "Pending save export hard link failed; copying staging file",
-                    category: .saving,
-                    metadata: [
-                        "source": job.sourceName,
-                        "staging": stagingURL.lastPathComponent,
-                        "error": error.localizedDescription
-                    ]
-                )
-                try fileManager.copyItem(at: job.state.temporaryOutputURL, to: stagingURL)
-                AppLogger.info(
-                    "Pending save export staging prepared with copy",
-                    category: .saving,
-                    metadata: [
-                        "source": job.sourceName,
-                        "staging": stagingURL.lastPathComponent
-                    ]
-                )
-            }
-
-            return stagingURL
-        } catch {
-            AppLogger.error(
-                "Pending save export staging preparation failed; using temporary output directly",
-                category: .saving,
-                metadata: [
-                    "source": job.sourceName,
-                    "error": error.localizedDescription
-                ]
-            )
-            return job.state.temporaryOutputURL
-        }
-    }
-
-    private func pendingSaveExportStagingDirectoryURL(for jobID: UUID) -> URL {
-        pendingSaveExportStagingRootDirectoryURL
-            .appendingPathComponent(jobID.uuidString, isDirectory: true)
-    }
-
-    private func cleanupPendingSaveExportPresentation(for jobID: UUID) {
-        let stagingDirectoryURL = pendingSaveExportStagingDirectoryURL(for: jobID)
-        guard FileManager.default.fileExists(atPath: stagingDirectoryURL.path) else {
-            return
-        }
-
-        do {
-            try FileManager.default.removeItem(at: stagingDirectoryURL)
-            AppLogger.info(
-                "Pending save export staging cleaned up",
-                category: .saving,
-                metadata: ["job": jobID.uuidString]
-            )
-        } catch {
-            AppLogger.warning(
-                "Pending save export staging cleanup failed",
-                category: .saving,
-                metadata: [
-                    "job": jobID.uuidString,
-                    "error": error.localizedDescription
-                ]
-            )
-        }
-    }
-
-    private func cleanupAllPendingSaveExportPresentations() {
-        guard FileManager.default.fileExists(atPath: pendingSaveExportStagingRootDirectoryURL.path) else {
-            return
-        }
-
-        do {
-            try FileManager.default.removeItem(at: pendingSaveExportStagingRootDirectoryURL)
-            AppLogger.info("All pending save export staging cleaned up", category: .saving)
-        } catch {
-            AppLogger.warning(
-                "Pending save export staging root cleanup failed",
-                category: .saving,
-                metadata: ["error": error.localizedDescription]
-            )
-        }
     }
 
     private func completedSaveDetailMessage(
@@ -5731,14 +5514,6 @@ final class HomeViewModel: ObservableObject {
             url.stopAccessingSecurityScopedResource()
         }
         securityScopedURLs = []
-    }
-
-    private func normalizedFolderRecoveryURL(for url: URL) -> URL {
-        guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey]),
-              values.isDirectory == false else {
-            return url
-        }
-        return url.deletingLastPathComponent()
     }
 
     private func hasActiveSecurityScopedAccess(for url: URL) -> Bool {

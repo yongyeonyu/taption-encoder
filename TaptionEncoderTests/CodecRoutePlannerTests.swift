@@ -3123,9 +3123,11 @@ final class CodecRoutePlannerTests: XCTestCase {
         let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
         let loadedFilesURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/LoadedFilesPanelView.swift")
         let stateURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeScreenState.swift")
+        let projectURL = rootURL.appendingPathComponent("TaptionEncoder.xcodeproj/project.pbxproj")
         let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
         let loadedFilesText = try String(contentsOf: loadedFilesURL, encoding: .utf8)
         let stateText = try String(contentsOf: stateURL, encoding: .utf8)
+        let projectText = try String(contentsOf: projectURL, encoding: .utf8)
         let sourceBarStart = try XCTUnwrap(homeViewText.range(of: "SourceActionBar("))
         let sourceBarEnd = try XCTUnwrap(
             homeViewText[sourceBarStart.lowerBound...].range(of: "\n                    outputSelector")
@@ -3147,8 +3149,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("handleImportBrowserDismiss"))
         XCTAssertFalse(homeViewText.contains("presentPendingImportPickerIfNeeded"))
         XCTAssertFalse(homeViewText.contains("openImportBrowserLocation"))
-        XCTAssertEqual(homeViewText.components(separatedBy: "VideoDocumentPicker(").count - 1, 1)
-        XCTAssertTrue(homeViewText.contains("viewModel.recoverFolderAccessForPendingSave(url: url)"))
+        XCTAssertFalse(homeViewText.contains("VideoDocumentPicker("))
+        XCTAssertFalse(homeViewText.contains("PendingSaveExportPicker("))
+        XCTAssertFalse(homeViewText.contains("recoverFolderAccessForPendingSave(url:"))
+        XCTAssertFalse(projectText.contains("VideoDocumentPicker.swift"))
         XCTAssertTrue(homeViewText.contains("viewModel.navigateImportBrowserIntoFolder(id: $0)"))
         XCTAssertTrue(homeViewText.contains("viewModel.navigateImportBrowserBack()"))
         XCTAssertTrue(homeViewText.contains("viewModel.navigateImportBrowserUp()"))
@@ -3167,6 +3171,21 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(loadedFilesText.contains("onChooseLocation"))
         XCTAssertFalse(loadedFilesText.contains("Change Location"))
         XCTAssertTrue(loadedFilesText.contains("Label(mode.importTitle, systemImage: mode == .files ? \"checkmark.circle.fill\" : \"tray.and.arrow.down.fill\")"))
+
+        let appSourceDirectoryURL = rootURL.appendingPathComponent("TaptionEncoder")
+        let appSourceURLs = try FileManager.default.subpathsOfDirectory(atPath: appSourceDirectoryURL.path)
+            .filter { $0.hasSuffix(".swift") }
+            .map { appSourceDirectoryURL.appendingPathComponent($0) }
+        let appSourceText = try appSourceURLs
+            .map { try String(contentsOf: $0, encoding: .utf8) }
+            .joined(separator: "\n")
+        XCTAssertFalse(appSourceText.contains("UIDocumentPickerViewController"))
+        XCTAssertFalse(appSourceText.contains("UIDocumentPickerDelegate"))
+        XCTAssertFalse(appSourceText.contains("fileImporter"))
+        XCTAssertFalse(appSourceText.contains("fileExporter"))
+        XCTAssertFalse(appSourceText.contains("PendingSaveExportPrompt"))
+        XCTAssertFalse(appSourceText.contains("PendingFolderAccessPrompt"))
+        XCTAssertFalse(appSourceText.contains("recoverFolderAccessForPendingSave"))
     }
 
     func testExternalVideoOpenSuppressesAppOpenAdsBeforePreviewRouting() throws {
@@ -5760,13 +5779,14 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testPendingSaveConflictOpensExportPickerWithoutOverwritePrompt() async throws {
+    func testPendingSaveConflictSavesUniqueFileWithoutSystemPicker() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
         }
         let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
         let finalURL = directoryURL.appendingPathComponent("clip_taption.mp4")
+        let uniqueURL = directoryURL.appendingPathComponent("clip_taption 2.mp4")
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         try Data("new output".utf8).write(to: temporaryURL)
         try Data("existing output".utf8).write(to: finalURL)
@@ -5787,17 +5807,22 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         await viewModel.restorePendingSavesIfNeeded()
         viewModel.retryPendingSave()
-        try await waitForPendingSaveExportPrompt(in: viewModel)
+        try await waitForCompletedSave(in: viewModel)
 
-        let prompt = try XCTUnwrap(viewModel.pendingSaveExportPrompt)
-        XCTAssertEqual(prompt.suggestedDirectoryURL, directoryURL)
-        XCTAssertEqual(prompt.suggestedFileName, "clip_taption.mp4")
         XCTAssertEqual(try String(contentsOf: finalURL, encoding: .utf8), "existing output")
-        XCTAssertEqual(try String(contentsOf: temporaryURL, encoding: .utf8), "new output")
+        XCTAssertEqual(try String(contentsOf: uniqueURL, encoding: .utf8), "new output")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+        XCTAssertEqual(
+            viewModel.state.detail,
+            expectedCompletedSaveDetail(
+                url: uniqueURL,
+                fileByteCount: Data("new output".utf8).count
+            )
+        )
 
         let states = try await store.loadPendingStates()
-        XCTAssertEqual(states.map(\.id), [state.id])
-        XCTAssertEqual(states.first?.requiresRewardedAd, false)
+        XCTAssertTrue(states.isEmpty)
     }
 
     @MainActor
@@ -5830,7 +5855,6 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         let destinationPrompt = try XCTUnwrap(viewModel.pendingSaveDestinationPrompt)
         XCTAssertEqual(destinationPrompt.job.id, state.id)
-        XCTAssertNil(viewModel.pendingSaveExportPrompt)
         XCTAssertFalse(FileManager.default.fileExists(atPath: finalURL.path))
         XCTAssertEqual(try String(contentsOf: temporaryURL, encoding: .utf8), "new output")
 
@@ -5858,24 +5882,25 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testRecoverFolderAccessStillSavesAfterPromptWasDismissed() async throws {
+    func testMissingRestoredFinalOutputRoutesToInternalOutputWithoutSystemPicker() async throws {
         let directoryURL = temporaryDirectoryURL()
+        try? FileManager.default.removeItem(at: TaptionEncoderStorageLocations.exportedVideosDirectoryURL)
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
+            try? FileManager.default.removeItem(at: TaptionEncoderStorageLocations.exportedVideosDirectoryURL)
         }
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
 
         let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
-        let finalURL = directoryURL.appendingPathComponent("clip_taption.mp4")
-        let pickedFileURL = directoryURL.appendingPathComponent("picked.mp4")
+        let internalURL = TaptionEncoderStorageLocations.exportedVideosDirectoryURL
+            .appendingPathComponent("encoded.mp4")
         try Data("new output".utf8).write(to: temporaryURL)
-        try Data("picked".utf8).write(to: pickedFileURL)
 
         let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
         let state = TaptionPendingSaveState(
             planID: UUID(),
             temporaryOutputURL: temporaryURL,
-            finalOutputURL: finalURL,
+            finalOutputURL: nil,
             saveDestination: .sourceFolder,
             requiresRewardedAd: false,
             saveDestinationWasChosen: true
@@ -5887,12 +5912,18 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         await viewModel.restorePendingSavesIfNeeded()
-        XCTAssertNil(viewModel.folderAccessPrompt)
-
-        viewModel.recoverFolderAccessForPendingSave(url: pickedFileURL)
+        viewModel.retryPendingSave()
         try await waitForCompletedSave(in: viewModel)
 
-        XCTAssertEqual(try String(contentsOf: finalURL, encoding: .utf8), "new output")
+        XCTAssertEqual(try String(contentsOf: internalURL, encoding: .utf8), "new output")
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+        XCTAssertEqual(
+            viewModel.state.detail,
+            expectedCompletedSaveDetail(
+                url: internalURL,
+                fileByteCount: Data("new output".utf8).count
+            )
+        )
         XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
         let states = try await store.loadPendingStates()
         XCTAssertTrue(states.isEmpty)
@@ -6053,7 +6084,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testRestoredPendingSaveDoesNotAutoPromptForFolderAccess() async throws {
+    func testRestoredPendingSaveWaitsForUserActionWithoutSystemPicker() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -6080,21 +6111,25 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         await viewModel.restorePendingSavesIfNeeded()
 
-        XCTAssertNil(viewModel.folderAccessPrompt)
-        XCTAssertNil(viewModel.pendingSaveExportPrompt)
+        XCTAssertEqual(viewModel.state.title, "Pending save")
         XCTAssertNotNil(viewModel.pendingSaveRecoveryJob)
     }
 
     @MainActor
-    func testPermissionDeniedPendingSaveRequestsExportPrompt() async throws {
+    func testPermissionDeniedPendingSaveRoutesToInternalOutputWithoutSystemPicker() async throws {
         let directoryURL = temporaryDirectoryURL()
+        let readOnlyDirectoryURL = directoryURL.appendingPathComponent("ReadOnly", isDirectory: true)
+        try? FileManager.default.removeItem(at: TaptionEncoderStorageLocations.exportedVideosDirectoryURL)
         defer {
+            chmod(readOnlyDirectoryURL.path, 0o755)
             chmod(directoryURL.path, 0o755)
             try? FileManager.default.removeItem(at: directoryURL)
+            try? FileManager.default.removeItem(at: TaptionEncoderStorageLocations.exportedVideosDirectoryURL)
         }
-        let readOnlyDirectoryURL = directoryURL.appendingPathComponent("ReadOnly", isDirectory: true)
         let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
         let finalURL = readOnlyDirectoryURL.appendingPathComponent("clip_taption.mp4")
+        let internalURL = TaptionEncoderStorageLocations.exportedVideosDirectoryURL
+            .appendingPathComponent("clip_taption.mp4")
         try FileManager.default.createDirectory(at: readOnlyDirectoryURL, withIntermediateDirectories: true)
         try Data("new output".utf8).write(to: temporaryURL)
         chmod(readOnlyDirectoryURL.path, 0o555)
@@ -6116,143 +6151,43 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         await viewModel.restorePendingSavesIfNeeded()
         viewModel.retryPendingSave()
-        try await waitForCondition(timeout: 2) {
-            viewModel.pendingSaveExportPrompt != nil
-        }
-
-        XCTAssertNil(viewModel.folderAccessPrompt)
-        XCTAssertEqual(viewModel.pendingSaveExportPrompt?.job.id, state.id)
-        XCTAssertEqual(
-            viewModel.pendingSaveExportPrompt?.exportPresentationURL.lastPathComponent,
-            finalURL.lastPathComponent
-        )
-        XCTAssertNotEqual(
-            viewModel.pendingSaveExportPrompt?.exportPresentationURL.lastPathComponent,
-            temporaryURL.lastPathComponent
-        )
-    }
-
-    @MainActor
-    func testPermissionDeniedPendingSaveExportCompletesAfterPromptDismissalRace() async throws {
-        let directoryURL = temporaryDirectoryURL()
-        defer {
-            chmod(directoryURL.path, 0o755)
-            try? FileManager.default.removeItem(at: directoryURL)
-        }
-        let readOnlyDirectoryURL = directoryURL.appendingPathComponent("ReadOnly", isDirectory: true)
-        let exportDirectoryURL = directoryURL.appendingPathComponent("Recovered", isDirectory: true)
-        let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
-        let finalURL = readOnlyDirectoryURL.appendingPathComponent("clip_taption.mp4")
-        let exportURL = exportDirectoryURL.appendingPathComponent("clip_taption.mp4")
-        try FileManager.default.createDirectory(at: readOnlyDirectoryURL, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: exportDirectoryURL, withIntermediateDirectories: true)
-        try Data("new output".utf8).write(to: temporaryURL)
-        chmod(readOnlyDirectoryURL.path, 0o555)
-
-        let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
-        let state = TaptionPendingSaveState(
-            planID: UUID(),
-            temporaryOutputURL: temporaryURL,
-            finalOutputURL: finalURL,
-            saveDestination: .sourceFolder,
-            requiresRewardedAd: false,
-            saveDestinationWasChosen: true
-        )
-        try await store.savePendingState(state)
-
-        let viewModel = HomeViewModel(
-            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: store)
-        )
-
-        await viewModel.restorePendingSavesIfNeeded()
-        viewModel.retryPendingSave()
-        try await waitForPendingSaveExportPrompt(in: viewModel)
-
-        let prompt = try XCTUnwrap(viewModel.pendingSaveExportPrompt)
-        try FileManager.default.copyItem(at: prompt.exportPresentationURL, to: exportURL)
-
-        viewModel.dismissPendingSaveExportPrompt()
-        viewModel.completePendingSaveExport(prompt: prompt, destinationURL: exportURL)
         try await waitForCompletedSave(in: viewModel)
 
-        XCTAssertNil(viewModel.pendingSaveExportPrompt)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: finalURL.path))
+        XCTAssertEqual(try String(contentsOf: internalURL, encoding: .utf8), "new output")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
         XCTAssertEqual(viewModel.state.title, "Save Complete")
         XCTAssertEqual(
             viewModel.state.detail,
             expectedCompletedSaveDetail(
-                url: exportURL,
+                url: internalURL,
                 fileByteCount: Data("new output".utf8).count
             )
         )
-        XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Save Complete")
-        XCTAssertNil(viewModel.fileCardSnapshots.first?.detailText)
-        XCTAssertEqual(try String(contentsOf: exportURL, encoding: .utf8), "new output")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
         let states = try await store.loadPendingStates()
         XCTAssertTrue(states.isEmpty)
     }
 
     @MainActor
-    func testPermissionDeniedPendingSaveExportCancelKeepsPendingState() async throws {
+    func testInternalOutputRecoveryKeepsSaveCompleteVisibleWhileAnotherPendingSaveRemainsQueued() async throws {
         let directoryURL = temporaryDirectoryURL()
-        defer {
-            chmod(directoryURL.path, 0o755)
-            try? FileManager.default.removeItem(at: directoryURL)
-        }
         let readOnlyDirectoryURL = directoryURL.appendingPathComponent("ReadOnly", isDirectory: true)
-        let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
-        let finalURL = readOnlyDirectoryURL.appendingPathComponent("clip_taption.mp4")
-        try FileManager.default.createDirectory(at: readOnlyDirectoryURL, withIntermediateDirectories: true)
-        try Data("new output".utf8).write(to: temporaryURL)
-        chmod(readOnlyDirectoryURL.path, 0o555)
-
-        let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
-        let state = TaptionPendingSaveState(
-            planID: UUID(),
-            temporaryOutputURL: temporaryURL,
-            finalOutputURL: finalURL,
-            saveDestination: .sourceFolder,
-            requiresRewardedAd: false,
-            saveDestinationWasChosen: true
-        )
-        try await store.savePendingState(state)
-
-        let viewModel = HomeViewModel(
-            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: store)
-        )
-
-        await viewModel.restorePendingSavesIfNeeded()
-        viewModel.retryPendingSave()
-        try await waitForPendingSaveExportPrompt(in: viewModel)
-
-        viewModel.dismissPendingSaveExportPrompt()
-
-        XCTAssertNil(viewModel.pendingSaveExportPrompt)
-        XCTAssertEqual(viewModel.pendingSaveRecoveryJob?.id, state.id)
-        XCTAssertEqual(viewModel.state.title, "Pending save")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: temporaryURL.path))
-        let states = try await store.loadPendingStates()
-        XCTAssertEqual(states.map(\.id), [state.id])
-    }
-
-    @MainActor
-    func testExportRecoveryKeepsSaveCompleteVisibleWhileAnotherPendingSaveRemainsQueued() async throws {
-        let directoryURL = temporaryDirectoryURL()
+        try? FileManager.default.removeItem(at: TaptionEncoderStorageLocations.exportedVideosDirectoryURL)
         defer {
+            chmod(readOnlyDirectoryURL.path, 0o755)
             chmod(directoryURL.path, 0o755)
             try? FileManager.default.removeItem(at: directoryURL)
+            try? FileManager.default.removeItem(at: TaptionEncoderStorageLocations.exportedVideosDirectoryURL)
         }
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
 
-        let readOnlyDirectoryURL = directoryURL.appendingPathComponent("ReadOnly", isDirectory: true)
-        let recoveredDirectoryURL = directoryURL.appendingPathComponent("Recovered", isDirectory: true)
         let firstTemporaryURL = directoryURL.appendingPathComponent("first-encoded.mp4")
         let firstFinalURL = readOnlyDirectoryURL.appendingPathComponent("first_taption.mp4")
-        let recoveredFirstURL = recoveredDirectoryURL.appendingPathComponent("first_taption.mp4")
+        let recoveredFirstURL = TaptionEncoderStorageLocations.exportedVideosDirectoryURL
+            .appendingPathComponent("first_taption.mp4")
         let secondTemporaryURL = directoryURL.appendingPathComponent("second-encoded.mp4")
         let secondFinalURL = directoryURL.appendingPathComponent("second_taption.mp4")
         try FileManager.default.createDirectory(at: readOnlyDirectoryURL, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: recoveredDirectoryURL, withIntermediateDirectories: true)
         try Data("first output".utf8).write(to: firstTemporaryURL)
         try Data("second output".utf8).write(to: secondTemporaryURL)
         chmod(readOnlyDirectoryURL.path, 0o555)
@@ -6285,12 +6220,6 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         await viewModel.restorePendingSavesIfNeeded()
         viewModel.retryPendingSave()
-        try await waitForPendingSaveExportPrompt(in: viewModel)
-
-        let prompt = try XCTUnwrap(viewModel.pendingSaveExportPrompt)
-        try FileManager.default.copyItem(at: prompt.exportPresentationURL, to: recoveredFirstURL)
-
-        viewModel.completePendingSaveExport(prompt: prompt, destinationURL: recoveredFirstURL)
         try await waitForCondition(timeout: 2) {
             if case .completed = viewModel.state {
                 return viewModel.state.detail == self.expectedCompletedSaveDetail(
@@ -6327,13 +6256,14 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testPendingSaveConflictExportPickerCanReplaceExistingOutputWithoutAnotherAd() async throws {
+    func testPendingSaveConflictKeepsExistingOutputAndSavesUniqueWithoutAnotherAd() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
         }
         let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
         let finalURL = directoryURL.appendingPathComponent("clip_taption.mp4")
+        let uniqueURL = directoryURL.appendingPathComponent("clip_taption 2.mp4")
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         try Data("new output".utf8).write(to: temporaryURL)
         try Data("existing output".utf8).write(to: finalURL)
@@ -6354,15 +6284,10 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         await viewModel.restorePendingSavesIfNeeded()
         viewModel.retryPendingSave()
-        try await waitForPendingSaveExportPrompt(in: viewModel)
-        let prompt = try XCTUnwrap(viewModel.pendingSaveExportPrompt)
-        try FileManager.default.removeItem(at: finalURL)
-        try FileManager.default.copyItem(at: prompt.exportPresentationURL, to: finalURL)
-        viewModel.completePendingSaveExport(prompt: prompt, destinationURL: finalURL)
         try await waitForCompletedSave(in: viewModel)
 
-        XCTAssertNil(viewModel.pendingSaveExportPrompt)
-        XCTAssertEqual(try String(contentsOf: finalURL, encoding: .utf8), "new output")
+        XCTAssertEqual(try String(contentsOf: finalURL, encoding: .utf8), "existing output")
+        XCTAssertEqual(try String(contentsOf: uniqueURL, encoding: .utf8), "new output")
         XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
         let expectedSize = ByteCountFormatter.string(
             fromByteCount: Int64(Data("new output".utf8).count),
@@ -6374,60 +6299,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(
             viewModel.state.detail,
             expectedCompletedSaveDetail(
-                url: finalURL,
-                fileByteCount: Data("new output".utf8).count
-            )
-        )
-        XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Save Complete")
-        XCTAssertNil(viewModel.fileCardSnapshots.first?.detailText)
-        let states = try await store.loadPendingStates()
-        XCTAssertTrue(states.isEmpty)
-    }
-
-    @MainActor
-    func testPendingSaveConflictExportPickerCanSaveNewFileWithoutRenameAlert() async throws {
-        let directoryURL = temporaryDirectoryURL()
-        defer {
-            try? FileManager.default.removeItem(at: directoryURL)
-        }
-        let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
-        let finalURL = directoryURL.appendingPathComponent("clip_taption.mp4")
-        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-        try Data("new output".utf8).write(to: temporaryURL)
-        try Data("existing output".utf8).write(to: finalURL)
-
-        let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
-        let state = TaptionPendingSaveState(
-            planID: UUID(),
-            temporaryOutputURL: temporaryURL,
-            finalOutputURL: finalURL,
-            saveDestination: .sourceFolder,
-            requiresRewardedAd: false,
-            saveDestinationWasChosen: true
-        )
-        try await store.savePendingState(state)
-        let viewModel = HomeViewModel(
-            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: store)
-        )
-
-        await viewModel.restorePendingSavesIfNeeded()
-        viewModel.retryPendingSave()
-        try await waitForPendingSaveExportPrompt(in: viewModel)
-        let prompt = try XCTUnwrap(viewModel.pendingSaveExportPrompt)
-        let customURL = directoryURL.appendingPathComponent("clip_taption_custom.mp4")
-        try FileManager.default.copyItem(at: prompt.exportPresentationURL, to: customURL)
-        viewModel.completePendingSaveExport(prompt: prompt, destinationURL: customURL)
-        try await waitForCompletedSave(in: viewModel)
-
-        XCTAssertNil(viewModel.pendingSaveExportPrompt)
-        XCTAssertEqual(try String(contentsOf: finalURL, encoding: .utf8), "existing output")
-        XCTAssertEqual(try String(contentsOf: customURL, encoding: .utf8), "new output")
-        XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
-        XCTAssertEqual(viewModel.state.title, "Save Complete")
-        XCTAssertEqual(
-            viewModel.state.detail,
-            expectedCompletedSaveDetail(
-                url: customURL,
+                url: uniqueURL,
                 fileByteCount: Data("new output".utf8).count
             )
         )
@@ -8753,15 +8625,6 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertEqual(cache.asset(for: url, currentFingerprint: originalFingerprint), asset)
         XCTAssertNil(cache.asset(for: url, currentFingerprint: changedFingerprint))
-    }
-
-    private func waitForPendingSaveExportPrompt(
-        in viewModel: HomeViewModel,
-        timeout: TimeInterval = 2
-    ) async throws {
-        try await waitForCondition(timeout: timeout) {
-            viewModel.pendingSaveExportPrompt != nil
-        }
     }
 
     @MainActor

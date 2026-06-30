@@ -945,21 +945,6 @@ struct PendingSaveJob: Identifiable, Equatable {
     }
 }
 
-struct PendingFolderAccessPrompt: Identifiable, Equatable {
-    var id: UUID {
-        job.id
-    }
-
-    var job: PendingSaveJob
-    var suggestedDirectoryURL: URL? = nil
-    var message: String {
-        if let suggestedDirectoryURL {
-            return "Choose \(suggestedDirectoryURL.lastPathComponent) so iOS grants write access for \(job.sourceName)."
-        }
-        return "Choose the original folder again so iOS grants write access for \(job.sourceName)."
-    }
-}
-
 enum HomeImportBrowserMode: String, Identifiable, Equatable {
     case files
     case folder
@@ -1068,26 +1053,6 @@ struct FolderPreviewContext: Identifiable, Equatable {
     }
 }
 
-struct PendingSaveExportPrompt: Identifiable, Equatable {
-    var id: UUID {
-        job.id
-    }
-
-    var job: PendingSaveJob
-    var exportPresentationURL: URL
-
-    var suggestedFileName: String {
-        exportPresentationURL.lastPathComponent
-    }
-
-    var suggestedDirectoryURL: URL? {
-        job.state.finalOutputURL?.deletingLastPathComponent()
-    }
-
-    var message: String {
-        "Choose where to save \(suggestedFileName)."
-    }
-}
 
 struct PendingSaveDestinationPrompt: Identifiable, Equatable {
     var id: UUID {

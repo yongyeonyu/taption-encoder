@@ -1,6 +1,15 @@
 import Foundation
 
 enum TaptionEncoderStorageLocations {
+    static var documentsDirectoryURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+
+    static var exportedVideosDirectoryURL: URL {
+        documentsDirectoryURL
+            .appendingPathComponent("Taption Encoder Outputs", isDirectory: true)
+    }
+
     static var appSupportDirectoryURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("TaptionEncoder", isDirectory: true)
