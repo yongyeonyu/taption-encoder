@@ -2,6 +2,7 @@ import SwiftUI
 
 enum HomeMenuSheet: String, Identifiable {
     case help
+    case batterySettings
     case openSource
     case deviceInfo
 
@@ -11,6 +12,8 @@ enum HomeMenuSheet: String, Identifiable {
         switch self {
         case .help:
             return "Help"
+        case .batterySettings:
+            return "Battery Settings"
         case .openSource:
             return "Open Source Notices"
         case .deviceInfo:
@@ -48,6 +51,8 @@ struct HomeMenuSheetView: View {
         switch sheet {
         case .help:
             HelpSheetContentView()
+        case .batterySettings:
+            BatterySettingsSheetContentView()
         case .openSource:
             OpenSourceNoticesSheetContentView()
         case .deviceInfo:
@@ -145,6 +150,95 @@ private struct HelpSheetContentView: View {
         case .unsupported:
             return .unsupported
         }
+    }
+}
+
+private struct BatterySettingsSheetContentView: View {
+    @State private var settings = BatteryEncodingSettings.load()
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Battery Limit")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+
+                        Spacer()
+
+                        Text("\(settings.batteryLimitPercent)%")
+                            .font(.headline.monospacedDigit())
+                            .foregroundStyle(TaptionTheme.accent)
+                    }
+
+                    Slider(
+                        value: Binding(
+                            get: { Double(settings.batteryLimitPercent) },
+                            set: { updateBatteryLimit(Int($0.rounded())) }
+                        ),
+                        in: BatteryEncodingSettings.sliderRange,
+                        step: 1
+                    )
+                    .tint(TaptionTheme.accent)
+
+                    HStack {
+                        Text("\(BatteryEncodingSettings.minimumLimitPercent)%")
+                        Spacer()
+                        Text("\(BatteryEncodingSettings.maximumLimitPercent)%")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(TaptionTheme.mutedText)
+
+                    Text("Encoding cannot start at or below the selected battery level.")
+                        .font(.caption)
+                        .foregroundStyle(Color.white.opacity(0.68))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(TaptionTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(TaptionTheme.border, lineWidth: 1)
+                )
+
+                Toggle(isOn: Binding(
+                    get: { settings.powerConnectedOnly },
+                    set: { updatePowerConnectedOnly($0) }
+                )) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Power Connected Only")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                        Text("Encoding can start only while the device is connected to power.")
+                            .font(.caption)
+                            .foregroundStyle(Color.white.opacity(0.68))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .tint(TaptionTheme.accent)
+                .padding(14)
+                .background(TaptionTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(TaptionTheme.border, lineWidth: 1)
+                )
+            }
+            .padding(18)
+        }
+    }
+
+    private func updateBatteryLimit(_ limit: Int) {
+        settings.batteryLimitPercent = BatteryEncodingSettings.clampLimitPercent(limit)
+        settings.save()
+    }
+
+    private func updatePowerConnectedOnly(_ isEnabled: Bool) {
+        settings.powerConnectedOnly = isEnabled
+        settings.save()
     }
 }
 

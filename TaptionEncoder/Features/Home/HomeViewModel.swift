@@ -1,5 +1,6 @@
 import Foundation
 import Photos
+import UIKit
 
 private enum PendingSaveConflictResolution: Equatable {
     case prompt
@@ -10,6 +11,37 @@ private enum PendingSaveConflictResolution: Equatable {
 private struct ActiveStarCharge: Equatable {
     var sourceURL: URL
     var sourceName: String
+}
+
+struct BatteryEncodingAlert: Identifiable, Equatable {
+    let id = UUID()
+    var title: String
+    var message: String
+}
+
+protocol BatteryPowerMonitoring {
+    var currentSnapshot: BatteryEncodingPowerSnapshot { get }
+}
+
+struct UIDeviceBatteryPowerMonitor: BatteryPowerMonitoring {
+    init() {
+        UIDevice.current.isBatteryMonitoringEnabled = true
+    }
+
+    var currentSnapshot: BatteryEncodingPowerSnapshot {
+        let device = UIDevice.current
+        device.isBatteryMonitoringEnabled = true
+        let batteryLevel = device.batteryLevel
+        let batteryPercent: Int? = batteryLevel >= 0
+            ? Int((batteryLevel * 100).rounded())
+            : nil
+        let batteryState = device.batteryState
+        return BatteryEncodingPowerSnapshot(
+            batteryPercent: batteryPercent,
+            isPowerConnected: batteryState == .charging || batteryState == .full,
+            isPowerStateKnown: batteryState != .unknown
+        )
+    }
 }
 
 @MainActor
@@ -31,8 +63,11 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var isWatchingStarAd: Bool
     @Published private(set) var activePreview: QueueVideoPreview?
     @Published private(set) var folderPreviewContext: FolderPreviewContext?
+    @Published private(set) var batteryEncodingAlert: BatteryEncodingAlert?
 
     private let environment: AppEnvironment
+    private let batteryPowerMonitor: any BatteryPowerMonitoring
+    private let batterySettingsProvider: () -> BatteryEncodingSettings
     private var activeTask: Task<Void, Never>?
     private var folderBatch: FolderEncodingBatch?
     private var currentReview: PreparedEncodingReview?
@@ -50,11 +85,19 @@ final class HomeViewModel: ObservableObject {
     private var rewardedAdStatePollingTask: Task<Void, Never>?
     private var activeEncodingActivitySessionID: UUID?
     private var lastEncodingActivitySnapshot: TaptionEncodingActivitySnapshot?
+    private var deferredBatteryStopReason: BatteryEncodingBlockReason?
+    private var batteryObservationTokens: [NSObjectProtocol] = []
     private let pendingSaveExportStagingRootDirectoryURL = FileManager.default.temporaryDirectory
         .appendingPathComponent("TaptionEncoderPendingSaveExports", isDirectory: true)
 
-    init(environment: AppEnvironment = .phase0) {
+    init(
+        environment: AppEnvironment = .phase0,
+        batteryPowerMonitor: any BatteryPowerMonitoring = UIDeviceBatteryPowerMonitor(),
+        batterySettingsProvider: @escaping () -> BatteryEncodingSettings = { BatteryEncodingSettings.load() }
+    ) {
         self.environment = environment
+        self.batteryPowerMonitor = batteryPowerMonitor
+        self.batterySettingsProvider = batterySettingsProvider
         self.selectedOutput = TaptionOutputSelection(
             videoCodec: environment.configuration.defaultOutputCodec,
             container: environment.configuration.defaultOutputContainer
@@ -67,6 +110,8 @@ final class HomeViewModel: ObservableObject {
         self.isWatchingStarAd = false
         self.activePreview = nil
         self.folderPreviewContext = nil
+        self.batteryEncodingAlert = nil
+        observeBatteryPowerChanges()
         AppLogger.info(
             "HomeViewModel initialized",
             category: .app,
@@ -80,6 +125,9 @@ final class HomeViewModel: ObservableObject {
         selectionInspectionTask?.cancel()
         previewInspectionTask?.cancel()
         rewardedAdStatePollingTask?.cancel()
+        for token in batteryObservationTokens {
+            NotificationCenter.default.removeObserver(token)
+        }
     }
 
     var appName: String {
@@ -136,6 +184,71 @@ final class HomeViewModel: ObservableObject {
 
     var canWatchAdForStar: Bool {
         !state.isBusy && !isWatchingStarAd
+    }
+
+    func dismissBatteryEncodingAlert() {
+        batteryEncodingAlert = nil
+    }
+
+    private func observeBatteryPowerChanges() {
+        let center = NotificationCenter.default
+        batteryObservationTokens = [
+            UIDevice.batteryLevelDidChangeNotification,
+            UIDevice.batteryStateDidChangeNotification
+        ].map { name in
+            center.addObserver(
+                forName: name,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.captureDeferredBatteryStopIfNeeded()
+                }
+            }
+        }
+    }
+
+    private func currentBatteryEncodingBlockReason() -> BatteryEncodingBlockReason? {
+        BatteryEncodingGate.blockReason(
+            settings: batterySettingsProvider(),
+            snapshot: batteryPowerMonitor.currentSnapshot
+        )
+    }
+
+    private func blockEncodingStart(
+        for review: PreparedEncodingReview,
+        reason: BatteryEncodingBlockReason
+    ) {
+        AppLogger.warning(
+            "Encoding start blocked by battery settings",
+            category: .encoding,
+            metadata: [
+                "name": review.source.displayName,
+                "reason": reason.alertMessage
+            ]
+        )
+        batteryEncodingAlert = BatteryEncodingAlert(
+            title: reason.alertTitle,
+            message: reason.alertMessage
+        )
+        activeTask = nil
+        state = .readyToStart(review)
+    }
+
+    private func captureDeferredBatteryStopIfNeeded() {
+        guard folderBatch != nil,
+              deferredBatteryStopReason == nil,
+              state.isBusy,
+              let reason = currentBatteryEncodingBlockReason() else {
+            return
+        }
+
+        deferredBatteryStopReason = reason
+        AppLogger.warning(
+            "Folder batch will stop after current item due to battery settings",
+            category: .encoding,
+            metadata: ["reason": reason.batchStopMessage]
+        )
     }
 
     private var estimatedStartStarCost: Int {
@@ -2366,6 +2479,7 @@ final class HomeViewModel: ObservableObject {
         )
         activeTask?.cancel()
         currentReview = review
+        deferredBatteryStopReason = nil
         let trace = TaptionEncodingPerformanceTrace(
             name: "home_encode_flow",
             category: .encoding,
@@ -2446,6 +2560,7 @@ final class HomeViewModel: ObservableObject {
                             from: progress,
                             sourceName: review.source.displayName
                         )
+                        self.captureDeferredBatteryStopIfNeeded()
                         self.markBatchItem(
                             review.source.url,
                             videoInfo: review.videoInfo,
@@ -3186,6 +3301,15 @@ final class HomeViewModel: ObservableObject {
         folderBatch = batch
         updateEncodingActivityForFolderBatch(statusText: "Saved", batch: batch)
 
+        if let stopReason = batchStopReasonAfterCurrentItem() {
+            batch.stopMessage = stopReason.batchStopMessage
+            batch = batchWithRemainingItemsStopped(batch, reason: stopReason)
+            folderBatch = batch
+            updateEncodingActivityForFolderBatch(statusText: "Stopped", batch: batch)
+            finishFolderBatch()
+            return true
+        }
+
         guard batch.hasRemainingFiles else {
             finishFolderBatch()
             return true
@@ -3214,6 +3338,15 @@ final class HomeViewModel: ObservableObject {
         batch.lastFailureMessage = "\(source.displayName): \(errorMessage)"
         folderBatch = batch
         updateEncodingActivityForFolderBatch(statusText: "Failed", batch: batch)
+
+        if let stopReason = batchStopReasonAfterCurrentItem() {
+            batch.stopMessage = stopReason.batchStopMessage
+            batch = batchWithRemainingItemsStopped(batch, reason: stopReason)
+            folderBatch = batch
+            updateEncodingActivityForFolderBatch(statusText: "Stopped", batch: batch)
+            finishFolderBatch()
+            return true
+        }
 
         guard batch.hasRemainingFiles else {
             finishFolderBatch()
@@ -3248,12 +3381,15 @@ final class HomeViewModel: ObservableObject {
             state = .pendingSave(nextPendingJob)
         } else {
             state = .completed(SavedOutput(
-                displayName: "Folder complete",
+                displayName: batch.stopMessage == nil ? "Folder complete" : "Folder stopped",
                 destinationDescription: batch.folderName,
                 detailOverride: folderCompletionMessage(for: batch)
             ))
         }
-        endEncodingActivity(statusText: "Folder complete", fractionCompleted: 1)
+        endEncodingActivity(
+            statusText: batch.stopMessage == nil ? "Folder complete" : "Folder stopped",
+            fractionCompleted: finalFolderActivityFraction(for: batch)
+        )
         stopSecurityScopedAccess()
         if batch.failedCount > 0 {
             requestSessionEndAd(reason: .failedEncoding)
@@ -3273,6 +3409,11 @@ final class HomeViewModel: ObservableObject {
                 "autoResumeAfterStarEarn": "\(autoResumeAfterStarEarn)"
             ]
         )
+
+        if let reason = currentBatteryEncodingBlockReason() {
+            blockEncodingStart(for: review, reason: reason)
+            return
+        }
 
         starWalletSnapshot = await environment.starWalletStore.currentSnapshot()
         guard starWalletSnapshot.balance > 0 else {
@@ -3364,7 +3505,12 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func folderCompletionMessage(for batch: FolderEncodingBatch) -> String {
-        var message = "Folder encoding complete. \(batch.completedCount) of \(batch.totalCount) files were saved."
+        var message: String
+        if let stopMessage = batch.stopMessage {
+            message = "Folder encoding stopped. \(batch.completedCount) of \(batch.totalCount) files were saved. \(stopMessage)"
+        } else {
+            message = "Folder encoding complete. \(batch.completedCount) of \(batch.totalCount) files were saved."
+        }
         if batch.failedCount > 0 {
             message += " \(batch.failedCount) failed."
         }
@@ -3372,6 +3518,35 @@ final class HomeViewModel: ObservableObject {
             message += " Last issue: \(lastFailureMessage)"
         }
         return message
+    }
+
+    private func finalFolderActivityFraction(for batch: FolderEncodingBatch) -> Double {
+        guard batch.stopMessage != nil else {
+            return 1
+        }
+        return Double(min(max(batch.currentIndex, 0), batch.totalCount)) / Double(max(batch.totalCount, 1))
+    }
+
+    private func batchStopReasonAfterCurrentItem() -> BatteryEncodingBlockReason? {
+        let reason = deferredBatteryStopReason ?? currentBatteryEncodingBlockReason()
+        deferredBatteryStopReason = nil
+        return reason
+    }
+
+    private func batchWithRemainingItemsStopped(
+        _ batch: FolderEncodingBatch,
+        reason: BatteryEncodingBlockReason
+    ) -> FolderEncodingBatch {
+        var updatedBatch = batch
+        for url in updatedBatch.fileURLs.dropFirst(updatedBatch.currentIndex) {
+            var item = updatedBatch.itemStates[url] ?? .queued
+            item.progress = nil
+            item.statusText = "Stopped"
+            item.detailText = reason.batchStopMessage
+            item.isActive = false
+            updatedBatch.itemStates[url] = item
+        }
+        return updatedBatch
     }
 
     private func startEncodingActivity(

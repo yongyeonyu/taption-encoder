@@ -1,5 +1,112 @@
 import Foundation
 
+struct BatteryEncodingSettings: Equatable {
+    static let minimumLimitPercent = 30
+    static let maximumLimitPercent = 100
+    static let defaultLimitPercent = 30
+
+    private static let batteryLimitPercentKey = "batteryEncoding.limitPercent"
+    private static let powerConnectedOnlyKey = "batteryEncoding.powerConnectedOnly"
+
+    var batteryLimitPercent: Int
+    var powerConnectedOnly: Bool
+
+    init(
+        batteryLimitPercent: Int = Self.defaultLimitPercent,
+        powerConnectedOnly: Bool = false
+    ) {
+        self.batteryLimitPercent = Self.clampLimitPercent(batteryLimitPercent)
+        self.powerConnectedOnly = powerConnectedOnly
+    }
+
+    static var sliderRange: ClosedRange<Double> {
+        Double(minimumLimitPercent)...Double(maximumLimitPercent)
+    }
+
+    static func load(defaults: UserDefaults = .standard) -> BatteryEncodingSettings {
+        let storedLimit = defaults.object(forKey: batteryLimitPercentKey) == nil
+            ? nil
+            : defaults.integer(forKey: batteryLimitPercentKey)
+        let storedPowerOnly = defaults.object(forKey: powerConnectedOnlyKey) == nil
+            ? nil
+            : defaults.bool(forKey: powerConnectedOnlyKey)
+        return BatteryEncodingSettings(
+            batteryLimitPercent: storedLimit ?? defaultLimitPercent,
+            powerConnectedOnly: storedPowerOnly ?? false
+        )
+    }
+
+    func save(defaults: UserDefaults = .standard) {
+        defaults.set(batteryLimitPercent, forKey: Self.batteryLimitPercentKey)
+        defaults.set(powerConnectedOnly, forKey: Self.powerConnectedOnlyKey)
+    }
+
+    static func clampLimitPercent(_ value: Int) -> Int {
+        min(max(value, minimumLimitPercent), maximumLimitPercent)
+    }
+}
+
+struct BatteryEncodingPowerSnapshot: Equatable {
+    var batteryPercent: Int?
+    var isPowerConnected: Bool
+    var isPowerStateKnown: Bool
+}
+
+enum BatteryEncodingBlockReason: Equatable {
+    case batteryLimitReached(batteryPercent: Int, limitPercent: Int)
+    case powerDisconnected(isPowerStateKnown: Bool)
+
+    var alertTitle: String {
+        "Connect Power"
+    }
+
+    var alertMessage: String {
+        switch self {
+        case .batteryLimitReached(let batteryPercent, let limitPercent):
+            return "Battery is at \(batteryPercent)%. Battery Limit is \(limitPercent)%. Connect power before starting encoding."
+        case .powerDisconnected(let isPowerStateKnown):
+            if isPowerStateKnown {
+                return "Power Connected Only is enabled. Connect power before starting encoding."
+            }
+            return "Power Connected Only is enabled, but power status is unavailable. Connect power before starting encoding."
+        }
+    }
+
+    var batchStopMessage: String {
+        switch self {
+        case .batteryLimitReached(let batteryPercent, let limitPercent):
+            return "Stopped after the current video. Battery reached \(batteryPercent)%, at or below the \(limitPercent)% Battery Limit. Connect power to continue encoding."
+        case .powerDisconnected(let isPowerStateKnown):
+            if isPowerStateKnown {
+                return "Stopped after the current video. Power was disconnected while Power Connected Only was enabled. Connect power to continue encoding."
+            }
+            return "Stopped after the current video. Power status became unavailable while Power Connected Only was enabled. Connect power to continue encoding."
+        }
+    }
+}
+
+enum BatteryEncodingGate {
+    static func blockReason(
+        settings: BatteryEncodingSettings,
+        snapshot: BatteryEncodingPowerSnapshot
+    ) -> BatteryEncodingBlockReason? {
+        if let batteryPercent = snapshot.batteryPercent,
+           batteryPercent <= settings.batteryLimitPercent {
+            return .batteryLimitReached(
+                batteryPercent: batteryPercent,
+                limitPercent: settings.batteryLimitPercent
+            )
+        }
+
+        if settings.powerConnectedOnly,
+           !snapshot.isPowerConnected {
+            return .powerDisconnected(isPowerStateKnown: snapshot.isPowerStateKnown)
+        }
+
+        return nil
+    }
+}
+
 struct TaptionInspectedMediaCache {
     private var assetsByURL: [URL: TaptionVideoAsset] = [:]
 
@@ -54,6 +161,7 @@ struct FolderEncodingBatch {
     var completedCount: Int = 0
     var failedCount: Int = 0
     var lastFailureMessage: String?
+    var stopMessage: String?
     var itemStates: [URL: BatchItemRuntime]
     var selectedURL: URL?
 

@@ -188,6 +188,24 @@ struct HomeView: View {
         .sheet(item: $activeMenuSheet) { sheet in
             HomeMenuSheetView(sheet: sheet)
         }
+        .alert(
+            item: Binding(
+                get: { viewModel.batteryEncodingAlert },
+                set: { alert in
+                    if alert == nil {
+                        viewModel.dismissBatteryEncodingAlert()
+                    }
+                }
+            )
+        ) { alert in
+            Alert(
+                title: Text(alert.title),
+                message: Text(alert.message),
+                dismissButton: .default(Text("OK")) {
+                    viewModel.dismissBatteryEncodingAlert()
+                }
+            )
+        }
         .sheet(
             item: Binding(
                 get: { viewModel.pendingSaveExportPrompt },
@@ -395,6 +413,12 @@ struct HomeView: View {
                     activeMenuSheet = .help
                 } label: {
                     Label("Help", systemImage: "questionmark.circle")
+                }
+
+                Button {
+                    activeMenuSheet = .batterySettings
+                } label: {
+                    Label("Battery Settings", systemImage: "battery.100percent")
                 }
 
                 Button {

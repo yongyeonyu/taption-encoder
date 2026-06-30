@@ -84,6 +84,56 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(state.remainingText, "--:--")
     }
 
+    func testBatteryEncodingGateBlocksAtOrBelowLimit() {
+        let settings = BatteryEncodingSettings(
+            batteryLimitPercent: 30,
+            powerConnectedOnly: false
+        )
+
+        XCTAssertNil(BatteryEncodingGate.blockReason(
+            settings: settings,
+            snapshot: BatteryEncodingPowerSnapshot(
+                batteryPercent: 31,
+                isPowerConnected: false,
+                isPowerStateKnown: true
+            )
+        ))
+
+        XCTAssertEqual(BatteryEncodingGate.blockReason(
+            settings: settings,
+            snapshot: BatteryEncodingPowerSnapshot(
+                batteryPercent: 30,
+                isPowerConnected: false,
+                isPowerStateKnown: true
+            )
+        ), .batteryLimitReached(batteryPercent: 30, limitPercent: 30))
+    }
+
+    func testBatteryEncodingGateBlocksPowerConnectedOnlyWithoutPower() {
+        let settings = BatteryEncodingSettings(
+            batteryLimitPercent: 30,
+            powerConnectedOnly: true
+        )
+
+        XCTAssertEqual(BatteryEncodingGate.blockReason(
+            settings: settings,
+            snapshot: BatteryEncodingPowerSnapshot(
+                batteryPercent: 80,
+                isPowerConnected: false,
+                isPowerStateKnown: true
+            )
+        ), .powerDisconnected(isPowerStateKnown: true))
+
+        XCTAssertNil(BatteryEncodingGate.blockReason(
+            settings: settings,
+            snapshot: BatteryEncodingPowerSnapshot(
+                batteryPercent: 80,
+                isPowerConnected: true,
+                isPowerStateKnown: true
+            )
+        ))
+    }
+
     func testBackgroundEncodingSnapshotClampsProgressFraction() {
         let lowSnapshot = TaptionBackgroundEncodingSnapshot(
             title: "Taption Encoder",
@@ -6601,6 +6651,101 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
+    func testBatteryLimitBlocksStartBeforeStarDebit() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let sourceURL = directoryURL.appendingPathComponent("source.mp4")
+        try Data("source".utf8).write(to: sourceURL)
+
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 1))
+        let batteryMonitor = MutableBatteryPowerMonitor(snapshot: BatteryEncodingPowerSnapshot(
+            batteryPercent: 30,
+            isPowerConnected: false,
+            isPowerStateKnown: true
+        ))
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
+                starWalletStore: walletStore
+            ),
+            batteryPowerMonitor: batteryMonitor,
+            batterySettingsProvider: {
+                BatteryEncodingSettings(
+                    batteryLimitPercent: 30,
+                    powerConnectedOnly: false
+                )
+            }
+        )
+
+        await viewModel.refreshStarsIfNeeded()
+        viewModel.startFilesFlow(url: sourceURL)
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.startPreparedEncoding()
+
+        try await waitForCondition(timeout: 2) {
+            viewModel.batteryEncodingAlert != nil
+        }
+
+        XCTAssertEqual(viewModel.batteryEncodingAlert?.title, "Connect Power")
+        XCTAssertEqual(viewModel.batteryEncodingAlert?.message, "Battery is at 30%. Battery Limit is 30%. Connect power before starting encoding.")
+        XCTAssertEqual(viewModel.state.title, "Ready to encode")
+        let blockedStartWalletSnapshot = await walletStore.currentSnapshot()
+        XCTAssertEqual(blockedStartWalletSnapshot.balance, 1)
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("source_taption.mp4").path
+        ))
+    }
+
+    @MainActor
+    func testPowerConnectedOnlyBlocksStartBeforeEncodingWhenDisconnected() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let sourceURL = directoryURL.appendingPathComponent("source.mp4")
+        try Data("source".utf8).write(to: sourceURL)
+
+        let batteryMonitor = MutableBatteryPowerMonitor(snapshot: BatteryEncodingPowerSnapshot(
+            batteryPercent: 80,
+            isPowerConnected: false,
+            isPowerStateKnown: true
+        ))
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8))
+            ),
+            batteryPowerMonitor: batteryMonitor,
+            batterySettingsProvider: {
+                BatteryEncodingSettings(
+                    batteryLimitPercent: 30,
+                    powerConnectedOnly: true
+                )
+            }
+        )
+
+        viewModel.startFilesFlow(url: sourceURL)
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.startPreparedEncoding()
+
+        try await waitForCondition(timeout: 2) {
+            viewModel.batteryEncodingAlert != nil
+        }
+
+        XCTAssertEqual(viewModel.batteryEncodingAlert?.title, "Connect Power")
+        XCTAssertEqual(viewModel.batteryEncodingAlert?.message, "Power Connected Only is enabled. Connect power before starting encoding.")
+        XCTAssertEqual(viewModel.state.title, "Ready to encode")
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("source_taption.mp4").path
+        ))
+    }
+
+    @MainActor
     func testEncodingFailureRefundsConsumedStar() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
@@ -6801,6 +6946,136 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: directoryURL.appendingPathComponent("c_taption.mp4").path
         ))
+    }
+
+    @MainActor
+    func testFolderBatchStopsAfterCurrentItemWhenPowerDisconnectsDuringEncoding() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let fileURLs = [
+            directoryURL.appendingPathComponent("a.mp4"),
+            directoryURL.appendingPathComponent("b.mp4"),
+            directoryURL.appendingPathComponent("c.mp4")
+        ]
+        for url in fileURLs {
+            try Data("source".utf8).write(to: url)
+        }
+
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 3))
+        let batteryMonitor = MutableBatteryPowerMonitor(snapshot: BatteryEncodingPowerSnapshot(
+            batteryPercent: 80,
+            isPowerConnected: true,
+            isPowerStateKnown: true
+        ))
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                encoderService: PowerDisconnectingEncoderService(
+                    outputData: Data("encoded".utf8),
+                    batteryMonitor: batteryMonitor
+                ),
+                starWalletStore: walletStore
+            ),
+            batteryPowerMonitor: batteryMonitor,
+            batterySettingsProvider: {
+                BatteryEncodingSettings(
+                    batteryLimitPercent: 30,
+                    powerConnectedOnly: true
+                )
+            }
+        )
+
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.startPreparedEncoding()
+        try await waitForCompletedSave(in: viewModel, timeout: 3)
+
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+        XCTAssertTrue(viewModel.state.detail.contains("Folder encoding stopped. 1 of 3 files were saved."))
+        let stoppedBatchWalletSnapshot = await walletStore.currentSnapshot()
+        XCTAssertEqual(stoppedBatchWalletSnapshot.balance, 2)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("a_taption.mp4").path
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("b_taption.mp4").path
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("c_taption.mp4").path
+        ))
+
+        let statuses = Dictionary(uniqueKeysWithValues: viewModel.fileCardSnapshots.map {
+            ($0.id, $0.statusText)
+        })
+        XCTAssertEqual(statuses[fileURLs[0].absoluteString], "Save Complete")
+        XCTAssertEqual(statuses[fileURLs[1].absoluteString], "Stopped")
+        XCTAssertEqual(statuses[fileURLs[2].absoluteString], "Stopped")
+    }
+
+    @MainActor
+    func testFolderBatchStopsAfterCurrentItemWhenBatteryDropsBelowLimitDuringEncoding() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let fileURLs = [
+            directoryURL.appendingPathComponent("a.mp4"),
+            directoryURL.appendingPathComponent("b.mp4"),
+            directoryURL.appendingPathComponent("c.mp4")
+        ]
+        for url in fileURLs {
+            try Data("source".utf8).write(to: url)
+        }
+
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 3))
+        let batteryMonitor = MutableBatteryPowerMonitor(snapshot: BatteryEncodingPowerSnapshot(
+            batteryPercent: 31,
+            isPowerConnected: false,
+            isPowerStateKnown: true
+        ))
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                encoderService: BatteryDroppingEncoderService(
+                    outputData: Data("encoded".utf8),
+                    batteryMonitor: batteryMonitor
+                ),
+                starWalletStore: walletStore
+            ),
+            batteryPowerMonitor: batteryMonitor,
+            batterySettingsProvider: {
+                BatteryEncodingSettings(
+                    batteryLimitPercent: 30,
+                    powerConnectedOnly: false
+                )
+            }
+        )
+
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.startPreparedEncoding()
+        try await waitForCompletedSave(in: viewModel, timeout: 3)
+
+        XCTAssertTrue(viewModel.state.detail.contains("Battery reached 29%, at or below the 30% Battery Limit."))
+        let stoppedBatchWalletSnapshot = await walletStore.currentSnapshot()
+        XCTAssertEqual(stoppedBatchWalletSnapshot.balance, 2)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("a_taption.mp4").path
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("b_taption.mp4").path
+        ))
+
+        let statuses = Dictionary(uniqueKeysWithValues: viewModel.fileCardSnapshots.map {
+            ($0.id, $0.statusText)
+        })
+        XCTAssertEqual(statuses[fileURLs[0].absoluteString], "Save Complete")
+        XCTAssertEqual(statuses[fileURLs[1].absoluteString], "Stopped")
+        XCTAssertEqual(statuses[fileURLs[2].absoluteString], "Stopped")
     }
 
     @MainActor
@@ -7437,6 +7712,98 @@ final class CodecRoutePlannerTests: XCTestCase {
             }
 
             progress(TaptionEncodingProgress(stage: .preparing, fractionCompleted: 0))
+            progress(TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.5, elapsedTime: 0.1))
+            try FileManager.default.createDirectory(
+                at: temporaryOutputURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try outputData.write(to: temporaryOutputURL)
+            progress(TaptionEncodingProgress(stage: .waitingForSaveGate, fractionCompleted: 1, elapsedTime: 0.2))
+
+            return TaptionEncodingResult(
+                planID: plan.id,
+                temporaryOutputURL: temporaryOutputURL,
+                finalOutputURL: plan.finalOutputURL,
+                usedBackend: .customSoftware,
+                usedMode: .software
+            )
+        }
+
+        func cancelEncoding(planID: UUID) async {}
+    }
+
+    private final class MutableBatteryPowerMonitor: BatteryPowerMonitoring {
+        var snapshot: BatteryEncodingPowerSnapshot
+
+        init(snapshot: BatteryEncodingPowerSnapshot) {
+            self.snapshot = snapshot
+        }
+
+        var currentSnapshot: BatteryEncodingPowerSnapshot {
+            snapshot
+        }
+    }
+
+    private struct PowerDisconnectingEncoderService: EncoderServicing {
+        var outputData: Data
+        var batteryMonitor: MutableBatteryPowerMonitor
+
+        func encode(
+            plan: TaptionEncodingPlan,
+            progress: @escaping (TaptionEncodingProgress) -> Void
+        ) async throws -> TaptionEncodingResult {
+            guard let temporaryOutputURL = plan.temporaryOutputURL else {
+                throw TaptionVideoCoreError.missingTemporaryOutputURL
+            }
+
+            progress(TaptionEncodingProgress(stage: .preparing, fractionCompleted: 0))
+            await MainActor.run {
+                batteryMonitor.snapshot = BatteryEncodingPowerSnapshot(
+                    batteryPercent: 80,
+                    isPowerConnected: false,
+                    isPowerStateKnown: true
+                )
+            }
+            progress(TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.5, elapsedTime: 0.1))
+            try FileManager.default.createDirectory(
+                at: temporaryOutputURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try outputData.write(to: temporaryOutputURL)
+            progress(TaptionEncodingProgress(stage: .waitingForSaveGate, fractionCompleted: 1, elapsedTime: 0.2))
+
+            return TaptionEncodingResult(
+                planID: plan.id,
+                temporaryOutputURL: temporaryOutputURL,
+                finalOutputURL: plan.finalOutputURL,
+                usedBackend: .customSoftware,
+                usedMode: .software
+            )
+        }
+
+        func cancelEncoding(planID: UUID) async {}
+    }
+
+    private struct BatteryDroppingEncoderService: EncoderServicing {
+        var outputData: Data
+        var batteryMonitor: MutableBatteryPowerMonitor
+
+        func encode(
+            plan: TaptionEncodingPlan,
+            progress: @escaping (TaptionEncodingProgress) -> Void
+        ) async throws -> TaptionEncodingResult {
+            guard let temporaryOutputURL = plan.temporaryOutputURL else {
+                throw TaptionVideoCoreError.missingTemporaryOutputURL
+            }
+
+            progress(TaptionEncodingProgress(stage: .preparing, fractionCompleted: 0))
+            await MainActor.run {
+                batteryMonitor.snapshot = BatteryEncodingPowerSnapshot(
+                    batteryPercent: 29,
+                    isPowerConnected: false,
+                    isPowerStateKnown: true
+                )
+            }
             progress(TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.5, elapsedTime: 0.1))
             try FileManager.default.createDirectory(
                 at: temporaryOutputURL.deletingLastPathComponent(),
