@@ -1872,14 +1872,14 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(documentContentTypes.isSuperset(of: ["com.taption.legacy-video"]))
         XCTAssertTrue(documentContentTypes.isSuperset(of: legacySystemContentTypes))
         XCTAssertTrue(documentContentTypes.isSuperset(of: standardVideoContentTypes))
-        XCTAssertEqual(documentHandlerRanks, ["Owner", "Default"])
+        XCTAssertEqual(documentHandlerRanks, ["Owner"])
         XCTAssertEqual(legacyDocumentType["LSHandlerRank"] as? String, "Owner")
         XCTAssertEqual(legacyDocumentType["CFBundleTypeRole"] as? String, "Viewer")
         XCTAssertTrue(
             Set(legacyDocumentType["LSItemContentTypes"] as? [String] ?? []).isSuperset(of: legacySystemContentTypes),
             "Legacy document type should claim Files-resolved Taption Encoder video UTIs."
         )
-        XCTAssertEqual(standardVideoDocumentType["LSHandlerRank"] as? String, "Default")
+        XCTAssertEqual(standardVideoDocumentType["LSHandlerRank"] as? String, "Owner")
         XCTAssertEqual(standardVideoDocumentType["CFBundleTypeRole"] as? String, "Viewer")
         XCTAssertEqual(documentIconFiles, ["AppIcon60x60"])
         XCTAssertEqual(exportedIdentifiers, ["com.taption.legacy-video"])
