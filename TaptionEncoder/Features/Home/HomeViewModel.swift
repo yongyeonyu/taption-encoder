@@ -1091,29 +1091,16 @@ final class HomeViewModel: ObservableObject {
             clearImportBrowserState(stoppingAccess: true)
         }
         importBrowserMode = mode
-        if importBrowserContext == nil {
-            importBrowserContext = HomeImportBrowserContext(
-                id: "empty-\(mode.rawValue)",
-                mode: mode,
-                rootFolderName: nil,
-                currentFolderName: nil,
-                pathText: mode.title,
-                folderCount: 0,
-                fileCount: 0,
-                selectedFileCount: 0,
-                canGoBack: false,
-                canGoUp: false
-            )
-        }
+        refreshImportBrowser()
     }
 
-    func openImportBrowserLocation(url: URL, mode: HomeImportBrowserMode) {
+    func openImportBrowserRoot(url: URL, mode: HomeImportBrowserMode) {
         guard canStartNewSourceFlow() else {
             return
         }
         guard state.canSelectSource else {
             AppLogger.warning(
-                "Import browser location ignored because source selection is disabled",
+                "Import browser root ignored because source selection is disabled",
                 category: .fileImport,
                 metadata: ["mode": mode.rawValue, "state": "\(state)"]
             )
@@ -1121,7 +1108,7 @@ final class HomeViewModel: ObservableObject {
         }
 
         AppLogger.info(
-            "Import browser location opened",
+            "Import browser root opened",
             category: .fileImport,
             metadata: ["mode": mode.rawValue, "name": url.lastPathComponent]
         )
@@ -1148,8 +1135,18 @@ final class HomeViewModel: ObservableObject {
     }
 
     func navigateImportBrowserIntoFolder(id: String) {
-        guard let currentURL = importBrowserCurrentURL,
-              let folder = importBrowserFolders.first(where: { $0.id == id }) else {
+        guard let folder = importBrowserFolders.first(where: { $0.id == id }) else {
+            return
+        }
+        if importBrowserCurrentURL == nil {
+            openImportBrowserRoot(
+                url: URL(fileURLWithPath: folder.id),
+                mode: importBrowserMode ?? .files
+            )
+            return
+        }
+
+        guard let currentURL = importBrowserCurrentURL else {
             return
         }
         importBrowserHistory.append(currentURL)
@@ -1159,6 +1156,15 @@ final class HomeViewModel: ObservableObject {
 
     func navigateImportBrowserBack() {
         guard let previousURL = importBrowserHistory.popLast() else {
+            guard importBrowserRootURL != nil else {
+                return
+            }
+            importBrowserRootURL = nil
+            importBrowserCurrentURL = nil
+            importBrowserHistory = []
+            importBrowserSelectedFileURLs = []
+            stopSecurityScopedAccess()
+            refreshImportBrowser()
             return
         }
         importBrowserCurrentURL = previousURL
@@ -4691,15 +4697,16 @@ final class HomeViewModel: ObservableObject {
 
         guard let rootURL = importBrowserRootURL?.standardizedFileURL,
               var currentURL = importBrowserCurrentURL?.standardizedFileURL else {
-            importBrowserFolders = []
+            let roots = importBrowserRootFolders()
+            importBrowserFolders = roots
             importBrowserFiles = []
             importBrowserContext = HomeImportBrowserContext(
-                id: "empty-\(mode.rawValue)",
+                id: "locations-\(mode.rawValue)-\(roots.count)",
                 mode: mode,
                 rootFolderName: nil,
                 currentFolderName: nil,
-                pathText: mode.title,
-                folderCount: 0,
+                pathText: mode.emptyTitle,
+                folderCount: roots.count,
                 fileCount: 0,
                 selectedFileCount: 0,
                 canGoBack: false,
@@ -4749,7 +4756,7 @@ final class HomeViewModel: ObservableObject {
                 folderCount: folders.count,
                 fileCount: files.count,
                 selectedFileCount: importBrowserSelectedFileURLs.count,
-                canGoBack: !importBrowserHistory.isEmpty,
+                canGoBack: true,
                 canGoUp: currentURL != rootURL
             )
         } catch {
@@ -4773,10 +4780,41 @@ final class HomeViewModel: ObservableObject {
                 folderCount: 0,
                 fileCount: 0,
                 selectedFileCount: importBrowserSelectedFileURLs.count,
-                canGoBack: !importBrowserHistory.isEmpty,
+                canGoBack: true,
                 canGoUp: currentURL != rootURL
             )
         }
+    }
+
+    private func importBrowserRootFolders() -> [HomeImportBrowserFolderSnapshot] {
+        let fileManager = FileManager.default
+        guard let documentsURL = fileManager.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        ).first else {
+            return []
+        }
+
+        try? fileManager.createDirectory(at: documentsURL, withIntermediateDirectories: true)
+
+        var roots: [HomeImportBrowserFolderSnapshot] = [
+            HomeImportBrowserFolderSnapshot(
+                id: documentsURL.standardizedFileURL.path,
+                folderName: "Taption Encoder Files",
+                detailText: "Documents"
+            )
+        ]
+
+        if let samplesURL = try? TaptionTestVideoSeeder.documentsSampleFolderURL(),
+           fileManager.fileExists(atPath: samplesURL.path) {
+            roots.append(HomeImportBrowserFolderSnapshot(
+                id: samplesURL.standardizedFileURL.path,
+                folderName: "Samples",
+                detailText: "Bundled videos"
+            ))
+        }
+
+        return roots
     }
 
     private func clearImportBrowserState(stoppingAccess: Bool) {

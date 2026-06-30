@@ -980,18 +980,18 @@ enum HomeImportBrowserMode: String, Identifiable, Equatable {
     var emptyTitle: String {
         switch self {
         case .files:
-            return "Choose Location"
+            return "Locations"
         case .folder:
-            return "Choose Folder"
+            return "Locations"
         }
     }
 
     var emptySubtitle: String {
         switch self {
         case .files:
-            return "Open a folder, then select videos inside Taption Encoder."
+            return "In-app locations"
         case .folder:
-            return "Open a folder, then move through subfolders inside Taption Encoder."
+            return "In-app locations"
         }
     }
 
@@ -1001,15 +1001,6 @@ enum HomeImportBrowserMode: String, Identifiable, Equatable {
             return "Import Selected"
         case .folder:
             return "Import This Folder"
-        }
-    }
-
-    var locationPickerTitle: String {
-        switch self {
-        case .files:
-            return "Choose Location"
-        case .folder:
-            return "Choose Folder"
         }
     }
 }
@@ -1042,6 +1033,14 @@ struct HomeImportBrowserContext: Identifiable, Equatable {
             return "\(folderText), \(videoText), \(selectedText)"
         }
         return "\(folderText), \(videoText)"
+    }
+
+    var emptyStateTitle: String {
+        hasLocation ? "No Videos" : "No Locations"
+    }
+
+    var emptyStateDetail: String {
+        hasLocation ? "Empty folder" : "Empty"
     }
 }
 

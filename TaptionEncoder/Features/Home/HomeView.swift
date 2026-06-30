@@ -11,10 +11,7 @@ import UIKit
 
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
-    @State private var isFileImporterPresented = false
-    @State private var isFolderImporterPresented = false
     @State private var activeImportBrowser: HomeImportBrowserMode?
-    @State private var pendingImportPicker: HomeImportBrowserMode?
     @State private var didCompleteImportBrowserSelection = false
     @State private var isPhotosPickerPresented = false
     @State private var selectedPhotoItem: PhotosPickerItem?
@@ -157,15 +154,6 @@ struct HomeView: View {
                 context: viewModel.importBrowserContext,
                 folders: viewModel.importBrowserFolders,
                 files: viewModel.importBrowserFiles,
-                onChooseLocation: {
-                    AppLogger.info(
-                        "Import browser choose location tapped",
-                        category: .ui,
-                        metadata: ["mode": mode.rawValue]
-                    )
-                    pendingImportPicker = mode
-                    activeImportBrowser = nil
-                },
                 onOpenFolder: { viewModel.navigateImportBrowserIntoFolder(id: $0) },
                 onToggleFile: { viewModel.toggleImportBrowserFileSelection(id: $0) },
                 onBack: { viewModel.navigateImportBrowserBack() },
@@ -192,66 +180,6 @@ struct HomeView: View {
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $isFileImporterPresented) {
-            VideoDocumentPicker(
-                contentTypes: [.folder],
-                allowsMultipleSelection: false,
-                onPick: { urls in
-                    AppLogger.info(
-                        "File location picker returned folders",
-                        category: .fileImport,
-                        metadata: [
-                            "count": "\(urls.count)",
-                            "names": urls.map(\.lastPathComponent).joined(separator: "|")
-                        ]
-                    )
-                    isFileImporterPresented = false
-                    if let url = urls.first {
-                        viewModel.openImportBrowserLocation(url: url, mode: .files)
-                    } else {
-                        viewModel.openImportBrowser(mode: .files)
-                    }
-                    activeImportBrowser = .files
-                },
-                onCancel: {
-                    AppLogger.info("File location picker cancelled", category: .fileImport)
-                    isFileImporterPresented = false
-                    viewModel.openImportBrowser(mode: .files)
-                    activeImportBrowser = .files
-                }
-            )
-            .ignoresSafeArea()
-        }
-        .sheet(isPresented: $isFolderImporterPresented) {
-            VideoDocumentPicker(
-                contentTypes: [.folder],
-                allowsMultipleSelection: false,
-                onPick: { urls in
-                    AppLogger.info(
-                        "Folder picker returned items",
-                        category: .folderImport,
-                        metadata: [
-                            "count": "\(urls.count)",
-                            "names": urls.map(\.lastPathComponent).joined(separator: "|")
-                        ]
-                    )
-                    isFolderImporterPresented = false
-                    if let url = urls.first {
-                        viewModel.openImportBrowserLocation(url: url, mode: .folder)
-                    } else {
-                        viewModel.openImportBrowser(mode: .folder)
-                    }
-                    activeImportBrowser = .folder
-                },
-                onCancel: {
-                    AppLogger.info("Folder picker cancelled", category: .folderImport)
-                    isFolderImporterPresented = false
-                    viewModel.openImportBrowser(mode: .folder)
-                    activeImportBrowser = .folder
-                }
-            )
-            .ignoresSafeArea()
         }
         .sheet(
             item: Binding(
@@ -513,24 +441,7 @@ struct HomeView: View {
         autoStartMiniPlayerPiPPreviewID = nil
     }
 
-    private func presentPendingImportPickerIfNeeded() {
-        guard let picker = pendingImportPicker else {
-            return
-        }
-        pendingImportPicker = nil
-        switch picker {
-        case .files:
-            isFileImporterPresented = true
-        case .folder:
-            isFolderImporterPresented = true
-        }
-    }
-
     private func handleImportBrowserDismiss() {
-        if pendingImportPicker != nil {
-            presentPendingImportPickerIfNeeded()
-            return
-        }
         if didCompleteImportBrowserSelection {
             didCompleteImportBrowserSelection = false
             return

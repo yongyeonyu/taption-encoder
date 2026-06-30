@@ -331,7 +331,6 @@ struct HomeImportBrowserView: View {
     var context: HomeImportBrowserContext?
     var folders: [HomeImportBrowserFolderSnapshot]
     var files: [HomeImportBrowserFileSnapshot]
-    var onChooseLocation: () -> Void
     var onOpenFolder: (String) -> Void
     var onToggleFile: (String) -> Void
     var onBack: () -> Void
@@ -349,7 +348,12 @@ struct HomeImportBrowserView: View {
 
             ScrollView {
                 LazyVGrid(columns: columns, spacing: 10) {
-                    if context?.hasLocation == true {
+                    if folders.isEmpty, files.isEmpty {
+                        HomeImportBrowserEmptyTileView(
+                            title: context?.emptyStateTitle ?? "No Items",
+                            statusText: context?.emptyStateDetail ?? "Empty"
+                        )
+                    } else {
                         ForEach(folders) { folder in
                             HomeImportBrowserFolderTileView(
                                 folder: folder,
@@ -364,18 +368,14 @@ struct HomeImportBrowserView: View {
                                 onSelect: { onToggleFile(file.id) }
                             )
                         }
-                    } else {
-                        HomeImportBrowserLocationTileView(
-                            title: mode.emptyTitle,
-                            statusText: mode.emptySubtitle,
-                            onSelect: onChooseLocation
-                        )
                     }
                 }
                 .padding(12)
             }
 
-            bottomBar
+            if context?.hasLocation == true {
+                bottomBar
+            }
         }
         .background(TaptionTheme.appBackground.ignoresSafeArea())
     }
@@ -430,17 +430,6 @@ struct HomeImportBrowserView: View {
 
     private var bottomBar: some View {
         HStack(spacing: 10) {
-            Button(action: onChooseLocation) {
-                Label("Change Location", systemImage: "folder.badge.plus")
-                    .font(.subheadline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color.white.opacity(0.9))
-            .background(Color.white.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
             Button(action: onImport) {
                 Label(mode.importTitle, systemImage: mode == .files ? "checkmark.circle.fill" : "tray.and.arrow.down.fill")
                     .font(.subheadline.weight(.semibold))
@@ -491,52 +480,48 @@ private struct ImportBrowserHeaderButton: View {
     }
 }
 
-private struct HomeImportBrowserLocationTileView: View {
+private struct HomeImportBrowserEmptyTileView: View {
     var title: String
     var statusText: String
-    var onSelect: () -> Void
 
     var body: some View {
-        Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 7) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.black.opacity(0.34))
+        VStack(alignment: .leading, spacing: 7) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.black.opacity(0.34))
 
-                    Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(TaptionTheme.mutedText)
-                }
-                .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.9))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.76)
-                    .frame(height: 32, alignment: .topLeading)
-
-                Text(statusText)
-                    .font(.caption2.weight(.semibold))
+                Image(systemName: "tray")
+                    .font(.system(size: 24, weight: .semibold))
                     .foregroundStyle(TaptionTheme.mutedText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
             }
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(TaptionTheme.elevatedSurface)
+            .aspectRatio(16.0 / 9.0, contentMode: .fit)
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(TaptionTheme.border, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.white.opacity(0.9))
+                .lineLimit(2)
+                .minimumScaleFactor(0.76)
+                .frame(height: 32, alignment: .topLeading)
+
+            Text(statusText)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(TaptionTheme.mutedText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
         }
-        .buttonStyle(.plain)
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(TaptionTheme.elevatedSurface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(TaptionTheme.border, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
