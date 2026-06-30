@@ -7,12 +7,16 @@ import SwiftUI
 import SwiftVLC
 #endif
 import PhotosUI
+import UniformTypeIdentifiers
 import UIKit
 
 struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
     @State private var activeImportBrowser: HomeImportBrowserMode?
     @State private var didCompleteImportBrowserSelection = false
+    @State private var importBrowserPermissionMode: HomeImportBrowserMode?
+    @State private var isImportBrowserLocationPickerPresented = false
+    @State private var didRequestStartupImportBrowserAccess = false
     @State private var isPhotosPickerPresented = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var activeMenuSheet: HomeMenuSheet?
@@ -155,6 +159,12 @@ struct HomeView: View {
             matching: .videos,
             preferredItemEncoding: .current
         )
+        .fileImporter(
+            isPresented: $isImportBrowserLocationPickerPresented,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false,
+            onCompletion: handleImportBrowserLocationPickerResult
+        )
         .onChange(of: selectedPhotoItem) { _, newItem in
             handleSelectedPhotoItemChange(newItem)
         }
@@ -169,6 +179,7 @@ struct HomeView: View {
             await AdMobBootstrapper.refreshOnActive()
             await viewModel.restorePendingSavesIfNeeded()
             await viewModel.refreshStarsIfNeeded()
+            requestStartupImportBrowserAccessIfNeeded()
             #if DEBUG
             openDebugPreviewFileIfRequested()
             openDebugPreviewSampleIfRequested()
@@ -337,14 +348,12 @@ struct HomeView: View {
 
     private func openFilesImportBrowser() {
         AppLogger.info("File button tapped", category: .ui)
-        viewModel.openImportBrowser(mode: .files)
-        activeImportBrowser = .files
+        requestImportBrowserLocationAccess(for: .files)
     }
 
     private func openFolderImportBrowser() {
         AppLogger.info("Folder button tapped", category: .ui)
-        viewModel.openImportBrowser(mode: .folder)
-        activeImportBrowser = .folder
+        requestImportBrowserLocationAccess(for: .folder)
     }
 
     private func presentPhotosPicker() {
@@ -357,6 +366,64 @@ struct HomeView: View {
         miniPlayerPreview = nil
         autoStartMiniPlayerPiPPreviewID = nil
         viewModel.reset()
+    }
+
+    private func requestStartupImportBrowserAccessIfNeeded() {
+        guard !didRequestStartupImportBrowserAccess,
+              importBrowserPermissionMode == nil,
+              activeImportBrowser == nil,
+              viewModel.state.canSelectSource else {
+            return
+        }
+
+        didRequestStartupImportBrowserAccess = true
+        requestImportBrowserLocationAccess(for: .folder)
+    }
+
+    private func requestImportBrowserLocationAccess(for mode: HomeImportBrowserMode) {
+        importBrowserPermissionMode = mode
+        isImportBrowserLocationPickerPresented = true
+    }
+
+    private func handleImportBrowserLocationPickerResult(_ result: Result<[URL], Error>) {
+        guard let mode = importBrowserPermissionMode else {
+            return
+        }
+
+        importBrowserPermissionMode = nil
+        switch result {
+        case .success(let urls):
+            guard let rootURL = urls.first?.standardizedFileURL else {
+                viewModel.openImportBrowser(mode: mode)
+                activeImportBrowser = mode
+                return
+            }
+            AppLogger.info(
+                "Import browser location access granted",
+                category: .fileImport,
+                metadata: [
+                    "mode": mode.rawValue,
+                    "name": rootURL.lastPathComponent
+                ]
+            )
+            viewModel.openImportBrowserRoot(
+                url: rootURL,
+                mode: mode,
+                authorizedRootURL: rootURL
+            )
+            activeImportBrowser = mode
+        case .failure(let error):
+            AppLogger.warning(
+                "Import browser location access failed",
+                category: .fileImport,
+                metadata: [
+                    "mode": mode.rawValue,
+                    "error": error.localizedDescription
+                ]
+            )
+            viewModel.openImportBrowser(mode: mode)
+            activeImportBrowser = mode
+        }
     }
 
     private func handleSelectedPhotoItemChange(_ newItem: PhotosPickerItem?) {

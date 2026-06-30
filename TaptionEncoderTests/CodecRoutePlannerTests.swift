@@ -1825,6 +1825,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         ]
         let externalPlayerExtensions = launchExtensions.subtracting(systemHandledExtensions)
         let standardVideoContentTypes: Set<String> = [
+            "public.audiovisual-content",
             "public.movie",
             "public.video",
             "public.mpeg-4",
@@ -3126,7 +3127,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(progressViewText.contains("if showsWatchAdAction {\n                        watchAdButton"))
     }
 
-    func testFileAndFolderButtonsOpenInAppImportBrowserWithoutAddLocation() throws {
+    func testFileAndFolderButtonsRequestFolderAccessForInAppImportBrowser() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -3142,22 +3143,29 @@ final class CodecRoutePlannerTests: XCTestCase {
         let projectText = try String(contentsOf: projectURL, encoding: .utf8)
         let sourceBarStart = try XCTUnwrap(homeViewText.range(of: "SourceActionBar("))
         let sourceBarEnd = try XCTUnwrap(
-            homeViewText[sourceBarStart.lowerBound...].range(of: "\n                    outputSelector")
+            homeViewText[sourceBarStart.lowerBound...].range(of: "\n        )\n    }")
         )
         let sourceBarText = String(homeViewText[sourceBarStart.lowerBound..<sourceBarEnd.lowerBound])
 
         XCTAssertTrue(homeViewText.contains("@State private var activeImportBrowser: HomeImportBrowserMode?"))
         XCTAssertTrue(homeViewText.contains("@State private var didCompleteImportBrowserSelection = false"))
-        XCTAssertFalse(homeViewText.contains("@State private var importBrowserPermissionMode"))
-        XCTAssertFalse(homeViewText.contains("@State private var isImportBrowserLocationPickerPresented"))
-        XCTAssertFalse(homeViewText.contains("import UniformTypeIdentifiers"))
+        XCTAssertTrue(homeViewText.contains("@State private var importBrowserPermissionMode: HomeImportBrowserMode?"))
+        XCTAssertTrue(homeViewText.contains("@State private var isImportBrowserLocationPickerPresented = false"))
+        XCTAssertTrue(homeViewText.contains("@State private var didRequestStartupImportBrowserAccess = false"))
+        XCTAssertTrue(homeViewText.contains("import UniformTypeIdentifiers"))
         XCTAssertFalse(homeViewText.contains("@State private var pendingImportPicker"))
         XCTAssertFalse(homeViewText.contains("@State private var isFileImporterPresented"))
         XCTAssertFalse(homeViewText.contains("@State private var isFolderImporterPresented"))
-        XCTAssertTrue(sourceBarText.contains("viewModel.openImportBrowser(mode: .files)"))
-        XCTAssertTrue(sourceBarText.contains("viewModel.openImportBrowser(mode: .folder)"))
-        XCTAssertTrue(sourceBarText.contains("activeImportBrowser = .files"))
-        XCTAssertTrue(sourceBarText.contains("activeImportBrowser = .folder"))
+        XCTAssertTrue(sourceBarText.contains("onFiles: openFilesImportBrowser"))
+        XCTAssertTrue(sourceBarText.contains("onFolder: openFolderImportBrowser"))
+        XCTAssertTrue(homeViewText.contains("requestImportBrowserLocationAccess(for: .files)"))
+        XCTAssertTrue(homeViewText.contains("requestImportBrowserLocationAccess(for: .folder)"))
+        XCTAssertTrue(homeViewText.contains("requestStartupImportBrowserAccessIfNeeded()"))
+        XCTAssertTrue(homeViewText.contains(".fileImporter("))
+        XCTAssertTrue(homeViewText.contains("allowedContentTypes: [.folder]"))
+        XCTAssertTrue(homeViewText.contains("handleImportBrowserLocationPickerResult"))
+        XCTAssertTrue(homeViewText.contains("viewModel.openImportBrowserRoot("))
+        XCTAssertTrue(homeViewText.contains("authorizedRootURL: rootURL"))
         XCTAssertFalse(sourceBarText.contains("onSamples"))
         XCTAssertFalse(sourceBarText.contains("openSampleLibrary()"))
         XCTAssertFalse(sourceBarText.contains("isFileImporterPresented = true"))
@@ -3167,10 +3175,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(sourceActionBarText.contains("title: \"Reset\""))
         XCTAssertTrue(homeViewText.contains("HomeImportBrowserView("))
         XCTAssertFalse(homeViewText.contains("onRequestLocationAccess:"))
-        XCTAssertFalse(homeViewText.contains("requestImportBrowserLocationAccess(for:"))
-        XCTAssertFalse(homeViewText.contains(".fileImporter("))
-        XCTAssertFalse(homeViewText.contains("allowedContentTypes: [.folder]"))
-        XCTAssertFalse(homeViewText.contains("handleImportBrowserLocationPickerResult"))
+        XCTAssertTrue(homeViewText.contains("requestImportBrowserLocationAccess(for:"))
+        XCTAssertTrue(homeViewText.contains(".fileImporter("))
+        XCTAssertTrue(homeViewText.contains("allowedContentTypes: [.folder]"))
+        XCTAssertTrue(homeViewText.contains("handleImportBrowserLocationPickerResult"))
         XCTAssertTrue(homeViewText.contains("handleImportBrowserDismiss"))
         XCTAssertFalse(homeViewText.contains("presentPendingImportPickerIfNeeded"))
         XCTAssertFalse(homeViewText.contains("openImportBrowserLocation"))
@@ -3220,7 +3228,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             .joined(separator: "\n")
         XCTAssertFalse(appSourceText.contains("UIDocumentPickerViewController"))
         XCTAssertFalse(appSourceText.contains("UIDocumentPickerDelegate"))
-        XCTAssertFalse(appSourceText.contains("fileImporter"))
+        XCTAssertTrue(appSourceText.contains("fileImporter"))
         XCTAssertFalse(appSourceText.contains("fileExporter"))
         XCTAssertFalse(appSourceText.contains("PendingSaveExportPrompt"))
         XCTAssertFalse(appSourceText.contains("PendingFolderAccessPrompt"))
@@ -7755,6 +7763,58 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, true)
         XCTAssertTrue(viewModel.importBrowserFolders.contains { $0.folderName == childName })
 
+        viewModel.navigateImportBrowserUp()
+
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "On My iPhone")
+        XCTAssertEqual(viewModel.importBrowserContext?.hasLocation, false)
+        XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, false)
+    }
+
+    @MainActor
+    func testImportBrowserCanMoveAboveTaptionFolderWhenParentAccessIsGranted() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let grantedRootURL = directoryURL.appendingPathComponent("OnMyPhoneGrant", isDirectory: true)
+        let taptionURL = grantedRootURL.appendingPathComponent("Taption", isDirectory: true)
+        let siblingURL = grantedRootURL.appendingPathComponent("OtherVideos", isDirectory: true)
+        try FileManager.default.createDirectory(at: taptionURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: siblingURL, withIntermediateDirectories: true)
+        try Data("taption".utf8).write(to: taptionURL.appendingPathComponent("taption.mp4"))
+        try Data("sibling".utf8).write(to: siblingURL.appendingPathComponent("sibling.mp4"))
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+
+        viewModel.openImportBrowserRoot(
+            url: taptionURL,
+            mode: .files,
+            authorizedRootURL: grantedRootURL
+        )
+
+        XCTAssertEqual(viewModel.importBrowserContext?.rootFolderName, "OnMyPhoneGrant")
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "OnMyPhoneGrant/Taption")
+        XCTAssertEqual(viewModel.importBrowserFiles.map(\.fileName), ["taption.mp4"])
+        XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, true)
+
+        viewModel.navigateImportBrowserUp()
+
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "OnMyPhoneGrant")
+        XCTAssertEqual(viewModel.importBrowserFolders.map(\.folderName), ["OtherVideos", "Taption"])
+        XCTAssertTrue(viewModel.importBrowserFiles.isEmpty)
+        XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, true)
+
+        viewModel.navigateImportBrowserIntoFolder(id: siblingURL.standardizedFileURL.path)
+
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "OnMyPhoneGrant/OtherVideos")
+        XCTAssertEqual(viewModel.importBrowserFiles.map(\.fileName), ["sibling.mp4"])
+
+        viewModel.navigateImportBrowserUp()
         viewModel.navigateImportBrowserUp()
 
         XCTAssertEqual(viewModel.importBrowserContext?.pathText, "On My iPhone")

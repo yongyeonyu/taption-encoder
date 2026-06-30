@@ -62,6 +62,7 @@
 			<string>Owner</string>
 			<key>LSItemContentTypes</key>
 			<array>
+				<string>public.audiovisual-content</string>
 				<string>public.movie</string>
 				<string>public.video</string>
 				<string>public.mpeg-4</string>

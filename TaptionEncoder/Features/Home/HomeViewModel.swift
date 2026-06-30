@@ -1090,6 +1090,10 @@ final class HomeViewModel: ObservableObject {
     }
 
     func openImportBrowserRoot(url: URL, mode: HomeImportBrowserMode) {
+        openImportBrowserRoot(url: url, mode: mode, authorizedRootURL: nil)
+    }
+
+    func openImportBrowserRoot(url: URL, mode: HomeImportBrowserMode, authorizedRootURL: URL?) {
         guard canStartNewSourceFlow() else {
             return
         }
@@ -1115,15 +1119,21 @@ final class HomeViewModel: ObservableObject {
         lastBatchFileCards = []
         folderPreviewContext = nil
         folderBatch = nil
-        beginSecurityScopedAccessIfNeeded(for: url)
-        let scope = importBrowserNavigationScope(for: url)
+        let standardizedURL = url.standardizedFileURL
+        let authorizedRootURL = authorizedRootURL?.standardizedFileURL
+        let scopedURLs = [authorizedRootURL, standardizedURL].compactMap { $0 }
+        beginSecurityScopedAccessIfNeeded(for: scopedURLs)
+        let scope = importBrowserNavigationScope(
+            for: standardizedURL,
+            authorizedRootURL: authorizedRootURL
+        )
         importBrowserMode = mode
         importBrowserRootURL = scope.rootURL
         importBrowserRootDisplayName = scope.displayName
-        importBrowserCurrentURL = url.standardizedFileURL
+        importBrowserCurrentURL = standardizedURL
         importBrowserHistory = []
         importBrowserSelectedFileURLs = []
-        selectAllImportBrowserFilesIfNeeded(in: url.standardizedFileURL)
+        selectAllImportBrowserFilesIfNeeded(in: standardizedURL)
         refreshImportBrowser()
         state = .idle
     }
@@ -4803,8 +4813,19 @@ final class HomeViewModel: ObservableObject {
         importBrowserSelectedFileURLs = Set(selectedURLs.map { $0.standardizedFileURL })
     }
 
-    private func importBrowserNavigationScope(for url: URL) -> (rootURL: URL, displayName: String) {
+    private func importBrowserNavigationScope(
+        for url: URL,
+        authorizedRootURL: URL? = nil
+    ) -> (rootURL: URL, displayName: String) {
         let standardizedURL = url.standardizedFileURL
+        if let authorizedRootURL = authorizedRootURL?.standardizedFileURL,
+           importBrowserURL(standardizedURL, isInsideRoot: authorizedRootURL) {
+            return (
+                authorizedRootURL,
+                importBrowserDisplayName(for: authorizedRootURL, fallback: "Files")
+            )
+        }
+
         guard let documentsURL = FileManager.default.urls(
             for: .documentDirectory,
             in: .userDomainMask
@@ -4814,6 +4835,11 @@ final class HomeViewModel: ObservableObject {
         }
 
         return (documentsURL, "Taption Encoder Files")
+    }
+
+    private func importBrowserDisplayName(for url: URL, fallback: String) -> String {
+        let name = url.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? fallback : name
     }
 
     private func relativeImportBrowserPath(

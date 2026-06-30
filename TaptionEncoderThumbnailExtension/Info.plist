@@ -111,6 +111,7 @@
 				<string>public.avchd-mpeg-2-transport-stream</string>
 				<string>org.xiph.ogv</string>
 				<string>org.xiph.ogg-audio</string>
+				<string>public.audiovisual-content</string>
 				<string>public.movie</string>
 				<string>public.video</string>
 				<string>public.mpeg-4</string>

@@ -22,6 +22,7 @@ from pathlib import Path
 
 required_document_types = {
     "com.taption.legacy-video",
+    "public.audiovisual-content",
     "public.movie",
     "public.video",
     "public.mpeg-4",
