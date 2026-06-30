@@ -25,6 +25,16 @@ struct SourceActionBar: View {
                 )
 
                 PrimaryActionButton(
+                    title: "Album",
+                    systemImage: "photo.on.rectangle",
+                    isProminent: true,
+                    isEnabled: canSelectSource,
+                    height: controlHeight,
+                    font: buttonFont,
+                    action: onPhotos
+                )
+
+                PrimaryActionButton(
                     title: "Folder",
                     systemImage: "folder",
                     isProminent: true,
@@ -37,17 +47,7 @@ struct SourceActionBar: View {
 
             HStack(spacing: 10) {
                 PrimaryActionButton(
-                    title: "Photos",
-                    systemImage: "photo.on.rectangle",
-                    isProminent: true,
-                    isEnabled: canSelectSource,
-                    height: controlHeight,
-                    font: buttonFont,
-                    action: onPhotos
-                )
-
-                PrimaryActionButton(
-                    title: "Samples",
+                    title: "Sample",
                     systemImage: "play.rectangle.on.rectangle",
                     isProminent: true,
                     isEnabled: canSelectSource,

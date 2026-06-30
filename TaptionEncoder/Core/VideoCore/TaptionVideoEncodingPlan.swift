@@ -232,6 +232,7 @@ struct TaptionPendingSaveState: Identifiable, Codable, Equatable {
     var createdAt: Date
     var accessBookmarkData: Data?
     var rewardedAdCompletedAt: Date?
+    var saveDestinationWasChosen: Bool?
 
     init(
         id: UUID = UUID(),
@@ -242,7 +243,8 @@ struct TaptionPendingSaveState: Identifiable, Codable, Equatable {
         requiresRewardedAd: Bool,
         createdAt: Date = Date(),
         accessBookmarkData: Data? = nil,
-        rewardedAdCompletedAt: Date? = nil
+        rewardedAdCompletedAt: Date? = nil,
+        saveDestinationWasChosen: Bool? = nil
     ) {
         self.id = id
         self.planID = planID
@@ -253,6 +255,7 @@ struct TaptionPendingSaveState: Identifiable, Codable, Equatable {
         self.createdAt = createdAt
         self.accessBookmarkData = accessBookmarkData
         self.rewardedAdCompletedAt = rewardedAdCompletedAt
+        self.saveDestinationWasChosen = saveDestinationWasChosen
     }
 }
 

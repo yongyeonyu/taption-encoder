@@ -19,6 +19,7 @@ struct HomeView: View {
     @State private var isOutputSizePopoverPresented = false
     @State private var outputSizeDraftMB: Double?
     @State private var miniPlayerPreview: QueueVideoPreview?
+    @State private var autoStartMiniPlayerPiPPreviewID: String?
     @State private var lastExternalVideoOpenURL: URL?
     @State private var lastExternalVideoOpenDate: Date?
     #if DEBUG
@@ -35,7 +36,7 @@ struct HomeView: View {
         GeometryReader { geometry in
             let metrics = HomeLayoutMetrics(size: geometry.size)
             let reservesFailureLogArea = viewModel.state.reservesFailureLogArea
-            let isVideoPlaybackOverlayActive = miniPlayerPreview != nil || viewModel.activePreview != nil
+            let isFullScreenVideoPlaybackActive = viewModel.activePreview != nil
 
             ZStack {
                 TaptionTheme.appBackground
@@ -64,12 +65,13 @@ struct HomeView: View {
                             viewModel.openSampleLibrary()
                         },
                         onPhotos: {
-                            AppLogger.info("Photos button tapped", category: .ui)
+                            AppLogger.info("Album button tapped", category: .ui)
                             isPhotosPickerPresented = true
                         },
                         onReset: {
                             AppLogger.info("Reset button tapped", category: .ui)
                             miniPlayerPreview = nil
+                            autoStartMiniPlayerPiPPreviewID = nil
                             viewModel.reset()
                         },
                         controlHeight: metrics.controlHeight,
@@ -99,9 +101,9 @@ struct HomeView: View {
                         startActionTitle: viewModel.startActionTitle,
                         showsSaveAction: viewModel.showsSaveAction,
                         saveActionTitle: viewModel.saveActionTitle,
-                        showsWorkAction: !isVideoPlaybackOverlayActive,
+                        showsWorkAction: !isFullScreenVideoPlaybackActive,
                         watchAdButtonTitle: viewModel.watchAdButtonTitle,
-                        showsWatchAdAction: !isVideoPlaybackOverlayActive,
+                        showsWatchAdAction: !isFullScreenVideoPlaybackActive,
                         canWatchAd: viewModel.canWatchAdForStar,
                         controlHeight: metrics.controlHeight,
                         contentScale: metrics.contentScale,
@@ -155,7 +157,7 @@ struct HomeView: View {
                         ]
                     )
                     isFileImporterPresented = false
-                    viewModel.startFilesFlow(urls: urls)
+                    viewModel.openFilesPreviewBrowser(urls: urls)
                 },
                 onCancel: {
                     AppLogger.info("Document picker cancelled", category: .fileImport)
@@ -228,6 +230,7 @@ struct HomeView: View {
                 }
             )
         }
+        .pendingSaveDestinationDialog(viewModel: viewModel)
         .sheet(
             item: Binding(
                 get: { viewModel.pendingSaveExportPrompt },
@@ -272,10 +275,11 @@ struct HomeView: View {
                     }
                 }
             )
-        ) { _ in
+        ) { prompt in
             VideoDocumentPicker(
                 contentTypes: [.folder],
                 allowsMultipleSelection: false,
+                directoryURL: prompt.suggestedDirectoryURL,
                 onPick: { urls in
                     AppLogger.info(
                         "Folder access recovery picker returned folders",
@@ -314,6 +318,12 @@ struct HomeView: View {
                 onClose: { viewModel.dismissPreview() },
                 onMinimize: {
                     miniPlayerPreview = preview
+                    autoStartMiniPlayerPiPPreviewID = nil
+                    viewModel.dismissPreview()
+                },
+                onPictureInPictureHome: {
+                    miniPlayerPreview = preview
+                    autoStartMiniPlayerPiPPreviewID = preview.id
                     viewModel.dismissPreview()
                 },
                 onPrevious: { viewModel.openPreviousPreview() },
@@ -436,6 +446,7 @@ struct HomeView: View {
             ]
         )
         self.miniPlayerPreview = nil
+        autoStartMiniPlayerPiPPreviewID = nil
     }
 
     #if DEBUG
@@ -535,12 +546,20 @@ struct HomeView: View {
                 Spacer(minLength: 0)
                 QueueMiniPlayerView(
                     preview: preview,
+                    autoStartPictureInPicture: autoStartMiniPlayerPiPPreviewID == preview.id,
                     onClose: {
                         miniPlayerPreview = nil
+                        autoStartMiniPlayerPiPPreviewID = nil
                     },
                     onExpand: {
                         miniPlayerPreview = nil
+                        autoStartMiniPlayerPiPPreviewID = nil
                         viewModel.restorePreview(preview)
+                    },
+                    onAutoPictureInPictureHandled: {
+                        if autoStartMiniPlayerPiPPreviewID == preview.id {
+                            autoStartMiniPlayerPiPPreviewID = nil
+                        }
                     }
                 )
                 .frame(width: max(210, width))
@@ -982,6 +1001,37 @@ struct HomeView: View {
     }
 }
 
+@MainActor
+private extension View {
+    func pendingSaveDestinationDialog(viewModel: HomeViewModel) -> some View {
+        confirmationDialog(
+            viewModel.pendingSaveDestinationPrompt?.title ?? "Save To",
+            isPresented: Binding(
+                get: { viewModel.pendingSaveDestinationPrompt != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.dismissPendingSaveDestinationPrompt()
+                    }
+                }
+            ),
+            titleVisibility: .visible,
+            presenting: viewModel.pendingSaveDestinationPrompt
+        ) { prompt in
+            Button("Album") {
+                viewModel.chooseAlbumForPendingSave(prompt: prompt)
+            }
+            Button("Folder") {
+                viewModel.chooseFolderForPendingSave(prompt: prompt)
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.dismissPendingSaveDestinationPrompt()
+            }
+        } message: { prompt in
+            Text(prompt.message)
+        }
+    }
+}
+
 enum QueuePreviewPlaybackMath {
     static let skipIntervalSeconds = 10.0
 
@@ -1081,6 +1131,7 @@ private struct QueueVideoPreviewView: View {
     var adUnitID: String
     var onClose: () -> Void
     var onMinimize: () -> Void
+    var onPictureInPictureHome: () -> Void
     var onPrevious: () -> Void
     var onNext: () -> Void
 
@@ -1175,19 +1226,23 @@ private struct QueueVideoPreviewView: View {
             startsAutomaticallyFromInline: true,
             managesAudioSession: false
         )
-            .frame(width: fittedSize.width, height: fittedSize.height)
-            .background(Color.black)
-            .onAppear {
-                didAttachVideoSurface = true
-                AppLogger.info(
-                    "Queue preview video surface appeared",
-                    category: .ui,
-                    metadata: ["name": preview.displayName]
-                )
-            }
-            .onDisappear {
-                didAttachVideoSurface = false
-            }
+        .frame(
+            width: min(max(fittedSize.width, 0), containerSize.width),
+            height: min(max(fittedSize.height, 0), containerSize.height)
+        )
+        .background(Color.black)
+        .clipped()
+        .onAppear {
+            didAttachVideoSurface = true
+            AppLogger.info(
+                "Queue preview video surface appeared",
+                category: .ui,
+                metadata: ["name": preview.displayName]
+            )
+        }
+        .onDisappear {
+            didAttachVideoSurface = false
+        }
     }
 
     private func videoGestureLayer(containerSize: CGSize) -> some View {
@@ -1249,13 +1304,13 @@ private struct QueueVideoPreviewView: View {
     ) -> some View {
         VStack(spacing: 0) {
             previewHeader
-                .padding(.horizontal, 16)
+                .padding(.horizontal, containerSize.width < 380 ? 12 : 16)
                 .padding(.top, previewHeaderTopPadding(containerSize: containerSize, safeAreaInsets: safeAreaInsets))
 
             Spacer(minLength: 0)
 
             transportControls
-                .padding(.horizontal, 16)
+                .padding(.horizontal, containerSize.width < 380 ? 10 : 16)
                 .padding(.bottom, 18)
         }
     }
@@ -1283,6 +1338,7 @@ private struct QueueVideoPreviewView: View {
                     .foregroundStyle(Color.white.opacity(0.94))
                     .lineLimit(2)
                     .minimumScaleFactor(0.72)
+                    .truncationMode(.middle)
 
                 PreviewBadgeFlowLayout(horizontalSpacing: 7, verticalSpacing: 7) {
                     previewBadge(systemImage: "video", text: preview.codecBadge)
@@ -1293,15 +1349,16 @@ private struct QueueVideoPreviewView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
 
-            Spacer(minLength: 6)
+            Spacer(minLength: 4)
 
             Button(action: minimizePreview) {
                 Image(systemName: "pip.enter")
                     .font(.system(size: 24, weight: .semibold))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(Color.white.opacity(0.94))
-                    .frame(width: 44, height: 44)
+                    .frame(width: 40, height: 40)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Minimize")
@@ -1311,7 +1368,7 @@ private struct QueueVideoPreviewView: View {
                     .font(.system(size: 28, weight: .semibold))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(Color.white.opacity(0.94))
-                    .frame(width: 44, height: 44)
+                    .frame(width: 40, height: 40)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close")
@@ -1367,62 +1424,66 @@ private struct QueueVideoPreviewView: View {
             .disabled(!player.isSeekable && player.duration == nil)
             .tint(Color.white)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Button(action: skipBackward) {
                     Image(systemName: "gobackward.10")
-                        .font(.system(size: 21, weight: .semibold))
-                        .frame(width: 38, height: 38)
+                        .font(.system(size: 19, weight: .semibold))
+                        .frame(width: 34, height: 36)
                 }
                 .accessibilityLabel("Rewind 10 seconds")
 
-                Button(action: previousItem) {
-                    Image(systemName: "backward.end.fill")
-                        .font(.system(size: 21, weight: .semibold))
-                        .frame(width: 38, height: 38)
+                if preview.playlist != nil {
+                    Button(action: previousItem) {
+                        Image(systemName: "backward.end.fill")
+                            .font(.system(size: 19, weight: .semibold))
+                            .frame(width: 34, height: 36)
+                    }
+                    .disabled(preview.playlist?.hasPrevious != true)
+                    .opacity(preview.playlist?.hasPrevious == true ? 1 : 0.36)
+                    .accessibilityLabel("Previous file")
                 }
-                .disabled(preview.playlist?.hasPrevious != true)
-                .opacity(preview.playlist?.hasPrevious == true ? 1 : 0.36)
-                .accessibilityLabel("Previous file")
 
                 Button(action: togglePlayback) {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 24, weight: .bold))
-                        .frame(width: 42, height: 40)
+                        .font(.system(size: 22, weight: .bold))
+                        .frame(width: 38, height: 38)
                 }
                 .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
-                Button(action: nextItem) {
-                    Image(systemName: "forward.end.fill")
-                        .font(.system(size: 21, weight: .semibold))
-                        .frame(width: 38, height: 38)
+                if preview.playlist != nil {
+                    Button(action: nextItem) {
+                        Image(systemName: "forward.end.fill")
+                            .font(.system(size: 19, weight: .semibold))
+                            .frame(width: 34, height: 36)
+                    }
+                    .disabled(preview.playlist?.hasNext != true)
+                    .opacity(preview.playlist?.hasNext == true ? 1 : 0.36)
+                    .accessibilityLabel("Next file")
                 }
-                .disabled(preview.playlist?.hasNext != true)
-                .opacity(preview.playlist?.hasNext == true ? 1 : 0.36)
-                .accessibilityLabel("Next file")
 
                 Button(action: skipForward) {
                     Image(systemName: "goforward.10")
-                        .font(.system(size: 21, weight: .semibold))
-                        .frame(width: 38, height: 38)
+                        .font(.system(size: 19, weight: .semibold))
+                        .frame(width: 34, height: 36)
                 }
                 .accessibilityLabel("Forward 10 seconds")
 
                 Button(action: togglePictureInPicture) {
                     Image(systemName: isPictureInPictureActive ? "pip.exit" : "pip.enter")
-                        .font(.system(size: 21, weight: .semibold))
-                        .frame(width: 38, height: 38)
+                        .font(.system(size: 19, weight: .semibold))
+                        .frame(width: 34, height: 36)
                 }
                 .disabled(!canTogglePictureInPicture)
                 .opacity(canTogglePictureInPicture ? 1 : 0.36)
                 .accessibilityLabel(isPictureInPictureActive ? "Exit Picture in Picture" : "Picture in Picture")
 
-                Spacer(minLength: 4)
-
                 Text("\(displayedCurrentTimeText) / \(durationText)")
                     .font(.caption.monospacedDigit().weight(.semibold))
                     .foregroundStyle(Color.white.opacity(0.88))
                     .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
+                    .minimumScaleFactor(0.62)
+                    .allowsTightening(true)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .trailing)
                     .layoutPriority(1)
             }
             .foregroundStyle(Color.white)
@@ -1666,18 +1727,36 @@ private struct QueueVideoPreviewView: View {
     }
 
     private func togglePictureInPicture() {
-        guard let pipController, canTogglePictureInPicture else {
+        guard let pipController else {
             showGestureFeedback(systemImage: "pip", text: "PiP unavailable")
             showControls(scheduleAutoHide: false)
             return
         }
 
-        let wasActive = pipController.isActive
-        pipController.toggle()
-        showGestureFeedback(
-            systemImage: wasActive ? "pip.exit" : "pip.enter",
-            text: wasActive ? "Inline" : "Picture in Picture"
+        if pipController.isActive {
+            pipController.stop()
+            showGestureFeedback(systemImage: "pip.exit", text: "Inline")
+            showControls(scheduleAutoHide: false)
+            return
+        }
+
+        guard pipController.isPossible else {
+            showGestureFeedback(systemImage: "pip", text: "PiP unavailable")
+            showControls(scheduleAutoHide: false)
+            return
+        }
+
+        AppLogger.info(
+            "Queue preview Picture in Picture home requested",
+            category: .ui,
+            metadata: [
+                "name": preview.displayName,
+                "possible": "\(pipController.isPossible)",
+                "active": "\(pipController.isActive)"
+            ]
         )
+        onPictureInPictureHome()
+        dismiss()
         showControls(scheduleAutoHide: false)
     }
 
@@ -2217,8 +2296,10 @@ private struct QueueVideoPreviewView: View {
 
 private struct QueueMiniPlayerView: View {
     var preview: QueueVideoPreview
+    var autoStartPictureInPicture: Bool = false
     var onClose: () -> Void
     var onExpand: () -> Void
+    var onAutoPictureInPictureHandled: () -> Void = {}
 
     @State private var player = QueuePreviewPlayerFactory.makePreviewPlayer()
     @State private var pipController: PiPController?
@@ -2227,6 +2308,7 @@ private struct QueueMiniPlayerView: View {
     @State private var didAttachVideoSurface = false
     @State private var didBeginVideoPlaybackAdSuppression = false
     @State private var didRequestShutdown = false
+    @State private var didAttemptAutoPictureInPicture = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -2345,6 +2427,14 @@ private struct QueueMiniPlayerView: View {
         .task(id: preview.id) {
             await startMiniPlayback()
         }
+        .onChange(of: autoStartPictureInPicture) { _, shouldStart in
+            guard shouldStart else {
+                return
+            }
+            Task { @MainActor in
+                await startAutoPictureInPictureIfRequested()
+            }
+        }
         .onDisappear {
             shutdownMiniPlayer()
         }
@@ -2357,6 +2447,7 @@ private struct QueueMiniPlayerView: View {
     @MainActor
     private func startMiniPlayback() async {
         didRequestShutdown = false
+        didAttemptAutoPictureInPicture = false
         playbackError = nil
         isLoading = true
         player.aspectRatio = .default
@@ -2381,10 +2472,15 @@ private struct QueueMiniPlayerView: View {
                         "hasVideoOutput": "\(player.hasVideoOutput)"
                     ]
                 )
+                isLoading = false
+                clearAutoPictureInPictureRequestIfNeeded()
+                return
             }
             isLoading = false
+            await startAutoPictureInPictureIfRequested()
         } catch is CancellationError {
             isLoading = false
+            clearAutoPictureInPictureRequestIfNeeded()
         } catch {
             playbackError = "Preview unavailable"
             isLoading = false
@@ -2396,6 +2492,7 @@ private struct QueueMiniPlayerView: View {
                     "error": String(describing: error)
                 ]
             )
+            clearAutoPictureInPictureRequestIfNeeded()
         }
     }
 
@@ -2435,6 +2532,80 @@ private struct QueueMiniPlayerView: View {
                 "active": "\(pipController.isActive)"
             ]
         )
+    }
+
+    @MainActor
+    private func startAutoPictureInPictureIfRequested() async {
+        guard autoStartPictureInPicture,
+              !didAttemptAutoPictureInPicture,
+              !isLoading,
+              playbackError == nil else {
+            return
+        }
+        didAttemptAutoPictureInPicture = true
+        defer {
+            onAutoPictureInPictureHandled()
+        }
+
+        for _ in 0..<30 {
+            if pipController?.isPossible == true {
+                break
+            }
+            if Task.isCancelled {
+                return
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        guard let pipController else {
+            AppLogger.info(
+                "Queue mini player auto PiP ignored because controller is unavailable",
+                category: .ui,
+                metadata: ["name": preview.displayName]
+            )
+            return
+        }
+
+        AppLogger.info(
+            "Queue mini player auto PiP requested",
+            category: .ui,
+            metadata: miniPictureInPictureMetadata(for: pipController)
+        )
+
+        guard pipController.isPossible else {
+            return
+        }
+
+        pipController.start()
+        for _ in 0..<20 {
+            if pipController.isActive {
+                break
+            }
+            if Task.isCancelled {
+                return
+            }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        AppLogger.info(
+            "Queue mini player auto PiP state checked",
+            category: .ui,
+            metadata: miniPictureInPictureMetadata(for: pipController)
+        )
+    }
+
+    private func clearAutoPictureInPictureRequestIfNeeded() {
+        guard autoStartPictureInPicture else {
+            return
+        }
+        onAutoPictureInPictureHandled()
+    }
+
+    private func miniPictureInPictureMetadata(for pipController: PiPController) -> [String: String] {
+        [
+            "name": preview.displayName,
+            "possible": "\(pipController.isPossible)",
+            "active": "\(pipController.isActive)"
+        ]
     }
 
     private func beginVideoPlaybackAdSuppressionIfNeeded() {

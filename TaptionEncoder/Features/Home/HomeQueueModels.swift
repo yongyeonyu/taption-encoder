@@ -164,6 +164,8 @@ struct FolderEncodingBatch {
     var stopMessage: String?
     var itemStates: [URL: BatchItemRuntime]
     var selectedURL: URL?
+    var selectedSaveDestination: TaptionSaveDestinationKind?
+    var outputFolderURL: URL?
 
     init(
         folderURL: URL? = nil,
@@ -176,6 +178,8 @@ struct FolderEncodingBatch {
         self.sourceKind = sourceKind
         self.fileURLs = fileURLs
         self.selectedURL = fileURLs.first
+        self.selectedSaveDestination = nil
+        self.outputFolderURL = nil
         self.itemStates = Dictionary(
             uniqueKeysWithValues: fileURLs.map { ($0, BatchItemRuntime.queued) }
         )

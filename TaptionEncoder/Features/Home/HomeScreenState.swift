@@ -951,8 +951,12 @@ struct PendingFolderAccessPrompt: Identifiable, Equatable {
     }
 
     var job: PendingSaveJob
+    var suggestedDirectoryURL: URL? = nil
     var message: String {
-        "Choose the original folder again so iOS grants write access for \(job.sourceName)."
+        if let suggestedDirectoryURL {
+            return "Choose \(suggestedDirectoryURL.lastPathComponent) so iOS grants write access for \(job.sourceName)."
+        }
+        return "Choose the original folder again so iOS grants write access for \(job.sourceName)."
     }
 }
 
@@ -984,6 +988,22 @@ struct PendingSaveExportPrompt: Identifiable, Equatable {
 
     var message: String {
         "Choose where to save \(suggestedFileName)."
+    }
+}
+
+struct PendingSaveDestinationPrompt: Identifiable, Equatable {
+    var id: UUID {
+        job.id
+    }
+
+    var job: PendingSaveJob
+
+    var title: String {
+        "Save To"
+    }
+
+    var message: String {
+        "Choose where to save \(job.sourceName)."
     }
 }
 

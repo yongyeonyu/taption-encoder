@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct VideoDocumentPicker: UIViewControllerRepresentable {
     var contentTypes: [UTType]
     var allowsMultipleSelection: Bool
+    var directoryURL: URL? = nil
     var onPick: ([URL]) -> Void
     var onCancel: () -> Void
 
@@ -16,6 +17,9 @@ struct VideoDocumentPicker: UIViewControllerRepresentable {
         picker.delegate = context.coordinator
         picker.allowsMultipleSelection = allowsMultipleSelection
         picker.shouldShowFileExtensions = true
+        if let directoryURL {
+            picker.directoryURL = directoryURL
+        }
         return picker
     }
 

@@ -3085,10 +3085,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         let progressViewText = try String(contentsOf: progressViewURL, encoding: .utf8)
 
         XCTAssertTrue(homeViewText.contains("@State private var miniPlayerPreview: QueueVideoPreview?"))
+        XCTAssertTrue(homeViewText.contains("@State private var autoStartMiniPlayerPiPPreviewID: String?"))
         XCTAssertTrue(homeViewText.contains("QueueMiniPlayerView("))
         XCTAssertTrue(homeViewText.contains("onMinimize:"))
+        XCTAssertTrue(homeViewText.contains("onPictureInPictureHome:"))
         XCTAssertTrue(homeViewText.contains("minimizePreview()"))
         XCTAssertTrue(homeViewText.contains("Queue preview minimized to floating player"))
+        XCTAssertTrue(homeViewText.contains("Queue preview Picture in Picture home requested"))
         XCTAssertTrue(homeViewText.contains("TAPTION_AUTO_MINIMIZE_PREVIEW"))
         XCTAssertTrue(homeViewText.contains("Debug auto mini player requested"))
         XCTAssertTrue(homeViewText.contains("Button(action: onExpand)"))
@@ -3096,11 +3099,14 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("Queue mini player PiP requested"))
         XCTAssertTrue(homeViewText.contains("Queue mini player PiP exit requested"))
         XCTAssertTrue(homeViewText.contains("Queue mini player PiP ignored because controller is unavailable"))
+        XCTAssertTrue(homeViewText.contains("Queue mini player auto PiP requested"))
+        XCTAssertTrue(homeViewText.contains("Queue mini player auto PiP state checked"))
+        XCTAssertTrue(homeViewText.contains("autoStartPictureInPicture: autoStartMiniPlayerPiPPreviewID == preview.id"))
         XCTAssertTrue(homeViewText.contains("viewModel.restorePreview(preview)"))
         XCTAssertTrue(homeViewText.contains("queueMiniPlayer"))
-        XCTAssertTrue(homeViewText.contains("let isVideoPlaybackOverlayActive = miniPlayerPreview != nil || viewModel.activePreview != nil"))
-        XCTAssertTrue(homeViewText.contains("showsWorkAction: !isVideoPlaybackOverlayActive"))
-        XCTAssertTrue(homeViewText.contains("showsWatchAdAction: !isVideoPlaybackOverlayActive"))
+        XCTAssertTrue(homeViewText.contains("let isFullScreenVideoPlaybackActive = viewModel.activePreview != nil"))
+        XCTAssertTrue(homeViewText.contains("showsWorkAction: !isFullScreenVideoPlaybackActive"))
+        XCTAssertTrue(homeViewText.contains("showsWatchAdAction: !isFullScreenVideoPlaybackActive"))
         XCTAssertTrue(homeViewText.contains("beginVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(homeViewText.contains("endVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(viewModelText.contains("func restorePreview(_ preview: QueueVideoPreview)"))
@@ -5718,7 +5724,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             temporaryOutputURL: temporaryURL,
             finalOutputURL: finalURL,
             saveDestination: .sourceFolder,
-            requiresRewardedAd: false
+            requiresRewardedAd: false,
+            saveDestinationWasChosen: true
         )
         try await store.savePendingState(state)
         let viewModel = HomeViewModel(
@@ -5738,6 +5745,48 @@ final class CodecRoutePlannerTests: XCTestCase {
         let states = try await store.loadPendingStates()
         XCTAssertEqual(states.map(\.id), [state.id])
         XCTAssertEqual(states.first?.requiresRewardedAd, false)
+    }
+
+    @MainActor
+    func testPendingSaveRequestsDestinationPromptBeforeFinalSave() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
+        let finalURL = directoryURL.appendingPathComponent("clip_taption.mp4")
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        try Data("new output".utf8).write(to: temporaryURL)
+
+        let store = FilePendingSaveStore(fileURL: directoryURL.appendingPathComponent("pending.json"))
+        let state = TaptionPendingSaveState(
+            planID: UUID(),
+            temporaryOutputURL: temporaryURL,
+            finalOutputURL: finalURL,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: false
+        )
+        try await store.savePendingState(state)
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: store)
+        )
+
+        await viewModel.restorePendingSavesIfNeeded()
+        viewModel.retryPendingSave()
+        try await waitForPendingSaveDestinationPrompt(in: viewModel)
+
+        let destinationPrompt = try XCTUnwrap(viewModel.pendingSaveDestinationPrompt)
+        XCTAssertEqual(destinationPrompt.job.id, state.id)
+        XCTAssertNil(viewModel.pendingSaveExportPrompt)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: finalURL.path))
+        XCTAssertEqual(try String(contentsOf: temporaryURL, encoding: .utf8), "new output")
+
+        viewModel.chooseFolderForPendingSave(prompt: destinationPrompt)
+        try await waitForCompletedSave(in: viewModel)
+
+        XCTAssertNil(viewModel.pendingSaveDestinationPrompt)
+        XCTAssertEqual(try String(contentsOf: finalURL, encoding: .utf8), "new output")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
     }
 
     @MainActor
@@ -5775,7 +5824,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             temporaryOutputURL: temporaryURL,
             finalOutputURL: finalURL,
             saveDestination: .sourceFolder,
-            requiresRewardedAd: false
+            requiresRewardedAd: false,
+            saveDestinationWasChosen: true
         )
         try await store.savePendingState(state)
 
@@ -5813,7 +5863,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             temporaryOutputURL: temporaryURL,
             finalOutputURL: finalURL,
             saveDestination: .sourceFolder,
-            requiresRewardedAd: false
+            requiresRewardedAd: false,
+            saveDestinationWasChosen: true
         )
         try await store.savePendingState(state)
 
@@ -5965,7 +6016,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             temporaryOutputURL: temporaryURL,
             finalOutputURL: finalURL,
             saveDestination: .sourceFolder,
-            requiresRewardedAd: false
+            requiresRewardedAd: false,
+            saveDestinationWasChosen: true
         )
         try await store.savePendingState(state)
 
@@ -6000,7 +6052,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             temporaryOutputURL: temporaryURL,
             finalOutputURL: finalURL,
             saveDestination: .sourceFolder,
-            requiresRewardedAd: false
+            requiresRewardedAd: false,
+            saveDestinationWasChosen: true
         )
         try await store.savePendingState(state)
 
@@ -6049,7 +6102,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             temporaryOutputURL: temporaryURL,
             finalOutputURL: finalURL,
             saveDestination: .sourceFolder,
-            requiresRewardedAd: false
+            requiresRewardedAd: false,
+            saveDestinationWasChosen: true
         )
         try await store.savePendingState(state)
 
@@ -6105,7 +6159,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             temporaryOutputURL: temporaryURL,
             finalOutputURL: finalURL,
             saveDestination: .sourceFolder,
-            requiresRewardedAd: false
+            requiresRewardedAd: false,
+            saveDestinationWasChosen: true
         )
         try await store.savePendingState(state)
 
@@ -6156,7 +6211,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             finalOutputURL: firstFinalURL,
             saveDestination: .sourceFolder,
             requiresRewardedAd: false,
-            createdAt: Date(timeIntervalSince1970: 1)
+            createdAt: Date(timeIntervalSince1970: 1),
+            saveDestinationWasChosen: true
         )
         let secondState = TaptionPendingSaveState(
             planID: UUID(),
@@ -6164,7 +6220,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             finalOutputURL: secondFinalURL,
             saveDestination: .sourceFolder,
             requiresRewardedAd: false,
-            createdAt: Date(timeIntervalSince1970: 2)
+            createdAt: Date(timeIntervalSince1970: 2),
+            saveDestinationWasChosen: true
         )
         try await store.savePendingState(firstState)
         try await store.savePendingState(secondState)
@@ -6234,7 +6291,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             temporaryOutputURL: temporaryURL,
             finalOutputURL: finalURL,
             saveDestination: .sourceFolder,
-            requiresRewardedAd: false
+            requiresRewardedAd: false,
+            saveDestinationWasChosen: true
         )
         try await store.savePendingState(state)
         let viewModel = HomeViewModel(
@@ -6291,7 +6349,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             temporaryOutputURL: temporaryURL,
             finalOutputURL: finalURL,
             saveDestination: .sourceFolder,
-            requiresRewardedAd: false
+            requiresRewardedAd: false,
+            saveDestinationWasChosen: true
         )
         try await store.savePendingState(state)
         let viewModel = HomeViewModel(
@@ -6347,7 +6406,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             finalOutputURL: firstFinalURL,
             saveDestination: .sourceFolder,
             requiresRewardedAd: false,
-            createdAt: Date(timeIntervalSince1970: 1)
+            createdAt: Date(timeIntervalSince1970: 1),
+            saveDestinationWasChosen: true
         )
         let secondState = TaptionPendingSaveState(
             planID: UUID(),
@@ -6355,7 +6415,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             finalOutputURL: secondFinalURL,
             saveDestination: .sourceFolder,
             requiresRewardedAd: false,
-            createdAt: Date(timeIntervalSince1970: 2)
+            createdAt: Date(timeIntervalSince1970: 2),
+            saveDestinationWasChosen: true
         )
         try await store.savePendingState(firstState)
         try await store.savePendingState(secondState)
@@ -6830,6 +6891,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         viewModel.startFilesFlow(url: sourceURL)
         try await waitForReadyToStartState(in: viewModel)
         viewModel.startPreparedEncoding()
+        try await chooseFolderForPendingSaveDestination(in: viewModel)
 
         try await waitForCondition(timeout: 2) {
             viewModel.state.pendingSaveJob?.state.requiresRewardedAd == true
@@ -6884,6 +6946,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Ready")
 
         viewModel.startPreparedEncoding()
+        try await chooseFolderForPendingSaveDestination(in: viewModel)
         try await waitForCondition(timeout: 2) {
             viewModel.state.pendingSaveJob?.state.requiresRewardedAd == true
                 && viewModel.canWatchAdForStar
@@ -7140,6 +7203,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(viewModel.startActionTitle, "Start (-3 Stars)")
 
         viewModel.startPreparedEncoding()
+        try await chooseFolderForPendingSaveDestination(in: viewModel)
 
         try await waitForCondition(timeout: 3) {
             viewModel.state.pendingSaveJob?.sourceName == "c.mp4"
@@ -7198,6 +7262,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(viewModel.startActionTitle, "Start (-3 Stars)")
 
         viewModel.startPreparedEncoding()
+        try await chooseFolderForPendingSaveDestination(in: viewModel)
         try await waitForCondition(timeout: 3) {
             viewModel.state.pendingSaveJob?.sourceName == "b.mp4"
                 && viewModel.state.pendingSaveJob?.state.requiresRewardedAd == true
@@ -7434,6 +7499,100 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(viewModel.fileCardSnapshots.first?.id, sourceURL.absoluteString)
         XCTAssertEqual(viewModel.fileCardSnapshots.first?.sourceKind, .folder)
         XCTAssertEqual(viewModel.fileCardSnapshots.first?.thumbnailSourceURL, sourceURL)
+    }
+
+    @MainActor
+    func testFolderBatchFolderDestinationSavesIntoSiblingTaptionFolder() async throws {
+        let parentURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: parentURL)
+        }
+        let sourceFolderURL = parentURL.appendingPathComponent("VideoFolder", isDirectory: true)
+        let firstURL = sourceFolderURL.appendingPathComponent("a.mp4")
+        let secondURL = sourceFolderURL.appendingPathComponent("b.mp4")
+        try FileManager.default.createDirectory(at: sourceFolderURL, withIntermediateDirectories: true)
+        try Data("source a".utf8).write(to: firstURL)
+        try Data("source b".utf8).write(to: secondURL)
+
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 2))
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264)),
+                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
+                starWalletStore: walletStore
+            )
+        )
+
+        await viewModel.refreshStarsIfNeeded()
+        viewModel.startFolderFlow(url: sourceFolderURL)
+        viewModel.importFolderPreviewBatch()
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.startPreparedEncoding()
+        try await chooseFolderForPendingSaveDestination(in: viewModel)
+
+        let outputFolderURL = parentURL.appendingPathComponent("VideoFolder_taption", isDirectory: true)
+        let firstOutputURL = outputFolderURL.appendingPathComponent("a_taption.mp4")
+        let secondOutputURL = outputFolderURL.appendingPathComponent("b_taption.mp4")
+        try await waitForCondition(timeout: 3) {
+            FileManager.default.fileExists(atPath: firstOutputURL.path)
+                && FileManager.default.fileExists(atPath: secondOutputURL.path)
+                && viewModel.state.title == "Save Complete"
+        }
+
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: sourceFolderURL.appendingPathComponent("a_taption.mp4").path
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: sourceFolderURL.appendingPathComponent("b_taption.mp4").path
+        ))
+        XCTAssertEqual(try String(contentsOf: firstOutputURL, encoding: .utf8), "encoded")
+        XCTAssertEqual(try String(contentsOf: secondOutputURL, encoding: .utf8), "encoded")
+    }
+
+    @MainActor
+    func testFilePickerSelectionOpensPreviewBrowserBeforeImport() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let firstURL = directoryURL.appendingPathComponent("a.mp4")
+        let secondURL = directoryURL.appendingPathComponent("b.mp4")
+        try Data("source".utf8).write(to: firstURL)
+        try Data("source".utf8).write(to: secondURL)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+
+        viewModel.openFilesPreviewBrowser(urls: [secondURL, firstURL])
+
+        XCTAssertEqual(viewModel.folderPreviewContext?.folderName, "Selected files")
+        XCTAssertEqual(viewModel.folderPreviewContext?.fileCount, 2)
+        XCTAssertEqual(viewModel.folderPreviewFileSnapshots.map(\.id), [
+            firstURL.absoluteString,
+            secondURL.absoluteString
+        ])
+        XCTAssertEqual(viewModel.folderPreviewFileSnapshots.first?.sourceKind, .files)
+        XCTAssertNil(viewModel.activePreview)
+        guard case .idle = viewModel.state else {
+            return XCTFail("Expected file picker browser to stay idle until preview or import is requested")
+        }
+
+        viewModel.selectFolderPreviewFile(id: secondURL.absoluteString)
+        try await waitForCondition(timeout: 2) {
+            viewModel.activePreview?.sourceURL == secondURL
+        }
+
+        XCTAssertEqual(viewModel.activePreview?.displayName, "b.mp4")
+        XCTAssertEqual(
+            viewModel.folderPreviewFileSnapshots.first(where: { $0.id == secondURL.absoluteString })?.isSelected,
+            true
+        )
     }
 
     @MainActor
@@ -8413,11 +8572,34 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
+    private func waitForPendingSaveDestinationPrompt(
+        in viewModel: HomeViewModel,
+        timeout: TimeInterval = 2
+    ) async throws {
+        try await waitForCondition(timeout: timeout) {
+            viewModel.pendingSaveDestinationPrompt != nil
+        }
+    }
+
+    @MainActor
+    private func chooseFolderForPendingSaveDestination(
+        in viewModel: HomeViewModel,
+        timeout: TimeInterval = 2
+    ) async throws {
+        try await waitForPendingSaveDestinationPrompt(in: viewModel, timeout: timeout)
+        let prompt = try XCTUnwrap(viewModel.pendingSaveDestinationPrompt)
+        viewModel.chooseFolderForPendingSave(prompt: prompt)
+    }
+
+    @MainActor
     private func waitForCompletedSave(
         in viewModel: HomeViewModel,
         timeout: TimeInterval = 2
     ) async throws {
         try await waitForCondition(timeout: timeout) {
+            if let prompt = viewModel.pendingSaveDestinationPrompt {
+                viewModel.chooseFolderForPendingSave(prompt: prompt)
+            }
             if case .completed = viewModel.state {
                 return true
             }

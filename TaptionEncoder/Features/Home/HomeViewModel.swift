@@ -58,6 +58,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var selectedOutput: TaptionOutputSelection
     @Published private(set) var folderAccessPrompt: PendingFolderAccessPrompt?
     @Published private(set) var pendingSaveExportPrompt: PendingSaveExportPrompt?
+    @Published private(set) var pendingSaveDestinationPrompt: PendingSaveDestinationPrompt?
     @Published private(set) var starWalletSnapshot: StarWalletSnapshot
     @Published private(set) var rewardedAdState: AdLoadState
     @Published private(set) var isWatchingStarAd: Bool
@@ -105,6 +106,7 @@ final class HomeViewModel: ObservableObject {
         self.state = .idle
         self.folderAccessPrompt = nil
         self.pendingSaveExportPrompt = nil
+        self.pendingSaveDestinationPrompt = nil
         self.starWalletSnapshot = .empty
         self.rewardedAdState = .idle
         self.isWatchingStarAd = false
@@ -1061,6 +1063,59 @@ final class HomeViewModel: ObservableObject {
         startFolderFlow(url: firstURL)
     }
 
+    func openFilesPreviewBrowser(urls: [URL]) {
+        AppLogger.info(
+            "Files preview browser requested",
+            category: .fileImport,
+            metadata: [
+                "count": "\(urls.count)",
+                "names": urls.map(\.lastPathComponent).joined(separator: "|")
+            ]
+        )
+        guard canStartNewSourceFlow() else {
+            return
+        }
+        guard state.canSelectSource else {
+            AppLogger.warning(
+                "Files preview browser ignored because source selection is disabled",
+                category: .fileImport,
+                metadata: ["state": "\(state)"]
+            )
+            return
+        }
+
+        let selectedURLs = urls
+            .filter { !selectedURLIsDirectory($0) }
+            .sorted {
+                $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+            }
+        guard !selectedURLs.isEmpty else {
+            AppLogger.warning("Files preview browser ignored because no files were selected", category: .fileImport)
+            return
+        }
+
+        let title = filesPreviewBrowserTitle(for: selectedURLs)
+        dismissPreview()
+        activeTask?.cancel()
+        selectionInspectionTask?.cancel()
+        previewInspectionTask?.cancel()
+        currentReview = nil
+        lastBatchFileCards = []
+        folderPreviewContext = nil
+        folderBatch = FolderEncodingBatch(
+            folderName: title,
+            sourceKind: .files,
+            fileURLs: selectedURLs
+        )
+        beginSecurityScopedAccessIfNeeded(for: selectedURLs)
+        folderPreviewContext = FolderPreviewContext(
+            id: "selected-files-\(UUID().uuidString)",
+            folderName: title,
+            fileCount: selectedURLs.count
+        )
+        state = .idle
+    }
+
     func openExternalPlayerFile(url: URL) {
         AppLogger.info(
             "External player file routed into preview flow",
@@ -1317,7 +1372,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func selectFolderPreviewFile(id: String) {
-        selectFileCard(id: id)
+        _ = openBatchPreviewForFileCard(id: id)
     }
 
     func importFolderPreviewBatch() {
@@ -1816,7 +1871,7 @@ final class HomeViewModel: ObservableObject {
                     ]
                 )
                 await refreshRewardedAdState(startPollingIfNeeded: true)
-                savePendingJob(authorizedJob)
+                requestSaveDestinationIfNeeded(for: authorizedJob)
             } catch {
                 AppLogger.error(
                     "Pending save rewarded ad completion failed",
@@ -1854,7 +1909,7 @@ final class HomeViewModel: ObservableObject {
             return
         }
         clearPendingSaveExportPrompt()
-        savePendingJob(job)
+        requestSaveDestinationIfNeeded(for: job)
     }
 
     func saveCurrentPendingOutput() {
@@ -1879,6 +1934,70 @@ final class HomeViewModel: ObservableObject {
             ]
         )
         let job = PendingSaveJob(sourceName: output.sourceName, state: output.pendingSaveState)
+        requestSaveDestinationIfNeeded(for: job)
+    }
+
+    func dismissPendingSaveDestinationPrompt() {
+        guard pendingSaveDestinationPrompt != nil else {
+            return
+        }
+        AppLogger.info("Pending save destination prompt dismissed", category: .saving)
+        pendingSaveDestinationPrompt = nil
+    }
+
+    func chooseAlbumForPendingSave(prompt: PendingSaveDestinationPrompt) {
+        guard pendingSaveDestinationPrompt?.id == prompt.id else {
+            return
+        }
+        pendingSaveDestinationPrompt = nil
+        var job = prompt.job
+        job.state.saveDestination = .photosLibrary
+        job.state.finalOutputURL = nil
+        job.state.saveDestinationWasChosen = true
+        rememberFolderBatchSaveDestinationIfNeeded(.photosLibrary)
+        persistPendingSaveState(job.state)
+        updatePendingSaveJob(job)
+        state = .pendingSave(job)
+        AppLogger.info(
+            "Pending save destination selected",
+            category: .saving,
+            metadata: [
+                "source": job.sourceName,
+                "destination": "album"
+            ]
+        )
+        savePendingJob(job)
+    }
+
+    func chooseFolderForPendingSave(prompt: PendingSaveDestinationPrompt) {
+        guard pendingSaveDestinationPrompt?.id == prompt.id else {
+            return
+        }
+        pendingSaveDestinationPrompt = nil
+        var job = prompt.job
+        job.state.saveDestination = .sourceFolder
+        job.state.saveDestinationWasChosen = true
+        rememberFolderBatchSaveDestinationIfNeeded(.sourceFolder)
+        job = applySelectedFolderBatchDestination(to: job)
+        persistPendingSaveState(job.state)
+        updatePendingSaveJob(job)
+        state = .pendingSave(job)
+        AppLogger.info(
+            "Pending save destination selected",
+            category: .saving,
+            metadata: [
+                "source": job.sourceName,
+                "destination": "folder",
+                "final": job.state.finalOutputURL?.path ?? "picker"
+            ]
+        )
+
+        guard job.state.finalOutputURL != nil else {
+            clearPendingSaveExportPrompt()
+            pendingSaveExportPrompt = makePendingSaveExportPrompt(for: job)
+            return
+        }
+
         savePendingJob(job)
     }
 
@@ -1892,6 +2011,7 @@ final class HomeViewModel: ObservableObject {
 
         var updatedState = jobToRecover.state
         updatedState.accessBookmarkData = makeSecurityScopedBookmarkData(for: recoveryURL)
+        updatedState.saveDestinationWasChosen = true
         var job = PendingSaveJob(sourceName: jobToRecover.sourceName, state: updatedState)
         job.saveGateMessage = "Folder access restored. Saving again."
         pendingSaveAccessURLs[job.id] = recoveryURL
@@ -1938,6 +2058,8 @@ final class HomeViewModel: ObservableObject {
         }
         var recoveredState = prompt.job.state
         recoveredState.finalOutputURL = destinationURL
+        recoveredState.saveDestination = .sourceFolder
+        recoveredState.saveDestinationWasChosen = true
         let job = PendingSaveJob(sourceName: prompt.job.sourceName, state: recoveredState)
         AppLogger.info(
             "Pending save export finalized",
@@ -1983,6 +2105,7 @@ final class HomeViewModel: ObservableObject {
         shouldAutoResumeBatchAfterStarEarn = false
         cancelEncodingActivity()
         folderAccessPrompt = nil
+        pendingSaveDestinationPrompt = nil
         folderPreviewContext = nil
         clearPendingSaveExportPrompt()
         pendingSaveQueue = []
@@ -2207,6 +2330,7 @@ final class HomeViewModel: ObservableObject {
                 if source.kind == .photos {
                     job.plan.finalOutputURL = nil
                 }
+                applySelectedFolderBatchDestination(to: &job, source: source)
                 AppLogger.info(
                     "Prepare encoding job created",
                     category: .mediaInspection,
@@ -2637,7 +2761,7 @@ final class HomeViewModel: ObservableObject {
                 activeTask = nil
                 state = .pendingSave(pendingJob)
                 trace.finish("pending_save_started", metadata: ["pendingSave": pendingJob.id.uuidString])
-                savePendingJob(pendingJob)
+                requestSaveDestinationIfNeeded(for: pendingJob)
             } catch is CancellationError {
                 AppLogger.warning(
                     "Encoding task cancelled",
@@ -2852,6 +2976,35 @@ final class HomeViewModel: ObservableObject {
             } catch {
                 if workingJob.state.saveDestination == .sourceFolder,
                    isFileProviderWritePermissionDenied(error) {
+                    if let batch = folderBatch,
+                       batch.sourceKind == .folder {
+                        workingJob.saveGateMessage = "Choose the parent folder so Taption Encoder can create \(batch.folderName + environment.configuration.outputSuffix)."
+                        updatePendingSaveJob(workingJob)
+                        folderAccessPrompt = PendingFolderAccessPrompt(
+                            job: workingJob,
+                            suggestedDirectoryURL: batch.folderURL?.deletingLastPathComponent()
+                        )
+                        AppLogger.warning(
+                            "Folder batch final save needs parent folder access",
+                            category: .saving,
+                            metadata: [
+                                "source": workingJob.sourceName,
+                                "error": error.localizedDescription,
+                                "targetFolder": batch.outputFolderURL?.lastPathComponent ?? "none"
+                            ]
+                        )
+                        markCurrentSaveItem(
+                            statusText: "Needs Folder Access",
+                            detailText: workingJob.saveGateMessage,
+                            progress: completedProgressSnapshot(label: "Pending Save"),
+                            isActive: true
+                        )
+                        state = .pendingSave(workingJob)
+                        activeTask = nil
+                        trace.finish("needs_folder_access", metadata: ["error": error.localizedDescription])
+                        return
+                    }
+
                     workingJob.saveGateMessage = "Choose where to save the encoded video, then the export will continue."
                     updatePendingSaveJob(workingJob)
                     clearPendingSaveExportPrompt()
@@ -2912,6 +3065,7 @@ final class HomeViewModel: ObservableObject {
         var waitingJob = job
         waitingJob.saveGateMessage = "Watch a rewarded ad to save this completed video."
         updatePendingSaveJob(waitingJob)
+        persistPendingSaveState(waitingJob.state)
         markCurrentSaveItem(
             statusText: "Watch Ad to Save",
             detailText: waitingJob.saveGateMessage,
@@ -2947,6 +3101,42 @@ final class HomeViewModel: ObservableObject {
             try? await Task.sleep(nanoseconds: 500_000_000)
             await environment.sessionEndAdProvider.showSessionEndAd(reason: reason)
         }
+    }
+
+    private func requestSaveDestinationIfNeeded(for job: PendingSaveJob) {
+        let routedJob = applySelectedFolderBatchDestination(to: job)
+        if routedJob.state.saveDestinationWasChosen == true {
+            updatePendingSaveJob(routedJob)
+            state = .pendingSave(routedJob)
+            if routedJob.state.saveDestination == .sourceFolder,
+               routedJob.state.finalOutputURL == nil {
+                clearPendingSaveExportPrompt()
+                pendingSaveExportPrompt = makePendingSaveExportPrompt(for: routedJob)
+                activeTask = nil
+                return
+            }
+            savePendingJob(routedJob)
+            return
+        }
+
+        pendingSaveDestinationPrompt = PendingSaveDestinationPrompt(job: routedJob)
+        updatePendingSaveJob(routedJob)
+        markCurrentSaveItem(
+            statusText: "Choose Save Location",
+            detailText: "Choose Album or Folder before saving.",
+            progress: completedProgressSnapshot(label: "Ready to Save"),
+            isActive: true
+        )
+        state = .pendingSave(routedJob)
+        activeTask = nil
+        AppLogger.info(
+            "Pending save destination prompt opened",
+            category: .saving,
+            metadata: [
+                "source": routedJob.sourceName,
+                "id": routedJob.id.uuidString
+            ]
+        )
     }
 
     private func finishPendingSaveJob(
@@ -3943,6 +4133,14 @@ final class HomeViewModel: ObservableObject {
         return values?.isDirectory == true
     }
 
+    private func filesPreviewBrowserTitle(for urls: [URL]) -> String {
+        guard urls.count == 1,
+              let firstURL = urls.first else {
+            return "Selected files"
+        }
+        return firstURL.lastPathComponent
+    }
+
     private func isPreviewableInCurrentBuild(asset: TaptionVideoAsset) -> Bool {
         guard let videoTrack = asset.videoTrack else {
             return false
@@ -4319,6 +4517,113 @@ final class HomeViewModel: ObservableObject {
             namingPolicy: TaptionOutputNamingPolicy(suffix: environment.configuration.outputSuffix),
             shouldRestorePendingSaveOnLaunch: true
         )
+    }
+
+    private func rememberFolderBatchSaveDestinationIfNeeded(_ destination: TaptionSaveDestinationKind) {
+        guard var batch = folderBatch else {
+            return
+        }
+        batch.selectedSaveDestination = destination
+        if destination == .sourceFolder,
+           batch.sourceKind == .folder {
+            batch.outputFolderURL = folderBatchOutputDirectoryURL(for: batch)
+        }
+        folderBatch = batch
+    }
+
+    private func applySelectedFolderBatchDestination(
+        to job: PendingSaveJob
+    ) -> PendingSaveJob {
+        guard let batch = folderBatch,
+              let selectedSaveDestination = batch.selectedSaveDestination else {
+            return job
+        }
+
+        var updatedJob = job
+        updatedJob.state.saveDestination = selectedSaveDestination
+        updatedJob.state.saveDestinationWasChosen = true
+
+        switch selectedSaveDestination {
+        case .photosLibrary:
+            updatedJob.state.finalOutputURL = nil
+        case .sourceFolder:
+            if let outputFolderURL = batch.outputFolderURL,
+               let finalFileName = job.state.finalOutputURL?.lastPathComponent {
+                updatedJob.state.finalOutputURL = outputFolderURL.appendingPathComponent(finalFileName)
+                updatedJob.state.accessBookmarkData = makeSecurityScopedBookmarkData(
+                    for: outputFolderURL.deletingLastPathComponent()
+                )
+                pendingSaveAccessURLs[updatedJob.id] = outputFolderURL.deletingLastPathComponent()
+            }
+        case .temporaryOnly:
+            updatedJob.state.finalOutputURL = nil
+        }
+
+        return updatedJob
+    }
+
+    private func applySelectedFolderBatchDestination(
+        to job: inout TaptionPreparedEncodingJob,
+        source: HomeSelectedSource
+    ) {
+        guard source.kind == .folder,
+              let batch = folderBatch,
+              let selectedSaveDestination = batch.selectedSaveDestination else {
+            return
+        }
+
+        job.plan.savePolicy.destination = selectedSaveDestination
+        switch selectedSaveDestination {
+        case .photosLibrary:
+            job.plan.finalOutputURL = nil
+        case .sourceFolder:
+            if let outputFolderURL = batch.outputFolderURL {
+                job.plan.finalOutputURL = folderBatchOutputURL(
+                    for: source.url,
+                    outputFolderURL: outputFolderURL,
+                    container: job.plan.outputPolicy.container
+                )
+            }
+        case .temporaryOnly:
+            job.plan.finalOutputURL = nil
+        }
+    }
+
+    private func folderBatchOutputDirectoryURL(for batch: FolderEncodingBatch) -> URL? {
+        guard batch.sourceKind == .folder,
+              let folderURL = batch.folderURL else {
+            return nil
+        }
+        return folderURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(folderURL.lastPathComponent + environment.configuration.outputSuffix, isDirectory: true)
+    }
+
+    private func folderBatchOutputURL(
+        for sourceURL: URL,
+        outputFolderURL: URL,
+        container: TaptionVideoContainer
+    ) -> URL {
+        outputFolderURL
+            .appendingPathComponent(sourceURL.deletingPathExtension().lastPathComponent + environment.configuration.outputSuffix)
+            .appendingPathExtension(container.defaultFileExtension)
+    }
+
+    private func persistPendingSaveState(_ state: TaptionPendingSaveState) {
+        Task { [environment] in
+            do {
+                try await environment.pendingSaveStore.savePendingState(state)
+            } catch {
+                AppLogger.error(
+                    "Failed to persist pending save destination",
+                    category: .saving,
+                    metadata: [
+                        "pendingSave": state.id.uuidString,
+                        "error": error.localizedDescription
+                    ]
+                )
+            }
+        }
     }
 
     private var selectedAssetForOutputConfiguration: TaptionVideoAsset? {
