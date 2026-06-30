@@ -3041,6 +3041,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(previewText.contains("Button(action: togglePictureInPicture)"))
         XCTAssertTrue(previewText.contains("startDebugAutoPictureInPictureIfRequested()"))
         XCTAssertTrue(previewText.contains("TAPTION_AUTO_START_PIP"))
+        XCTAssertTrue(previewText.contains("nativeValidationProbe"))
+        XCTAssertTrue(previewText.contains("TAPTION_PIP_PROBE_ID"))
         XCTAssertTrue(previewText.contains("beginVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(previewText.contains("endVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(previewText.contains("AdMobBannerSlotView("))
@@ -3172,6 +3174,25 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(scriptText.contains("Queue mini player video output ready"))
         XCTAssertTrue(scriptText.contains("Full-screen ads suppressed during video playback"))
         XCTAssertTrue(scriptText.contains("xcrun simctl io \"$DEVICE\" screenshot"))
+    }
+
+    func testPictureInPictureProbeVerifierCoversSimulatorAndDeviceLaunches() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let scriptURL = rootURL.appendingPathComponent("Scripts/verify_picture_in_picture_probe.sh")
+        let scriptText = try String(contentsOf: scriptURL, encoding: .utf8)
+
+        XCTAssertTrue(scriptText.contains("TAPTION_PREVIEW_SAMPLE_NAME"))
+        XCTAssertTrue(scriptText.contains("TAPTION_AUTO_START_PIP"))
+        XCTAssertTrue(scriptText.contains("TAPTION_PIP_PROBE_ID"))
+        XCTAssertTrue(scriptText.contains("xcrun simctl launch --terminate-running-process"))
+        XCTAssertTrue(scriptText.contains("xcrun devicectl device process launch"))
+        XCTAssertTrue(scriptText.contains("--environment-variables"))
+        XCTAssertTrue(scriptText.contains("Debug auto PiP requested"))
+        XCTAssertTrue(scriptText.contains("Debug auto PiP state checked .*active=true"))
+        XCTAssertTrue(scriptText.contains("TAPTION_PIP_REQUIRE_ACTIVE"))
+        XCTAssertTrue(scriptText.contains("picture-in-picture-probe.log"))
     }
 
     func testDeviceCodecCapabilitiesExposeInstalledDeviceSupportFlags() {

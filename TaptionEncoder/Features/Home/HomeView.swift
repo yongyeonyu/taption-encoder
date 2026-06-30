@@ -1,7 +1,11 @@
 import Darwin
 import AVFoundation
 import SwiftUI
+#if DEBUG
+@_spi(ValidationHarness) import SwiftVLC
+#else
 import SwiftVLC
+#endif
 import PhotosUI
 import UIKit
 
@@ -19,6 +23,7 @@ struct HomeView: View {
     @State private var lastExternalVideoOpenDate: Date?
     #if DEBUG
     @State private var didOpenDebugPreviewFile = false
+    @State private var didOpenDebugPreviewSample = false
     @State private var didOpenDebugSampleLibrary = false
     #endif
 
@@ -375,6 +380,7 @@ struct HomeView: View {
             await viewModel.refreshStarsIfNeeded()
             #if DEBUG
             openDebugPreviewFileIfRequested()
+            openDebugPreviewSampleIfRequested()
             openDebugSampleLibraryIfRequested()
             #endif
         }
@@ -455,6 +461,40 @@ struct HomeView: View {
         }
     }
 
+    private func openDebugPreviewSampleIfRequested() {
+        guard !didOpenDebugPreviewSample,
+              let sampleName = ProcessInfo.processInfo.environment["TAPTION_PREVIEW_SAMPLE_NAME"],
+              !sampleName.isEmpty else {
+            return
+        }
+
+        didOpenDebugPreviewSample = true
+        do {
+            let sampleFolderURL = try TaptionTestVideoSeeder.documentsSampleFolderURL()
+            let previewURL = sampleFolderURL.appendingPathComponent(sampleName)
+            AppLogger.info(
+                "Debug preview sample opened",
+                category: .fileImport,
+                metadata: [
+                    "name": previewURL.lastPathComponent,
+                    "path": previewURL.path,
+                    "probeID": debugProbeID ?? "none"
+                ]
+            )
+            AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
+            viewModel.openExternalPlayerFile(url: previewURL)
+        } catch {
+            AppLogger.error(
+                "Debug preview sample failed",
+                category: .fileImport,
+                metadata: [
+                    "name": sampleName,
+                    "error": error.localizedDescription
+                ]
+            )
+        }
+    }
+
     private func openDebugSampleLibraryIfRequested() {
         guard !didOpenDebugSampleLibrary,
               debugSampleLibraryRequested else {
@@ -474,6 +514,10 @@ struct HomeView: View {
     private var debugAutoStartEncodingRequested: Bool {
         ProcessInfo.processInfo.environment["TAPTION_AUTO_START_ENCODING"] == "1"
             || ProcessInfo.processInfo.arguments.contains("--taption-auto-start-encoding")
+    }
+
+    private var debugProbeID: String? {
+        ProcessInfo.processInfo.environment["TAPTION_PIP_PROBE_ID"]
     }
     #endif
 
@@ -1665,11 +1709,7 @@ private struct QueueVideoPreviewView: View {
         AppLogger.info(
             "Debug auto PiP requested",
             category: .ui,
-            metadata: [
-                "name": preview.displayName,
-                "possible": "\(pipController.isPossible)",
-                "active": "\(pipController.isActive)"
-            ]
+            metadata: debugPictureInPictureMetadata(for: pipController)
         )
 
         guard pipController.isPossible else {
@@ -1677,21 +1717,49 @@ private struct QueueVideoPreviewView: View {
         }
 
         pipController.start()
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        for _ in 0..<20 {
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            if pipController.isActive {
+                break
+            }
+        }
         AppLogger.info(
             "Debug auto PiP state checked",
             category: .ui,
-            metadata: [
-                "name": preview.displayName,
-                "possible": "\(pipController.isPossible)",
-                "active": "\(pipController.isActive)"
-            ]
+            metadata: debugPictureInPictureMetadata(for: pipController)
         )
+    }
+
+    private func debugPictureInPictureMetadata(for pipController: PiPController) -> [String: String] {
+        var metadata: [String: String] = [
+            "name": preview.displayName,
+            "possible": "\(pipController.isPossible)",
+            "active": "\(pipController.isActive)",
+            "simulator": Self.isSimulatorRuntime ? "true" : "false",
+            "probeID": debugProbeID ?? "none"
+        ]
+        if let probe = pipController.nativeValidationProbe {
+            metadata["hasAVController"] = "\(probe.hasAVController)"
+            metadata["windowController"] = probe.windowControllerClassName ?? "none"
+        }
+        return metadata
+    }
+
+    private static var isSimulatorRuntime: Bool {
+        #if targetEnvironment(simulator)
+        return true
+        #else
+        return false
+        #endif
     }
 
     private var debugAutoStartPictureInPictureRequested: Bool {
         ProcessInfo.processInfo.environment["TAPTION_AUTO_START_PIP"] == "1"
             || ProcessInfo.processInfo.arguments.contains("--taption-auto-start-pip")
+    }
+
+    private var debugProbeID: String? {
+        ProcessInfo.processInfo.environment["TAPTION_PIP_PROBE_ID"]
     }
 
     @MainActor
