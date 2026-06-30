@@ -2029,13 +2029,18 @@ final class CodecRoutePlannerTests: XCTestCase {
             extensionInfo["NSExtensionPrincipalClass"] as? String,
             "$(PRODUCT_MODULE_NAME).ThumbnailProvider"
         )
-        XCTAssertTrue(
-            supportedContentTypes.isSuperset(of: documentContentTypes),
-            "Thumbnail extension must cover every Files-visible video type: \(documentContentTypes.subtracting(supportedContentTypes).sorted().joined(separator: ", "))"
+        XCTAssertEqual(
+            supportedContentTypes,
+            ["com.taption.legacy-video"],
+            "Thumbnail extension must avoid system-supported QL types that App Store Connect rejects."
         )
         XCTAssertTrue(
-            supportedContentTypes.isSuperset(of: filesResolvedContentTypes),
-            "Thumbnail extension must also cover system UTIs resolved from supported file extensions: \(filesResolvedContentTypes.subtracting(supportedContentTypes).sorted().joined(separator: ", "))"
+            supportedContentTypes.isDisjoint(with: documentContentTypes.subtracting(["com.taption.legacy-video"])),
+            "Thumbnail extension must not declare system document types: \(supportedContentTypes.intersection(documentContentTypes.subtracting(["com.taption.legacy-video"])).sorted().joined(separator: ", "))"
+        )
+        XCTAssertTrue(
+            supportedContentTypes.isDisjoint(with: filesResolvedContentTypes),
+            "Thumbnail extension must not declare system-resolved file UTIs: \(supportedContentTypes.intersection(filesResolvedContentTypes).sorted().joined(separator: ", "))"
         )
         XCTAssertNil(extensionPlist["UTExportedTypeDeclarations"])
         XCTAssertEqual(extensionLegacyFileExtensions, appLegacyFileExtensions)
