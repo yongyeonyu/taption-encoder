@@ -3116,6 +3116,36 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(progressViewText.contains("if showsWatchAdAction {\n                        watchAdButton"))
     }
 
+    func testFileAndFolderButtonsOpenImportBrowserBeforeSystemPicker() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
+        let loadedFilesURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/LoadedFilesPanelView.swift")
+        let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
+        let loadedFilesText = try String(contentsOf: loadedFilesURL, encoding: .utf8)
+        let sourceBarStart = try XCTUnwrap(homeViewText.range(of: "SourceActionBar("))
+        let sourceBarEnd = try XCTUnwrap(
+            homeViewText[sourceBarStart.lowerBound...].range(of: "\n                    outputSelector")
+        )
+        let sourceBarText = String(homeViewText[sourceBarStart.lowerBound..<sourceBarEnd.lowerBound])
+
+        XCTAssertTrue(homeViewText.contains("@State private var activeImportBrowser: HomeImportBrowserMode?"))
+        XCTAssertTrue(homeViewText.contains("@State private var pendingImportPicker: HomeImportBrowserMode?"))
+        XCTAssertTrue(sourceBarText.contains("activeImportBrowser = .files"))
+        XCTAssertTrue(sourceBarText.contains("activeImportBrowser = .folder"))
+        XCTAssertFalse(sourceBarText.contains("isFileImporterPresented = true"))
+        XCTAssertFalse(sourceBarText.contains("isFolderImporterPresented = true"))
+        XCTAssertTrue(homeViewText.contains("HomeImportBrowserView("))
+        XCTAssertTrue(homeViewText.contains("presentPendingImportPickerIfNeeded"))
+        XCTAssertTrue(homeViewText.contains("case .files:\n            isFileImporterPresented = true"))
+        XCTAssertTrue(homeViewText.contains("case .folder:\n            isFolderImporterPresented = true"))
+        XCTAssertTrue(loadedFilesText.contains("enum HomeImportBrowserMode: String, Identifiable"))
+        XCTAssertTrue(loadedFilesText.contains("struct HomeImportBrowserView: View"))
+        XCTAssertTrue(loadedFilesText.contains("GridItem(.adaptive(minimum: 118, maximum: 168)"))
+        XCTAssertTrue(loadedFilesText.contains("Label(mode.primaryTitle, systemImage: mode.primarySystemImage)"))
+    }
+
     func testExternalVideoOpenSuppressesAppOpenAdsBeforePreviewRouting() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

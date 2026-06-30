@@ -13,6 +13,8 @@ struct HomeView: View {
     @StateObject private var viewModel: HomeViewModel
     @State private var isFileImporterPresented = false
     @State private var isFolderImporterPresented = false
+    @State private var activeImportBrowser: HomeImportBrowserMode?
+    @State private var pendingImportPicker: HomeImportBrowserMode?
     @State private var isPhotosPickerPresented = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var activeMenuSheet: HomeMenuSheet?
@@ -54,11 +56,11 @@ struct HomeView: View {
                         canReset: viewModel.state.canReset,
                         onFiles: {
                             AppLogger.info("File button tapped", category: .ui)
-                            isFileImporterPresented = true
+                            activeImportBrowser = .files
                         },
                         onFolder: {
                             AppLogger.info("Folder button tapped", category: .ui)
-                            isFolderImporterPresented = true
+                            activeImportBrowser = .folder
                         },
                         onSamples: {
                             AppLogger.info("Samples button tapped", category: .ui)
@@ -142,6 +144,33 @@ struct HomeView: View {
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+        }
+        .sheet(
+            item: $activeImportBrowser,
+            onDismiss: presentPendingImportPickerIfNeeded
+        ) { mode in
+            HomeImportBrowserView(
+                mode: mode,
+                onChoose: {
+                    AppLogger.info(
+                        "Import browser choose tapped",
+                        category: .ui,
+                        metadata: ["mode": mode.rawValue]
+                    )
+                    pendingImportPicker = mode
+                    activeImportBrowser = nil
+                },
+                onClose: {
+                    AppLogger.info(
+                        "Import browser closed",
+                        category: .ui,
+                        metadata: ["mode": mode.rawValue]
+                    )
+                    activeImportBrowser = nil
+                }
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isFileImporterPresented) {
             VideoDocumentPicker(
@@ -447,6 +476,19 @@ struct HomeView: View {
         )
         self.miniPlayerPreview = nil
         autoStartMiniPlayerPiPPreviewID = nil
+    }
+
+    private func presentPendingImportPickerIfNeeded() {
+        guard let picker = pendingImportPicker else {
+            return
+        }
+        pendingImportPicker = nil
+        switch picker {
+        case .files:
+            isFileImporterPresented = true
+        case .folder:
+            isFolderImporterPresented = true
+        }
     }
 
     #if DEBUG

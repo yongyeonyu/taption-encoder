@@ -326,6 +326,190 @@ struct FolderPreviewBrowserView: View {
     }
 }
 
+enum HomeImportBrowserMode: String, Identifiable {
+    case files
+    case folder
+
+    var id: String {
+        rawValue
+    }
+
+    var title: String {
+        switch self {
+        case .files:
+            return "Files"
+        case .folder:
+            return "Folder"
+        }
+    }
+
+    var countText: String {
+        switch self {
+        case .files:
+            return "Choose videos"
+        case .folder:
+            return "Choose one folder"
+        }
+    }
+
+    var primaryTitle: String {
+        switch self {
+        case .files:
+            return "Choose Files"
+        case .folder:
+            return "Choose Folder"
+        }
+    }
+
+    var primarySystemImage: String {
+        switch self {
+        case .files:
+            return "doc.on.doc"
+        case .folder:
+            return "folder"
+        }
+    }
+
+    var tileStatus: String {
+        switch self {
+        case .files:
+            return "Multi-select"
+        case .folder:
+            return "Batch"
+        }
+    }
+}
+
+struct HomeImportBrowserView: View {
+    var mode: HomeImportBrowserMode
+    var onChoose: () -> Void
+    var onClose: () -> Void
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 118, maximum: 168), spacing: 10, alignment: .top)
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: 10) {
+                    HomeImportBrowserTileView(
+                        title: mode.primaryTitle,
+                        statusText: mode.tileStatus,
+                        systemImage: mode.primarySystemImage,
+                        onSelect: onChoose
+                    )
+                }
+                .padding(12)
+            }
+
+            bottomBar
+        }
+        .background(TaptionTheme.appBackground.ignoresSafeArea())
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(mode.title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                Text(mode.countText)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(TaptionTheme.mutedText)
+            }
+
+            Spacer(minLength: 8)
+
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .frame(width: 36, height: 36)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.white.opacity(0.88))
+            .background(Color.white.opacity(0.10))
+            .clipShape(Circle())
+            .accessibilityLabel("Close")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(TaptionTheme.surface)
+    }
+
+    private var bottomBar: some View {
+        HStack(spacing: 10) {
+            Button(action: onChoose) {
+                Label(mode.primaryTitle, systemImage: mode.primarySystemImage)
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.black.opacity(0.88))
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .padding(12)
+        .background(TaptionTheme.surface)
+    }
+}
+
+private struct HomeImportBrowserTileView: View {
+    var title: String
+    var statusText: String
+    var systemImage: String
+    var onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: 7) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.black.opacity(0.34))
+
+                    Image(systemName: systemImage)
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(TaptionTheme.mutedText)
+                }
+                .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.76)
+                    .frame(height: 32, alignment: .topLeading)
+
+                Text(statusText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(TaptionTheme.mutedText)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(TaptionTheme.elevatedSurface)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(TaptionTheme.border, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct FolderPreviewTileView: View {
     var file: EncodingFileCardSnapshot
     var onSelect: () -> Void
