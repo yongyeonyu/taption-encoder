@@ -3111,6 +3111,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         let suppressionRange = try XCTUnwrap(
             handlerText.range(of: "AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()")
         )
+        let miniPlayerClearRange = try XCTUnwrap(
+            handlerText.range(of: "clearMiniPlayerForNewSource(reason: \"externalVideoOpen\")")
+        )
         let previewRoutingRange = try XCTUnwrap(
             handlerText.range(of: "viewModel.openExternalPlayerFile(url: url)")
         )
@@ -3123,6 +3126,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("drainPendingExternalVideoOpens(source: \"pending\")"))
         XCTAssertTrue(homeViewText.contains("for url in ExternalVideoOpenInbox.drainPendingURLs()"))
         XCTAssertTrue(homeViewText.contains("Duplicate external video URL ignored"))
+        XCTAssertTrue(homeViewText.contains("Queue mini player cleared for new source"))
+        XCTAssertLessThan(miniPlayerClearRange.lowerBound, suppressionRange.lowerBound)
         XCTAssertLessThan(suppressionRange.lowerBound, previewRoutingRange.lowerBound)
         XCTAssertTrue(appText.contains("static let taptionExternalVideoOpenRequested"))
         XCTAssertTrue(appText.contains("enum ExternalVideoOpenInbox"))

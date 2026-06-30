@@ -409,8 +409,24 @@ struct HomeView: View {
                 "source": source
             ]
         )
+        clearMiniPlayerForNewSource(reason: "externalVideoOpen")
         AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
         viewModel.openExternalPlayerFile(url: url)
+    }
+
+    private func clearMiniPlayerForNewSource(reason: String) {
+        guard let miniPlayerPreview else {
+            return
+        }
+        AppLogger.info(
+            "Queue mini player cleared for new source",
+            category: .ui,
+            metadata: [
+                "name": miniPlayerPreview.displayName,
+                "reason": reason
+            ]
+        )
+        self.miniPlayerPreview = nil
     }
 
     #if DEBUG
