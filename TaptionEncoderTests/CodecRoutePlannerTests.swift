@@ -1818,6 +1818,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             "com.adobe.flash.video",
             "public.mpeg",
             "public.mpeg-2-video",
+            "public.mpeg-2-transport-stream",
+            "public.avchd-mpeg-2-transport-stream",
             "org.xiph.ogv",
             "org.xiph.ogg-audio"
         ]
@@ -1900,9 +1902,12 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(SupportedVideoFileExtensions.contains("avi"))
         XCTAssertTrue(SupportedVideoFileExtensions.contains("webm"))
         XCTAssertTrue(SupportedVideoFileExtensions.contains("DAT"))
-        XCTAssertFalse(SupportedVideoFileExtensions.contains(".m2t"))
+        XCTAssertTrue(SupportedVideoFileExtensions.contains(".m2t"))
+        XCTAssertTrue(SupportedVideoFileExtensions.contains("MTS"))
+        XCTAssertTrue(SupportedVideoFileExtensions.contains("trp"))
         XCTAssertTrue(SupportedVideoFileExtensions.contains("dif"))
-        XCTAssertFalse(ImportableVideoTypes.fileExtensions.contains("lrf"))
+        XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("lrf"))
+        XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("nut"))
         XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("dvr-ms"))
         XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("vc1"))
         XCTAssertTrue(ImportableVideoTypes.fileExtensions.contains("h261"))
@@ -1912,6 +1917,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(ExternalVideoOpenPolicy.canHandle(url: URL(fileURLWithPath: "/tmp/Movie.MP4")))
         XCTAssertTrue(ExternalVideoOpenPolicy.canHandle(url: URL(fileURLWithPath: "/tmp/Legacy.AVI")))
         XCTAssertTrue(ExternalVideoOpenPolicy.canHandle(url: URL(fileURLWithPath: "/tmp/Clip.h261")))
+        XCTAssertTrue(ExternalVideoOpenPolicy.canHandle(url: URL(fileURLWithPath: "/tmp/Camera.M2TS")))
+        XCTAssertTrue(ExternalVideoOpenPolicy.canHandle(url: URL(fileURLWithPath: "/tmp/DJI.LRF")))
+        XCTAssertTrue(ExternalVideoOpenPolicy.canHandle(url: URL(fileURLWithPath: "/tmp/Archive.nut")))
         XCTAssertFalse(ExternalVideoOpenPolicy.canHandle(url: URL(fileURLWithPath: "/tmp/notes.txt")))
         XCTAssertFalse(ExternalVideoOpenPolicy.canHandle(url: URL(string: "https://example.com/movie.mp4")!))
     }
@@ -2006,6 +2014,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             "com.adobe.flash.video",
             "public.mpeg",
             "public.mpeg-2-video",
+            "public.mpeg-2-transport-stream",
+            "public.avchd-mpeg-2-transport-stream",
             "org.xiph.ogv",
             "org.xiph.ogg-audio"
         ]
@@ -3116,16 +3126,18 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(progressViewText.contains("if showsWatchAdAction {\n                        watchAdButton"))
     }
 
-    func testFileAndFolderButtonsOpenInAppImportBrowserWithoutSystemPicker() throws {
+    func testFileAndFolderButtonsOpenInAppImportBrowserWithoutAddLocation() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
         let loadedFilesURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/LoadedFilesPanelView.swift")
+        let sourceActionBarURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/SourceActionBar.swift")
         let stateURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeScreenState.swift")
         let projectURL = rootURL.appendingPathComponent("TaptionEncoder.xcodeproj/project.pbxproj")
         let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
         let loadedFilesText = try String(contentsOf: loadedFilesURL, encoding: .utf8)
+        let sourceActionBarText = try String(contentsOf: sourceActionBarURL, encoding: .utf8)
         let stateText = try String(contentsOf: stateURL, encoding: .utf8)
         let projectText = try String(contentsOf: projectURL, encoding: .utf8)
         let sourceBarStart = try XCTUnwrap(homeViewText.range(of: "SourceActionBar("))
@@ -3136,6 +3148,9 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertTrue(homeViewText.contains("@State private var activeImportBrowser: HomeImportBrowserMode?"))
         XCTAssertTrue(homeViewText.contains("@State private var didCompleteImportBrowserSelection = false"))
+        XCTAssertFalse(homeViewText.contains("@State private var importBrowserPermissionMode"))
+        XCTAssertFalse(homeViewText.contains("@State private var isImportBrowserLocationPickerPresented"))
+        XCTAssertFalse(homeViewText.contains("import UniformTypeIdentifiers"))
         XCTAssertFalse(homeViewText.contains("@State private var pendingImportPicker"))
         XCTAssertFalse(homeViewText.contains("@State private var isFileImporterPresented"))
         XCTAssertFalse(homeViewText.contains("@State private var isFolderImporterPresented"))
@@ -3143,9 +3158,19 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(sourceBarText.contains("viewModel.openImportBrowser(mode: .folder)"))
         XCTAssertTrue(sourceBarText.contains("activeImportBrowser = .files"))
         XCTAssertTrue(sourceBarText.contains("activeImportBrowser = .folder"))
+        XCTAssertFalse(sourceBarText.contains("onSamples"))
+        XCTAssertFalse(sourceBarText.contains("openSampleLibrary()"))
         XCTAssertFalse(sourceBarText.contains("isFileImporterPresented = true"))
         XCTAssertFalse(sourceBarText.contains("isFolderImporterPresented = true"))
+        XCTAssertFalse(sourceActionBarText.contains("var onSamples"))
+        XCTAssertFalse(sourceActionBarText.contains("title: \"Sample\""))
+        XCTAssertTrue(sourceActionBarText.contains("title: \"Reset\""))
         XCTAssertTrue(homeViewText.contains("HomeImportBrowserView("))
+        XCTAssertFalse(homeViewText.contains("onRequestLocationAccess:"))
+        XCTAssertFalse(homeViewText.contains("requestImportBrowserLocationAccess(for:"))
+        XCTAssertFalse(homeViewText.contains(".fileImporter("))
+        XCTAssertFalse(homeViewText.contains("allowedContentTypes: [.folder]"))
+        XCTAssertFalse(homeViewText.contains("handleImportBrowserLocationPickerResult"))
         XCTAssertTrue(homeViewText.contains("handleImportBrowserDismiss"))
         XCTAssertFalse(homeViewText.contains("presentPendingImportPickerIfNeeded"))
         XCTAssertFalse(homeViewText.contains("openImportBrowserLocation"))
@@ -3154,22 +3179,36 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(homeViewText.contains("recoverFolderAccessForPendingSave(url:"))
         XCTAssertFalse(projectText.contains("VideoDocumentPicker.swift"))
         XCTAssertTrue(homeViewText.contains("viewModel.navigateImportBrowserIntoFolder(id: $0)"))
-        XCTAssertTrue(homeViewText.contains("viewModel.navigateImportBrowserBack()"))
+        XCTAssertTrue(homeViewText.contains("onBack: { viewModel.navigateImportBrowserUp() }"))
+        XCTAssertFalse(homeViewText.contains("onBack: { viewModel.navigateImportBrowserBack() }"))
         XCTAssertTrue(homeViewText.contains("viewModel.navigateImportBrowserUp()"))
         XCTAssertTrue(homeViewText.contains("viewModel.toggleImportBrowserFileSelection(id: $0)"))
         XCTAssertTrue(homeViewText.contains("viewModel.importFromImportBrowser()"))
         XCTAssertTrue(stateText.contains("enum HomeImportBrowserMode: String, Identifiable, Equatable"))
-        XCTAssertTrue(stateText.contains("return \"Locations\""))
+        XCTAssertTrue(stateText.contains("return \"On My iPhone\""))
         XCTAssertTrue(stateText.contains("struct HomeImportBrowserContext: Identifiable, Equatable"))
         XCTAssertTrue(stateText.contains("struct HomeImportBrowserFolderSnapshot: Identifiable, Equatable"))
         XCTAssertTrue(stateText.contains("struct HomeImportBrowserFileSnapshot: Identifiable, Equatable"))
         XCTAssertTrue(loadedFilesText.contains("struct HomeImportBrowserView: View"))
-        XCTAssertTrue(loadedFilesText.contains("GridItem(.adaptive(minimum: 118, maximum: 168)"))
-        XCTAssertTrue(loadedFilesText.contains("ImportBrowserHeaderButton("))
+        XCTAssertTrue(loadedFilesText.contains("GridItem(.flexible(minimum: 82)"))
+        XCTAssertTrue(loadedFilesText.contains("ImportBrowserBackButton("))
+        XCTAssertTrue(loadedFilesText.contains("ImportBrowserToolbarButton("))
+        XCTAssertTrue(loadedFilesText.contains("ImportBrowserExplorerStyle.navigationBar"))
+        XCTAssertTrue(loadedFilesText.contains("ImportBrowserExplorerStyle.blueAccent"))
+        XCTAssertTrue(loadedFilesText.contains(".simultaneousGesture(backSwipeGesture)"))
+        XCTAssertTrue(loadedFilesText.contains("DragGesture(minimumDistance: 24"))
+        XCTAssertTrue(loadedFilesText.contains("guard context?.canGoUp == true"))
+        XCTAssertTrue(loadedFilesText.contains("Image(systemName: \"chevron.left\")"))
+        XCTAssertTrue(loadedFilesText.contains("ImportBrowserFolderArtwork(systemBadge: nil)"))
+        XCTAssertFalse(loadedFilesText.contains("HomeImportBrowserLocationAccessTileView"))
+        XCTAssertFalse(loadedFilesText.contains("folder.badge.plus"))
         XCTAssertTrue(loadedFilesText.contains("HomeImportBrowserFolderTileView("))
         XCTAssertTrue(loadedFilesText.contains("HomeImportBrowserFileTileView("))
+        XCTAssertFalse(loadedFilesText.contains("var onRequestLocationAccess"))
+        XCTAssertFalse(loadedFilesText.contains("var onUp: () -> Void"))
+        XCTAssertFalse(loadedFilesText.contains("Text(\"Add Location\")"))
+        XCTAssertFalse(loadedFilesText.contains("Choose files root"))
         XCTAssertFalse(loadedFilesText.contains("onChooseLocation"))
-        XCTAssertFalse(loadedFilesText.contains("Change Location"))
         XCTAssertTrue(loadedFilesText.contains("Label(mode.importTitle, systemImage: mode == .files ? \"checkmark.circle.fill\" : \"tray.and.arrow.down.fill\")"))
 
         let appSourceDirectoryURL = rootURL.appendingPathComponent("TaptionEncoder")
@@ -3474,11 +3513,11 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainers,
-            [.mp4, .mov, .m4v, .mkv, .avi, .webm, .flv, .ogg, .mxf, .mpegProgramStream, .dv, .threeGP, .threeGPP2, .asf, .wmv, .roq, .realMedia, .rawElementaryStream]
+            [.mp4, .mov, .m4v, .mkv, .avi, .webm, .flv, .ogg, .mpegTransportStream, .mxf, .mpegProgramStream, .lrf, .dv, .threeGP, .threeGPP2, .asf, .wmv, .nut, .roq, .realMedia, .rawElementaryStream]
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainerSummary,
-            "MP4, MOV, QT, M4V, MKV, AVI, DIVX, WEBM, FLV, F4V, OGG, OGV, OGM, MXF, MPG, MPEG, MPE, VOB, MOD, DAT, DV, DIF, 3GP, 3GPP, 3G2, 3GPP2, ASF, DVR-MS, WMV, ROQ, RM, RMVB, H264, H265, HEVC, 264, 265, IVF, OBU, Y4M, AV1, H263, H261, M1V, M2V, VC1"
+            "MP4, MOV, QT, M4V, MKV, AVI, DIVX, WEBM, FLV, F4V, OGG, OGV, OGM, TS, MTS, M2TS, M2T, TP, TRP, TOD, MXF, MPG, MPEG, MPE, VOB, MOD, DAT, LRF, DV, DIF, 3GP, 3GPP, 3G2, 3GPP2, ASF, DVR-MS, WMV, NUT, ROQ, RM, RMVB, H264, H265, HEVC, 264, 265, IVF, OBU, Y4M, AV1, H263, H261, M1V, M2V, VC1"
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.executableNowInputVideoCodecs,
@@ -3517,7 +3556,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.supportedInputContainerNote,
-            "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as MKV, WebM, FLV, OGG/OGV, AVI, MXF, MPEG program streams, 3GP, 3G2, ASF/WMV, and raw elementary streams."
+            "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as MKV, WebM, FLV, OGG/OGV, AVI, MXF, MPEG transport and program streams, DJI LRF, NUT, 3GP, 3G2, ASF/WMV, and raw elementary streams."
         )
         XCTAssertTrue(
             TaptionLaunchSupportCatalog.plannedInputVideoNote.contains("roadmap input codecs")
@@ -7531,7 +7570,7 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         viewModel.openImportBrowser(mode: .files)
 
-        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "Locations")
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "On My iPhone")
         XCTAssertEqual(viewModel.importBrowserContext?.hasLocation, false)
         XCTAssertEqual(viewModel.importBrowserContext?.canGoBack, false)
         XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, false)
@@ -7545,10 +7584,11 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertEqual(viewModel.importBrowserContext?.hasLocation, true)
         XCTAssertEqual(viewModel.importBrowserContext?.canGoBack, true)
+        XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, true)
 
-        viewModel.navigateImportBrowserBack()
+        viewModel.navigateImportBrowserUp()
 
-        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "Locations")
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "On My iPhone")
         XCTAssertEqual(viewModel.importBrowserContext?.hasLocation, false)
     }
 
@@ -7596,7 +7636,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         viewModel.navigateImportBrowserUp()
 
         XCTAssertEqual(viewModel.importBrowserContext?.pathText, "VideoRoot")
-        XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, false)
+        XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, true)
         XCTAssertEqual(viewModel.importBrowserContext?.selectedFileCount, 1)
 
         viewModel.navigateImportBrowserBack()
@@ -7613,7 +7653,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testImportBrowserFolderModeCanMoveUpBeforeImportingCurrentFolder() async throws {
+    func testImportBrowserFolderModeDefaultsToSelectedFilesAndCanTrimQueue() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -7622,9 +7662,11 @@ final class CodecRoutePlannerTests: XCTestCase {
         let childURL = rootURL.appendingPathComponent("Child", isDirectory: true)
         let rootVideoURL = rootURL.appendingPathComponent("root.mp4")
         let childVideoURL = childURL.appendingPathComponent("child.mp4")
+        let keptChildVideoURL = childURL.appendingPathComponent("keep.mov")
         try FileManager.default.createDirectory(at: childURL, withIntermediateDirectories: true)
         try Data("root".utf8).write(to: rootVideoURL)
         try Data("child".utf8).write(to: childVideoURL)
+        try Data("keep".utf8).write(to: keptChildVideoURL)
 
         let viewModel = HomeViewModel(
             environment: makeHomeViewModelTestEnvironment(
@@ -7638,26 +7680,86 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(viewModel.importBrowserContext?.pathText, "VideoRoot")
         XCTAssertEqual(viewModel.importBrowserFolders.map(\.folderName), ["Child"])
         XCTAssertEqual(viewModel.importBrowserFiles.map(\.fileName), ["root.mp4"])
+        XCTAssertEqual(viewModel.importBrowserContext?.selectedFileCount, 1)
+        XCTAssertEqual(viewModel.importBrowserFiles.map(\.isSelected), [true])
 
         viewModel.navigateImportBrowserIntoFolder(id: childURL.standardizedFileURL.path)
 
         XCTAssertEqual(viewModel.importBrowserContext?.pathText, "VideoRoot/Child")
         XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, true)
-        XCTAssertEqual(viewModel.importBrowserFiles.map(\.fileName), ["child.mp4"])
+        XCTAssertEqual(viewModel.importBrowserFiles.map(\.fileName), ["child.mp4", "keep.mov"])
+        XCTAssertEqual(viewModel.importBrowserContext?.selectedFileCount, 2)
+        XCTAssertEqual(viewModel.importBrowserFiles.map(\.isSelected), [true, true])
+
+        viewModel.toggleImportBrowserFileSelection(id: childVideoURL.standardizedFileURL.path)
+
+        XCTAssertEqual(viewModel.importBrowserContext?.selectedFileCount, 1)
+        XCTAssertEqual(
+            viewModel.importBrowserFiles.first(where: { $0.fileName == "child.mp4" })?.isSelected,
+            false
+        )
+        XCTAssertEqual(
+            viewModel.importBrowserFiles.first(where: { $0.fileName == "keep.mov" })?.isSelected,
+            true
+        )
 
         viewModel.navigateImportBrowserUp()
 
         XCTAssertEqual(viewModel.importBrowserContext?.pathText, "VideoRoot")
-        XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, false)
+        XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, true)
+        XCTAssertEqual(viewModel.importBrowserContext?.selectedFileCount, 1)
+        XCTAssertEqual(viewModel.importBrowserFiles.map(\.isSelected), [true])
 
         viewModel.navigateImportBrowserIntoFolder(id: childURL.standardizedFileURL.path)
+        viewModel.toggleImportBrowserFileSelection(id: childVideoURL.standardizedFileURL.path)
         viewModel.importFromImportBrowser()
 
         XCTAssertNil(viewModel.importBrowserContext)
         XCTAssertEqual(viewModel.folderPreviewContext?.folderName, "Child")
         XCTAssertEqual(viewModel.folderPreviewContext?.fileCount, 1)
-        XCTAssertEqual(viewModel.folderPreviewFileSnapshots.map(\.id), [childVideoURL.absoluteString])
+        XCTAssertEqual(viewModel.folderPreviewFileSnapshots.map(\.id), [keptChildVideoURL.absoluteString])
         XCTAssertEqual(viewModel.folderPreviewFileSnapshots.first?.sourceKind, .folder)
+    }
+
+    @MainActor
+    func testImportBrowserCanMoveUpFromDocumentsChildToParentAndLocations() async throws {
+        let documentsURL = try XCTUnwrap(FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        ).first)
+        let childName = "ImportBrowserParentProbe-\(UUID().uuidString)"
+        let childURL = documentsURL.appendingPathComponent(childName, isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: childURL)
+        }
+        try FileManager.default.createDirectory(at: childURL, withIntermediateDirectories: true)
+        try Data("child".utf8).write(to: childURL.appendingPathComponent("child.mp4"))
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+
+        viewModel.openImportBrowserRoot(url: childURL, mode: .files)
+
+        XCTAssertEqual(viewModel.importBrowserContext?.rootFolderName, "Taption Encoder Files")
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "Taption Encoder Files/\(childName)")
+        XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, true)
+        XCTAssertEqual(viewModel.importBrowserFiles.map(\.fileName), ["child.mp4"])
+
+        viewModel.navigateImportBrowserUp()
+
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "Taption Encoder Files")
+        XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, true)
+        XCTAssertTrue(viewModel.importBrowserFolders.contains { $0.folderName == childName })
+
+        viewModel.navigateImportBrowserUp()
+
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "On My iPhone")
+        XCTAssertEqual(viewModel.importBrowserContext?.hasLocation, false)
+        XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, false)
     }
 
     @MainActor

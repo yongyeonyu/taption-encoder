@@ -965,9 +965,9 @@ enum HomeImportBrowserMode: String, Identifiable, Equatable {
     var emptyTitle: String {
         switch self {
         case .files:
-            return "Locations"
+            return "On My iPhone"
         case .folder:
-            return "Locations"
+            return "On My iPhone"
         }
     }
 
@@ -985,7 +985,7 @@ enum HomeImportBrowserMode: String, Identifiable, Equatable {
         case .files:
             return "Import Selected"
         case .folder:
-            return "Import This Folder"
+            return "Import Selected"
         }
     }
 }
@@ -1013,7 +1013,7 @@ struct HomeImportBrowserContext: Identifiable, Equatable {
 
         let folderText = folderCount == 1 ? "1 folder" : "\(folderCount) folders"
         let videoText = fileCount == 1 ? "1 video" : "\(fileCount) videos"
-        if mode == .files, selectedFileCount > 0 {
+        if selectedFileCount > 0 {
             let selectedText = selectedFileCount == 1 ? "1 selected" : "\(selectedFileCount) selected"
             return "\(folderText), \(videoText), \(selectedText)"
         }

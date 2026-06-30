@@ -334,12 +334,13 @@ struct HomeImportBrowserView: View {
     var onOpenFolder: (String) -> Void
     var onToggleFile: (String) -> Void
     var onBack: () -> Void
-    var onUp: () -> Void
     var onImport: () -> Void
     var onClose: () -> Void
 
     private let columns = [
-        GridItem(.adaptive(minimum: 118, maximum: 168), spacing: 10, alignment: .top)
+        GridItem(.flexible(minimum: 82), spacing: 22, alignment: .top),
+        GridItem(.flexible(minimum: 82), spacing: 22, alignment: .top),
+        GridItem(.flexible(minimum: 82), spacing: 22, alignment: .top)
     ]
 
     var body: some View {
@@ -347,8 +348,8 @@ struct HomeImportBrowserView: View {
             header
 
             ScrollView {
-                LazyVGrid(columns: columns, spacing: 10) {
-                    if folders.isEmpty, files.isEmpty {
+                LazyVGrid(columns: columns, spacing: 28) {
+                    if folders.isEmpty, files.isEmpty, context?.hasLocation == true {
                         HomeImportBrowserEmptyTileView(
                             title: context?.emptyStateTitle ?? "No Items",
                             statusText: context?.emptyStateDetail ?? "Empty"
@@ -364,68 +365,54 @@ struct HomeImportBrowserView: View {
                         ForEach(files) { file in
                             HomeImportBrowserFileTileView(
                                 file: file,
-                                isSelectable: mode == .files,
+                                isSelectable: mode == .files || mode == .folder,
                                 onSelect: { onToggleFile(file.id) }
                             )
                         }
                     }
                 }
-                .padding(12)
+                .padding(.horizontal, 22)
+                .padding(.top, 24)
+                .padding(.bottom, 28)
             }
+            .background(ImportBrowserExplorerStyle.background)
 
             if context?.hasLocation == true {
                 bottomBar
             }
         }
-        .background(TaptionTheme.appBackground.ignoresSafeArea())
+        .background(ImportBrowserExplorerStyle.background.ignoresSafeArea())
+        .simultaneousGesture(backSwipeGesture)
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
-            ImportBrowserHeaderButton(
-                systemImage: "chevron.left",
-                isEnabled: context?.canGoBack == true,
-                accessibilityLabel: "Back",
-                action: onBack
-            )
+        ZStack {
+            Text(navigationTitle)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(Color.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .padding(.horizontal, 116)
 
-            ImportBrowserHeaderButton(
-                systemImage: "arrow.up",
-                isEnabled: context?.canGoUp == true,
-                accessibilityLabel: "Up",
-                action: onUp
-            )
+            HStack(spacing: 8) {
+                ImportBrowserBackButton(
+                    title: backTitle,
+                    isEnabled: context?.canGoUp == true,
+                    action: onBack
+                )
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(context?.pathText ?? mode.title)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.92))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                Spacer(minLength: 8)
 
-                Text(context?.countText ?? mode.emptySubtitle)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(TaptionTheme.mutedText)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
+                ImportBrowserToolbarButton(
+                    systemImage: "xmark",
+                    accessibilityLabel: "Close",
+                    action: onClose
+                )
             }
-
-            Spacer(minLength: 8)
-
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .bold))
-                    .frame(width: 36, height: 36)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Color.white.opacity(0.88))
-            .background(Color.white.opacity(0.10))
-            .clipShape(Circle())
-            .accessibilityLabel("Close")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(TaptionTheme.surface)
+        .frame(height: 78)
+        .padding(.horizontal, 16)
+        .background(ImportBrowserExplorerStyle.navigationBar)
     }
 
     private var bottomBar: some View {
@@ -438,12 +425,19 @@ struct HomeImportBrowserView: View {
             }
             .buttonStyle(.plain)
             .disabled(!canImport)
-            .foregroundStyle(canImport ? Color.black.opacity(0.88) : TaptionTheme.disabledText)
-            .background(canImport ? Color.white : Color.white.opacity(0.12))
+            .foregroundStyle(canImport ? Color.white : ImportBrowserExplorerStyle.secondaryText)
+            .background(canImport ? ImportBrowserExplorerStyle.blueAccent : ImportBrowserExplorerStyle.disabledControl)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .padding(12)
-        .background(TaptionTheme.surface)
+        .background(
+            ImportBrowserExplorerStyle.background
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(ImportBrowserExplorerStyle.blueAccent.opacity(0.22))
+                        .frame(height: 1)
+                }
+        )
     }
 
     private var canImport: Bool {
@@ -451,32 +445,139 @@ struct HomeImportBrowserView: View {
             return false
         }
         switch mode {
-        case .files:
+        case .files, .folder:
             return (context?.selectedFileCount ?? 0) > 0
-        case .folder:
-            return true
         }
+    }
+
+    private var navigationTitle: String {
+        guard context?.hasLocation == true else {
+            return mode.title
+        }
+        return context?.currentFolderName ?? mode.title
+    }
+
+    private var backTitle: String {
+        guard context?.hasLocation == true else {
+            return "Back"
+        }
+
+        let parts = (context?.pathText ?? "")
+            .split(separator: "/")
+            .map(String.init)
+        guard parts.count > 1 else {
+            return "On My iPhone"
+        }
+        return parts[parts.count - 2]
+    }
+
+    private var backSwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 24, coordinateSpace: .local)
+            .onEnded { value in
+                guard context?.canGoUp == true else {
+                    return
+                }
+
+                let horizontal = value.translation.width
+                let vertical = abs(value.translation.height)
+                if horizontal > 72, horizontal > vertical * 1.45 {
+                    onBack()
+                }
+            }
     }
 }
 
-private struct ImportBrowserHeaderButton: View {
-    var systemImage: String
+private enum ImportBrowserExplorerStyle {
+    static let navigationBar = Color(red: 0.02, green: 0.04, blue: 0.08)
+    static let background = Color(red: 0.005, green: 0.01, blue: 0.02)
+    static let primaryText = Color.white.opacity(0.94)
+    static let secondaryText = Color(red: 0.52, green: 0.72, blue: 1.0)
+    static let blueAccent = Color(red: 0.0, green: 0.48, blue: 1.0)
+    static let disabledControl = Color(red: 0.05, green: 0.10, blue: 0.18)
+    static let folderFront = Color(red: 0.05, green: 0.34, blue: 0.86)
+    static let folderBack = Color(red: 0.02, green: 0.18, blue: 0.46)
+    static let selectedRing = Color(red: 0.0, green: 0.64, blue: 1.0)
+}
+
+private struct ImportBrowserBackButton: View {
+    var title: String
     var isEnabled: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 29, weight: .semibold))
+
+                Text(title)
+                    .font(.title3.weight(.medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.66)
+            }
+            .frame(width: 112, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .foregroundStyle(isEnabled ? ImportBrowserExplorerStyle.secondaryText : Color.white.opacity(0.32))
+        .accessibilityLabel("Back")
+    }
+}
+
+private struct ImportBrowserToolbarButton: View {
+    var systemImage: String
     var accessibilityLabel: String
     var action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 14, weight: .bold))
-                .frame(width: 34, height: 34)
+                .font(.system(size: 23, weight: .bold))
+                .frame(width: 36, height: 36)
         }
         .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .foregroundStyle(isEnabled ? Color.white.opacity(0.9) : TaptionTheme.disabledText)
-        .background(Color.white.opacity(isEnabled ? 0.12 : 0.06))
-        .clipShape(Circle())
+        .foregroundStyle(ImportBrowserExplorerStyle.secondaryText)
         .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+private struct ImportBrowserFolderArtwork: View {
+    var systemBadge: String?
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let height = geometry.size.height
+            let bodyHeight = height * 0.64
+            let tabWidth = width * 0.46
+            let tabHeight = height * 0.18
+
+            ZStack(alignment: .bottom) {
+                RoundedRectangle(cornerRadius: max(width * 0.055, 6), style: .continuous)
+                    .fill(ImportBrowserExplorerStyle.folderFront)
+                    .frame(width: width * 0.92, height: bodyHeight)
+                    .offset(y: -height * 0.02)
+
+                HStack {
+                    RoundedRectangle(cornerRadius: max(width * 0.035, 4), style: .continuous)
+                        .fill(ImportBrowserExplorerStyle.folderBack)
+                        .frame(width: tabWidth, height: tabHeight)
+                    Spacer(minLength: 0)
+                }
+                .frame(width: width * 0.82)
+                .offset(y: -bodyHeight + tabHeight * 0.58)
+
+                if let systemBadge {
+                    Image(systemName: systemBadge)
+                        .font(.system(size: max(width * 0.18, 18), weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.96))
+                        .shadow(color: Color.black.opacity(0.12), radius: 1, x: 0, y: 1)
+                        .offset(y: -height * 0.22)
+                }
+            }
+            .frame(width: width, height: height)
+        }
+        .aspectRatio(1.18, contentMode: .fit)
     }
 }
 
@@ -485,43 +586,37 @@ private struct HomeImportBrowserEmptyTileView: View {
     var statusText: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .center, spacing: 10) {
             ZStack {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.black.opacity(0.34))
+                    .fill(ImportBrowserExplorerStyle.disabledControl)
 
                 Image(systemName: "tray")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(TaptionTheme.mutedText)
+                    .font(.system(size: 26, weight: .semibold))
+                    .foregroundStyle(ImportBrowserExplorerStyle.secondaryText)
             }
-            .aspectRatio(16.0 / 9.0, contentMode: .fit)
+            .frame(height: 82)
             .overlay(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                    .stroke(ImportBrowserExplorerStyle.blueAccent.opacity(0.18), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             Text(title)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Color.white.opacity(0.9))
+                .font(.callout.weight(.bold))
+                .foregroundStyle(ImportBrowserExplorerStyle.primaryText)
                 .lineLimit(2)
                 .minimumScaleFactor(0.76)
-                .frame(height: 32, alignment: .topLeading)
+                .multilineTextAlignment(.center)
+                .frame(height: 40, alignment: .top)
 
             Text(statusText)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(TaptionTheme.mutedText)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(ImportBrowserExplorerStyle.secondaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
         }
-        .padding(8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(TaptionTheme.elevatedSurface)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(TaptionTheme.border, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .frame(maxWidth: .infinity)
     }
 }
 
@@ -531,43 +626,26 @@ private struct HomeImportBrowserFolderTileView: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 7) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.black.opacity(0.34))
-
-                    Image(systemName: "folder.fill")
-                        .font(.system(size: 26, weight: .semibold))
-                        .foregroundStyle(TaptionTheme.accent)
-                }
-                .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            VStack(alignment: .center, spacing: 10) {
+                ImportBrowserFolderArtwork(systemBadge: nil)
+                    .frame(height: 82)
 
                 Text(folder.folderName)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.9))
+                    .font(.callout.weight(.bold))
+                    .foregroundStyle(ImportBrowserExplorerStyle.primaryText)
                     .lineLimit(2)
                     .minimumScaleFactor(0.76)
-                    .frame(height: 32, alignment: .topLeading)
+                    .multilineTextAlignment(.center)
+                    .frame(height: 40, alignment: .top)
 
                 Text(folder.detailText)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(TaptionTheme.mutedText)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(ImportBrowserExplorerStyle.secondaryText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(TaptionTheme.elevatedSurface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(TaptionTheme.border, lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -580,41 +658,42 @@ private struct HomeImportBrowserFileTileView: View {
 
     var body: some View {
         Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .center, spacing: 10) {
                 FolderPreviewThumbnailView(
                     sourceURL: file.thumbnailSourceURL,
                     canAttemptThumbnail: true
                 )
+                .frame(height: 82)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay(alignment: .topTrailing) {
                     if file.isSelected {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 19, weight: .semibold))
-                            .foregroundStyle(Color.white, TaptionTheme.accent)
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(Color.white, ImportBrowserExplorerStyle.selectedRing)
                             .padding(6)
                     }
                 }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(file.isSelected ? ImportBrowserExplorerStyle.selectedRing : ImportBrowserExplorerStyle.blueAccent.opacity(0.18), lineWidth: file.isSelected ? 2 : 1)
+                )
 
                 Text(file.fileName)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(isSelectable ? 0.9 : 0.66))
+                    .font(.callout.weight(.bold))
+                    .foregroundStyle(isSelectable ? ImportBrowserExplorerStyle.primaryText : ImportBrowserExplorerStyle.secondaryText)
                     .lineLimit(2)
                     .minimumScaleFactor(0.76)
-                    .frame(height: 32, alignment: .topLeading)
+                    .multilineTextAlignment(.center)
+                    .frame(height: 40, alignment: .top)
 
                 Text(file.detailText)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(isSelectable ? TaptionTheme.mutedText : TaptionTheme.disabledText)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(ImportBrowserExplorerStyle.secondaryText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }
-            .padding(8)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(file.isSelected ? TaptionTheme.selectedSurface : TaptionTheme.elevatedSurface)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(file.isSelected ? Color.white.opacity(0.36) : TaptionTheme.border, lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!isSelectable)

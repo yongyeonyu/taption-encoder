@@ -42,96 +42,11 @@ struct HomeView: View {
                 TaptionTheme.appBackground
                     .ignoresSafeArea()
 
-                VStack(spacing: metrics.verticalSpacing) {
-                    AdMobBannerSlotView(
-                        adUnitID: viewModel.bannerAdUnitID,
-                        displayScale: metrics.bannerScale
-                    )
-                    header(metrics: metrics)
-
-                    SourceActionBar(
-                        canSelectSource: viewModel.state.canSelectSource,
-                        canReset: viewModel.state.canReset,
-                        onFiles: {
-                            AppLogger.info("File button tapped", category: .ui)
-                            viewModel.openImportBrowser(mode: .files)
-                            activeImportBrowser = .files
-                        },
-                        onFolder: {
-                            AppLogger.info("Folder button tapped", category: .ui)
-                            viewModel.openImportBrowser(mode: .folder)
-                            activeImportBrowser = .folder
-                        },
-                        onSamples: {
-                            AppLogger.info("Samples button tapped", category: .ui)
-                            viewModel.openSampleLibrary()
-                        },
-                        onPhotos: {
-                            AppLogger.info("Album button tapped", category: .ui)
-                            isPhotosPickerPresented = true
-                        },
-                        onReset: {
-                            AppLogger.info("Reset button tapped", category: .ui)
-                            miniPlayerPreview = nil
-                            autoStartMiniPlayerPiPPreviewID = nil
-                            viewModel.reset()
-                        },
-                        controlHeight: metrics.controlHeight,
-                        buttonFont: metrics.buttonFont
-                    )
-
-                    outputSelector(metrics: metrics)
-
-                    OutputSummaryView(
-                        title: viewModel.selectedOutputDetailTitle,
-                        videoCodecText: viewModel.selectedVideoCodecText,
-                        audioCodecText: viewModel.selectedAudioCodecText,
-                        contentScale: metrics.contentScale
-                    )
-
-                    LoadedFilesPanelView(
-                        files: viewModel.fileCardSnapshots,
-                        contentScale: metrics.contentScale,
-                        panelHeight: metrics.filePanelHeight,
-                        onSelect: { viewModel.openPreviewForFileCard(id: $0) }
-                    )
-
-                    EncodingProgressView(
-                        state: viewModel.state,
-                        displayDetail: viewModel.progressDetailText,
-                        canStartEncoding: viewModel.canStartEncodingNow,
-                        startActionTitle: viewModel.startActionTitle,
-                        showsSaveAction: viewModel.showsSaveAction,
-                        saveActionTitle: viewModel.saveActionTitle,
-                        showsWorkAction: !isFullScreenVideoPlaybackActive,
-                        watchAdButtonTitle: viewModel.watchAdButtonTitle,
-                        showsWatchAdAction: !isFullScreenVideoPlaybackActive,
-                        canWatchAd: viewModel.canWatchAdForStar,
-                        controlHeight: metrics.controlHeight,
-                        contentScale: metrics.contentScale,
-                        reservesFailureLogArea: reservesFailureLogArea,
-                        onStart: { viewModel.startPreparedEncoding() },
-                        onSave: { viewModel.saveCurrentPendingOutput() },
-                        onWatchAd: { viewModel.watchAdForStar() },
-                        onCancel: { viewModel.cancel() }
-                    )
-
-                    if !reservesFailureLogArea {
-                        Spacer(minLength: 0)
-                    }
-
-                    AdMobBannerSlotView(
-                        adUnitID: viewModel.bannerAdUnitID,
-                        displayScale: metrics.bannerScale
-                    )
-
-                    exitButton(metrics: metrics)
-                }
-                .padding(.horizontal, metrics.horizontalPadding)
-                .padding(.vertical, metrics.verticalPadding)
-                .frame(width: metrics.canvasWidth, height: metrics.canvasHeight, alignment: .top)
-                .background(TaptionTheme.appBackground)
-                .clipped()
+                homeContent(
+                    metrics: metrics,
+                    reservesFailureLogArea: reservesFailureLogArea,
+                    showsPlaybackActions: !isFullScreenVideoPlaybackActive
+                )
 
                 if let preview = miniPlayerPreview {
                     miniPlayerOverlay(
@@ -156,27 +71,9 @@ struct HomeView: View {
                 files: viewModel.importBrowserFiles,
                 onOpenFolder: { viewModel.navigateImportBrowserIntoFolder(id: $0) },
                 onToggleFile: { viewModel.toggleImportBrowserFileSelection(id: $0) },
-                onBack: { viewModel.navigateImportBrowserBack() },
-                onUp: { viewModel.navigateImportBrowserUp() },
-                onImport: {
-                    AppLogger.info(
-                        "Import browser import tapped",
-                        category: .ui,
-                        metadata: ["mode": mode.rawValue]
-                    )
-                    didCompleteImportBrowserSelection = true
-                    viewModel.importFromImportBrowser()
-                    activeImportBrowser = nil
-                },
-                onClose: {
-                    AppLogger.info(
-                        "Import browser closed",
-                        category: .ui,
-                        metadata: ["mode": mode.rawValue]
-                    )
-                    viewModel.dismissImportBrowser()
-                    activeImportBrowser = nil
-                }
+                onBack: { viewModel.navigateImportBrowserUp() },
+                onImport: { importFromBrowser(mode: mode) },
+                onClose: { closeImportBrowser(mode: mode) }
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -259,44 +156,7 @@ struct HomeView: View {
             preferredItemEncoding: .current
         )
         .onChange(of: selectedPhotoItem) { _, newItem in
-            guard let newItem else {
-                return
-            }
-
-            Task {
-                do {
-                    guard let importedVideo = try await newItem.loadTransferable(type: ImportedPhotoVideo.self) else {
-                        await MainActor.run {
-                            AppLogger.error("Photos picker returned no transferable video", category: .photosImport)
-                            viewModel.fail(message: "The selected Photos video could not be imported.")
-                        }
-                        return
-                    }
-
-                    await MainActor.run {
-                        AppLogger.info(
-                            "Photos video imported",
-                            category: .photosImport,
-                            metadata: ["name": importedVideo.displayName]
-                        )
-                        viewModel.startPhotosFlow(
-                            url: importedVideo.url,
-                            displayName: importedVideo.displayName
-                        )
-                        selectedPhotoItem = nil
-                    }
-                } catch {
-                    await MainActor.run {
-                        AppLogger.error(
-                            "Photos picker import failed",
-                            category: .photosImport,
-                            metadata: ["error": error.localizedDescription]
-                        )
-                        viewModel.fail(message: error.localizedDescription)
-                        selectedPhotoItem = nil
-                    }
-                }
-            }
+            handleSelectedPhotoItemChange(newItem)
         }
         .onOpenURL { url in
             handleExternalVideoOpen(url: url, source: "scene")
@@ -315,6 +175,103 @@ struct HomeView: View {
             openDebugSampleLibraryIfRequested()
             #endif
         }
+    }
+
+    @ViewBuilder
+    private func homeContent(
+        metrics: HomeLayoutMetrics,
+        reservesFailureLogArea: Bool,
+        showsPlaybackActions: Bool
+    ) -> some View {
+        VStack(spacing: metrics.verticalSpacing) {
+            AdMobBannerSlotView(
+                adUnitID: viewModel.bannerAdUnitID,
+                displayScale: metrics.bannerScale
+            )
+            header(metrics: metrics)
+            sourceControls(metrics: metrics)
+            outputSelector(metrics: metrics)
+            outputSummary(metrics: metrics)
+            loadedFilesPanel(metrics: metrics)
+            encodingControls(
+                metrics: metrics,
+                reservesFailureLogArea: reservesFailureLogArea,
+                showsPlaybackActions: showsPlaybackActions
+            )
+
+            if !reservesFailureLogArea {
+                Spacer(minLength: 0)
+            }
+
+            AdMobBannerSlotView(
+                adUnitID: viewModel.bannerAdUnitID,
+                displayScale: metrics.bannerScale
+            )
+
+            exitButton(metrics: metrics)
+        }
+        .padding(.horizontal, metrics.horizontalPadding)
+        .padding(.vertical, metrics.verticalPadding)
+        .frame(width: metrics.canvasWidth, height: metrics.canvasHeight, alignment: .top)
+        .background(TaptionTheme.appBackground)
+        .clipped()
+    }
+
+    private func sourceControls(metrics: HomeLayoutMetrics) -> some View {
+        SourceActionBar(
+            canSelectSource: viewModel.state.canSelectSource,
+            canReset: viewModel.state.canReset,
+            onFiles: openFilesImportBrowser,
+            onFolder: openFolderImportBrowser,
+            onPhotos: presentPhotosPicker,
+            onReset: resetHome,
+            controlHeight: metrics.controlHeight,
+            buttonFont: metrics.buttonFont
+        )
+    }
+
+    private func outputSummary(metrics: HomeLayoutMetrics) -> some View {
+        OutputSummaryView(
+            title: viewModel.selectedOutputDetailTitle,
+            videoCodecText: viewModel.selectedVideoCodecText,
+            audioCodecText: viewModel.selectedAudioCodecText,
+            contentScale: metrics.contentScale
+        )
+    }
+
+    private func loadedFilesPanel(metrics: HomeLayoutMetrics) -> some View {
+        LoadedFilesPanelView(
+            files: viewModel.fileCardSnapshots,
+            contentScale: metrics.contentScale,
+            panelHeight: metrics.filePanelHeight,
+            onSelect: { viewModel.openPreviewForFileCard(id: $0) }
+        )
+    }
+
+    private func encodingControls(
+        metrics: HomeLayoutMetrics,
+        reservesFailureLogArea: Bool,
+        showsPlaybackActions: Bool
+    ) -> some View {
+        EncodingProgressView(
+            state: viewModel.state,
+            displayDetail: viewModel.progressDetailText,
+            canStartEncoding: viewModel.canStartEncodingNow,
+            startActionTitle: viewModel.startActionTitle,
+            showsSaveAction: viewModel.showsSaveAction,
+            saveActionTitle: viewModel.saveActionTitle,
+            showsWorkAction: showsPlaybackActions,
+            watchAdButtonTitle: viewModel.watchAdButtonTitle,
+            showsWatchAdAction: showsPlaybackActions,
+            canWatchAd: viewModel.canWatchAdForStar,
+            controlHeight: metrics.controlHeight,
+            contentScale: metrics.contentScale,
+            reservesFailureLogArea: reservesFailureLogArea,
+            onStart: { viewModel.startPreparedEncoding() },
+            onSave: { viewModel.saveCurrentPendingOutput() },
+            onWatchAd: { viewModel.watchAdForStar() },
+            onCancel: { viewModel.cancel() }
+        )
     }
 
     private func drainPendingExternalVideoOpens(source: String) {
@@ -376,6 +333,99 @@ struct HomeView: View {
             return
         }
         viewModel.dismissImportBrowser()
+    }
+
+    private func openFilesImportBrowser() {
+        AppLogger.info("File button tapped", category: .ui)
+        viewModel.openImportBrowser(mode: .files)
+        activeImportBrowser = .files
+    }
+
+    private func openFolderImportBrowser() {
+        AppLogger.info("Folder button tapped", category: .ui)
+        viewModel.openImportBrowser(mode: .folder)
+        activeImportBrowser = .folder
+    }
+
+    private func presentPhotosPicker() {
+        AppLogger.info("Album button tapped", category: .ui)
+        isPhotosPickerPresented = true
+    }
+
+    private func resetHome() {
+        AppLogger.info("Reset button tapped", category: .ui)
+        miniPlayerPreview = nil
+        autoStartMiniPlayerPiPPreviewID = nil
+        viewModel.reset()
+    }
+
+    private func handleSelectedPhotoItemChange(_ newItem: PhotosPickerItem?) {
+        guard let newItem else {
+            return
+        }
+
+        Task {
+            await importSelectedPhotoItem(newItem)
+        }
+    }
+
+    private func importSelectedPhotoItem(_ item: PhotosPickerItem) async {
+        do {
+            guard let importedVideo = try await item.loadTransferable(type: ImportedPhotoVideo.self) else {
+                failPhotosImport(message: "The selected Photos video could not be imported.")
+                return
+            }
+
+            completePhotosImport(importedVideo)
+        } catch {
+            failPhotosImport(message: error.localizedDescription)
+        }
+    }
+
+    @MainActor
+    private func completePhotosImport(_ importedVideo: ImportedPhotoVideo) {
+        AppLogger.info(
+            "Photos video imported",
+            category: .photosImport,
+            metadata: ["name": importedVideo.displayName]
+        )
+        viewModel.startPhotosFlow(
+            url: importedVideo.url,
+            displayName: importedVideo.displayName
+        )
+        selectedPhotoItem = nil
+    }
+
+    @MainActor
+    private func failPhotosImport(message: String) {
+        AppLogger.error(
+            "Photos picker import failed",
+            category: .photosImport,
+            metadata: ["error": message]
+        )
+        viewModel.fail(message: message)
+        selectedPhotoItem = nil
+    }
+
+    private func importFromBrowser(mode: HomeImportBrowserMode) {
+        AppLogger.info(
+            "Import browser import tapped",
+            category: .ui,
+            metadata: ["mode": mode.rawValue]
+        )
+        didCompleteImportBrowserSelection = true
+        viewModel.importFromImportBrowser()
+        activeImportBrowser = nil
+    }
+
+    private func closeImportBrowser(mode: HomeImportBrowserMode) {
+        AppLogger.info(
+            "Import browser closed",
+            category: .ui,
+            metadata: ["mode": mode.rawValue]
+        )
+        viewModel.dismissImportBrowser()
+        activeImportBrowser = nil
     }
 
     #if DEBUG

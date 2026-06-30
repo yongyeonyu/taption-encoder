@@ -236,13 +236,16 @@ enum TaptionLaunchSupportCatalog {
         .webm,
         .flv,
         .ogg,
+        .mpegTransportStream,
         .mxf,
         .mpegProgramStream,
+        .lrf,
         .dv,
         .threeGP,
         .threeGPP2,
         .asf,
         .wmv,
+        .nut,
         .roq,
         .realMedia,
         .rawElementaryStream
@@ -374,7 +377,7 @@ enum TaptionLaunchSupportCatalog {
     }
 
     static var supportedInputContainerNote: String {
-        "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as MKV, WebM, FLV, OGG/OGV, AVI, MXF, MPEG program streams, 3GP, 3G2, ASF/WMV, and raw elementary streams."
+        "The current launch build imports Apple-readable containers plus selected software-inspected inputs such as MKV, WebM, FLV, OGG/OGV, AVI, MXF, MPEG transport and program streams, DJI LRF, NUT, 3GP, 3G2, ASF/WMV, and raw elementary streams."
     }
 
     static func inputAvailability(for codec: TaptionVideoCodec) -> TaptionLaunchInputSupportAvailability? {

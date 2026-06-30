@@ -5,7 +5,6 @@ struct SourceActionBar: View {
     var canReset: Bool
     var onFiles: () -> Void
     var onFolder: () -> Void
-    var onSamples: () -> Void
     var onPhotos: () -> Void
     var onReset: () -> Void
     var controlHeight: CGFloat = 44
@@ -45,27 +44,15 @@ struct SourceActionBar: View {
                 )
             }
 
-            HStack(spacing: 10) {
-                PrimaryActionButton(
-                    title: "Sample",
-                    systemImage: "play.rectangle.on.rectangle",
-                    isProminent: true,
-                    isEnabled: canSelectSource,
-                    height: controlHeight,
-                    font: buttonFont,
-                    action: onSamples
-                )
-
-                PrimaryActionButton(
-                    title: "Reset",
-                    systemImage: "arrow.counterclockwise",
-                    isProminent: false,
-                    isEnabled: canReset,
-                    height: controlHeight,
-                    font: buttonFont,
-                    action: onReset
-                )
-            }
+            PrimaryActionButton(
+                title: "Reset",
+                systemImage: "arrow.counterclockwise",
+                isProminent: false,
+                isEnabled: canReset,
+                height: controlHeight,
+                font: buttonFont,
+                action: onReset
+            )
         }
     }
 }

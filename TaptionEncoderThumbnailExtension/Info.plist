@@ -51,6 +51,13 @@
 					<string>rm</string>
 					<string>rmvb</string>
 					<string>mxf</string>
+					<string>ts</string>
+					<string>mts</string>
+					<string>m2ts</string>
+					<string>m2t</string>
+					<string>tp</string>
+					<string>trp</string>
+					<string>tod</string>
 					<string>mpg</string>
 					<string>mpeg</string>
 					<string>mpe</string>
@@ -64,6 +71,8 @@
 					<string>ogm</string>
 					<string>flv</string>
 					<string>f4v</string>
+					<string>lrf</string>
+					<string>nut</string>
 					<string>h264</string>
 					<string>h265</string>
 					<string>hevc</string>
@@ -87,6 +96,28 @@
 			<key>QLSupportedContentTypes</key>
 			<array>
 				<string>com.taption.legacy-video</string>
+				<string>public.avi</string>
+				<string>org.smpte.mxf</string>
+				<string>public.dv-movie</string>
+				<string>com.microsoft.advanced-systems-format</string>
+				<string>com.microsoft.windows-media-wmv</string>
+				<string>com.real.realmedia</string>
+				<string>com.real.realmedia-vbr</string>
+				<string>org.webmproject.webm</string>
+				<string>com.adobe.flash.video</string>
+				<string>public.mpeg</string>
+				<string>public.mpeg-2-video</string>
+				<string>public.mpeg-2-transport-stream</string>
+				<string>public.avchd-mpeg-2-transport-stream</string>
+				<string>org.xiph.ogv</string>
+				<string>org.xiph.ogg-audio</string>
+				<string>public.movie</string>
+				<string>public.video</string>
+				<string>public.mpeg-4</string>
+				<string>com.apple.m4v-video</string>
+				<string>com.apple.quicktime-movie</string>
+				<string>public.3gpp</string>
+				<string>public.3gpp2</string>
 			</array>
 		</dict>
 		<key>NSExtensionPointIdentifier</key>

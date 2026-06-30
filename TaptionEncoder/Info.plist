@@ -43,6 +43,8 @@
 				<string>com.adobe.flash.video</string>
 				<string>public.mpeg</string>
 				<string>public.mpeg-2-video</string>
+				<string>public.mpeg-2-transport-stream</string>
+				<string>public.avchd-mpeg-2-transport-stream</string>
 				<string>org.xiph.ogv</string>
 				<string>org.xiph.ogg-audio</string>
 			</array>
@@ -172,6 +174,13 @@
 					<string>rm</string>
 					<string>rmvb</string>
 					<string>mxf</string>
+					<string>ts</string>
+					<string>mts</string>
+					<string>m2ts</string>
+					<string>m2t</string>
+					<string>tp</string>
+					<string>trp</string>
+					<string>tod</string>
 					<string>mpg</string>
 					<string>mpeg</string>
 					<string>mpe</string>
@@ -185,6 +194,8 @@
 					<string>ogm</string>
 					<string>flv</string>
 					<string>f4v</string>
+					<string>lrf</string>
+					<string>nut</string>
 					<string>h264</string>
 					<string>h265</string>
 					<string>hevc</string>

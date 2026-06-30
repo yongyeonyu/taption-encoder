@@ -321,7 +321,7 @@ enum SW_SoftwareCodecBackendRegistry {
         videoEncodeCodecs: [],
         audioDecodeCodecs: [],
         audioEncodeCodecs: [],
-        readableContainers: [.mp4, .mov, .m4v, .mkv, .webm, .avi, .flv, .ogg, .mpegProgramStream, .mxf, .dv, .threeGP, .threeGPP2, .asf, .wmv, .roq, .realMedia, .rawElementaryStream],
+        readableContainers: [.mp4, .mov, .m4v, .mkv, .webm, .avi, .flv, .ogg, .mpegTransportStream, .mpegProgramStream, .lrf, .mxf, .dv, .threeGP, .threeGPP2, .asf, .wmv, .nut, .roq, .realMedia, .rawElementaryStream],
         writableContainers: [],
         requiresLicenseReview: true,
         notes: "Current app fallback for AV1, H.264, H.265, VP9, VP8, MPEG-1, MPEG-2, MPEG-4 Visual, H.263, H.261, Flash Video, Microsoft MPEG-4 V2/V3, Motion JPEG, JPEG 2000, JPEG-LS, Lossless JPEG, Apple Animation, Cinepak, Sorenson Video, Sorenson Video 3, QuickTime Video, Theora, RoQ Video, Windows Media Video, Microsoft Video 1, ASUS V1/V2, FlashSV/FlashSV2, ZMBV, CLJR, Snow, FFV1, HuffYUV, Ut Video, MagicYUV, DVCPro HD, DV, CineForm, DNxHD, PNG Video, R10K, V308, V210, R210, V408, V410, Y41P, Microsoft RLE, QuickTime Graphics, YUV4, and Raw Video decode. Output encoding is handled by the route-specific software-to-H.265 algorithms."

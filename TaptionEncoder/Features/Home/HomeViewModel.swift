@@ -84,6 +84,7 @@ final class HomeViewModel: ObservableObject {
     private var securityScopedURLs: [URL] = []
     private var importBrowserMode: HomeImportBrowserMode?
     private var importBrowserRootURL: URL?
+    private var importBrowserRootDisplayName: String?
     private var importBrowserCurrentURL: URL?
     private var importBrowserHistory: [URL] = []
     private var importBrowserSelectedFileURLs: Set<URL> = []
@@ -1115,11 +1116,14 @@ final class HomeViewModel: ObservableObject {
         folderPreviewContext = nil
         folderBatch = nil
         beginSecurityScopedAccessIfNeeded(for: url)
+        let scope = importBrowserNavigationScope(for: url)
         importBrowserMode = mode
-        importBrowserRootURL = url
-        importBrowserCurrentURL = url
+        importBrowserRootURL = scope.rootURL
+        importBrowserRootDisplayName = scope.displayName
+        importBrowserCurrentURL = url.standardizedFileURL
         importBrowserHistory = []
         importBrowserSelectedFileURLs = []
+        selectAllImportBrowserFilesIfNeeded(in: url.standardizedFileURL)
         refreshImportBrowser()
         state = .idle
     }
@@ -1144,7 +1148,9 @@ final class HomeViewModel: ObservableObject {
             return
         }
         importBrowserHistory.append(currentURL)
-        importBrowserCurrentURL = URL(fileURLWithPath: folder.id)
+        let nextURL = URL(fileURLWithPath: folder.id).standardizedFileURL
+        importBrowserCurrentURL = nextURL
+        selectAllImportBrowserFilesIfNeeded(in: nextURL)
         refreshImportBrowser()
     }
 
@@ -1154,6 +1160,7 @@ final class HomeViewModel: ObservableObject {
                 return
             }
             importBrowserRootURL = nil
+            importBrowserRootDisplayName = nil
             importBrowserCurrentURL = nil
             importBrowserHistory = []
             importBrowserSelectedFileURLs = []
@@ -1162,6 +1169,7 @@ final class HomeViewModel: ObservableObject {
             return
         }
         importBrowserCurrentURL = previousURL
+        selectAllImportBrowserFilesIfNeeded(in: previousURL)
         refreshImportBrowser()
     }
 
@@ -1169,6 +1177,16 @@ final class HomeViewModel: ObservableObject {
         guard let rootURL = importBrowserRootURL?.standardizedFileURL,
               let currentURL = importBrowserCurrentURL?.standardizedFileURL,
               currentURL != rootURL else {
+            guard importBrowserRootURL != nil else {
+                return
+            }
+            importBrowserRootURL = nil
+            importBrowserRootDisplayName = nil
+            importBrowserCurrentURL = nil
+            importBrowserHistory = []
+            importBrowserSelectedFileURLs = []
+            stopSecurityScopedAccess()
+            refreshImportBrowser()
             return
         }
 
@@ -1178,11 +1196,12 @@ final class HomeViewModel: ObservableObject {
         }
         importBrowserHistory.append(currentURL)
         importBrowserCurrentURL = parentURL
+        selectAllImportBrowserFilesIfNeeded(in: parentURL)
         refreshImportBrowser()
     }
 
     func toggleImportBrowserFileSelection(id: String) {
-        guard importBrowserMode == .files,
+        guard importBrowserMode != nil,
               importBrowserFiles.contains(where: { $0.id == id }) else {
             return
         }
@@ -1214,9 +1233,23 @@ final class HomeViewModel: ObservableObject {
             clearImportBrowserState(stoppingAccess: false)
             openFilesPreviewBrowser(urls: selectedURLs, securityScopedRootURL: rootURL)
         case .folder:
+            let visibleFileURLs = Set(importBrowserFiles.map { URL(fileURLWithPath: $0.id).standardizedFileURL })
+            let selectedURLs = importBrowserSelectedFileURLs
+                .filter { visibleFileURLs.contains($0.standardizedFileURL) }
+                .sorted {
+                    $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+                }
+            guard !selectedURLs.isEmpty else {
+                AppLogger.warning("Import browser folder import ignored because no files are selected", category: .fileImport)
+                return
+            }
             let rootURL = importBrowserRootURL
             clearImportBrowserState(stoppingAccess: false)
-            startFolderFlow(url: currentURL, securityScopedRootURL: rootURL)
+            openFolderSelectionPreviewBrowser(
+                folderURL: currentURL,
+                fileURLs: selectedURLs,
+                securityScopedRootURL: rootURL
+            )
         }
     }
 
@@ -1273,6 +1306,63 @@ final class HomeViewModel: ObservableObject {
         folderPreviewContext = FolderPreviewContext(
             id: "selected-files-\(UUID().uuidString)",
             folderName: title,
+            fileCount: selectedURLs.count
+        )
+        state = .idle
+    }
+
+    private func openFolderSelectionPreviewBrowser(
+        folderURL: URL,
+        fileURLs: [URL],
+        securityScopedRootURL: URL?
+    ) {
+        AppLogger.info(
+            "Folder selection preview browser requested",
+            category: .folderImport,
+            metadata: [
+                "folder": folderURL.lastPathComponent,
+                "count": "\(fileURLs.count)",
+                "names": fileURLs.map(\.lastPathComponent).joined(separator: "|")
+            ]
+        )
+        guard canStartNewSourceFlow() else {
+            return
+        }
+        guard state.canSelectSource else {
+            AppLogger.warning(
+                "Folder selection preview browser ignored because source selection is disabled",
+                category: .folderImport,
+                metadata: ["state": "\(state)"]
+            )
+            return
+        }
+
+        let selectedURLs = fileURLs.sorted {
+            $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+        }
+        guard !selectedURLs.isEmpty else {
+            AppLogger.warning("Folder selection preview browser ignored because no files were selected", category: .folderImport)
+            return
+        }
+
+        dismissPreview()
+        activeTask?.cancel()
+        selectionInspectionTask?.cancel()
+        previewInspectionTask?.cancel()
+        currentReview = nil
+        lastBatchFileCards = []
+        folderPreviewContext = nil
+        folderBatch = FolderEncodingBatch(
+            folderURL: folderURL,
+            folderName: folderURL.lastPathComponent,
+            sourceKind: .folder,
+            fileURLs: selectedURLs
+        )
+        let scopedURLs = ([securityScopedRootURL].compactMap { $0 } + [folderURL] + selectedURLs)
+        beginSecurityScopedAccessIfNeeded(for: scopedURLs)
+        folderPreviewContext = FolderPreviewContext(
+            id: "\(folderURL.standardizedFileURL.absoluteString)-selected-\(UUID().uuidString)",
+            folderName: folderURL.lastPathComponent,
             fileCount: selectedURLs.count
         )
         state = .idle
@@ -4609,17 +4699,22 @@ final class HomeViewModel: ObservableObject {
                     isSelected: selectedPaths.contains(standardizedURL.path)
                 )
             }
+            let rootDisplayName = importBrowserRootDisplayName ?? rootURL.lastPathComponent
             importBrowserContext = HomeImportBrowserContext(
                 id: "\(mode.rawValue)-\(currentURL.path)-\(importBrowserSelectedFileURLs.count)",
                 mode: mode,
-                rootFolderName: rootURL.lastPathComponent,
+                rootFolderName: rootDisplayName,
                 currentFolderName: currentURL.lastPathComponent,
-                pathText: relativeImportBrowserPath(root: rootURL, current: currentURL),
+                pathText: relativeImportBrowserPath(
+                    root: rootURL,
+                    current: currentURL,
+                    rootDisplayName: rootDisplayName
+                ),
                 folderCount: folders.count,
                 fileCount: files.count,
                 selectedFileCount: importBrowserSelectedFileURLs.count,
                 canGoBack: true,
-                canGoUp: currentURL != rootURL
+                canGoUp: true
             )
         } catch {
             AppLogger.error(
@@ -4633,17 +4728,22 @@ final class HomeViewModel: ObservableObject {
             )
             importBrowserFolders = []
             importBrowserFiles = []
+            let rootDisplayName = importBrowserRootDisplayName ?? rootURL.lastPathComponent
             importBrowserContext = HomeImportBrowserContext(
                 id: "\(mode.rawValue)-\(currentURL.path)-error",
                 mode: mode,
-                rootFolderName: rootURL.lastPathComponent,
+                rootFolderName: rootDisplayName,
                 currentFolderName: currentURL.lastPathComponent,
-                pathText: relativeImportBrowserPath(root: rootURL, current: currentURL),
+                pathText: relativeImportBrowserPath(
+                    root: rootURL,
+                    current: currentURL,
+                    rootDisplayName: rootDisplayName
+                ),
                 folderCount: 0,
                 fileCount: 0,
                 selectedFileCount: importBrowserSelectedFileURLs.count,
                 canGoBack: true,
-                canGoUp: currentURL != rootURL
+                canGoUp: true
             )
         }
     }
@@ -4663,7 +4763,7 @@ final class HomeViewModel: ObservableObject {
             HomeImportBrowserFolderSnapshot(
                 id: documentsURL.standardizedFileURL.path,
                 folderName: "Taption Encoder Files",
-                detailText: "Documents"
+                detailText: "On My iPhone"
             )
         ]
 
@@ -4672,7 +4772,7 @@ final class HomeViewModel: ObservableObject {
             roots.append(HomeImportBrowserFolderSnapshot(
                 id: samplesURL.standardizedFileURL.path,
                 folderName: "Samples",
-                detailText: "Bundled videos"
+                detailText: "Taption Encoder Files"
             ))
         }
 
@@ -4682,6 +4782,7 @@ final class HomeViewModel: ObservableObject {
     private func clearImportBrowserState(stoppingAccess: Bool) {
         importBrowserMode = nil
         importBrowserRootURL = nil
+        importBrowserRootDisplayName = nil
         importBrowserCurrentURL = nil
         importBrowserHistory = []
         importBrowserSelectedFileURLs = []
@@ -4693,12 +4794,38 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    private func relativeImportBrowserPath(root: URL, current: URL) -> String {
+    private func selectAllImportBrowserFilesIfNeeded(in folderURL: URL) {
+        guard importBrowserMode == .folder else {
+            return
+        }
+
+        let selectedURLs = (try? videoFileURLs(in: folderURL)) ?? []
+        importBrowserSelectedFileURLs = Set(selectedURLs.map { $0.standardizedFileURL })
+    }
+
+    private func importBrowserNavigationScope(for url: URL) -> (rootURL: URL, displayName: String) {
+        let standardizedURL = url.standardizedFileURL
+        guard let documentsURL = FileManager.default.urls(
+            for: .documentDirectory,
+            in: .userDomainMask
+        ).first?.standardizedFileURL,
+              importBrowserURL(standardizedURL, isInsideRoot: documentsURL) else {
+            return (standardizedURL, standardizedURL.lastPathComponent)
+        }
+
+        return (documentsURL, "Taption Encoder Files")
+    }
+
+    private func relativeImportBrowserPath(
+        root: URL,
+        current: URL,
+        rootDisplayName: String
+    ) -> String {
         let rootPath = root.standardizedFileURL.path
         let currentPath = current.standardizedFileURL.path
         guard currentPath != rootPath,
               currentPath.hasPrefix(rootPath + "/") else {
-            return root.lastPathComponent
+            return rootDisplayName
         }
 
         let suffix = currentPath
@@ -4706,9 +4833,9 @@ final class HomeViewModel: ObservableObject {
             .split(separator: "/")
             .joined(separator: "/")
         guard !suffix.isEmpty else {
-            return root.lastPathComponent
+            return rootDisplayName
         }
-        return "\(root.lastPathComponent)/\(suffix)"
+        return "\(rootDisplayName)/\(suffix)"
     }
 
     private func importBrowserURL(_ url: URL, isInsideRoot rootURL: URL) -> Bool {
