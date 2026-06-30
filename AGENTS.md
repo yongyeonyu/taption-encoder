@@ -14,8 +14,8 @@ This project is the standalone app shell for Taption's AV1 to H.265 conversion f
 
 ## Current Release State
 
-- Release `01.00.02` maps to Apple marketing version `1.0.2` and build `20`.
-- Release `01.00.02` archive/export/upload succeeded on 2026-06-29, and App Store Connect reported the uploaded package is processing. App Review, processing completion, TestFlight availability, and public App Store availability are separate states and are not verified here.
+- Release `01.00.02` maps to Apple marketing version `1.0.2` and current upload build `21`.
+- Release `01.00.02` build `20` archive/export/upload succeeded on 2026-06-29. Build `21` archive/export/upload succeeded on 2026-06-30 after tightening the thumbnail extension `QLSupportedContentTypes` declaration, and App Store Connect reported the uploaded package is processing. App Review, processing completion, TestFlight availability, and public App Store availability are separate states and are not verified here.
 - Release `01.00.01` remains the archived shipped baseline. The `01.00.01` release train used commit `f5af6b3` (`Prepare Taption Encoder 1.0.1 build 19`).
 - App Store Connect/TestFlight upload proof is separate from App Review or store-processing status. Do not report processing, review, or public availability as complete unless that exact state was verified or reported by the company.
 - The last release proof set for `01.00.01` included:
@@ -29,7 +29,7 @@ This project is the standalone app shell for Taption's AV1 to H.265 conversion f
 ## Product Direction
 
 - Released baseline: `01.00.01` / `1.0.1 (19)` ships the standalone H.265 / HEVC conversion app with fixed H.265 video output, MP4/MOV output containers, file/folder/Photos sources, route-based HW/SW handling, rewarded-save recovery, release assets, and App Store metadata.
-- Current release train: `01.00.02` / `1.0.2 (20)` keeps H.265-only output, preserves the standalone encoder scope, and carries the preview/sample/documentation stabilization work forward.
+- Current release train: `01.00.02` / `1.0.2 (21)` keeps H.265-only output, preserves the standalone encoder scope, and carries the preview/sample/documentation stabilization work forward.
 - Next milestone: stabilize `01.00.02` feedback and continue broad practical video-input execution toward H.265-only output.
 - Final direction: broad practical input coverage with H.265 / HEVC as the only video output codec.
 - Output video codec is fixed to H.265. Do not add selectable output video codecs unless the company explicitly changes this policy.
@@ -94,7 +94,7 @@ Create a clean encoder module in this project, then migrate only the AV1 detecti
 ## Next Chat Handoff
 
 - Continue from `/Users/u_mo_c/Documents/taption_encoder` only.
-- Treat `01.00.02` / `1.0.2 (20)` as the current uploaded release train; verify processing/TestFlight/App Review/public availability separately before reporting those states.
+- Treat `01.00.02` / `1.0.2 (21)` as the current uploaded release train; verify processing/TestFlight/App Review/public availability separately before reporting those states.
 - Use `docs/planning/ACTION_ITEMS.md` for active work and `docs/archive/` only for historical evidence.
 - Jamini communication must identify the project as Taption Encoder and use this repository's `docs/agent_communication/` scripts and handoff folders.
 - Keep proof surfaces separate in reports: code review, tests, fixture evidence, build/archive, TestFlight/App Store Connect upload, device install, runtime logs, and manual UI proof are distinct.

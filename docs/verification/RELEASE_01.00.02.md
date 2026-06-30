@@ -4,9 +4,9 @@
 
 - Company release label: `01.00.02`
 - Apple marketing version: `1.0.2`
-- Apple build number: `20`
+- Apple build number: `21`
 - Bundle identifier: `com.taption.encoder`
-- Release date: 2026-06-29
+- Release date: 2026-06-30
 
 ## Scope
 
@@ -18,20 +18,23 @@
 
 ## Proof Surfaces
 
-- [x] Code review completed: no release-blocking code issues remained after checking the preview/sample/doc diffs and `git diff --check`.
-- [x] `plutil -lint TaptionEncoder/Info.plist` passed.
+- [x] Code review completed: App Store Connect rejected the first build `21` upload attempt because the thumbnail extension declared system-supported types in `QLSupportedContentTypes`; the release-blocking issue was fixed by limiting the thumbnail extension to `com.taption.legacy-video`, then re-archiving and re-uploading.
+- [x] `plutil -lint TaptionEncoder/Info.plist TaptionEncoderThumbnailExtension/Info.plist TaptionEncoderLiveActivityExtension/Info.plist` passed.
+- [x] Thumbnail extension archive inspection passed: `QLSupportedContentTypes` contains only `com.taption.legacy-video`.
 - [x] Focused queue-preview/thumbnail XCTest passed:
   - `CodecRoutePlannerTests/testPreviewRegressionSamplesProduceVisibleVideoSnapshots`
   - `CodecRoutePlannerTests/testBundledAvailableNowSamplesGenerateQueueThumbnails`
 - [x] `Scripts/verify_bundled_test_videos.sh` passed: 55 bundled videos, target duration 4.85-5.15 seconds, documented size exceptions `DV.dv` and `DVCPro HD.mov`, documented audio exceptions `H.261.h261` and `RoQ Video.roq`.
 - [x] `Scripts/run_core_codec_truth_checks.sh` passed: 63 planned video route pairs, 93 Apple device models, 2 video output selections, 56 audio output selections.
-- [x] App-scheme XCTest passed with parallel testing disabled: 245 tests, 2 skipped, 0 failures.
-- [x] Release archive succeeded at `build/TestFlight-01.00.02-20/TaptionEncoder.xcarchive`; archived app Info.plist reported `com.taption.encoder`, version `1.0.2`, build `20`.
+- [x] External video player registration verification passed for source and built app Info.plist.
+- [x] External video player flow verification passed in both warm and cold modes on the iPhone 17 Pro simulator.
+- [x] App-scheme XCTest passed with parallel testing disabled.
+- [x] Release archive succeeded at `build/TestFlight-01.00.02-21/TaptionEncoder.xcarchive`; archived app Info.plist reported `com.taption.encoder`, version `1.0.2`, build `21`.
 - [x] TestFlight/App Store Connect export/upload succeeded with `Uploaded package is processing`, `Upload succeeded`, and `EXPORT SUCCEEDED`.
 
 ## Upload Notes
 
-- Upload command used `build/TestFlight-01.00.02-20/ExportOptions.plist` with App Store Connect upload destination.
+- Upload command used `build/TestFlight-01.00.02-21/ExportOptions.plist` with App Store Connect upload destination.
 - Upload produced non-blocking dSYM warnings for `GoogleMobileAds.framework` and `UserMessagingPlatform.framework`, matching the existing release pattern; the app package upload still succeeded.
 
 ## Boundaries
