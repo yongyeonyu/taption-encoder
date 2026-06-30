@@ -196,10 +196,10 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
 
     func preloadRewardedAd() async -> AdLoadState {
         #if canImport(GoogleMobileAds)
-        guard await AdMobBootstrapper.ensureReadyForAds() else {
+        if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "preload") {
             return .unavailable
         }
-        if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "preload") {
+        guard await AdMobBootstrapper.ensureReadyForAds() else {
             return .unavailable
         }
         return await AdMobRewardedAdManager.shared.loadIfNeeded(
@@ -212,10 +212,10 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
 
     func retryRewardedAdNow() async -> AdLoadState {
         #if canImport(GoogleMobileAds)
-        guard await AdMobBootstrapper.ensureReadyForAds() else {
+        if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "retry") {
             return .unavailable
         }
-        if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "retry") {
+        guard await AdMobBootstrapper.ensureReadyForAds() else {
             return .unavailable
         }
         return await AdMobRewardedAdManager.shared.loadIfNeeded(
@@ -229,10 +229,10 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
 
     func showRewardedAd() async -> RewardedAdShowResult {
         #if canImport(GoogleMobileAds)
-        guard await AdMobBootstrapper.ensureReadyForAds() else {
+        if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "show") {
             return .unavailable
         }
-        if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "show") {
+        guard await AdMobBootstrapper.ensureReadyForAds() else {
             return .unavailable
         }
         return await AdMobRewardedAdManager.shared.show(
@@ -253,10 +253,10 @@ struct AdMobSessionEndAdProvider: SessionEndAdProviding {
 
     func preloadSessionEndAd() async {
         #if canImport(GoogleMobileAds)
-        guard await AdMobBootstrapper.ensureReadyForAds() else {
+        if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "interstitial", action: "preload") {
             return
         }
-        if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "interstitial", action: "preload") {
+        guard await AdMobBootstrapper.ensureReadyForAds() else {
             return
         }
         _ = await AdMobInterstitialAdManager.shared.loadIfNeeded(adUnitID: configuration.sessionEndInterstitialAdUnitID)
@@ -265,10 +265,10 @@ struct AdMobSessionEndAdProvider: SessionEndAdProviding {
 
     func showSessionEndAd(reason: SessionEndAdReason) async {
         #if canImport(GoogleMobileAds)
-        guard await AdMobBootstrapper.ensureReadyForAds() else {
+        if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "interstitial", action: "show") {
             return
         }
-        if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "interstitial", action: "show") {
+        guard await AdMobBootstrapper.ensureReadyForAds() else {
             return
         }
         await AdMobInterstitialAdManager.shared.showIfAvailable(
@@ -462,6 +462,9 @@ enum AdMobBootstrapper {
     static func refreshOnActive() async {
         #if canImport(GoogleMobileAds)
         AppLogger.info("AdMob refresh requested for active scene", category: .ads)
+        if await shouldSkipNonBannerAdRequest(placement: "allNonBanner", action: "refreshOnActive") {
+            return
+        }
         guard await ensureReadyForAds() else {
             return
         }
@@ -524,6 +527,9 @@ enum AdMobBootstrapper {
 
     static func showAppOpenAdIfAvailable() async {
         #if canImport(GoogleMobileAds)
+        if await shouldSkipNonBannerAdRequest(placement: "appOpen", action: "showAppOpen") {
+            return
+        }
         if await isAppOpenAdSuppressed {
             AppLogger.info("App open ad skipped for external playback", category: .ads)
             return

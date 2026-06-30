@@ -3068,6 +3068,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(adProvidersText.contains("placement: \"interstitial\", action: \"load\""))
         XCTAssertTrue(adProvidersText.contains("placement: \"appOpen\", action: \"load\""))
         XCTAssertTrue(adProvidersText.contains("placement: \"allNonBanner\", action: \"preload\""))
+        XCTAssertTrue(adProvidersText.contains("placement: \"allNonBanner\", action: \"refreshOnActive\""))
+        XCTAssertTrue(adProvidersText.contains("placement: \"appOpen\", action: \"showAppOpen\""))
         XCTAssertTrue(adProvidersText.contains("App open ad skipped for external playback"))
     }
 
@@ -3195,8 +3197,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(scriptText.contains("xcrun simctl launch --terminate-running-process"))
         XCTAssertTrue(scriptText.contains("xcrun devicectl device process launch"))
         XCTAssertTrue(scriptText.contains("--environment-variables"))
-        XCTAssertTrue(scriptText.contains("Debug auto PiP requested"))
-        XCTAssertTrue(scriptText.contains("Debug auto PiP state checked .*active=true"))
+        XCTAssertTrue(scriptText.contains("requested_pattern=\"Debug auto PiP requested .*probeID=$PROBE_ID\""))
+        XCTAssertTrue(scriptText.contains("possible_pattern=\"Debug auto PiP requested .*possible=true .*probeID=$PROBE_ID\""))
+        XCTAssertTrue(scriptText.contains("active_pattern=\"Debug auto PiP state checked .*active=true .*probeID=$PROBE_ID\""))
         XCTAssertTrue(scriptText.contains("TAPTION_PIP_REQUIRE_ACTIVE"))
         XCTAssertTrue(scriptText.contains("picture-in-picture-probe.log"))
     }

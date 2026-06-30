@@ -80,10 +80,13 @@ copy_log() {
 }
 
 deadline=$((SECONDS + 25))
+requested_pattern="Debug auto PiP requested .*probeID=$PROBE_ID"
+possible_pattern="Debug auto PiP requested .*possible=true .*probeID=$PROBE_ID"
+active_pattern="Debug auto PiP state checked .*active=true .*probeID=$PROBE_ID"
 while [[ $SECONDS -lt $deadline ]]; do
-  if copy_log && grep -q "$PROBE_ID" "$LOG_COPY" && grep -q "Debug auto PiP requested" "$LOG_COPY"; then
+  if copy_log && grep -q "$requested_pattern" "$LOG_COPY"; then
     if [[ "$REQUIRE_ACTIVE" == "1" ]]; then
-      if grep -q "Debug auto PiP state checked .*active=true" "$LOG_COPY"; then
+      if grep -q "$active_pattern" "$LOG_COPY"; then
         [[ "$is_simulator" == "1" ]] && xcrun simctl io "$DEVICE" screenshot "$SCREENSHOT" >/dev/null || true
         echo "picture-in-picture active verified"
         echo "probe: $PROBE_ID"
@@ -93,7 +96,7 @@ while [[ $SECONDS -lt $deadline ]]; do
       fi
     else
       [[ "$is_simulator" == "1" ]] && xcrun simctl io "$DEVICE" screenshot "$SCREENSHOT" >/dev/null || true
-      if grep -q "Debug auto PiP requested .*possible=true" "$LOG_COPY"; then
+      if grep -q "$possible_pattern" "$LOG_COPY"; then
         echo "picture-in-picture probe completed: possible=true"
       else
         echo "picture-in-picture probe completed: possible=false"
