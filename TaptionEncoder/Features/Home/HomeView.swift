@@ -953,6 +953,7 @@ private struct QueueVideoPreviewView: View {
     @State private var gestureFeedbackTask: Task<Void, Never>?
     @State private var didAttachVideoSurface = false
     @State private var pipController: PiPController?
+    @State private var didBeginVideoPlaybackAdSuppression = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -997,6 +998,7 @@ private struct QueueVideoPreviewView: View {
                 .ignoresSafeArea()
         )
         .onAppear {
+            beginVideoPlaybackAdSuppressionIfNeeded()
             AppOrientationController.shared.activatePreviewOrientations()
             showControls(scheduleAutoHide: false)
         }
@@ -1469,6 +1471,22 @@ private struct QueueVideoPreviewView: View {
         dismiss()
     }
 
+    private func beginVideoPlaybackAdSuppressionIfNeeded() {
+        guard !didBeginVideoPlaybackAdSuppression else {
+            return
+        }
+        didBeginVideoPlaybackAdSuppression = true
+        AdMobBootstrapper.beginVideoPlaybackAdSuppression(reason: "queuePreview")
+    }
+
+    private func endVideoPlaybackAdSuppressionIfNeeded() {
+        guard didBeginVideoPlaybackAdSuppression else {
+            return
+        }
+        didBeginVideoPlaybackAdSuppression = false
+        AdMobBootstrapper.endVideoPlaybackAdSuppression(reason: "queuePreview")
+    }
+
     private func togglePlayback() {
         player.togglePlayPause()
         showControls(scheduleAutoHide: false)
@@ -1912,6 +1930,7 @@ private struct QueueVideoPreviewView: View {
         gestureFeedbackTask?.cancel()
         AppOrientationController.shared.restorePortrait()
         pipController?.stop()
+        endVideoPlaybackAdSuppressionIfNeeded()
         let sessionID = preview.id
         Task { @MainActor in
             await player.shutdown()

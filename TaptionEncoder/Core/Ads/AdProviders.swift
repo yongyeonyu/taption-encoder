@@ -433,6 +433,8 @@ final class AdMobConsentManager {
 enum AdMobBootstrapper {
     @MainActor
     private static var appOpenAdSuppressedUntil: Date?
+    @MainActor
+    private static var activeVideoPlaybackSuppressionCount = 0
 
     static func start() {
         #if canImport(GoogleMobileAds)
@@ -462,6 +464,32 @@ enum AdMobBootstrapper {
         )
     }
 
+    @MainActor
+    static func beginVideoPlaybackAdSuppression(reason: String) {
+        activeVideoPlaybackSuppressionCount += 1
+        AppLogger.info(
+            "Full-screen ads suppressed during video playback",
+            category: .ads,
+            metadata: [
+                "reason": reason,
+                "count": "\(activeVideoPlaybackSuppressionCount)"
+            ]
+        )
+    }
+
+    @MainActor
+    static func endVideoPlaybackAdSuppression(reason: String) {
+        activeVideoPlaybackSuppressionCount = max(activeVideoPlaybackSuppressionCount - 1, 0)
+        AppLogger.info(
+            "Video playback ad suppression released",
+            category: .ads,
+            metadata: [
+                "reason": reason,
+                "count": "\(activeVideoPlaybackSuppressionCount)"
+            ]
+        )
+    }
+
     static func showAppOpenAdIfAvailable() async {
         #if canImport(GoogleMobileAds)
         if await isAppOpenAdSuppressed {
@@ -480,6 +508,9 @@ enum AdMobBootstrapper {
 
     @MainActor
     private static var isAppOpenAdSuppressed: Bool {
+        if activeVideoPlaybackSuppressionCount > 0 {
+            return true
+        }
         guard let until = appOpenAdSuppressedUntil else {
             return false
         }

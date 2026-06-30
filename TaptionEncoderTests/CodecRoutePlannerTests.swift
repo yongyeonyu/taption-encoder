@@ -2991,10 +2991,26 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(previewText.contains("startsAutomaticallyFromInline: true"))
         XCTAssertTrue(previewText.contains("managesAudioSession: false"))
         XCTAssertTrue(previewText.contains("Button(action: togglePictureInPicture)"))
+        XCTAssertTrue(previewText.contains("beginVideoPlaybackAdSuppressionIfNeeded()"))
+        XCTAssertTrue(previewText.contains("endVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(previewText.contains("AdMobBannerSlotView("))
         XCTAssertFalse(previewText.localizedCaseInsensitiveContains("rewarded"))
         XCTAssertFalse(previewText.localizedCaseInsensitiveContains("interstitial"))
         XCTAssertFalse(previewText.localizedCaseInsensitiveContains("appOpen"))
+    }
+
+    func testVideoPlaybackSuppressesFullScreenAdsUntilPreviewCloses() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let adProvidersURL = rootURL.appendingPathComponent("TaptionEncoder/Core/Ads/AdProviders.swift")
+        let adProvidersText = try String(contentsOf: adProvidersURL, encoding: .utf8)
+
+        XCTAssertTrue(adProvidersText.contains("activeVideoPlaybackSuppressionCount"))
+        XCTAssertTrue(adProvidersText.contains("beginVideoPlaybackAdSuppression(reason:"))
+        XCTAssertTrue(adProvidersText.contains("endVideoPlaybackAdSuppression(reason:"))
+        XCTAssertTrue(adProvidersText.contains("if activeVideoPlaybackSuppressionCount > 0"))
+        XCTAssertTrue(adProvidersText.contains("App open ad skipped for external playback"))
     }
 
     func testExternalVideoOpenSuppressesAppOpenAdsBeforePreviewRouting() throws {
