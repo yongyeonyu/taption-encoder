@@ -33,7 +33,7 @@ struct OutputSummaryView: View {
 
     private func codecLine(_ text: String) -> some View {
         Text(text)
-            .font(contentScale < 0.9 ? .caption2.weight(.semibold) : .caption.weight(.semibold))
+            .font(.caption2.weight(.semibold))
             .foregroundStyle(Color.white.opacity(0.9))
             .lineLimit(1)
             .minimumScaleFactor(0.7)

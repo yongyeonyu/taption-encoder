@@ -16,7 +16,7 @@ struct HomeLayoutMetrics {
     var headerFont: Font
     var buttonFont: Font
 
-    init(size: CGSize) {
+    init(size: CGSize, reservesFailureLogArea: Bool = false) {
         let isPad = UIDevice.current.userInterfaceIdiom == .pad
         let portraitWidth = min(size.width, size.height)
         let portraitHeight = max(size.width, size.height)
@@ -58,7 +58,10 @@ struct HomeLayoutMetrics {
         let sourceActionHeight = (controlHeight * 2) + 10
         let outputSelectorHeight = max(controlHeight, 52 * contentScale)
         let codecSummaryHeight = max(66, 78 * contentScale)
-        let progressCardHeight = max(92, 116 * contentScale)
+        let progressCardHeight = reservesFailureLogArea
+            ? max(150, 188 * contentScale)
+            : max(92, 116 * contentScale)
+        let visibleSpacingCount: CGFloat = reservesFailureLogArea ? 8 : 9
         let fixedComponentHeight = (bannerHeight * 2)
             + headerHeight
             + sourceActionHeight
@@ -66,14 +69,10 @@ struct HomeLayoutMetrics {
             + codecSummaryHeight
             + progressCardHeight
             + footerExitButtonHeight
-            + (verticalSpacing * 7)
+            + (verticalSpacing * visibleSpacingCount)
             + (verticalPadding * 2)
         let remainingHeight = canvasHeight - fixedComponentHeight
-        let minimumFilePanelHeight = isPad ? 170 * contentScale : 108 * contentScale
-        let maximumFilePanelHeight = isPad ? 360 * contentScale : 205 * contentScale
-        filePanelHeight = min(
-            max(remainingHeight, minimumFilePanelHeight),
-            maximumFilePanelHeight
-        )
+        let minimumFilePanelHeight = isPad ? max(118, 132 * contentScale) : max(76, 88 * contentScale)
+        filePanelHeight = max(remainingHeight, minimumFilePanelHeight)
     }
 }

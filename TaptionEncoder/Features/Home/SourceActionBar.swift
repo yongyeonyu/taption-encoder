@@ -47,7 +47,7 @@ struct SourceActionBar: View {
             PrimaryActionButton(
                 title: "Reset",
                 systemImage: "arrow.counterclockwise",
-                isProminent: false,
+                isProminent: true,
                 isEnabled: canReset,
                 height: controlHeight,
                 font: buttonFont,

@@ -1,5 +1,6 @@
 import Darwin
 import AVFoundation
+import MediaPlayer
 import SwiftUI
 #if DEBUG
 @_spi(ValidationHarness) import SwiftVLC
@@ -175,8 +176,11 @@ struct HomeView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let metrics = HomeLayoutMetrics(size: geometry.size)
             let reservesFailureLogArea = viewModel.state.reservesFailureLogArea
+            let metrics = HomeLayoutMetrics(
+                size: geometry.size,
+                reservesFailureLogArea: reservesFailureLogArea
+            )
             let isFullScreenVideoPlaybackActive = viewModel.activePreview != nil
 
             ZStack {
@@ -856,7 +860,6 @@ struct HomeView: View {
             .foregroundStyle(Color(red: 1.0, green: 0.78, blue: 0.80))
             .frame(maxWidth: .infinity)
             .frame(height: metrics.footerExitButtonHeight)
-            .background(Color(red: 1.0, green: 0.30, blue: 0.34).opacity(0.16))
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(Color(red: 1.0, green: 0.30, blue: 0.34).opacity(0.48), lineWidth: 1)
@@ -1339,6 +1342,7 @@ private struct QueueVideoPreviewView: View {
     @State private var didAttachVideoSurface = false
     @State private var pipController: PiPController?
     @State private var didBeginVideoPlaybackAdSuppression = false
+    @StateObject private var systemVolumeController = QueuePreviewSystemVolumeController()
     #if DEBUG
     @State private var didAttemptDebugAutoPiP = false
     @State private var didAttemptDebugAutoMiniPlayer = false
@@ -1380,6 +1384,12 @@ private struct QueueVideoPreviewView: View {
                     gestureFeedbackOverlay(gestureFeedback)
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 }
+
+                QueuePreviewSystemVolumeBridgeView(controller: systemVolumeController)
+                    .frame(width: 1, height: 1)
+                    .opacity(0.01)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
             }
         }
         .background(
@@ -2174,11 +2184,11 @@ private struct QueueVideoPreviewView: View {
                 translation: value.translation.height,
                 containerHeight: containerSize.height
             )
-            let volume = min(max(startValue + delta, 0), 2)
-            try? player.setAudioVolume(Volume(volume))
+            let volume = QueuePreviewSystemVolumeController.clampedVolume(startValue + delta)
+            setPreviewOutputVolume(volume)
             showGestureFeedback(
-                systemImage: player.isMuted || volume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill",
-                text: "\(Int((min(volume, 1) * 100).rounded()))%",
+                systemImage: volume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                text: "\(Int((volume * 100).rounded()))%",
                 autoDismiss: false
             )
         case .previousItem:
@@ -2251,10 +2261,16 @@ private struct QueueVideoPreviewView: View {
             if value.startLocation.x < containerSize.width / 2 {
                 return .brightness(startValue: UIScreen.main.brightness)
             }
-            return .volume(startValue: player.volume)
+            return .volume(startValue: systemVolumeController.volume)
         }
 
         return nil
+    }
+
+    private func setPreviewOutputVolume(_ volume: Float) {
+        player.isMuted = false
+        try? player.setAudioVolume(.unity)
+        systemVolumeController.setVolume(volume)
     }
 
     private func toggleControls() {
@@ -3032,6 +3048,73 @@ private struct PreviewBadgeFlowLayout: Layout {
     private struct PreviewBadgeItem {
         var index: Int
         var size: CGSize
+    }
+}
+
+@MainActor
+private final class QueuePreviewSystemVolumeController: ObservableObject {
+    @Published private(set) var volume: Float
+
+    private let audioSession: AVAudioSession
+    private weak var volumeSlider: UISlider?
+    private var outputVolumeObservation: NSKeyValueObservation?
+
+    init(audioSession: AVAudioSession = .sharedInstance()) {
+        self.audioSession = audioSession
+        volume = audioSession.outputVolume
+        outputVolumeObservation = audioSession.observe(\.outputVolume, options: [.initial, .new]) { [weak self] session, change in
+            let nextVolume = change.newValue ?? session.outputVolume
+            Task { @MainActor [weak self] in
+                self?.volume = Self.clampedVolume(nextVolume)
+            }
+        }
+    }
+
+    static func clampedVolume(_ value: Float) -> Float {
+        min(max(value, 0), 1)
+    }
+
+    func attach(volumeView: MPVolumeView) {
+        volumeView.showsVolumeSlider = true
+        if let slider = volumeView.subviews.compactMap({ $0 as? UISlider }).first {
+            volumeSlider = slider
+            slider.setValue(volume, animated: false)
+            slider.sendActions(for: .valueChanged)
+            return
+        }
+
+        Task { @MainActor [weak self, weak volumeView] in
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            guard let volumeView else {
+                return
+            }
+            self?.attach(volumeView: volumeView)
+        }
+    }
+
+    func setVolume(_ value: Float) {
+        let nextVolume = Self.clampedVolume(value)
+        volume = nextVolume
+        guard let volumeSlider else {
+            return
+        }
+        volumeSlider.setValue(nextVolume, animated: false)
+        volumeSlider.sendActions(for: .valueChanged)
+        volumeSlider.sendActions(for: .touchUpInside)
+    }
+}
+
+private struct QueuePreviewSystemVolumeBridgeView: UIViewRepresentable {
+    @ObservedObject var controller: QueuePreviewSystemVolumeController
+
+    func makeUIView(context _: Context) -> MPVolumeView {
+        let volumeView = MPVolumeView(frame: .zero)
+        controller.attach(volumeView: volumeView)
+        return volumeView
+    }
+
+    func updateUIView(_ volumeView: MPVolumeView, context _: Context) {
+        controller.attach(volumeView: volumeView)
     }
 }
 

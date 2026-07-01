@@ -3,6 +3,12 @@ import SwiftVLC
 import UIKit
 import UniformTypeIdentifiers
 
+private enum QueueCardSwipeIntent {
+    case none
+    case select
+    case delete
+}
+
 struct LoadedFilesPanelView: View {
     var files: [EncodingFileCardSnapshot]
     var contentScale: CGFloat
@@ -14,6 +20,15 @@ struct LoadedFilesPanelView: View {
     var onMoveEnded: () -> Void
 
     @State private var draggedFileID: String?
+    @State private var pressedGroupAnchorID: String?
+
+    private var selectedFileCount: Int {
+        files.filter(\.isMultiSelected).count
+    }
+
+    private var isGroupPressActive: Bool {
+        pressedGroupAnchorID != nil && selectedFileCount > 1
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,22 +41,50 @@ struct LoadedFilesPanelView: View {
                             EncodingFileCardView(
                                 file: file,
                                 contentScale: contentScale,
+                                selectedGroupCount: selectedFileCount,
+                                isGroupPressAnchor: pressedGroupAnchorID == file.id,
+                                isBundledByGroupPress: isGroupPressActive
+                                    && file.isMultiSelected
+                                    && pressedGroupAnchorID != file.id,
                                 onSelect: { onSelect(file.id) },
                                 onToggleSelection: { onToggleSelection(file.id) },
                                 onDelete: { onDelete(file.id) },
-                                onDragStarted: { draggedFileID = file.id }
+                                onDragStarted: {
+                                    draggedFileID = file.id
+                                    if file.isMultiSelected && selectedFileCount > 1 {
+                                        withAnimation(queueSpringAnimation) {
+                                            pressedGroupAnchorID = file.id
+                                        }
+                                    }
+                                },
+                                onGroupPressChanged: { isPressing in
+                                    guard file.isMultiSelected && selectedFileCount > 1 else {
+                                        return
+                                    }
+                                    withAnimation(queueSpringAnimation) {
+                                        pressedGroupAnchorID = isPressing ? file.id : nil
+                                    }
+                                }
                             )
+                            .zIndex(pressedGroupAnchorID == file.id ? 2 : 0)
                             .onDrop(
                                 of: [UTType.plainText],
                                 delegate: QueueFileDropDelegate(
                                     targetID: file.id,
                                     draggedFileID: $draggedFileID,
                                     onMove: onMove,
-                                    onMoveEnded: onMoveEnded
+                                    onMoveEnded: {
+                                        onMoveEnded()
+                                        withAnimation(queueSpringAnimation) {
+                                            pressedGroupAnchorID = nil
+                                        }
+                                    }
                                 )
                             )
                         }
                     }
+                    .animation(queueSpringAnimation, value: files.map(\.id))
+                    .animation(queueSpringAnimation, value: pressedGroupAnchorID)
                     .padding(8 * contentScale)
                 }
             }
@@ -54,6 +97,10 @@ struct LoadedFilesPanelView: View {
                 .stroke(TaptionTheme.strongBorder, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var queueSpringAnimation: Animation {
+        .spring(response: 0.28, dampingFraction: 0.84)
     }
 
     private var emptyState: some View {
@@ -74,13 +121,26 @@ struct LoadedFilesPanelView: View {
 private struct EncodingFileCardView: View {
     var file: EncodingFileCardSnapshot
     var contentScale: CGFloat
+    var selectedGroupCount: Int
+    var isGroupPressAnchor: Bool
+    var isBundledByGroupPress: Bool
     var onSelect: () -> Void
     var onToggleSelection: () -> Void
     var onDelete: () -> Void
     var onDragStarted: () -> Void
+    var onGroupPressChanged: (Bool) -> Void
+
+    @State private var swipeOffset: CGFloat = 0
 
     var body: some View {
-        cardContent
+        ZStack {
+            swipeActionBackground
+            groupStackLayer
+            cardContent
+                .offset(x: swipeOffset)
+                .scaleEffect(cardScale)
+                .opacity(cardOpacity)
+        }
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .onTapGesture {
                 if file.isInteractable {
@@ -88,7 +148,15 @@ private struct EncodingFileCardView: View {
                 }
             }
             .simultaneousGesture(swipeGesture)
-        .opacity(file.isInteractable ? 1 : 0.58)
+            .onLongPressGesture(
+                minimumDuration: 0.22,
+                maximumDistance: 22,
+                pressing: onGroupPressChanged,
+                perform: {}
+            )
+            .animation(queueSpringAnimation, value: swipeOffset)
+            .animation(queueSpringAnimation, value: isGroupPressAnchor)
+            .animation(queueSpringAnimation, value: isBundledByGroupPress)
     }
 
     private var cardContent: some View {
@@ -119,16 +187,22 @@ private struct EncodingFileCardView: View {
     }
 
     private var dragHandle: some View {
-        Image(systemName: "line.3.horizontal")
-            .font(.system(size: 17 * contentScale, weight: .bold))
-            .foregroundStyle(file.isMultiSelected ? TaptionTheme.accent : TaptionTheme.mutedText)
-            .frame(width: 28 * contentScale, height: 48 * contentScale)
-            .contentShape(Rectangle())
+        dragHandleIcon
             .onDrag {
                 onDragStarted()
                 return NSItemProvider(object: file.id as NSString)
+            } preview: {
+                dragPreview
             }
             .accessibilityLabel("Move queue item")
+    }
+
+    private var dragHandleIcon: some View {
+        Image(systemName: leadingIconName)
+            .font(.system(size: 17 * contentScale, weight: .bold))
+            .foregroundStyle(leadingIconColor)
+            .frame(width: 28 * contentScale, height: 48 * contentScale)
+            .contentShape(Rectangle())
     }
 
     private var headerRow: some View {
@@ -236,63 +310,250 @@ private struct EncodingFileCardView: View {
 
     private var swipeGesture: some Gesture {
         DragGesture(minimumDistance: 28, coordinateSpace: .local)
-            .onEnded { value in
+            .onChanged { value in
                 let horizontal = value.translation.width
+                let vertical = value.translation.height
+                guard abs(horizontal) > abs(vertical) * 1.15 else {
+                    return
+                }
+                swipeOffset = clampedSwipeOffset(horizontal)
+            }
+            .onEnded { value in
+                let horizontal = clampedSwipeOffset(value.translation.width)
                 let vertical = value.translation.height
                 guard abs(horizontal) > 46,
                       abs(horizontal) > abs(vertical) * 1.35 else {
+                    resetSwipeOffset()
                     return
                 }
 
-                if horizontal < 0 {
+                if horizontal < 0, abs(horizontal) >= actionThreshold {
                     onToggleSelection()
-                } else {
+                } else if horizontal >= actionThreshold {
                     onDelete()
                 }
+                resetSwipeOffset()
             }
+    }
+
+    @ViewBuilder
+    private var swipeActionBackground: some View {
+        let progress = min(1, abs(swipeOffset) / swipeLimit)
+        HStack {
+            if swipeOffset > 0 {
+                swipeActionLabel(icon: "trash.fill", text: "Delete", color: deleteColor)
+                Spacer(minLength: 0)
+            } else if swipeOffset < 0 {
+                Spacer(minLength: 0)
+                swipeActionLabel(icon: "checkmark.circle.fill", text: "Select", color: TaptionTheme.accent)
+            }
+        }
+        .padding(.horizontal, 14 * contentScale)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(swipeBackgroundColor.opacity(0.16 + 0.24 * progress))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .opacity(progress)
+    }
+
+    private func swipeActionLabel(icon: String, text: String, color: Color) -> some View {
+        Label(text, systemImage: icon)
+            .font(contentScale < 0.9 ? .caption.weight(.bold) : .subheadline.weight(.bold))
+            .foregroundStyle(color)
+            .labelStyle(.iconOnly)
+            .frame(width: 34 * contentScale, height: 34 * contentScale)
+            .background(color.opacity(0.16))
+            .clipShape(Circle())
+    }
+
+    @ViewBuilder
+    private var groupStackLayer: some View {
+        if isGroupPressAnchor && selectedGroupCount > 1 {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(TaptionTheme.selectedSurface.opacity(0.64))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(TaptionTheme.accent.opacity(0.34), lineWidth: 1)
+                )
+                .offset(x: -7 * contentScale, y: -7 * contentScale)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(TaptionTheme.selectedSurface.opacity(0.42))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(TaptionTheme.accent.opacity(0.22), lineWidth: 1)
+                )
+                .offset(x: -13 * contentScale, y: -13 * contentScale)
+        }
+    }
+
+    private var dragPreview: some View {
+        ZStack(alignment: .topTrailing) {
+            previewCardContent
+                .frame(width: 300 * contentScale)
+            if file.isMultiSelected && selectedGroupCount > 1 {
+                Text("\(selectedGroupCount)")
+                    .font(.caption.bold())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(TaptionTheme.accent)
+                    .clipShape(Capsule())
+                    .padding(6)
+            }
+        }
+    }
+
+    private var previewCardContent: some View {
+        HStack(alignment: .top, spacing: 9 * contentScale) {
+            dragHandleIcon
+
+            QueueFileThumbnailView(
+                sourceURL: file.thumbnailSourceURL,
+                canAttemptThumbnail: file.isInteractable,
+                contentScale: contentScale
+            )
+
+            VStack(alignment: .leading, spacing: 7 * contentScale) {
+                headerRow
+                selectedDetailSection
+                progressSection
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(9 * contentScale)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(cardBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(cardBorder, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var leadingIconName: String {
+        switch visualSwipeIntent {
+        case .delete:
+            return "trash.fill"
+        case .select:
+            return "checkmark.circle.fill"
+        case .none:
+            return file.isMultiSelected ? "checkmark.circle.fill" : "line.3.horizontal"
+        }
+    }
+
+    private var leadingIconColor: Color {
+        switch visualSwipeIntent {
+        case .delete:
+            return deleteColor
+        case .select:
+            return TaptionTheme.accent
+        case .none:
+            return file.isMultiSelected ? TaptionTheme.accent : TaptionTheme.mutedText
+        }
+    }
+
+    private var visualSwipeIntent: QueueCardSwipeIntent {
+        if swipeOffset > visualIntentThreshold {
+            return .delete
+        }
+        if swipeOffset < -visualIntentThreshold {
+            return .select
+        }
+        return .none
+    }
+
+    private var swipeBackgroundColor: Color {
+        visualSwipeIntent == .delete ? deleteColor : TaptionTheme.accent
+    }
+
+    private var cardScale: CGFloat {
+        if isGroupPressAnchor {
+            return 1.025
+        }
+        return isBundledByGroupPress ? 0.94 : 1
+    }
+
+    private var cardOpacity: Double {
+        let baseOpacity = file.isInteractable ? 1 : 0.58
+        return isBundledByGroupPress ? 0.46 : baseOpacity
+    }
+
+    private var swipeLimit: CGFloat {
+        max(72, 112 * contentScale)
+    }
+
+    private var actionThreshold: CGFloat {
+        max(58, 72 * contentScale)
+    }
+
+    private var visualIntentThreshold: CGFloat {
+        max(18, 24 * contentScale)
+    }
+
+    private var deleteColor: Color {
+        Color(red: 0.96, green: 0.18, blue: 0.22)
+    }
+
+    private var queueSpringAnimation: Animation {
+        .spring(response: 0.26, dampingFraction: 0.82)
+    }
+
+    private func clampedSwipeOffset(_ offset: CGFloat) -> CGFloat {
+        min(swipeLimit, max(-swipeLimit, offset))
+    }
+
+    private func resetSwipeOffset() {
+        withAnimation(queueSpringAnimation) {
+            swipeOffset = 0
+        }
     }
 
     private func infoGrid(_ info: LoadedVideoInfo) -> some View {
-        VStack(alignment: .leading, spacing: 4 * contentScale) {
-            Text("Codec Info (Video / Audio)")
-                .font(contentScale < 0.9 ? .caption.weight(.semibold) : .caption.weight(.semibold))
-                .foregroundStyle(TaptionTheme.mutedText)
+        VStack(alignment: .leading, spacing: 5 * contentScale) {
+            metricTable(info)
+            codecFlowTable(info)
+        }
+    }
 
-            HStack(spacing: 8 * contentScale) {
-                infoCell("Time", info.duration)
-                infoCell("Resolution", info.resolution)
+    private func metricTable(_ info: LoadedVideoInfo) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: 10 * contentScale, verticalSpacing: 3 * contentScale) {
+            GridRow {
+                tableValue(info.duration)
+                tableValue(info.frameRate)
             }
-            HStack(spacing: 8 * contentScale) {
-                infoCell("FPS", info.frameRate)
-                infoCell("File", info.fileSize)
-            }
-
-            Divider()
-                .overlay(TaptionTheme.border)
-
-            HStack(spacing: 8 * contentScale) {
-                infoCell("Video In", info.inputSummary)
-                infoCell("Video Out", info.outputSummary)
-            }
-            HStack(spacing: 8 * contentScale) {
-                infoCell("Audio In", info.audio)
-                infoCell("Audio Out", info.audioOutputSummary)
+            GridRow {
+                tableValue(info.resolution)
+                tableValue(info.fileSize)
             }
         }
     }
 
-    private func infoCell(_ title: String, _ value: String, valueColor: Color? = nil) -> some View {
-        HStack(spacing: 4 * contentScale) {
-            Text(title)
-                .font(contentScale < 0.9 ? .caption2.weight(.semibold) : .caption2.weight(.semibold))
-                .foregroundStyle(TaptionTheme.mutedText)
-            Text(value)
-                .font(contentScale < 0.9 ? .caption2.weight(.semibold) : .caption.weight(.semibold))
-                .foregroundStyle(valueColor ?? defaultValueColor)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+    private func codecFlowTable(_ info: LoadedVideoInfo) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: 6 * contentScale, verticalSpacing: 3 * contentScale) {
+            codecFlowRow(input: info.inputSummary, output: info.outputSummary)
+            codecFlowRow(input: info.audio, output: info.audioOutputSummary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func codecFlowRow(input: String, output: String) -> some View {
+        GridRow {
+            tableValue(input)
+            Text("->")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(TaptionTheme.mutedText)
+                .lineLimit(1)
+                .gridColumnAlignment(.center)
+            tableValue(output)
+        }
+    }
+
+    private func tableValue(_ value: String) -> some View {
+        Text(value)
+            .font(contentScale < 0.9 ? .caption2.weight(.semibold) : .caption.weight(.semibold))
+            .foregroundStyle(defaultValueColor)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var defaultValueColor: Color {
@@ -325,11 +586,15 @@ private struct QueueFileDropDelegate: DropDelegate {
               draggedFileID != targetID else {
             return
         }
-        onMove(draggedFileID, targetID)
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+            onMove(draggedFileID, targetID)
+        }
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        onMoveEnded()
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+            onMoveEnded()
+        }
         draggedFileID = nil
         return true
     }
@@ -953,6 +1218,8 @@ private struct QueueFileThumbnailView: View {
                     .font(.system(size: 16 * contentScale, weight: .semibold))
                     .foregroundStyle(TaptionTheme.mutedText)
             }
+
+            playBadge
         }
         .frame(width: thumbnailSize.width, height: thumbnailSize.height)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -964,6 +1231,22 @@ private struct QueueFileThumbnailView: View {
             await loadThumbnail()
         }
         .accessibilityHidden(true)
+    }
+
+    private var playBadge: some View {
+        Image(systemName: "play.fill")
+            .font(.system(size: max(7, 8 * contentScale), weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: max(15, 17 * contentScale), height: max(15, 17 * contentScale))
+            .background(TaptionTheme.accent)
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(Color.white.opacity(0.34), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.35), radius: 2, x: 0, y: 1)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            .padding(3 * contentScale)
     }
 
     private var thumbnailTaskID: String {
