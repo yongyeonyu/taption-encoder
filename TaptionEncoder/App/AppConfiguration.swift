@@ -20,19 +20,22 @@ struct AppConfiguration: Equatable {
         backgroundEncodingMinimumMajorVersion: Int = 26,
         starPurchaseProducts: [StarPurchaseProduct] = [
             StarPurchaseProduct(
-                productID: "com.taption.encoder.stars.10",
-                starCount: 10,
-                displayName: "10 Stars"
-            ),
-            StarPurchaseProduct(
-                productID: "com.taption.encoder.stars.50",
-                starCount: 50,
-                displayName: "50 Stars"
+                productID: "com.taption.encoder.stars.30",
+                starCount: 30,
+                displayName: "30 Stars",
+                displayPrice: "$1"
             ),
             StarPurchaseProduct(
                 productID: "com.taption.encoder.stars.100",
                 starCount: 100,
-                displayName: "100 Stars"
+                displayName: "100 Stars",
+                displayPrice: "$2"
+            ),
+            StarPurchaseProduct(
+                productID: "com.taption.encoder.stars.300",
+                starCount: 300,
+                displayName: "300 Stars",
+                displayPrice: "$3"
             )
         ]
     ) {

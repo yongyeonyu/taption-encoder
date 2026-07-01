@@ -6590,6 +6590,56 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(makeStarWalletSnapshot(balance: 1_200).badgeText, "999+")
     }
 
+    func testDefaultStarPurchaseProductsUseDraftPriceTiers() {
+        let products = AppConfiguration().starPurchaseProducts
+
+        XCTAssertEqual(
+            products.map(\.productID),
+            [
+                "com.taption.encoder.stars.30",
+                "com.taption.encoder.stars.100",
+                "com.taption.encoder.stars.300"
+            ]
+        )
+        XCTAssertEqual(products.map(\.starCount), [30, 100, 300])
+        XCTAssertEqual(products.map(\.displayName), ["30 Stars", "100 Stars", "300 Stars"])
+        XCTAssertEqual(products.map(\.displayPrice), ["$1", "$2", "$3"])
+    }
+
+    func testStarBadgeOpensPurchaseSheetWithoutCreditingStarsDirectly() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
+        let homeViewModelURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeViewModel.swift")
+        let homeStateURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeScreenState.swift")
+        let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
+        let viewModelText = try String(contentsOf: homeViewModelURL, encoding: .utf8)
+        let stateText = try String(contentsOf: homeStateURL, encoding: .utf8)
+
+        XCTAssertTrue(homeViewText.contains("@State private var isStarPurchaseSheetPresented = false"))
+        XCTAssertTrue(homeViewText.contains(".sheet(isPresented: $isStarPurchaseSheetPresented)"))
+        XCTAssertTrue(homeViewText.contains("StarPurchaseSheetView("))
+        XCTAssertTrue(homeViewText.contains("Button {\n            openStarPurchaseSheet()"))
+        XCTAssertTrue(homeViewText.contains("isStarPurchaseSheetPresented = true"))
+        XCTAssertTrue(homeViewText.contains("await viewModel.refreshStarPurchaseProducts()"))
+        XCTAssertTrue(homeViewText.contains("viewModel.beginStarPurchase(product: product)"))
+        XCTAssertTrue(homeViewText.contains(".starPurchaseNoticeDialog(viewModel: viewModel)"))
+        XCTAssertTrue(homeViewText.contains("accessibilityLabel(\"Buy Stars. Balance \\(viewModel.starBalanceDisplayText)\")"))
+        XCTAssertTrue(homeViewText.contains("private struct StarPurchaseSheetView: View"))
+        XCTAssertTrue(homeViewText.contains("private struct StarPurchaseProductRow: View"))
+        XCTAssertTrue(homeViewText.contains("Text(\"Purchases will complete here after the matching App Store Connect in-app purchases are approved.\")"))
+        XCTAssertTrue(viewModelText.contains("@Published private(set) var starPurchaseProducts: [StarPurchaseProduct]"))
+        XCTAssertTrue(viewModelText.contains("@Published private(set) var starPurchaseNotice: StarPurchaseNotice?"))
+        XCTAssertTrue(viewModelText.contains("func refreshStarPurchaseProducts() async"))
+        XCTAssertTrue(viewModelText.contains("func beginStarPurchase(product: StarPurchaseProduct)"))
+        XCTAssertTrue(viewModelText.contains("starPurchaseNotice = StarPurchaseNotice(product: product)"))
+        XCTAssertFalse(viewModelText.contains("recordPurchase(product"))
+        XCTAssertTrue(stateText.contains("struct StarPurchaseNotice: Identifiable, Equatable"))
+        XCTAssertTrue(stateText.contains("Purchase Not Available"))
+        XCTAssertTrue(stateText.contains("App Store Connect"))
+    }
+
     func testStarWalletStoreGrantsInitialInstallBonusOnce() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
@@ -6722,7 +6772,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             StarPurchaseProduct(
                 productID: "stars.10",
                 starCount: 10,
-                displayName: "10 Stars"
+                displayName: "10 Stars",
+                displayPrice: "$1"
             )
         )
 
@@ -6923,24 +6974,30 @@ final class CodecRoutePlannerTests: XCTestCase {
             try? FileManager.default.removeItem(at: directoryURL)
         }
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-        let sourceURL = directoryURL.appendingPathComponent("source.mp4")
-        try Data("source".utf8).write(to: sourceURL)
+        let temporaryURL = directoryURL.appendingPathComponent("encoded.mp4")
+        let finalURL = directoryURL.appendingPathComponent("source_taption.mp4")
+        try Data("encoded".utf8).write(to: temporaryURL)
 
+        let pendingSaveStore = FakePendingSaveStore()
+        let state = TaptionPendingSaveState(
+            planID: UUID(),
+            temporaryOutputURL: temporaryURL,
+            finalOutputURL: finalURL,
+            saveDestination: .sourceFolder,
+            requiresRewardedAd: true,
+            saveDestinationWasChosen: true
+        )
+        try await pendingSaveStore.savePendingState(state)
         let rewardedAdProvider = RetryingRewardedAdProvider()
         let viewModel = HomeViewModel(
             environment: makeHomeViewModelTestEnvironment(
-                pendingSaveStore: FakePendingSaveStore(),
+                pendingSaveStore: pendingSaveStore,
                 encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
                 rewardedAdProvider: rewardedAdProvider
             )
         )
 
-        await viewModel.refreshStarsIfNeeded()
-        viewModel.startFilesFlow(url: sourceURL)
-        try await waitForReadyToStartState(in: viewModel)
-        viewModel.startPreparedEncoding()
-        try await chooseFolderForPendingSaveDestination(in: viewModel)
-
+        await viewModel.restorePendingSavesIfNeeded()
         try await waitForCondition(timeout: 2) {
             viewModel.state.pendingSaveJob?.state.requiresRewardedAd == true
                 && viewModel.rewardedAdState == .unavailable
@@ -6963,7 +7020,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testStartPreparedEncodingWithoutStarsEncodesBeforeRewardedSaveAd() async throws {
+    func testStartPreparedEncodingWithoutStarsDisablesStartAndDoesNotEncode() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -6973,14 +7030,12 @@ final class CodecRoutePlannerTests: XCTestCase {
         try Data("source".utf8).write(to: sourceURL)
 
         let rewardedAdProvider = RecordingRewardedAdProvider(showResult: .earnedReward)
-        let sessionEndAdProvider = RecordingSessionEndAdProvider()
         let walletStore = FakeStarWalletStore()
         let viewModel = HomeViewModel(
             environment: makeHomeViewModelTestEnvironment(
                 pendingSaveStore: FakePendingSaveStore(),
                 encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
                 rewardedAdProvider: rewardedAdProvider,
-                sessionEndAdProvider: sessionEndAdProvider,
                 starWalletStore: walletStore
             )
         )
@@ -6989,34 +7044,19 @@ final class CodecRoutePlannerTests: XCTestCase {
         viewModel.startFilesFlow(url: sourceURL)
         try await waitForReadyToStartState(in: viewModel)
 
-        XCTAssertTrue(viewModel.canStartEncodingNow)
+        XCTAssertFalse(viewModel.canStartEncodingNow)
+        XCTAssertEqual(viewModel.startActionTitle, "Start (-1 Star)")
         XCTAssertEqual(viewModel.starWalletSnapshot.balance, 0)
         XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Ready")
 
         viewModel.startPreparedEncoding()
-        try await chooseFolderForPendingSaveDestination(in: viewModel)
-        try await waitForCondition(timeout: 2) {
-            viewModel.state.pendingSaveJob?.state.requiresRewardedAd == true
-                && viewModel.canWatchAdForStar
-        }
 
-        XCTAssertEqual(viewModel.state.title, "Ready to save")
-        XCTAssertEqual(viewModel.watchAdButtonTitle, "Watch Ad to Save")
+        XCTAssertEqual(viewModel.state.title, "Ready to encode")
         XCTAssertFalse(FileManager.default.fileExists(
             atPath: directoryURL.appendingPathComponent("source_taption.mp4").path
         ))
-        let showCallCountBeforeSaveAd = await rewardedAdProvider.recordedShowCallCount()
-        XCTAssertEqual(showCallCountBeforeSaveAd, 0)
-
-        viewModel.watchAdForStar()
-        try await waitForCompletedSave(in: viewModel)
         let showCallCount = await rewardedAdProvider.recordedShowCallCount()
-        let sessionReasons = await sessionEndAdProvider.recordedReasons()
-
-        XCTAssertEqual(viewModel.starWalletSnapshot.balance, 0)
-        XCTAssertEqual(showCallCount, 1)
-        XCTAssertTrue(sessionReasons.isEmpty)
-        XCTAssertEqual(viewModel.state.title, "Save Complete")
+        XCTAssertEqual(showCallCount, 0)
     }
 
     @MainActor
@@ -7117,10 +7157,12 @@ final class CodecRoutePlannerTests: XCTestCase {
             isPowerConnected: false,
             isPowerStateKnown: true
         ))
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 1))
         let viewModel = HomeViewModel(
             environment: makeHomeViewModelTestEnvironment(
                 pendingSaveStore: FakePendingSaveStore(),
-                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8))
+                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
+                starWalletStore: walletStore
             ),
             batteryPowerMonitor: batteryMonitor,
             batterySettingsProvider: {
@@ -7131,6 +7173,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             }
         )
 
+        await viewModel.refreshStarsIfNeeded()
         viewModel.startFilesFlow(url: sourceURL)
         try await waitForReadyToStartState(in: viewModel)
         viewModel.startPreparedEncoding()
@@ -7166,6 +7209,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             )
         )
 
+        await viewModel.refreshStarsIfNeeded()
         viewModel.startFilesFlow(url: sourceURL)
         try await waitForReadyToStartState(in: viewModel)
         viewModel.startPreparedEncoding()
@@ -7200,6 +7244,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             )
         )
 
+        await viewModel.refreshStarsIfNeeded()
         viewModel.startFilesFlow(url: sourceURL)
         try await waitForReadyToStartState(in: viewModel)
         viewModel.startPreparedEncoding()
@@ -7219,7 +7264,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testFolderBatchEncodesNextItemThenWaitsForRewardedSaveAdWhenBalanceRunsOut() async throws {
+    func testFolderBatchWithPartialStarBalanceActivatesTopCardsAndEncodesOnlyThose() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -7245,40 +7290,39 @@ final class CodecRoutePlannerTests: XCTestCase {
             )
         )
 
+        await viewModel.refreshStarsIfNeeded()
         viewModel.startFilesFlow(urls: fileURLs)
         try await waitForReadyToStartState(in: viewModel)
 
-        XCTAssertEqual(viewModel.startActionTitle, "Start (-3 Stars)")
+        XCTAssertEqual(viewModel.startActionTitle, "Start (-2 Stars)")
+        XCTAssertTrue(viewModel.canStartEncodingNow)
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.fileName), ["a.mp4", "b.mp4", "c.mp4"])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isEnabled), [true, true, false])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isStarLimited), [false, false, true])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.statusText), ["Ready", "Queued", "Need Stars"])
 
         viewModel.startPreparedEncoding()
         try await chooseFolderForPendingSaveDestination(in: viewModel)
-
-        try await waitForCondition(timeout: 3) {
-            viewModel.state.pendingSaveJob?.sourceName == "c.mp4"
-                && viewModel.state.pendingSaveJob?.state.requiresRewardedAd == true
-                && viewModel.fileCardSnapshots.last?.statusText == "Watch Ad to Save"
-                && viewModel.starWalletSnapshot.balance == 0
-        }
-
-        let statuses = Dictionary(uniqueKeysWithValues: viewModel.fileCardSnapshots.map {
-            ($0.id, $0.statusText)
-        })
-        XCTAssertEqual(statuses[fileURLs[0].absoluteString], "Save Complete")
-        XCTAssertEqual(statuses[fileURLs[1].absoluteString], "Save Complete")
-        XCTAssertEqual(statuses[fileURLs[2].absoluteString], "Watch Ad to Save")
-        let showCallCountBeforeSaveAd = await rewardedAdProvider.recordedShowCallCount()
-        XCTAssertEqual(showCallCountBeforeSaveAd, 0)
-
-        viewModel.watchAdForStar()
-        try await waitForCompletedSave(in: viewModel)
+        try await waitForCompletedSave(in: viewModel, timeout: 3)
 
         XCTAssertEqual(viewModel.state.title, "Save Complete")
-        let showCallCountAfterSaveAd = await rewardedAdProvider.recordedShowCallCount()
-        XCTAssertEqual(showCallCountAfterSaveAd, 1)
+        XCTAssertTrue(viewModel.state.detail.contains("2 of 3 files were saved"))
+        XCTAssertEqual(viewModel.starWalletSnapshot.balance, 0)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("a_taption.mp4").path
+        ))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("b_taption.mp4").path
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("c_taption.mp4").path
+        ))
+        let showCallCount = await rewardedAdProvider.recordedShowCallCount()
+        XCTAssertEqual(showCallCount, 0)
     }
 
     @MainActor
-    func testFolderBatchRequiresRewardedAdsForEveryMissingStarBeforeAllSavesComplete() async throws {
+    func testFolderBatchWithOneStarActivatesOnlyFirstCardBeforeEncoding() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -7304,52 +7348,86 @@ final class CodecRoutePlannerTests: XCTestCase {
             )
         )
 
+        await viewModel.refreshStarsIfNeeded()
         viewModel.startFilesFlow(urls: fileURLs)
         try await waitForReadyToStartState(in: viewModel)
 
-        XCTAssertEqual(viewModel.startActionTitle, "Start (-3 Stars)")
+        XCTAssertEqual(viewModel.startActionTitle, "Start (-1 Star)")
+        XCTAssertTrue(viewModel.canStartEncodingNow)
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isEnabled), [true, false, false])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isStarLimited), [false, true, true])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.statusText), ["Ready", "Need Stars", "Need Stars"])
 
         viewModel.startPreparedEncoding()
         try await chooseFolderForPendingSaveDestination(in: viewModel)
-        try await waitForCondition(timeout: 3) {
-            viewModel.state.pendingSaveJob?.sourceName == "b.mp4"
-                && viewModel.state.pendingSaveJob?.state.requiresRewardedAd == true
-                && viewModel.starWalletSnapshot.balance == 0
-        }
+        try await waitForCompletedSave(in: viewModel, timeout: 3)
 
-        var showCallCount = await rewardedAdProvider.recordedShowCallCount()
-        XCTAssertEqual(showCallCount, 0)
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+        XCTAssertTrue(viewModel.state.detail.contains("1 of 3 files were saved"))
+        XCTAssertEqual(viewModel.starWalletSnapshot.balance, 0)
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: directoryURL.appendingPathComponent("a_taption.mp4").path
         ))
         XCTAssertFalse(FileManager.default.fileExists(
             atPath: directoryURL.appendingPathComponent("b_taption.mp4").path
         ))
-
-        viewModel.watchAdForStar()
-        try await waitForCondition(timeout: 3) {
-            viewModel.state.pendingSaveJob?.sourceName == "c.mp4"
-                && viewModel.state.pendingSaveJob?.state.requiresRewardedAd == true
-        }
-
-        showCallCount = await rewardedAdProvider.recordedShowCallCount()
-        XCTAssertEqual(showCallCount, 1)
-        XCTAssertTrue(FileManager.default.fileExists(
-            atPath: directoryURL.appendingPathComponent("b_taption.mp4").path
-        ))
         XCTAssertFalse(FileManager.default.fileExists(
             atPath: directoryURL.appendingPathComponent("c_taption.mp4").path
         ))
+        let showCallCount = await rewardedAdProvider.recordedShowCallCount()
+        XCTAssertEqual(showCallCount, 0)
+    }
 
-        viewModel.watchAdForStar()
-        try await waitForCompletedSave(in: viewModel, timeout: 3)
+    @MainActor
+    func testFolderBatchStarBudgetReappliesAfterQueueMove() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let fileURLs = [
+            directoryURL.appendingPathComponent("a.mp4"),
+            directoryURL.appendingPathComponent("b.mp4"),
+            directoryURL.appendingPathComponent("c.mp4")
+        ]
+        for url in fileURLs {
+            try Data("source".utf8).write(to: url)
+        }
 
-        showCallCount = await rewardedAdProvider.recordedShowCallCount()
-        XCTAssertEqual(showCallCount, 2)
-        XCTAssertEqual(viewModel.state.title, "Save Complete")
-        XCTAssertTrue(FileManager.default.fileExists(
-            atPath: directoryURL.appendingPathComponent("c_taption.mp4").path
-        ))
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 2))
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264)),
+                starWalletStore: walletStore
+            )
+        )
+
+        await viewModel.refreshStarsIfNeeded()
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+
+        viewModel.moveQueueFiles(
+            draggedID: fileURLs[2].absoluteString,
+            before: fileURLs[0].absoluteString
+        )
+
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.fileName), ["c.mp4", "a.mp4", "b.mp4"])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isEnabled), [true, true, false])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isStarLimited), [false, false, true])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.statusText), ["Queued", "Ready", "Need Stars"])
+
+        viewModel.finishQueueMove()
+        try await waitForCondition(timeout: 2) {
+            viewModel.state.preparedEncodingReview?.source.url == fileURLs[2]
+        }
+
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.fileName), ["c.mp4", "a.mp4", "b.mp4"])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isEnabled), [true, true, false])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isStarLimited), [false, false, true])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.statusText), ["Ready", "Queued", "Need Stars"])
+        XCTAssertEqual(viewModel.startActionTitle, "Start (-2 Stars)")
+        XCTAssertTrue(viewModel.canStartEncodingNow)
     }
 
     @MainActor
@@ -7392,6 +7470,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             }
         )
 
+        await viewModel.refreshStarsIfNeeded()
         viewModel.startFilesFlow(urls: fileURLs)
         try await waitForReadyToStartState(in: viewModel)
         viewModel.startPreparedEncoding()
@@ -7459,6 +7538,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             }
         )
 
+        await viewModel.refreshStarsIfNeeded()
         viewModel.startFilesFlow(urls: fileURLs)
         try await waitForReadyToStartState(in: viewModel)
         viewModel.startPreparedEncoding()
@@ -8176,8 +8256,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(loadedFilesPanelText.contains("var onSelect: () -> Void"))
         XCTAssertTrue(loadedFilesPanelText.contains("var onPlay: (String) -> Void"))
         XCTAssertTrue(loadedFilesPanelText.contains("var onPlay: () -> Void"))
-        XCTAssertTrue(loadedFilesPanelText.contains("Image(systemName: leadingIconName)"))
-        XCTAssertTrue(loadedFilesPanelText.contains("return file.isMultiSelected ? \"checkmark.circle.fill\" : \"line.3.horizontal\""))
+        XCTAssertFalse(loadedFilesPanelText.contains("Image(systemName: leadingIconName)"))
+        XCTAssertFalse(loadedFilesPanelText.contains("line.3.horizontal"))
+        XCTAssertFalse(loadedFilesPanelText.contains("private var dragHandle"))
+        XCTAssertFalse(loadedFilesPanelText.contains("private var dragHandleIcon"))
+        XCTAssertFalse(loadedFilesPanelText.contains("private var leadingIconName"))
+        XCTAssertFalse(loadedFilesPanelText.contains("private var leadingIconColor"))
+        XCTAssertFalse(loadedFilesPanelText.contains("Move queue item"))
         XCTAssertTrue(loadedFilesPanelText.contains("deleteSwipeTrashOverlay"))
         XCTAssertTrue(loadedFilesPanelText.contains("private var deleteSwipeTrashOverlay: some View"))
         XCTAssertTrue(loadedFilesPanelText.contains("Image(systemName: \"trash.fill\")"))
@@ -8243,14 +8328,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         let cardGestureText = String(loadedFilesPanelText[cardViewStart.lowerBound..<cardContentStart.lowerBound])
         XCTAssertTrue(cardGestureText.contains(".onTapGesture"))
         XCTAssertFalse(cardGestureText.contains("onPlay()"))
-        let dragHandleStart = try XCTUnwrap(loadedFilesPanelText.range(of: "private var dragHandle: some View"))
-        let dragHandleEnd = try XCTUnwrap(loadedFilesPanelText[dragHandleStart.lowerBound...].range(of: "private var dragHandleIcon"))
-        let dragHandleText = String(loadedFilesPanelText[dragHandleStart.lowerBound..<dragHandleEnd.lowerBound])
-        XCTAssertFalse(dragHandleText.contains(".onDrag"))
-        let leadingIconNameStart = try XCTUnwrap(loadedFilesPanelText.range(of: "private var leadingIconName: String"))
-        let leadingIconNameEnd = try XCTUnwrap(loadedFilesPanelText[leadingIconNameStart.lowerBound...].range(of: "private var leadingIconColor: Color"))
-        let leadingIconNameText = String(loadedFilesPanelText[leadingIconNameStart.lowerBound..<leadingIconNameEnd.lowerBound])
-        XCTAssertFalse(leadingIconNameText.contains("return \"trash.fill\""))
+        let cardContentText = String(loadedFilesPanelText[cardContentStart.lowerBound...])
+        XCTAssertFalse(cardContentText.contains("dragHandle"))
         XCTAssertTrue(homeViewText.contains("onSelect: { viewModel.selectFileCard(id: $0) }"))
         XCTAssertTrue(homeViewText.contains("onPlay: { viewModel.openPreviewForFileCard(id: $0) }"))
         XCTAssertTrue(homeViewText.contains("viewModel.toggleQueueFileSelection(id: $0)"))
@@ -8655,14 +8734,17 @@ final class CodecRoutePlannerTests: XCTestCase {
         try Data("source".utf8).write(to: firstURL)
         try Data("source".utf8).write(to: secondURL)
 
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 1))
         let viewModel = HomeViewModel(
             environment: makeHomeViewModelTestEnvironment(
                 pendingSaveStore: FakePendingSaveStore(),
                 mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264)),
-                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8))
+                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
+                starWalletStore: walletStore
             )
         )
 
+        await viewModel.refreshStarsIfNeeded()
         viewModel.startFilesFlow(url: firstURL)
         try await waitForReadyToStartState(in: viewModel)
         viewModel.openPreviewForFileCard(id: firstURL.lastPathComponent)

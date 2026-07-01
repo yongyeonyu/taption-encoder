@@ -158,6 +158,7 @@ struct HomeView: View {
     @State private var isPhotosPickerPresented = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var activeMenuSheet: HomeMenuSheet?
+    @State private var isStarPurchaseSheetPresented = false
     @State private var isOutputSizePopoverPresented = false
     @State private var outputSizeDraftMB: Double?
     @State private var miniPlayerPreview: QueueVideoPreview?
@@ -246,6 +247,23 @@ struct HomeView: View {
         .sheet(item: $activeMenuSheet) { sheet in
             HomeMenuSheetView(sheet: sheet)
         }
+        .sheet(isPresented: $isStarPurchaseSheetPresented) {
+            StarPurchaseSheetView(
+                balanceText: viewModel.starBalanceDisplayText,
+                products: viewModel.starPurchaseProducts,
+                onProductSelected: { product in
+                    viewModel.beginStarPurchase(product: product)
+                },
+                onClose: {
+                    isStarPurchaseSheetPresented = false
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .task {
+                await viewModel.refreshStarPurchaseProducts()
+            }
+        }
         .alert(
             item: Binding(
                 get: { viewModel.batteryEncodingAlert },
@@ -266,6 +284,7 @@ struct HomeView: View {
         }
         .pendingSaveDestinationDialog(viewModel: viewModel)
         .savedFolderDialog(viewModel: viewModel)
+        .starPurchaseNoticeDialog(viewModel: viewModel)
         .fullScreenCover(
             item: Binding<QueueVideoPreview?>(
                 get: { viewModel.activePreview },
@@ -508,6 +527,14 @@ struct HomeView: View {
     private func presentPhotosPicker() {
         AppLogger.info("Album button tapped", category: .ui)
         isPhotosPickerPresented = true
+    }
+
+    private func openStarPurchaseSheet() {
+        AppLogger.info("Star badge tapped", category: .ui)
+        isStarPurchaseSheetPresented = true
+        Task {
+            await viewModel.refreshStarPurchaseProducts()
+        }
     }
 
     private func resetHome() {
@@ -826,17 +853,22 @@ struct HomeView: View {
     }
 
     private func starBadge(metrics: HomeLayoutMetrics) -> some View {
-        HStack(spacing: 6 * metrics.contentScale) {
-            Image(systemName: "star.fill")
-                .font(.system(size: max(13, metrics.headerIconSize - 3), weight: .semibold))
-                .foregroundStyle(Color.yellow.opacity(0.95))
+        Button {
+            openStarPurchaseSheet()
+        } label: {
+            HStack(spacing: 6 * metrics.contentScale) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: max(13, metrics.headerIconSize - 3), weight: .semibold))
+                    .foregroundStyle(Color.yellow.opacity(0.95))
 
-            Text(viewModel.starBalanceDisplayText)
-                .font((metrics.contentScale < 0.84 ? Font.caption : Font.subheadline).monospacedDigit().weight(.semibold))
-                .foregroundStyle(Color.white.opacity(0.92))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                Text(viewModel.starBalanceDisplayText)
+                    .font((metrics.contentScale < 0.84 ? Font.caption : Font.subheadline).monospacedDigit().weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
         }
+        .buttonStyle(.plain)
         .padding(.horizontal, 10 * metrics.contentScale)
         .frame(height: 34 * metrics.contentScale)
         .background(TaptionTheme.elevatedSurface)
@@ -845,7 +877,7 @@ struct HomeView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(TaptionTheme.border, lineWidth: 1)
         )
-        .accessibilityLabel("Stars \(viewModel.starBalanceDisplayText)")
+        .accessibilityLabel("Buy Stars. Balance \(viewModel.starBalanceDisplayText)")
     }
 
     private func exitButton(metrics: HomeLayoutMetrics) -> some View {
@@ -1248,6 +1280,121 @@ private extension View {
         } message: { prompt in
             Text(prompt.message)
         }
+    }
+
+    func starPurchaseNoticeDialog(viewModel: HomeViewModel) -> some View {
+        alert(
+            viewModel.starPurchaseNotice?.title ?? "Purchase Not Available",
+            isPresented: Binding(
+                get: { viewModel.starPurchaseNotice != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.dismissStarPurchaseNotice()
+                    }
+                }
+            ),
+            presenting: viewModel.starPurchaseNotice
+        ) { _ in
+            Button("OK") {
+                viewModel.dismissStarPurchaseNotice()
+            }
+        } message: { notice in
+            Text(notice.message)
+        }
+    }
+}
+
+private struct StarPurchaseSheetView: View {
+    var balanceText: String
+    var products: [StarPurchaseProduct]
+    var onProductSelected: (StarPurchaseProduct) -> Void
+    var onClose: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 12) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(Color.yellow.opacity(0.96))
+                        .frame(width: 44, height: 44)
+                        .background(TaptionTheme.selectedSurface)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Stars")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(Color.white.opacity(0.94))
+                        Text("Balance \(balanceText)")
+                            .font(.subheadline.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(TaptionTheme.mutedText)
+                    }
+                }
+
+                VStack(spacing: 10) {
+                    ForEach(products) { product in
+                        Button {
+                            onProductSelected(product)
+                        } label: {
+                            StarPurchaseProductRow(product: product)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+
+                Text("Purchases will complete here after the matching App Store Connect in-app purchases are approved.")
+                    .font(.caption)
+                    .foregroundStyle(TaptionTheme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(TaptionTheme.appBackground.ignoresSafeArea())
+            .navigationTitle("Buy Stars")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done", action: onClose)
+                        .foregroundStyle(TaptionTheme.accent)
+                }
+            }
+        }
+    }
+}
+
+private struct StarPurchaseProductRow: View {
+    var product: StarPurchaseProduct
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(product.displayName)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.94))
+                Text("\(product.starCount) ad-free saves")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(TaptionTheme.mutedText)
+            }
+
+            Spacer(minLength: 8)
+
+            Text(product.displayPrice)
+                .font(.headline.monospacedDigit().weight(.bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .frame(height: 36)
+                .background(TaptionTheme.accent)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .padding(14)
+        .background(TaptionTheme.surface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(TaptionTheme.border, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 

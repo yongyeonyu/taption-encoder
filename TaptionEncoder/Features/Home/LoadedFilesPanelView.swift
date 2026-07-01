@@ -177,8 +177,6 @@ private struct EncodingFileCardView: View {
 
     private var cardContent: some View {
         HStack(alignment: .top, spacing: 9 * contentScale) {
-            dragHandle
-
             QueueFileThumbnailView(
                 sourceURL: file.thumbnailSourceURL,
                 canAttemptThumbnail: file.isInteractable,
@@ -202,19 +200,6 @@ private struct EncodingFileCardView: View {
                 .stroke(cardBorder, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-
-    private var dragHandle: some View {
-        dragHandleIcon
-            .accessibilityLabel("Move queue item")
-    }
-
-    private var dragHandleIcon: some View {
-        Image(systemName: leadingIconName)
-            .font(.system(size: 17 * contentScale, weight: .bold))
-            .foregroundStyle(leadingIconColor)
-            .frame(width: 28 * contentScale, height: 48 * contentScale)
-            .contentShape(Rectangle())
     }
 
     private var headerRow: some View {
@@ -435,8 +420,6 @@ private struct EncodingFileCardView: View {
 
     private var previewCardContent: some View {
         HStack(alignment: .top, spacing: 9 * contentScale) {
-            dragHandleIcon
-
             QueueFileThumbnailView(
                 sourceURL: file.thumbnailSourceURL,
                 canAttemptThumbnail: file.isInteractable,
@@ -459,28 +442,6 @@ private struct EncodingFileCardView: View {
                 .stroke(cardBorder, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-    }
-
-    private var leadingIconName: String {
-        switch visualSwipeIntent {
-        case .delete:
-            return file.isMultiSelected ? "checkmark.circle.fill" : "line.3.horizontal"
-        case .select:
-            return "checkmark.circle.fill"
-        case .none:
-            return file.isMultiSelected ? "checkmark.circle.fill" : "line.3.horizontal"
-        }
-    }
-
-    private var leadingIconColor: Color {
-        switch visualSwipeIntent {
-        case .delete:
-            return file.isMultiSelected ? TaptionTheme.accent : TaptionTheme.mutedText
-        case .select:
-            return TaptionTheme.accent
-        case .none:
-            return file.isMultiSelected ? TaptionTheme.accent : TaptionTheme.mutedText
-        }
     }
 
     private var visualSwipeIntent: QueueCardSwipeIntent {

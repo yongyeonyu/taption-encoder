@@ -138,6 +138,8 @@ struct BatchItemRuntime {
     var detailText: String?
     var isActive: Bool
     var isEnabled: Bool
+    var isRouteEncodable: Bool
+    var isStarLimited: Bool
     var isPreviewable: Bool
 
     static let queued = BatchItemRuntime(
@@ -148,6 +150,8 @@ struct BatchItemRuntime {
         detailText: nil,
         isActive: false,
         isEnabled: true,
+        isRouteEncodable: true,
+        isStarLimited: false,
         isPreviewable: false
     )
 }
@@ -245,6 +249,7 @@ struct FolderEncodingBatch {
                 isSelected: selectedURL == url,
                 isMultiSelected: multiSelectedURLs.contains(url),
                 isEnabled: item.isEnabled,
+                isStarLimited: item.isStarLimited,
                 isPreviewable: item.isPreviewable
             )
         }

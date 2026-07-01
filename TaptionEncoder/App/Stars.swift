@@ -70,10 +70,15 @@ enum StarWalletError: LocalizedError, Equatable {
     }
 }
 
-struct StarPurchaseProduct: Codable, Equatable, Sendable {
+struct StarPurchaseProduct: Codable, Equatable, Identifiable, Sendable {
     var productID: String
     var starCount: Int
     var displayName: String
+    var displayPrice: String
+
+    var id: String {
+        productID
+    }
 }
 
 protocol StarPurchaseProviding {

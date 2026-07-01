@@ -31,6 +31,19 @@ struct StorageIssue: Equatable {
     var message: String
 }
 
+struct StarPurchaseNotice: Identifiable, Equatable {
+    let id = UUID()
+    var product: StarPurchaseProduct
+
+    var title: String {
+        "Purchase Not Available"
+    }
+
+    var message: String {
+        "\(product.displayName) for \(product.displayPrice) is ready for StoreKit setup. Add and approve this in-app purchase in App Store Connect before purchases can complete."
+    }
+}
+
 struct LoadedVideoInfo: Equatable {
     var fileName: String
     var inputSummary: String
@@ -756,10 +769,11 @@ struct EncodingFileCardSnapshot: Identifiable, Equatable {
     var isSelected: Bool
     var isMultiSelected: Bool = false
     var isEnabled: Bool
+    var isStarLimited: Bool = false
     var isPreviewable: Bool = false
 
     var isInteractable: Bool {
-        isEnabled || isPreviewable
+        !isStarLimited && (isEnabled || isPreviewable)
     }
 }
 

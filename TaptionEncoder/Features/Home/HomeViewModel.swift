@@ -59,6 +59,8 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var pendingSaveDestinationPrompt: PendingSaveDestinationPrompt?
     @Published private(set) var savedFolderPrompt: SavedFolderPrompt?
     @Published private(set) var starWalletSnapshot: StarWalletSnapshot
+    @Published private(set) var starPurchaseProducts: [StarPurchaseProduct]
+    @Published private(set) var starPurchaseNotice: StarPurchaseNotice?
     @Published private(set) var rewardedAdState: AdLoadState
     @Published private(set) var isWatchingStarAd: Bool
     @Published private(set) var activePreview: QueueVideoPreview?
@@ -114,6 +116,8 @@ final class HomeViewModel: ObservableObject {
         self.pendingSaveDestinationPrompt = nil
         self.savedFolderPrompt = nil
         self.starWalletSnapshot = .empty
+        self.starPurchaseProducts = environment.configuration.starPurchaseProducts
+        self.starPurchaseNotice = nil
         self.rewardedAdState = .idle
         self.isWatchingStarAd = false
         self.activePreview = nil
@@ -157,7 +161,10 @@ final class HomeViewModel: ObservableObject {
         guard let review = state.preparedEncodingReview else {
             return false
         }
-        return review.videoInfo.isRouteEncodable
+        guard review.videoInfo.isRouteEncodable else {
+            return false
+        }
+        return estimatedStartStarShortage == 0
     }
 
     var startActionTitle: String {
@@ -267,10 +274,124 @@ final class HomeViewModel: ObservableObject {
               review.videoInfo.isRouteEncodable else {
             return 0
         }
+        return estimatedStartStarCost(for: review)
+    }
+
+    private var estimatedStartStarShortage: Int {
+        startStarShortage(
+            required: estimatedStartStarCost,
+            available: starWalletSnapshot.balance
+        )
+    }
+
+    private func estimatedStartStarCost(for review: PreparedEncodingReview) -> Int {
+        guard review.videoInfo.isRouteEncodable else {
+            return 0
+        }
         guard let folderBatch else {
             return 1
         }
         return max(folderBatch.remainingEncodableFileCount, 1)
+    }
+
+    private func startStarShortage(required: Int, available: Int) -> Int {
+        max(required - available, 0)
+    }
+
+    private func blockEncodingStartForInsufficientStars(
+        review: PreparedEncodingReview,
+        requiredStarCount: Int,
+        availableStarCount: Int
+    ) {
+        AppLogger.info(
+            "Start encoding ignored because stars are insufficient",
+            category: .encoding,
+            metadata: [
+                "name": review.source.displayName,
+                "required": "\(requiredStarCount)",
+                "available": "\(availableStarCount)",
+                "shortage": "\(startStarShortage(required: requiredStarCount, available: availableStarCount))"
+            ]
+        )
+        activeStarCharge = nil
+        shouldAutoResumeBatchAfterStarEarn = false
+        activeTask = nil
+        state = .readyToStart(review)
+    }
+
+    private func applyFolderStarBudgetToCurrentBatchIfReady() {
+        guard hasLoadedStarWallet,
+              !state.isBusy,
+              let batch = folderBatch else {
+            return
+        }
+        folderBatch = applyFolderStarBudget(to: batch)
+    }
+
+    private func applyFolderStarBudget(to batch: FolderEncodingBatch) -> FolderEncodingBatch {
+        guard hasLoadedStarWallet else {
+            return batch
+        }
+
+        var remainingStarSlots = max(starWalletSnapshot.balance, 0)
+        var updatedBatch = batch
+        for url in updatedBatch.fileURLs {
+            var item = updatedBatch.itemStates[url] ?? .queued
+            guard item.videoInfo != nil || item.asset != nil else {
+                updatedBatch.itemStates[url] = item
+                continue
+            }
+
+            guard item.isRouteEncodable else {
+                item.isEnabled = false
+                item.isStarLimited = false
+                updatedBatch.itemStates[url] = item
+                continue
+            }
+
+            if remainingStarSlots > 0 {
+                remainingStarSlots -= 1
+                item.isEnabled = true
+                item.isStarLimited = false
+                if item.statusText == "Need Stars" {
+                    item.statusText = item.isActive ? (item.videoInfo?.readinessStatusText ?? "Ready") : "Queued"
+                    item.detailText = item.isActive
+                        ? item.videoInfo?.readinessDetailText
+                        : folderQueuedDetailText(for: item)
+                }
+            } else {
+                item.progress = nil
+                item.isActive = false
+                item.isEnabled = false
+                item.isStarLimited = true
+                item.statusText = "Need Stars"
+                item.detailText = "Move this video higher in the queue or add Stars to include it."
+            }
+            updatedBatch.itemStates[url] = item
+        }
+
+        if let selectedURL = updatedBatch.selectedURL,
+           let selectedItem = updatedBatch.itemStates[selectedURL],
+           selectedItem.isStarLimited {
+            updatedBatch.selectedURL = queueSelectableURL(in: updatedBatch)
+        }
+        updatedBatch.currentIndex = firstQueueIndex(for: updatedBatch)
+        return updatedBatch
+    }
+
+    private func folderQueuedDetailText(for item: BatchItemRuntime) -> String? {
+        guard let info = item.videoInfo else {
+            return item.detailText
+        }
+        return "\(info.codecPathTitle). Ready to encode."
+    }
+
+    private func queueSelectableURL(in batch: FolderEncodingBatch) -> URL? {
+        batch.fileURLs.first { url in
+            let item = batch.itemStates[url]
+            return item?.isStarLimited != true
+                && (item?.isEnabled != false || item?.isPreviewable == true)
+        } ?? batch.fileURLs.first
     }
 
     private func formattedStarDelta(_ delta: Int) -> String {
@@ -965,7 +1086,41 @@ final class HomeViewModel: ObservableObject {
             hasLoadedStarWallet = true
         }
         starWalletSnapshot = await environment.starWalletStore.currentSnapshot()
+        applyFolderStarBudgetToCurrentBatchIfReady()
         await refreshRewardedAdState(startPollingIfNeeded: true)
+    }
+
+    func refreshStarPurchaseProducts() async {
+        let products = await environment.starPurchaseProvider.availableProducts()
+        starPurchaseProducts = products.isEmpty
+            ? environment.configuration.starPurchaseProducts
+            : products
+        AppLogger.info(
+            "Star purchase products refreshed",
+            category: .app,
+            metadata: ["count": "\(starPurchaseProducts.count)"]
+        )
+    }
+
+    func beginStarPurchase(product: StarPurchaseProduct) {
+        AppLogger.info(
+            "Star purchase product selected",
+            category: .app,
+            metadata: [
+                "productID": product.productID,
+                "stars": "\(product.starCount)",
+                "price": product.displayPrice
+            ]
+        )
+        starPurchaseNotice = StarPurchaseNotice(product: product)
+    }
+
+    func dismissStarPurchaseNotice() {
+        guard starPurchaseNotice != nil else {
+            return
+        }
+        AppLogger.info("Star purchase notice dismissed", category: .app)
+        starPurchaseNotice = nil
     }
 
     private func refreshRewardedAdState(startPollingIfNeeded: Bool) async {
@@ -1702,6 +1857,7 @@ final class HomeViewModel: ObservableObject {
         let insertionIndex = targetOriginalIndex > firstMovingIndex ? targetIndex + 1 : targetIndex
         reorderedURLs.insert(contentsOf: movingURLs, at: insertionIndex)
         batch.fileURLs = reorderedURLs
+        batch = applyFolderStarBudget(to: batch)
         batch.currentIndex = queueCurrentIndex(for: batch)
         folderBatch = batch
         objectWillChange.send()
@@ -1712,6 +1868,7 @@ final class HomeViewModel: ObservableObject {
               var batch = folderBatch else {
             return
         }
+        batch = applyFolderStarBudget(to: batch)
         batch.currentIndex = firstQueueIndex(for: batch)
         folderBatch = batch
 
@@ -1928,6 +2085,18 @@ final class HomeViewModel: ObservableObject {
             )
             return
         }
+        let requiredStarCount = estimatedStartStarCost(for: review)
+        guard startStarShortage(
+            required: requiredStarCount,
+            available: starWalletSnapshot.balance
+        ) == 0 else {
+            blockEncodingStartForInsufficientStars(
+                review: review,
+                requiredStarCount: requiredStarCount,
+                availableStarCount: starWalletSnapshot.balance
+            )
+            return
+        }
         dismissPreview()
         Task { @MainActor [weak self] in
             await self?.attemptEncodingStart(
@@ -1953,7 +2122,8 @@ final class HomeViewModel: ObservableObject {
         }
 
         let item = batch.itemStates[selectedURL] ?? .queued
-        guard item.isEnabled || item.isPreviewable else {
+        guard !item.isStarLimited,
+              item.isEnabled || item.isPreviewable else {
             AppLogger.info(
                 "Disabled file card preview ignored",
                 category: .ui,
@@ -2048,6 +2218,7 @@ final class HomeViewModel: ObservableObject {
     private func batchPreview(for url: URL) -> QueueVideoPreview? {
         guard let batch = folderBatch,
               let item = batch.itemStates[url],
+              !item.isStarLimited,
               item.isPreviewable,
               let videoInfo = item.videoInfo,
               item.asset?.videoTrack != nil else {
@@ -2113,7 +2284,8 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func isQueuePreviewNavigationCandidate(_ item: BatchItemRuntime) -> Bool {
-        item.isPreviewable
+        !item.isStarLimited
+            && item.isPreviewable
             && item.videoInfo != nil
             && item.asset?.videoTrack != nil
     }
@@ -2235,6 +2407,7 @@ final class HomeViewModel: ObservableObject {
                 category: .ads,
                 metadata: ["balance": "\(result.snapshot.balance)"]
             )
+            applyFolderStarBudgetToCurrentBatchIfReady()
 
             if shouldAutoResumeBatchAfterStarEarn,
                let review = state.preparedEncodingReview,
@@ -2859,6 +3032,9 @@ final class HomeViewModel: ObservableObject {
                         autoResumeAfterStarEarn: true
                     )
                 } else {
+                    if let batch = folderBatch {
+                        folderBatch = applyFolderStarBudget(to: batch)
+                    }
                     state = .readyToStart(review)
                     trace.finish("ready")
                     if autoOpenPreviewAfterPrepare {
@@ -3965,20 +4141,15 @@ final class HomeViewModel: ObservableObject {
         }
 
         starWalletSnapshot = await environment.starWalletStore.currentSnapshot()
-        guard starWalletSnapshot.balance > 0 else {
-            AppLogger.info(
-                "Starting encoding without stars; rewarded ad will be required before final save",
-                category: .encoding,
-                metadata: [
-                    "name": review.source.displayName,
-                    "balance": "\(starWalletSnapshot.balance)"
-                ]
-            )
-            activeStarCharge = nil
-            shouldAutoResumeBatchAfterStarEarn = false
-            startEncoding(
-                review: reviewWithSaveGate(.rewardedAdBeforeFinalSave, for: review),
-                allowsBusyState: true
+        let requiredStarCount = estimatedStartStarCost(for: review)
+        guard startStarShortage(
+            required: requiredStarCount,
+            available: starWalletSnapshot.balance
+        ) == 0 else {
+            blockEncodingStartForInsufficientStars(
+                review: review,
+                requiredStarCount: requiredStarCount,
+                availableStarCount: starWalletSnapshot.balance
             )
             return
         }
@@ -3999,19 +4170,10 @@ final class HomeViewModel: ObservableObject {
         } catch let error as StarWalletError {
             if case .insufficientStars = error {
                 starWalletSnapshot = await environment.starWalletStore.currentSnapshot()
-                AppLogger.info(
-                    "Star balance changed before debit; continuing with rewarded save ad",
-                    category: .encoding,
-                    metadata: [
-                        "name": review.source.displayName,
-                        "balance": "\(starWalletSnapshot.balance)"
-                    ]
-                )
-                activeStarCharge = nil
-                shouldAutoResumeBatchAfterStarEarn = false
-                startEncoding(
-                    review: reviewWithSaveGate(.rewardedAdBeforeFinalSave, for: review),
-                    allowsBusyState: true
+                blockEncodingStartForInsufficientStars(
+                    review: review,
+                    requiredStarCount: requiredStarCount,
+                    availableStarCount: starWalletSnapshot.balance
                 )
                 return
             }
@@ -4299,21 +4461,33 @@ final class HomeViewModel: ObservableObject {
         item.isActive = isActive
         if let isEnabled {
             item.isEnabled = isEnabled
+            item.isRouteEncodable = isEnabled
+            item.isStarLimited = false
         }
         if let isPreviewable {
             item.isPreviewable = isPreviewable
         }
         if isActive {
+            for otherURL in batch.fileURLs where otherURL != url {
+                guard var otherItem = batch.itemStates[otherURL],
+                      otherItem.isActive else {
+                    continue
+                }
+                otherItem.isActive = false
+                if otherItem.statusText == otherItem.videoInfo?.readinessStatusText {
+                    otherItem.statusText = otherItem.isEnabled ? "Queued" : otherItem.statusText
+                    otherItem.detailText = otherItem.isEnabled
+                        ? folderQueuedDetailText(for: otherItem)
+                        : otherItem.detailText
+                }
+                batch.itemStates[otherURL] = otherItem
+            }
             batch.selectedURL = url
         }
         batch.itemStates[url] = item
-        if item.isEnabled == false,
-           !item.isPreviewable,
+        if (item.isEnabled == false || item.isStarLimited),
            batch.selectedURL == url {
-            batch.selectedURL = batch.fileURLs.first { url in
-                let item = batch.itemStates[url]
-                return item?.isEnabled != false || item?.isPreviewable == true
-            }
+            batch.selectedURL = queueSelectableURL(in: batch)
         }
         folderBatch = batch
         objectWillChange.send()
@@ -4345,23 +4519,29 @@ final class HomeViewModel: ObservableObject {
 
     private func queueCurrentIndex(for batch: FolderEncodingBatch) -> Int {
         if let reviewURL = currentReview?.source.url,
-           let reviewIndex = batch.fileURLs.firstIndex(of: reviewURL) {
+           let reviewIndex = batch.fileURLs.firstIndex(of: reviewURL),
+           let item = batch.itemStates[reviewURL],
+           item.isEnabled,
+           !item.isStarLimited {
             return reviewIndex
         }
         if let selectedURL = batch.selectedURL,
-           let selectedIndex = batch.fileURLs.firstIndex(of: selectedURL) {
+           let selectedIndex = batch.fileURLs.firstIndex(of: selectedURL),
+           let item = batch.itemStates[selectedURL],
+           item.isEnabled,
+           !item.isStarLimited {
             return selectedIndex
         }
         return batch.fileURLs.firstIndex { url in
             let item = batch.itemStates[url]
-            return item?.isEnabled != false
+            return item?.isEnabled == true && item?.isStarLimited != true
         } ?? 0
     }
 
     private func firstQueueIndex(for batch: FolderEncodingBatch) -> Int {
         batch.fileURLs.firstIndex { url in
             let item = batch.itemStates[url]
-            return item?.isEnabled != false
+            return item?.isEnabled == true && item?.isStarLimited != true
         } ?? 0
     }
 
@@ -4404,10 +4584,7 @@ final class HomeViewModel: ObservableObject {
 
         if let selectedURL = batch.selectedURL,
            deletingURLs.contains(selectedURL) {
-            batch.selectedURL = batch.fileURLs.first { url in
-                let item = batch.itemStates[url]
-                return item?.isEnabled != false || item?.isPreviewable == true
-            } ?? batch.fileURLs.first
+            batch.selectedURL = queueSelectableURL(in: batch)
         }
 
         guard !batch.fileURLs.isEmpty else {
@@ -4426,6 +4603,7 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
+        batch = applyFolderStarBudget(to: batch)
         batch.currentIndex = queueCurrentIndex(for: batch)
         folderBatch = batch
         if removedActivePreview {
@@ -4672,6 +4850,8 @@ final class HomeViewModel: ObservableObject {
             )
             item.videoInfo = info
             item.isEnabled = info.isRouteEncodable
+            item.isRouteEncodable = info.isRouteEncodable
+            item.isStarLimited = false
             item.isPreviewable = isPreviewableInCurrentBuild(asset: asset)
             item.statusText = info.isRouteEncodable ? "Queued" : info.readinessStatusText
             item.detailText = info.isRouteEncodable ? "\(routeSelection.displayTitle). Ready to encode." : info.readinessDetailText
@@ -4680,12 +4860,8 @@ final class HomeViewModel: ObservableObject {
             batch.itemStates[url] = item
         }
 
-        batch.selectedURL = batch.fileURLs.first { url in
-            let item = batch.itemStates[url]
-            return item?.isEnabled != false || item?.isPreviewable == true
-        }
-            ?? batch.fileURLs.first
-        folderBatch = batch
+        batch.selectedURL = queueSelectableURL(in: batch)
+        folderBatch = applyFolderStarBudget(to: batch)
         objectWillChange.send()
     }
 
