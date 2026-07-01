@@ -3233,6 +3233,16 @@ final class CodecRoutePlannerTests: XCTestCase {
         let exitButtonEnd = try XCTUnwrap(homeViewText[exitButtonStart.lowerBound...].range(of: "\n    private func outputSelector"))
         let exitButtonText = String(homeViewText[exitButtonStart.lowerBound..<exitButtonEnd.lowerBound])
         XCTAssertFalse(exitButtonText.contains(".background(Color(red: 1.0, green: 0.30, blue: 0.34).opacity(0.16))"))
+        XCTAssertTrue(exitButtonText.contains(".foregroundStyle(.white)"))
+        XCTAssertTrue(exitButtonText.contains(".background(Color(red: 0.96, green: 0.18, blue: 0.22))"))
+        let homeContentStart = try XCTUnwrap(homeViewText.range(of: "private func homeContent("))
+        let homeContentEnd = try XCTUnwrap(homeViewText[homeContentStart.lowerBound...].range(of: "\n    private func sourceControls"))
+        let homeContentText = String(homeViewText[homeContentStart.lowerBound..<homeContentEnd.lowerBound])
+        let footerExitRange = try XCTUnwrap(homeContentText.range(of: "exitButton(metrics: metrics)"))
+        let footerBannerRange = try XCTUnwrap(
+            homeContentText[footerExitRange.upperBound...].range(of: "AdMobBannerSlotView(")
+        )
+        XCTAssertLessThan(footerExitRange.lowerBound, footerBannerRange.lowerBound)
         XCTAssertFalse(projectText.contains("VideoDocumentPicker.swift"))
         XCTAssertTrue(homeViewText.contains("viewModel.navigateImportBrowserIntoFolder(id: $0)"))
         XCTAssertTrue(homeViewText.contains("onBack: { viewModel.navigateImportBrowserUp() }"))
@@ -3340,20 +3350,18 @@ final class CodecRoutePlannerTests: XCTestCase {
         let scriptText = try String(contentsOf: scriptURL, encoding: .utf8)
 
         XCTAssertTrue(scriptText.contains("xcrun simctl openurl"))
-        XCTAssertTrue(scriptText.contains("SIMCTL_CHILD_TAPTION_AUTO_MINIMIZE_PREVIEW=1"))
+        XCTAssertFalse(scriptText.contains("SIMCTL_CHILD_TAPTION_AUTO_MINIMIZE_PREVIEW=1"))
         XCTAssertTrue(scriptText.contains("TAPTION_EXTERNAL_PLAYER_VERIFY_MODE"))
         XCTAssertTrue(scriptText.contains("external-video-player-flow-$MODE.log"))
         XCTAssertTrue(scriptText.contains("external-video-player-flow-$MODE.png"))
         XCTAssertTrue(scriptText.contains("xcrun simctl terminate \"$DEVICE\" \"$BUNDLE_ID\""))
         XCTAssertTrue(scriptText.contains("External video URL opened"))
         XCTAssertTrue(scriptText.contains("source=scene"))
-        XCTAssertTrue(scriptText.contains("External player file routed into preview flow"))
+        XCTAssertTrue(scriptText.contains("External player file routed into queue flow"))
         XCTAssertTrue(scriptText.contains("Security scoped access started"))
-        XCTAssertTrue(scriptText.contains("Queue preview opened"))
-        XCTAssertTrue(scriptText.contains("Queue preview video output ready"))
-        XCTAssertTrue(scriptText.contains("Queue preview minimized to floating player"))
-        XCTAssertTrue(scriptText.contains("Queue mini player video output ready"))
-        XCTAssertTrue(scriptText.contains("Full-screen ads suppressed during video playback"))
+        XCTAssertTrue(scriptText.contains("Prepare encoding ready"))
+        XCTAssertTrue(scriptText.contains("external video file open unexpectedly started preview playback"))
+        XCTAssertTrue(scriptText.contains("external video file open queued without playback"))
         XCTAssertTrue(scriptText.contains("xcrun simctl io \"$DEVICE\" screenshot"))
     }
 
@@ -5926,6 +5934,10 @@ final class CodecRoutePlannerTests: XCTestCase {
                 fileByteCount: Data("new output".utf8).count
             )
         )
+        XCTAssertEqual(viewModel.savedFolderPrompt?.title, "Open Saved Folder?")
+        XCTAssertEqual(viewModel.savedFolderPrompt?.message, "Open the folder containing clip_taption 2.mp4?")
+        XCTAssertEqual(viewModel.savedFolderPrompt?.fileName, uniqueURL.lastPathComponent)
+        XCTAssertEqual(viewModel.savedFolderPrompt?.folderURL.standardizedFileURL, directoryURL.standardizedFileURL)
 
         let states = try await store.loadPendingStates()
         XCTAssertTrue(states.isEmpty)
@@ -6029,6 +6041,11 @@ final class CodecRoutePlannerTests: XCTestCase {
                 url: internalURL,
                 fileByteCount: Data("new output".utf8).count
             )
+        )
+        XCTAssertEqual(viewModel.savedFolderPrompt?.fileName, internalURL.lastPathComponent)
+        XCTAssertEqual(
+            viewModel.savedFolderPrompt?.folderURL.standardizedFileURL,
+            internalURL.deletingLastPathComponent().standardizedFileURL
         )
         XCTAssertFalse(FileManager.default.fileExists(atPath: temporaryURL.path))
         let states = try await store.loadPendingStates()
@@ -7521,6 +7538,7 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         viewModel.importFolderPreviewBatch()
         try await waitForReadyToStartState(in: viewModel)
+        XCTAssertNil(viewModel.activePreview)
 
         guard case .readyToStart(let review) = viewModel.state else {
             return XCTFail("Expected ready state for folder selection")
@@ -7905,7 +7923,7 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         viewModel.startFilesFlow(urls: fileURLs)
         try await waitForReadyToStartState(in: viewModel)
-        XCTAssertEqual(viewModel.activePreview?.sourceURL, fileURLs[0])
+        XCTAssertNil(viewModel.activePreview)
 
         viewModel.openPreviewForFileCard(id: fileURLs[1].absoluteString)
         try await waitForCondition(timeout: 2) {
@@ -7925,6 +7943,54 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(
             viewModel.fileCardSnapshots.first(where: { $0.id == fileURLs[1].absoluteString })?.thumbnailSourceURL,
             fileURLs[1]
+        )
+    }
+
+    @MainActor
+    func testQueueCardSelectionShowsDetailsWithoutOpeningPreview() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let fileURLs = [
+            directoryURL.appendingPathComponent("a.mp4"),
+            directoryURL.appendingPathComponent("b.mp4")
+        ]
+        for url in fileURLs {
+            try Data("source".utf8).write(to: url)
+        }
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.dismissPreview()
+        XCTAssertNil(viewModel.activePreview)
+
+        viewModel.selectFileCard(id: fileURLs[1].absoluteString)
+        try await waitForCondition(timeout: 2) {
+            guard let selectedCard = viewModel.fileCardSnapshots.first(where: { $0.id == fileURLs[1].absoluteString }) else {
+                return false
+            }
+            return selectedCard.isSelected
+                && selectedCard.videoInfo != nil
+                && selectedCard.detailText?.contains("Ready to encode") == true
+        }
+
+        XCTAssertEqual(
+            viewModel.fileCardSnapshots.first(where: { $0.id == fileURLs[0].absoluteString })?.isSelected,
+            false
+        )
+        XCTAssertNil(viewModel.activePreview)
+        XCTAssertEqual(
+            viewModel.fileCardSnapshots.first(where: { $0.id == fileURLs[1].absoluteString })?.isPreviewable,
+            true
         )
     }
 
@@ -7964,7 +8030,46 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertEqual(viewModel.fileCardSnapshots.map(\.fileName), ["a.mp4", "d.mp4"])
         XCTAssertTrue(viewModel.fileCardSnapshots.allSatisfy { !$0.isMultiSelected })
-        XCTAssertEqual(viewModel.activePreview?.sourceURL, fileURLs[0])
+        XCTAssertNil(viewModel.activePreview)
+    }
+
+    @MainActor
+    func testQueueCardTapClearsMultiSelectionAndShowsTappedCardDetails() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let fileURLs = ["a.mp4", "b.mp4", "c.mp4"].map {
+            directoryURL.appendingPathComponent($0)
+        }
+        for url in fileURLs {
+            try Data("source".utf8).write(to: url)
+        }
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.toggleQueueFileSelection(id: fileURLs[1].absoluteString)
+        viewModel.toggleQueueFileSelection(id: fileURLs[2].absoluteString)
+        XCTAssertEqual(viewModel.fileCardSnapshots.filter(\.isMultiSelected).count, 2)
+
+        viewModel.selectFileCard(id: fileURLs[2].absoluteString)
+        try await waitForCondition(timeout: 2) {
+            viewModel.fileCardSnapshots.first(where: { $0.id == fileURLs[2].absoluteString })?.isSelected == true
+        }
+
+        XCTAssertTrue(viewModel.fileCardSnapshots.allSatisfy { !$0.isMultiSelected })
+        XCTAssertEqual(
+            viewModel.fileCardSnapshots.first(where: { $0.id == fileURLs[2].absoluteString })?.videoInfo?.inputSummary,
+            "H.264 / AVC / MP4"
+        )
     }
 
     @MainActor
@@ -8009,7 +8114,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             viewModel.fileCardSnapshots.filter(\.isMultiSelected).map(\.fileName),
             ["b.mp4", "c.mp4"]
         )
-        XCTAssertEqual(viewModel.activePreview?.sourceURL, fileURLs[1])
+        XCTAssertNil(viewModel.activePreview)
     }
 
     @MainActor
@@ -8056,13 +8161,19 @@ final class CodecRoutePlannerTests: XCTestCase {
             .deletingLastPathComponent()
         let loadedFilesPanelURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/LoadedFilesPanelView.swift")
         let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
+        let homeViewModelURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeViewModel.swift")
         let homeLayoutMetricsURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeLayoutMetrics.swift")
         let loadedFilesPanelText = try String(contentsOf: loadedFilesPanelURL, encoding: .utf8)
         let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
+        let homeViewModelText = try String(contentsOf: homeViewModelURL, encoding: .utf8)
         let homeLayoutMetricsText = try String(contentsOf: homeLayoutMetricsURL, encoding: .utf8)
 
         XCTAssertTrue(loadedFilesPanelText.contains("@State private var swipeOffset: CGFloat = 0"))
+        XCTAssertTrue(loadedFilesPanelText.contains("@State private var isSwipeGestureActive = false"))
+        XCTAssertTrue(loadedFilesPanelText.contains("@State private var isCardPressActive = false"))
         XCTAssertTrue(loadedFilesPanelText.contains("@State private var pressedGroupAnchorID: String?"))
+        XCTAssertTrue(loadedFilesPanelText.contains("var onSelect: (String) -> Void"))
+        XCTAssertTrue(loadedFilesPanelText.contains("var onSelect: () -> Void"))
         XCTAssertTrue(loadedFilesPanelText.contains("var onPlay: (String) -> Void"))
         XCTAssertTrue(loadedFilesPanelText.contains("var onPlay: () -> Void"))
         XCTAssertTrue(loadedFilesPanelText.contains("Image(systemName: leadingIconName)"))
@@ -8074,22 +8185,34 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(loadedFilesPanelText.contains("preview: {"))
         XCTAssertTrue(loadedFilesPanelText.contains(".onDrop("))
         XCTAssertTrue(loadedFilesPanelText.contains("QueueFileDropDelegate"))
+        XCTAssertTrue(loadedFilesPanelText.contains(".onTapGesture {"))
+        XCTAssertTrue(loadedFilesPanelText.contains("guard !isSwipeGestureActive, abs(swipeOffset) < 1 else"))
+        XCTAssertTrue(loadedFilesPanelText.contains("onSelect()"))
         XCTAssertTrue(loadedFilesPanelText.contains("DragGesture(minimumDistance: 28"))
         XCTAssertTrue(loadedFilesPanelText.contains(".onChanged { value in"))
         XCTAssertTrue(loadedFilesPanelText.contains(".onEnded { value in"))
+        XCTAssertTrue(loadedFilesPanelText.contains("isSwipeGestureActive = true"))
         XCTAssertTrue(loadedFilesPanelText.contains("if horizontal < 0"))
         XCTAssertTrue(loadedFilesPanelText.contains("resetSwipeOffset()"))
+        XCTAssertTrue(loadedFilesPanelText.contains("isSwipeGestureActive = false"))
         XCTAssertTrue(loadedFilesPanelText.contains("onToggleSelection()"))
         XCTAssertTrue(loadedFilesPanelText.contains("onDelete()"))
         XCTAssertTrue(loadedFilesPanelText.contains(".onLongPressGesture("))
+        XCTAssertTrue(loadedFilesPanelText.contains("isCardPressActive = isPressing"))
         XCTAssertTrue(loadedFilesPanelText.contains("selectedGroupCount"))
         XCTAssertTrue(loadedFilesPanelText.contains("groupStackLayer"))
         XCTAssertTrue(loadedFilesPanelText.contains("withAnimation(.spring(response: 0.28, dampingFraction: 0.84))"))
         XCTAssertTrue(loadedFilesPanelText.contains("metricTable(info)"))
         XCTAssertTrue(loadedFilesPanelText.contains("codecFlowTable(info)"))
-        XCTAssertTrue(loadedFilesPanelText.contains("codecFlowRow(input: info.inputSummary, output: info.outputSummary)"))
-        XCTAssertTrue(loadedFilesPanelText.contains("codecFlowRow(input: info.audio, output: info.audioOutputSummary)"))
-        XCTAssertTrue(loadedFilesPanelText.contains("Text(\"->\")"))
+        XCTAssertTrue(loadedFilesPanelText.contains("tableValue(info.inputSummary)"))
+        XCTAssertTrue(loadedFilesPanelText.contains("tableValue(info.audio)"))
+        XCTAssertTrue(loadedFilesPanelText.contains("codecFlowArrow()"))
+        XCTAssertTrue(loadedFilesPanelText.contains("tableValue(info.outputSummary)"))
+        XCTAssertTrue(loadedFilesPanelText.contains("tableValue(info.audioOutputSummary)"))
+        XCTAssertTrue(loadedFilesPanelText.contains("Image(systemName: \"arrow.down\")"))
+        XCTAssertFalse(loadedFilesPanelText.contains("Text(\"->\")"))
+        XCTAssertFalse(loadedFilesPanelText.contains("codecFlowRow(input:"))
+        XCTAssertTrue(loadedFilesPanelText.contains("if file.isSelected {\n            return TaptionTheme.accent"))
         XCTAssertFalse(loadedFilesPanelText.contains("Text(\"Codec Info (Video / Audio)\")"))
         XCTAssertFalse(loadedFilesPanelText.contains("infoCell(\"Time\""))
         XCTAssertFalse(loadedFilesPanelText.contains("infoCell(\"FPS\""))
@@ -8102,9 +8225,15 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(loadedFilesPanelText.contains("playBadge"))
         XCTAssertTrue(loadedFilesPanelText.contains("Image(systemName: \"play.fill\")"))
         XCTAssertTrue(loadedFilesPanelText.contains("if canAttemptThumbnail, onPlay != nil"))
+        XCTAssertTrue(loadedFilesPanelText.contains("playbackGestureEnabled: thumbnailPlaybackEnabled"))
+        XCTAssertTrue(loadedFilesPanelText.contains("playbackGestureEnabled: false"))
+        XCTAssertTrue(loadedFilesPanelText.contains("@State private var lastPointerMovementAt = Date.distantPast"))
+        XCTAssertTrue(loadedFilesPanelText.contains(".simultaneousGesture(pointerMovementGesture)"))
+        XCTAssertTrue(loadedFilesPanelText.contains("guard canStartPlayback, let onPlay else { return }"))
+        XCTAssertTrue(loadedFilesPanelText.contains("Date().timeIntervalSince(lastPointerMovementAt) > 0.35"))
+        XCTAssertTrue(loadedFilesPanelText.contains("hasMeaningfulPointerMovement(value.translation)"))
         XCTAssertTrue(loadedFilesPanelText.contains("onPlay: onPlay"))
         XCTAssertTrue(loadedFilesPanelText.contains(".onTapGesture(count: 2)"))
-        XCTAssertTrue(loadedFilesPanelText.contains("guard canAttemptThumbnail, let onPlay else { return }"))
         XCTAssertTrue(loadedFilesPanelText.contains(".accessibilityLabel(canAttemptThumbnail && onPlay != nil ? \"Double tap to play preview\" : \"Video thumbnail\")"))
         XCTAssertTrue(loadedFilesPanelText.contains(".accessibilityAction {"))
         XCTAssertTrue(loadedFilesPanelText.contains(".background(TaptionTheme.accent)"))
@@ -8112,7 +8241,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         let cardViewStart = try XCTUnwrap(loadedFilesPanelText.range(of: "private struct EncodingFileCardView: View"))
         let cardContentStart = try XCTUnwrap(loadedFilesPanelText[cardViewStart.lowerBound...].range(of: "private var cardContent: some View"))
         let cardGestureText = String(loadedFilesPanelText[cardViewStart.lowerBound..<cardContentStart.lowerBound])
-        XCTAssertFalse(cardGestureText.contains(".onTapGesture"))
+        XCTAssertTrue(cardGestureText.contains(".onTapGesture"))
+        XCTAssertFalse(cardGestureText.contains("onPlay()"))
         let dragHandleStart = try XCTUnwrap(loadedFilesPanelText.range(of: "private var dragHandle: some View"))
         let dragHandleEnd = try XCTUnwrap(loadedFilesPanelText[dragHandleStart.lowerBound...].range(of: "private var dragHandleIcon"))
         let dragHandleText = String(loadedFilesPanelText[dragHandleStart.lowerBound..<dragHandleEnd.lowerBound])
@@ -8121,19 +8251,38 @@ final class CodecRoutePlannerTests: XCTestCase {
         let leadingIconNameEnd = try XCTUnwrap(loadedFilesPanelText[leadingIconNameStart.lowerBound...].range(of: "private var leadingIconColor: Color"))
         let leadingIconNameText = String(loadedFilesPanelText[leadingIconNameStart.lowerBound..<leadingIconNameEnd.lowerBound])
         XCTAssertFalse(leadingIconNameText.contains("return \"trash.fill\""))
+        XCTAssertTrue(homeViewText.contains("onSelect: { viewModel.selectFileCard(id: $0) }"))
         XCTAssertTrue(homeViewText.contains("onPlay: { viewModel.openPreviewForFileCard(id: $0) }"))
         XCTAssertTrue(homeViewText.contains("viewModel.toggleQueueFileSelection(id: $0)"))
         XCTAssertTrue(homeViewText.contains("viewModel.deleteQueueFile(id: $0)"))
         XCTAssertTrue(homeViewText.contains("viewModel.moveQueueFiles(draggedID: draggedID, before: targetID)"))
         XCTAssertTrue(homeViewText.contains("viewModel.finishQueueMove()"))
+        XCTAssertTrue(homeViewModelText.contains("autoOpenPreviewAfterPrepare: false"))
+        XCTAssertTrue(homeViewModelText.contains("autoOpenPreviewAfterPrepare: Bool = false"))
+        XCTAssertTrue(homeViewModelText.contains("batch.multiSelectedURLs.removeAll()"))
+        XCTAssertTrue(homeViewModelText.contains("standaloneSelectedQueueIDs.removeAll()"))
         XCTAssertTrue(homeViewText.contains("reservesFailureLogArea: reservesFailureLogArea"))
         XCTAssertTrue(homeLayoutMetricsText.contains("init(size: CGSize, reservesFailureLogArea: Bool = false)"))
+        XCTAssertTrue(homeLayoutMetricsText.contains("let availableHeight = max(1, size.height)"))
+        XCTAssertTrue(homeLayoutMetricsText.contains("let heightScale = min(max(availableHeight / referenceHeight, minimumScale), maximumScale)"))
         XCTAssertTrue(homeLayoutMetricsText.contains("let visibleSpacingCount: CGFloat = reservesFailureLogArea ? 8 : 9"))
-        XCTAssertTrue(homeLayoutMetricsText.contains("filePanelHeight = max(remainingHeight, minimumFilePanelHeight)"))
+        XCTAssertTrue(homeLayoutMetricsText.contains("filePanelHeight = max(0, remainingHeight)"))
+        XCTAssertFalse(homeLayoutMetricsText.contains("filePanelHeight = max(remainingHeight, minimumFilePanelHeight)"))
+    }
+
+    func testHomeLayoutMetricsShrinksQueuePanelUnderVerticalPressure() {
+        let portraitMetrics = HomeLayoutMetrics(size: CGSize(width: 393, height: 852))
+        let compactLandscapeMetrics = HomeLayoutMetrics(size: CGSize(width: 852, height: 393))
+
+        XCTAssertEqual(compactLandscapeMetrics.canvasHeight, 393, accuracy: 0.1)
+        XCTAssertLessThan(compactLandscapeMetrics.contentScale, portraitMetrics.contentScale)
+        XCTAssertLessThan(compactLandscapeMetrics.filePanelHeight, portraitMetrics.filePanelHeight)
+        XCTAssertLessThanOrEqual(compactLandscapeMetrics.filePanelHeight, 1)
+        XCTAssertGreaterThanOrEqual(compactLandscapeMetrics.filePanelHeight, 0)
     }
 
     @MainActor
-    func testSingleFileImportAutoOpensPreview() async throws {
+    func testSingleFileImportQueuesWithoutAutoOpeningPreview() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -8152,6 +8301,17 @@ final class CodecRoutePlannerTests: XCTestCase {
         viewModel.startFilesFlow(url: sourceURL)
         try await waitForReadyToStartState(in: viewModel)
 
+        XCTAssertNil(viewModel.activePreview)
+        XCTAssertEqual(viewModel.fileCardSnapshots.count, 1)
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.fileName, "single.mp4")
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.sourceKind, .files)
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Ready")
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.isPreviewable, true)
+
+        viewModel.openPreviewForFileCard(id: "single.mp4")
+        try await waitForCondition(timeout: 2) {
+            viewModel.activePreview?.sourceURL == sourceURL
+        }
         XCTAssertEqual(viewModel.activePreview?.sourceURL, sourceURL)
         XCTAssertEqual(viewModel.activePreview?.displayName, "single.mp4")
     }
@@ -8192,7 +8352,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testExternalFileOpenRoutesIntoAutoPreview() async throws {
+    func testExternalFileOpenQueuesWithoutAutoOpeningPreview() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -8211,6 +8371,17 @@ final class CodecRoutePlannerTests: XCTestCase {
         viewModel.openExternalPlayerFile(url: sourceURL)
         try await waitForReadyToStartState(in: viewModel)
 
+        XCTAssertNil(viewModel.activePreview)
+        XCTAssertEqual(viewModel.fileCardSnapshots.count, 1)
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.fileName, "external.avi")
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.sourceKind, .files)
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Ready")
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.isPreviewable, true)
+
+        viewModel.openPreviewForFileCard(id: "external.avi")
+        try await waitForCondition(timeout: 2) {
+            viewModel.activePreview?.sourceURL == sourceURL
+        }
         XCTAssertEqual(viewModel.activePreview?.sourceURL, sourceURL)
         XCTAssertEqual(viewModel.activePreview?.displayName, "external.avi")
     }
@@ -8331,7 +8502,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(viewModel.folderPreviewContext?.fileCount, 3)
         viewModel.importFolderPreviewBatch()
         try await waitForReadyToStartState(in: viewModel)
-        XCTAssertEqual(viewModel.activePreview?.sourceURL, supportedFirstURL)
+        XCTAssertNil(viewModel.activePreview)
 
         viewModel.openPreviewForFileCard(id: supportedFirstURL.absoluteString)
         try await waitForCondition(timeout: 2) {
@@ -8395,7 +8566,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         let middleSnapshot = viewModel.fileCardSnapshots.first { $0.fileName == nonPreviewableURL.lastPathComponent }
         XCTAssertEqual(middleSnapshot?.isEnabled, true)
         XCTAssertEqual(middleSnapshot?.isPreviewable, false)
-        XCTAssertEqual(viewModel.activePreview?.sourceURL, supportedFirstURL)
+        XCTAssertNil(viewModel.activePreview)
 
         viewModel.openPreviewForFileCard(id: supportedFirstURL.absoluteString)
         try await waitForCondition(timeout: 2) {
@@ -8450,14 +8621,14 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         viewModel.startFilesFlow(urls: [supportedURL, sourceURL])
         try await waitForReadyToStartState(in: viewModel)
-        XCTAssertEqual(viewModel.activePreview?.sourceURL, supportedURL)
+        XCTAssertNil(viewModel.activePreview)
         viewModel.openPreviewForFileCard(id: sourceURL.absoluteString)
 
         try await waitForCondition(timeout: 2) {
             viewModel.fileCardSnapshots.first(where: { $0.id == sourceURL.absoluteString })?.isEnabled == false
         }
 
-        XCTAssertEqual(viewModel.activePreview?.sourceURL, supportedURL)
+        XCTAssertNil(viewModel.activePreview)
         XCTAssertEqual(
             viewModel.fileCardSnapshots.first(where: { $0.id == sourceURL.absoluteString })?.isEnabled,
             false
@@ -8927,20 +9098,15 @@ final class CodecRoutePlannerTests: XCTestCase {
 
     private func expectedCompletedSaveDetail(
         url: URL,
-        fileByteCount: Int,
-        duration: String = "Unknown"
+        fileByteCount: Int
     ) -> String {
-        let format = url.pathExtension.isEmpty ? "Unknown" : url.pathExtension.uppercased()
         let size = ByteCountFormatter.string(
             fromByteCount: Int64(fileByteCount),
             countStyle: .file
         )
         return [
             "File: \(url.lastPathComponent)",
-            "Format: \(format)",
-            "Size: \(size)",
-            "Time: \(duration)",
-            "Path: \(url.path)"
+            "Size: \(size)"
         ].joined(separator: "\n")
     }
 

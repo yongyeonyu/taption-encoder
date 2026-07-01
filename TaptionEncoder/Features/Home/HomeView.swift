@@ -265,6 +265,7 @@ struct HomeView: View {
             )
         }
         .pendingSaveDestinationDialog(viewModel: viewModel)
+        .savedFolderDialog(viewModel: viewModel)
         .fullScreenCover(
             item: Binding<QueueVideoPreview?>(
                 get: { viewModel.activePreview },
@@ -355,12 +356,12 @@ struct HomeView: View {
                 Spacer(minLength: 0)
             }
 
+            exitButton(metrics: metrics)
+
             AdMobBannerSlotView(
                 adUnitID: viewModel.bannerAdUnitID,
                 displayScale: metrics.bannerScale
             )
-
-            exitButton(metrics: metrics)
         }
         .padding(.horizontal, metrics.horizontalPadding)
         .padding(.vertical, metrics.verticalPadding)
@@ -396,6 +397,7 @@ struct HomeView: View {
             files: viewModel.fileCardSnapshots,
             contentScale: metrics.contentScale,
             panelHeight: metrics.filePanelHeight,
+            onSelect: { viewModel.selectFileCard(id: $0) },
             onPlay: { viewModel.openPreviewForFileCard(id: $0) },
             onToggleSelection: { viewModel.toggleQueueFileSelection(id: $0) },
             onDelete: { viewModel.deleteQueueFile(id: $0) },
@@ -857,12 +859,13 @@ struct HomeView: View {
                 Text("Exit")
                     .font(metrics.buttonFont.weight(.semibold))
             }
-            .foregroundStyle(Color(red: 1.0, green: 0.78, blue: 0.80))
+            .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .frame(height: metrics.footerExitButtonHeight)
+            .background(Color(red: 0.96, green: 0.18, blue: 0.22))
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color(red: 1.0, green: 0.30, blue: 0.34).opacity(0.48), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
@@ -1217,6 +1220,30 @@ private extension View {
             }
             Button("Cancel", role: .cancel) {
                 viewModel.dismissPendingSaveDestinationPrompt()
+            }
+        } message: { prompt in
+            Text(prompt.message)
+        }
+    }
+
+    func savedFolderDialog(viewModel: HomeViewModel) -> some View {
+        alert(
+            viewModel.savedFolderPrompt?.title ?? "Open Saved Folder?",
+            isPresented: Binding(
+                get: { viewModel.savedFolderPrompt != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.dismissSavedFolderPrompt()
+                    }
+                }
+            ),
+            presenting: viewModel.savedFolderPrompt
+        ) { prompt in
+            Button("Open Folder") {
+                viewModel.openSavedFolder(prompt: prompt)
+            }
+            Button("Not Now", role: .cancel) {
+                viewModel.dismissSavedFolderPrompt()
             }
         } message: { prompt in
             Text(prompt.message)

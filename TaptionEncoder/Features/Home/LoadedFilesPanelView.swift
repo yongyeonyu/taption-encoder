@@ -13,6 +13,7 @@ struct LoadedFilesPanelView: View {
     var files: [EncodingFileCardSnapshot]
     var contentScale: CGFloat
     var panelHeight: CGFloat
+    var onSelect: (String) -> Void
     var onPlay: (String) -> Void
     var onToggleSelection: (String) -> Void
     var onDelete: (String) -> Void
@@ -46,6 +47,7 @@ struct LoadedFilesPanelView: View {
                                 isBundledByGroupPress: isGroupPressActive
                                     && file.isMultiSelected
                                     && pressedGroupAnchorID != file.id,
+                                onSelect: { onSelect(file.id) },
                                 onPlay: { onPlay(file.id) },
                                 onToggleSelection: { onToggleSelection(file.id) },
                                 onDelete: { onDelete(file.id) },
@@ -124,6 +126,7 @@ private struct EncodingFileCardView: View {
     var selectedGroupCount: Int
     var isGroupPressAnchor: Bool
     var isBundledByGroupPress: Bool
+    var onSelect: () -> Void
     var onPlay: () -> Void
     var onToggleSelection: () -> Void
     var onDelete: () -> Void
@@ -131,6 +134,8 @@ private struct EncodingFileCardView: View {
     var onGroupPressChanged: (Bool) -> Void
 
     @State private var swipeOffset: CGFloat = 0
+    @State private var isSwipeGestureActive = false
+    @State private var isCardPressActive = false
 
     var body: some View {
         ZStack {
@@ -144,10 +149,19 @@ private struct EncodingFileCardView: View {
         }
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .simultaneousGesture(swipeGesture)
+            .onTapGesture {
+                guard !isSwipeGestureActive, abs(swipeOffset) < 1 else {
+                    return
+                }
+                onSelect()
+            }
             .onLongPressGesture(
                 minimumDuration: 0.22,
                 maximumDistance: 22,
-                pressing: onGroupPressChanged,
+                pressing: { isPressing in
+                    isCardPressActive = isPressing
+                    onGroupPressChanged(isPressing)
+                },
                 perform: {}
             )
             .onDrag {
@@ -168,6 +182,7 @@ private struct EncodingFileCardView: View {
             QueueFileThumbnailView(
                 sourceURL: file.thumbnailSourceURL,
                 canAttemptThumbnail: file.isInteractable,
+                playbackGestureEnabled: thumbnailPlaybackEnabled,
                 contentScale: contentScale,
                 onPlay: onPlay
             )
@@ -270,23 +285,23 @@ private struct EncodingFileCardView: View {
     }
 
     private var cardBackground: Color {
-        guard file.isInteractable else {
-            return TaptionTheme.elevatedSurface.opacity(0.55)
-        }
         if file.isMultiSelected {
             return TaptionTheme.selectedSurface.opacity(0.95)
         }
-        return file.isSelected ? TaptionTheme.selectedSurface : TaptionTheme.elevatedSurface
+        if file.isSelected {
+            return TaptionTheme.selectedSurface.opacity(file.isInteractable ? 1 : 0.74)
+        }
+        return file.isInteractable ? TaptionTheme.elevatedSurface : TaptionTheme.elevatedSurface.opacity(0.55)
     }
 
     private var cardBorder: Color {
-        guard file.isInteractable else {
-            return Color.white.opacity(0.08)
-        }
         if file.isMultiSelected {
             return TaptionTheme.accent.opacity(0.82)
         }
-        return file.isSelected ? Color.white.opacity(0.35) : TaptionTheme.border
+        if file.isSelected {
+            return TaptionTheme.accent
+        }
+        return file.isInteractable ? TaptionTheme.border : Color.white.opacity(0.08)
     }
 
     private var statusColor: Color {
@@ -313,6 +328,7 @@ private struct EncodingFileCardView: View {
                 guard abs(horizontal) > abs(vertical) * 1.15 else {
                     return
                 }
+                isSwipeGestureActive = true
                 swipeOffset = clampedSwipeOffset(horizontal)
             }
             .onEnded { value in
@@ -424,6 +440,7 @@ private struct EncodingFileCardView: View {
             QueueFileThumbnailView(
                 sourceURL: file.thumbnailSourceURL,
                 canAttemptThumbnail: file.isInteractable,
+                playbackGestureEnabled: false,
                 contentScale: contentScale
             )
 
@@ -492,6 +509,13 @@ private struct EncodingFileCardView: View {
         return isBundledByGroupPress ? 0.46 : baseOpacity
     }
 
+    private var thumbnailPlaybackEnabled: Bool {
+        !isSwipeGestureActive
+            && !isCardPressActive
+            && !isBundledByGroupPress
+            && abs(swipeOffset) < 1
+    }
+
     private var swipeLimit: CGFloat {
         max(72, 112 * contentScale)
     }
@@ -520,6 +544,7 @@ private struct EncodingFileCardView: View {
         withAnimation(queueSpringAnimation) {
             swipeOffset = 0
         }
+        isSwipeGestureActive = false
     }
 
     private func infoGrid(_ info: LoadedVideoInfo) -> some View {
@@ -543,23 +568,29 @@ private struct EncodingFileCardView: View {
     }
 
     private func codecFlowTable(_ info: LoadedVideoInfo) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 6 * contentScale, verticalSpacing: 3 * contentScale) {
-            codecFlowRow(input: info.inputSummary, output: info.outputSummary)
-            codecFlowRow(input: info.audio, output: info.audioOutputSummary)
+        Grid(alignment: .leading, horizontalSpacing: 10 * contentScale, verticalSpacing: 2 * contentScale) {
+            GridRow {
+                tableValue(info.inputSummary)
+                tableValue(info.audio)
+            }
+            GridRow {
+                codecFlowArrow()
+                codecFlowArrow()
+            }
+            GridRow {
+                tableValue(info.outputSummary)
+                tableValue(info.audioOutputSummary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func codecFlowRow(input: String, output: String) -> some View {
-        GridRow {
-            tableValue(input)
-            Text("->")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(TaptionTheme.mutedText)
-                .lineLimit(1)
-                .gridColumnAlignment(.center)
-            tableValue(output)
-        }
+    private func codecFlowArrow() -> some View {
+        Image(systemName: "arrow.down")
+            .font(.system(size: max(9, 10 * contentScale), weight: .bold))
+            .foregroundStyle(defaultValueColor.opacity(file.isInteractable ? 0.72 : 0.5))
+            .frame(maxWidth: .infinity, alignment: .center)
+            .accessibilityHidden(true)
     }
 
     private func tableValue(_ value: String) -> some View {
@@ -1206,12 +1237,14 @@ private struct FolderPreviewThumbnailView: View {
 private struct QueueFileThumbnailView: View {
     var sourceURL: URL?
     var canAttemptThumbnail: Bool
+    var playbackGestureEnabled: Bool = true
     var contentScale: CGFloat
     var onPlay: (() -> Void)? = nil
 
     @State private var thumbnailImage: UIImage?
     @State private var isLoading = false
     @State private var didFail = false
+    @State private var lastPointerMovementAt = Date.distantPast
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -1253,18 +1286,46 @@ private struct QueueFileThumbnailView: View {
         .task(id: thumbnailTaskID) {
             await loadThumbnail()
         }
+        .simultaneousGesture(pointerMovementGesture)
         .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .onTapGesture(count: 2) {
-            guard canAttemptThumbnail, let onPlay else { return }
+            guard canStartPlayback, let onPlay else { return }
             onPlay()
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(canAttemptThumbnail && onPlay != nil ? "Double tap to play preview" : "Video thumbnail")
         .accessibilityAddTraits(canAttemptThumbnail && onPlay != nil ? .isButton : [])
         .accessibilityAction {
-            guard canAttemptThumbnail, let onPlay else { return }
+            guard canStartPlayback, let onPlay else { return }
             onPlay()
         }
+    }
+
+    private var pointerMovementGesture: some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .local)
+            .onChanged { value in
+                guard hasMeaningfulPointerMovement(value.translation) else {
+                    return
+                }
+                lastPointerMovementAt = Date()
+            }
+            .onEnded { value in
+                guard hasMeaningfulPointerMovement(value.translation) else {
+                    return
+                }
+                lastPointerMovementAt = Date()
+            }
+    }
+
+    private var canStartPlayback: Bool {
+        canAttemptThumbnail
+            && playbackGestureEnabled
+            && onPlay != nil
+            && Date().timeIntervalSince(lastPointerMovementAt) > 0.35
+    }
+
+    private func hasMeaningfulPointerMovement(_ translation: CGSize) -> Bool {
+        abs(translation.width) > 4 || abs(translation.height) > 4
     }
 
     private var playBadge: some View {

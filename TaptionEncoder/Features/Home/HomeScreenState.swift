@@ -1071,6 +1071,20 @@ struct PendingSaveDestinationPrompt: Identifiable, Equatable {
     }
 }
 
+struct SavedFolderPrompt: Identifiable, Equatable {
+    let id = UUID()
+    var fileName: String
+    var folderURL: URL
+
+    var title: String {
+        "Open Saved Folder?"
+    }
+
+    var message: String {
+        "Open the folder containing \(fileName)?"
+    }
+}
+
 struct SavedOutput: Equatable {
     var displayName: String
     var destinationDescription: String

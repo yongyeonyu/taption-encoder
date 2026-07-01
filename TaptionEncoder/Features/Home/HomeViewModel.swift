@@ -57,6 +57,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var state: HomeScreenState
     @Published private(set) var selectedOutput: TaptionOutputSelection
     @Published private(set) var pendingSaveDestinationPrompt: PendingSaveDestinationPrompt?
+    @Published private(set) var savedFolderPrompt: SavedFolderPrompt?
     @Published private(set) var starWalletSnapshot: StarWalletSnapshot
     @Published private(set) var rewardedAdState: AdLoadState
     @Published private(set) var isWatchingStarAd: Bool
@@ -111,6 +112,7 @@ final class HomeViewModel: ObservableObject {
         )
         self.state = .idle
         self.pendingSaveDestinationPrompt = nil
+        self.savedFolderPrompt = nil
         self.starWalletSnapshot = .empty
         self.rewardedAdState = .idle
         self.isWatchingStarAd = false
@@ -1384,7 +1386,7 @@ final class HomeViewModel: ObservableObject {
 
     func openExternalPlayerFile(url: URL) {
         AppLogger.info(
-            "External player file routed into preview flow",
+            "External player file routed into queue flow",
             category: .fileImport,
             metadata: ["name": url.lastPathComponent]
         )
@@ -1856,33 +1858,46 @@ final class HomeViewModel: ObservableObject {
     func selectFileCard(id: String) {
         guard var batch = folderBatch,
               let selectedURL = batch.fileURLs.first(where: { $0.absoluteString == id }) else {
+            if !standaloneSelectedQueueIDs.isEmpty {
+                standaloneSelectedQueueIDs.removeAll()
+                objectWillChange.send()
+                AppLogger.info("Standalone queue selections cleared by card tap", category: .ui)
+                return
+            }
             AppLogger.warning("File card selection ignored because item was not found", category: .ui)
             return
         }
 
         let item = batch.itemStates[selectedURL] ?? .queued
-        guard item.isEnabled else {
+        let clearedSelectionCount = batch.multiSelectedURLs.count
+        if clearedSelectionCount > 0 {
+            batch.multiSelectedURLs.removeAll()
+        }
+        if !item.isEnabled {
             AppLogger.info(
-                "Disabled file card tapped",
+                "Disabled file card selected",
                 category: .ui,
                 metadata: [
                     "name": selectedURL.lastPathComponent,
                     "status": item.statusText
                 ]
             )
-            return
         }
 
         AppLogger.info(
             "File card selected",
             category: .ui,
-            metadata: ["name": selectedURL.lastPathComponent]
+            metadata: [
+                "name": selectedURL.lastPathComponent,
+                "clearedSelectionCount": "\(clearedSelectionCount)"
+            ]
         )
         batch.selectedURL = selectedURL
         folderBatch = batch
         objectWillChange.send()
 
         guard item.videoInfo == nil,
+              item.detailText == nil,
               !state.isBusy else {
             return
         }
@@ -2355,6 +2370,48 @@ final class HomeViewModel: ObservableObject {
         pendingSaveDestinationPrompt = nil
     }
 
+    func dismissSavedFolderPrompt() {
+        guard savedFolderPrompt != nil else {
+            return
+        }
+        AppLogger.info("Saved folder prompt dismissed", category: .saving)
+        savedFolderPrompt = nil
+    }
+
+    func openSavedFolder(prompt: SavedFolderPrompt) {
+        guard savedFolderPrompt?.id == prompt.id else {
+            return
+        }
+        savedFolderPrompt = nil
+        AppLogger.info(
+            "Saved folder open requested",
+            category: .saving,
+            metadata: [
+                "folder": prompt.folderURL.lastPathComponent,
+                "file": prompt.fileName
+            ]
+        )
+        let didStartSecurityScope = prompt.folderURL.startAccessingSecurityScopedResource()
+        UIApplication.shared.open(prompt.folderURL, options: [:]) { success in
+            if didStartSecurityScope {
+                prompt.folderURL.stopAccessingSecurityScopedResource()
+            }
+            if success {
+                AppLogger.info(
+                    "Saved folder open request accepted",
+                    category: .saving,
+                    metadata: ["folder": prompt.folderURL.lastPathComponent]
+                )
+            } else {
+                AppLogger.warning(
+                    "Saved folder open request failed",
+                    category: .saving,
+                    metadata: ["folder": prompt.folderURL.path]
+                )
+            }
+        }
+    }
+
     func chooseAlbumForPendingSave(prompt: PendingSaveDestinationPrompt) {
         guard pendingSaveDestinationPrompt?.id == prompt.id else {
             return
@@ -2555,7 +2612,7 @@ final class HomeViewModel: ObservableObject {
     private func prepareEncodingFlow(
         source: HomeSelectedSource,
         autoStartAfterPrepare: Bool = false,
-        autoOpenPreviewAfterPrepare: Bool = true,
+        autoOpenPreviewAfterPrepare: Bool = false,
         allowsBusyState: Bool = false,
         preinspectedAsset: TaptionVideoAsset? = nil
     ) {
@@ -3435,10 +3492,10 @@ final class HomeViewModel: ObservableObject {
         } else {
             metadataURL = completedOutputURL
         }
-        let completedSaveDetail = await completedSaveDetailMessage(
+        let completedFileSize = fileSizeInBytes(at: metadataURL) ?? fileSizeInBytes(at: completedOutputURL)
+        let completedSaveDetail = completedSaveDetailMessage(
             savedURL: completedOutputURL,
-            metadataURL: metadataURL,
-            saveDestination: job.state.saveDestination
+            fileSizeBytes: completedFileSize
         )
 
         do {
@@ -3459,8 +3516,8 @@ final class HomeViewModel: ObservableObject {
             "Final save completed",
             category: .saving,
             metadata: [
-                "source": job.sourceName,
-                "saved": savedURL.lastPathComponent
+                "file": completedOutputURL.lastPathComponent,
+                "size": fileSizeText(completedFileSize)
             ]
         )
         markCurrentSaveItem(
@@ -3482,8 +3539,13 @@ final class HomeViewModel: ObservableObject {
             displayName: displayName,
             destinationDescription: destination,
             detailOverride: completedSaveDetail,
-            fileSizeBytes: fileSizeInBytes(at: completedOutputURL)
+            fileSizeBytes: completedFileSize
         ))
+        savedFolderPrompt = makeSavedFolderPrompt(
+            fileName: displayName,
+            savedURL: completedOutputURL,
+            saveDestination: job.state.saveDestination
+        )
         endEncodingActivity(statusText: "Save Complete", fractionCompleted: 1)
         stopSecurityScopedAccess()
         activeTask = nil
@@ -3762,6 +3824,7 @@ final class HomeViewModel: ObservableObject {
         prepareEncodingFlow(
             source: source,
             autoStartAfterPrepare: autoStartAfterPrepare,
+            autoOpenPreviewAfterPrepare: false,
             allowsBusyState: allowsBusyState,
             preinspectedAsset: batch.itemStates[url]?.asset
         )
@@ -3846,6 +3909,7 @@ final class HomeViewModel: ObservableObject {
         guard let batch = folderBatch else {
             return
         }
+        let completedFolderPrompt = makeSavedFolderPrompt(for: batch)
 
         AppLogger.info(
             "Batch finished",
@@ -3869,6 +3933,7 @@ final class HomeViewModel: ObservableObject {
                 destinationDescription: batch.folderName,
                 detailOverride: folderCompletionMessage(for: batch)
             ))
+            savedFolderPrompt = completedFolderPrompt
         }
         endEncodingActivity(
             statusText: batch.stopMessage == nil ? "Folder complete" : "Folder stopped",
@@ -5326,36 +5391,40 @@ final class HomeViewModel: ObservableObject {
 
     private func completedSaveDetailMessage(
         savedURL: URL,
-        metadataURL: URL,
-        saveDestination: TaptionSaveDestinationKind
-    ) async -> String {
-        let fileSizeBytes = fileSizeInBytes(at: metadataURL) ?? fileSizeInBytes(at: savedURL)
+        fileSizeBytes: Int64?
+    ) -> String {
         let fileName = savedURL.lastPathComponent
-        let fileFormat = savedURL.pathExtension.isEmpty ? "Unknown" : savedURL.pathExtension.uppercased()
-        let durationValue: String
-        if let asset = try? await environment.mediaInspector.inspectVideo(at: metadataURL) {
-            durationValue = durationText(asset.duration)
-        } else {
-            durationValue = "Unknown"
-        }
-
-        let savePath: String
-        switch saveDestination {
-        case .sourceFolder:
-            savePath = savedURL.path
-        case .photosLibrary:
-            savePath = "Photos"
-        case .temporaryOnly:
-            savePath = "temporary storage"
-        }
-
         return [
             "File: \(fileName)",
-            "Format: \(fileFormat)",
-            "Size: \(fileSizeText(fileSizeBytes))",
-            "Time: \(durationValue)",
-            "Path: \(savePath)"
+            "Size: \(fileSizeText(fileSizeBytes))"
         ].joined(separator: "\n")
+    }
+
+    private func makeSavedFolderPrompt(
+        fileName: String,
+        savedURL: URL,
+        saveDestination: TaptionSaveDestinationKind
+    ) -> SavedFolderPrompt? {
+        switch saveDestination {
+        case .sourceFolder, .temporaryOnly:
+            return SavedFolderPrompt(
+                fileName: fileName,
+                folderURL: savedURL.deletingLastPathComponent()
+            )
+        case .photosLibrary:
+            return nil
+        }
+    }
+
+    private func makeSavedFolderPrompt(for batch: FolderEncodingBatch) -> SavedFolderPrompt? {
+        guard batch.completedCount > 0,
+              let outputFolderURL = batch.outputFolderURL else {
+            return nil
+        }
+        return SavedFolderPrompt(
+            fileName: outputFolderURL.lastPathComponent,
+            folderURL: outputFolderURL
+        )
     }
 
     private var isRefreshingPreparedSourceForOutputChange: Bool {

@@ -18,30 +18,29 @@ struct HomeLayoutMetrics {
 
     init(size: CGSize, reservesFailureLogArea: Bool = false) {
         let isPad = UIDevice.current.userInterfaceIdiom == .pad
+        let availableWidth = max(1, size.width)
+        let availableHeight = max(1, size.height)
         let portraitWidth = min(size.width, size.height)
-        let portraitHeight = max(size.width, size.height)
 
         if isPad {
             let idealAspect: CGFloat = 834 / 1194
-            let availableWidth = max(320, size.width)
-            let availableHeight = max(568, size.height)
             let portraitCanvasWidth = min(availableWidth, availableHeight * idealAspect)
             canvasWidth = min(max(portraitCanvasWidth, 600), 820)
             canvasHeight = availableHeight
         } else {
             canvasWidth = min(max(size.width, 320), 430)
-            canvasHeight = size.height
+            canvasHeight = availableHeight
         }
 
         let referenceWidth: CGFloat = isPad ? 834 : 390
         let referenceHeight: CGFloat = isPad ? 1194 : 844
         let minimumScale: CGFloat = isPad ? 0.82 : 0.72
         let maximumScale: CGFloat = isPad ? 1.18 : 1
-        let heightScale = min(max(portraitHeight / referenceHeight, minimumScale), maximumScale)
+        let heightScale = min(max(availableHeight / referenceHeight, minimumScale), maximumScale)
         let widthScale = min(max(portraitWidth / referenceWidth, isPad ? 0.82 : 0.84), maximumScale)
         let scale = min(heightScale, widthScale)
 
-        let compactHeightPressure = portraitHeight < (isPad ? 900 : 760)
+        let compactHeightPressure = availableHeight < (isPad ? 900 : 760)
         contentScale = compactHeightPressure ? max(minimumScale, scale * 0.92) : scale
         bannerScale = min(max(contentScale, isPad ? 0.74 : 0.68), 1)
         verticalSpacing = compactHeightPressure ? max(4, 7 * contentScale) : max(5, 9 * contentScale)
@@ -72,7 +71,6 @@ struct HomeLayoutMetrics {
             + (verticalSpacing * visibleSpacingCount)
             + (verticalPadding * 2)
         let remainingHeight = canvasHeight - fixedComponentHeight
-        let minimumFilePanelHeight = isPad ? max(118, 132 * contentScale) : max(76, 88 * contentScale)
-        filePanelHeight = max(remainingHeight, minimumFilePanelHeight)
+        filePanelHeight = max(0, remainingHeight)
     }
 }

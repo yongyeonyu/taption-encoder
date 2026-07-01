@@ -49,8 +49,7 @@ fi
 rm -f "$LOG_COPY" "$SCREENSHOT"
 
 if [[ "$MODE" == "warm" ]]; then
-  SIMCTL_CHILD_TAPTION_AUTO_MINIMIZE_PREVIEW=1 \
-    xcrun simctl launch --terminate-running-process "$DEVICE" "$BUNDLE_ID" >/dev/null
+  xcrun simctl launch --terminate-running-process "$DEVICE" "$BUNDLE_ID" >/dev/null
   sleep 1
 else
   xcrun simctl terminate "$DEVICE" "$BUNDLE_ID" >/dev/null 2>&1 || true
@@ -66,18 +65,10 @@ while [[ $SECONDS -lt $deadline ]]; do
     required_patterns=(
       "External video URL opened"
       "source=scene"
-      "External player file routed into preview flow"
+      "External player file routed into queue flow"
       "Security scoped access started"
-      "Queue preview opened"
-      "Queue preview video output ready"
-      "Full-screen ads suppressed during video playback"
+      "Prepare encoding ready"
     )
-    if [[ "$MODE" == "warm" ]]; then
-      required_patterns+=(
-        "Queue preview minimized to floating player"
-        "Queue mini player video output ready"
-      )
-    fi
 
     all_patterns_present=1
     for pattern in "${required_patterns[@]}"; do
@@ -88,8 +79,14 @@ while [[ $SECONDS -lt $deadline ]]; do
     done
 
     if [[ "$all_patterns_present" == "1" ]]; then
+      if grep -q "Queue preview opened" "$LOG_COPY"; then
+        echo "error: external video file open unexpectedly started preview playback" >&2
+        echo "log: $LOG_COPY" >&2
+        tail -n 80 "$LOG_COPY" >&2 || true
+        exit 1
+      fi
       xcrun simctl io "$DEVICE" screenshot "$SCREENSHOT" >/dev/null
-      echo "external video player flow verified ($MODE)"
+      echo "external video file open queued without playback ($MODE)"
       echo "log: $LOG_COPY"
       echo "screenshot: $SCREENSHOT"
       exit 0
@@ -102,7 +99,7 @@ if [[ -n "$container" && -f "$container/Documents/TaptionEncoderLogs/taption-enc
   cp "$container/Documents/TaptionEncoderLogs/taption-encoder.log" "$LOG_COPY"
 fi
 
-echo "error: external video player flow did not reach expected $MODE playback state in time" >&2
+echo "error: external video file open did not reach expected $MODE queued state in time" >&2
 echo "log: $LOG_COPY" >&2
 tail -n 80 "$LOG_COPY" >&2 || true
 exit 1
