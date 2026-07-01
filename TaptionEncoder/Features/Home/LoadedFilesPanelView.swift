@@ -1239,8 +1239,8 @@ private struct QueueFileThumbnailView: View {
                     .accessibilityHidden(true)
             }
 
-            if let onPlay, canAttemptThumbnail {
-                playBadge(onPlay: onPlay)
+            if canAttemptThumbnail, onPlay != nil {
+                playBadge
                     .padding(3 * contentScale)
             }
         }
@@ -1253,24 +1253,33 @@ private struct QueueFileThumbnailView: View {
         .task(id: thumbnailTaskID) {
             await loadThumbnail()
         }
+        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .onTapGesture(count: 2) {
+            guard canAttemptThumbnail, let onPlay else { return }
+            onPlay()
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(canAttemptThumbnail && onPlay != nil ? "Double tap to play preview" : "Video thumbnail")
+        .accessibilityAddTraits(canAttemptThumbnail && onPlay != nil ? .isButton : [])
+        .accessibilityAction {
+            guard canAttemptThumbnail, let onPlay else { return }
+            onPlay()
+        }
     }
 
-    private func playBadge(onPlay: @escaping () -> Void) -> some View {
-        Button(action: onPlay) {
-            Image(systemName: "play.fill")
-                .font(.system(size: max(7, 8 * contentScale), weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: max(15, 17 * contentScale), height: max(15, 17 * contentScale))
-                .background(TaptionTheme.accent)
-                .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .stroke(Color.white.opacity(0.34), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.35), radius: 2, x: 0, y: 1)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Play preview")
+    private var playBadge: some View {
+        Image(systemName: "play.fill")
+            .font(.system(size: max(7, 8 * contentScale), weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: max(15, 17 * contentScale), height: max(15, 17 * contentScale))
+            .background(TaptionTheme.accent)
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(Color.white.opacity(0.34), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.35), radius: 2, x: 0, y: 1)
+            .accessibilityHidden(true)
     }
 
     private var thumbnailTaskID: String {
