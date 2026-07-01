@@ -13,7 +13,7 @@ struct LoadedFilesPanelView: View {
     var files: [EncodingFileCardSnapshot]
     var contentScale: CGFloat
     var panelHeight: CGFloat
-    var onSelect: (String) -> Void
+    var onPlay: (String) -> Void
     var onToggleSelection: (String) -> Void
     var onDelete: (String) -> Void
     var onMove: (String, String) -> Void
@@ -46,7 +46,7 @@ struct LoadedFilesPanelView: View {
                                 isBundledByGroupPress: isGroupPressActive
                                     && file.isMultiSelected
                                     && pressedGroupAnchorID != file.id,
-                                onSelect: { onSelect(file.id) },
+                                onPlay: { onPlay(file.id) },
                                 onToggleSelection: { onToggleSelection(file.id) },
                                 onDelete: { onDelete(file.id) },
                                 onDragStarted: {
@@ -124,7 +124,7 @@ private struct EncodingFileCardView: View {
     var selectedGroupCount: Int
     var isGroupPressAnchor: Bool
     var isBundledByGroupPress: Bool
-    var onSelect: () -> Void
+    var onPlay: () -> Void
     var onToggleSelection: () -> Void
     var onDelete: () -> Void
     var onDragStarted: () -> Void
@@ -140,13 +140,9 @@ private struct EncodingFileCardView: View {
                 .offset(x: swipeOffset)
                 .scaleEffect(cardScale)
                 .opacity(cardOpacity)
+            deleteSwipeTrashOverlay
         }
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .onTapGesture {
-                if file.isInteractable {
-                    onSelect()
-                }
-            }
             .simultaneousGesture(swipeGesture)
             .onLongPressGesture(
                 minimumDuration: 0.22,
@@ -154,6 +150,12 @@ private struct EncodingFileCardView: View {
                 pressing: onGroupPressChanged,
                 perform: {}
             )
+            .onDrag {
+                onDragStarted()
+                return NSItemProvider(object: file.id as NSString)
+            } preview: {
+                dragPreview
+            }
             .animation(queueSpringAnimation, value: swipeOffset)
             .animation(queueSpringAnimation, value: isGroupPressAnchor)
             .animation(queueSpringAnimation, value: isBundledByGroupPress)
@@ -166,7 +168,8 @@ private struct EncodingFileCardView: View {
             QueueFileThumbnailView(
                 sourceURL: file.thumbnailSourceURL,
                 canAttemptThumbnail: file.isInteractable,
-                contentScale: contentScale
+                contentScale: contentScale,
+                onPlay: onPlay
             )
 
             VStack(alignment: .leading, spacing: 7 * contentScale) {
@@ -188,12 +191,6 @@ private struct EncodingFileCardView: View {
 
     private var dragHandle: some View {
         dragHandleIcon
-            .onDrag {
-                onDragStarted()
-                return NSItemProvider(object: file.id as NSString)
-            } preview: {
-                dragPreview
-            }
             .accessibilityLabel("Move queue item")
     }
 
@@ -341,8 +338,7 @@ private struct EncodingFileCardView: View {
         let progress = min(1, abs(swipeOffset) / swipeLimit)
         HStack {
             if swipeOffset > 0 {
-                swipeActionLabel(icon: "trash.fill", text: "Delete", color: deleteColor)
-                Spacer(minLength: 0)
+                Color.clear
             } else if swipeOffset < 0 {
                 Spacer(minLength: 0)
                 swipeActionLabel(icon: "checkmark.circle.fill", text: "Select", color: TaptionTheme.accent)
@@ -353,6 +349,25 @@ private struct EncodingFileCardView: View {
         .background(swipeBackgroundColor.opacity(0.16 + 0.24 * progress))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .opacity(progress)
+    }
+
+    @ViewBuilder
+    private var deleteSwipeTrashOverlay: some View {
+        let progress = min(1, max(0, swipeOffset) / swipeLimit)
+        if swipeOffset > 0 {
+            Image(systemName: "trash.fill")
+                .font(.system(size: max(24, 32 * contentScale), weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: max(48, 58 * contentScale), height: max(48, 58 * contentScale))
+                .background(deleteColor)
+                .clipShape(Circle())
+                .shadow(color: deleteColor.opacity(0.35), radius: 8, x: 0, y: 2)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                .padding(.trailing, 14 * contentScale)
+                .opacity(progress)
+                .scaleEffect(0.82 + (0.18 * progress))
+                .allowsHitTesting(false)
+        }
     }
 
     private func swipeActionLabel(icon: String, text: String, color: Color) -> some View {
@@ -432,7 +447,7 @@ private struct EncodingFileCardView: View {
     private var leadingIconName: String {
         switch visualSwipeIntent {
         case .delete:
-            return "trash.fill"
+            return file.isMultiSelected ? "checkmark.circle.fill" : "line.3.horizontal"
         case .select:
             return "checkmark.circle.fill"
         case .none:
@@ -443,7 +458,7 @@ private struct EncodingFileCardView: View {
     private var leadingIconColor: Color {
         switch visualSwipeIntent {
         case .delete:
-            return deleteColor
+            return file.isMultiSelected ? TaptionTheme.accent : TaptionTheme.mutedText
         case .select:
             return TaptionTheme.accent
         case .none:
@@ -1192,15 +1207,17 @@ private struct QueueFileThumbnailView: View {
     var sourceURL: URL?
     var canAttemptThumbnail: Bool
     var contentScale: CGFloat
+    var onPlay: (() -> Void)? = nil
 
     @State private var thumbnailImage: UIImage?
     @State private var isLoading = false
     @State private var didFail = false
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .bottomTrailing) {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(Color.black.opacity(0.34))
+                .accessibilityHidden(true)
 
             if let thumbnailImage {
                 Image(uiImage: thumbnailImage)
@@ -1208,18 +1225,24 @@ private struct QueueFileThumbnailView: View {
                     .scaledToFill()
                     .frame(width: thumbnailSize.width, height: thumbnailSize.height)
                     .clipped()
+                    .accessibilityHidden(true)
             } else if isLoading {
                 ProgressView()
                     .progressViewStyle(.circular)
                     .scaleEffect(max(0.6, contentScale * 0.72))
                     .tint(TaptionTheme.mutedText)
+                    .accessibilityHidden(true)
             } else {
                 Image(systemName: didFail ? "film" : "photo.on.rectangle.angled")
                     .font(.system(size: 16 * contentScale, weight: .semibold))
                     .foregroundStyle(TaptionTheme.mutedText)
+                    .accessibilityHidden(true)
             }
 
-            playBadge
+            if let onPlay, canAttemptThumbnail {
+                playBadge(onPlay: onPlay)
+                    .padding(3 * contentScale)
+            }
         }
         .frame(width: thumbnailSize.width, height: thumbnailSize.height)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -1230,23 +1253,24 @@ private struct QueueFileThumbnailView: View {
         .task(id: thumbnailTaskID) {
             await loadThumbnail()
         }
-        .accessibilityHidden(true)
     }
 
-    private var playBadge: some View {
-        Image(systemName: "play.fill")
-            .font(.system(size: max(7, 8 * contentScale), weight: .bold))
-            .foregroundStyle(.white)
-            .frame(width: max(15, 17 * contentScale), height: max(15, 17 * contentScale))
-            .background(TaptionTheme.accent)
-            .clipShape(Circle())
-            .overlay(
-                Circle()
-                    .stroke(Color.white.opacity(0.34), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.35), radius: 2, x: 0, y: 1)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            .padding(3 * contentScale)
+    private func playBadge(onPlay: @escaping () -> Void) -> some View {
+        Button(action: onPlay) {
+            Image(systemName: "play.fill")
+                .font(.system(size: max(7, 8 * contentScale), weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: max(15, 17 * contentScale), height: max(15, 17 * contentScale))
+                .background(TaptionTheme.accent)
+                .clipShape(Circle())
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.34), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.35), radius: 2, x: 0, y: 1)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Play preview")
     }
 
     private var thumbnailTaskID: String {
