@@ -70,47 +70,11 @@ enum StarWalletError: LocalizedError, Equatable {
     }
 }
 
-struct StarPurchaseProduct: Codable, Equatable, Identifiable, Sendable {
-    var productID: String
-    var starCount: Int
-    var displayName: String
-    var displayPrice: String
-    var displaySubtitle: String = "Ad-free saves."
-    var benefitLines: [String] = []
-    var grantsUnlimitedStars: Bool = false
-    var removesAds: Bool = false
-
-    var id: String {
-        productID
-    }
-}
-
-protocol StarPurchaseProviding {
-    func availableProducts() async -> [StarPurchaseProduct]
-}
-
-struct ConfiguredStarPurchaseProvider: StarPurchaseProviding {
-    var products: [StarPurchaseProduct]
-
-    func availableProducts() async -> [StarPurchaseProduct] {
-        products
-    }
-}
-
-struct FakeStarPurchaseProvider: StarPurchaseProviding {
-    var products: [StarPurchaseProduct] = []
-
-    func availableProducts() async -> [StarPurchaseProduct] {
-        products
-    }
-}
-
 protocol StarWalletManaging {
     func currentSnapshot() async -> StarWalletSnapshot
     func earnStar(source: String) async throws -> StarWalletSnapshot
     func consumeStar(source: String) async throws -> StarWalletSnapshot
     func refundStar(source: String) async throws -> StarWalletSnapshot
-    func recordPurchase(_ product: StarPurchaseProduct) async throws -> StarWalletSnapshot
 }
 
 protocol StarEarningServing {
@@ -195,17 +159,6 @@ actor FakeStarWalletStore: StarWalletManaging {
 
     func refundStar(source: String) async throws -> StarWalletSnapshot {
         applyEvent(kind: .failureRefund, delta: 1, note: source)
-    }
-
-    func recordPurchase(_ product: StarPurchaseProduct) async throws -> StarWalletSnapshot {
-        var updated = applyEvent(
-            kind: .purchase,
-            delta: product.starCount,
-            note: product.productID
-        )
-        updated.totalPurchased += product.starCount
-        snapshot = updated
-        return updated
     }
 
     @discardableResult
@@ -414,20 +367,10 @@ actor StarWalletStore: StarWalletManaging {
         try await mutate(kind: .failureRefund, delta: 1, note: source)
     }
 
-    func recordPurchase(_ product: StarPurchaseProduct) async throws -> StarWalletSnapshot {
-        try await mutate(
-            kind: .purchase,
-            delta: product.starCount,
-            note: product.productID,
-            purchasedStars: product.starCount
-        )
-    }
-
     private func mutate(
         kind: StarLedgerEventKind,
         delta: Int,
         note: String,
-        purchasedStars: Int = 0
     ) async throws -> StarWalletSnapshot {
         var snapshot = await currentSnapshot()
         let now = clock()
@@ -439,7 +382,6 @@ actor StarWalletStore: StarWalletManaging {
         } else if delta < 0 {
             snapshot.totalSpent += abs(delta)
         }
-        snapshot.totalPurchased += purchasedStars
         snapshot.events.append(
             StarLedgerEvent(
                 kind: kind,

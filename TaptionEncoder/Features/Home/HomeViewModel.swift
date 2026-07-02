@@ -59,8 +59,6 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var pendingSaveDestinationPrompt: PendingSaveDestinationPrompt?
     @Published private(set) var savedFolderPrompt: SavedFolderPrompt?
     @Published private(set) var starWalletSnapshot: StarWalletSnapshot
-    @Published private(set) var starPurchaseProducts: [StarPurchaseProduct]
-    @Published private(set) var starPurchaseNotice: StarPurchaseNotice?
     @Published private(set) var rewardedAdState: AdLoadState
     @Published private(set) var isWatchingStarAd: Bool
     @Published private(set) var activePreview: QueueVideoPreview?
@@ -116,8 +114,6 @@ final class HomeViewModel: ObservableObject {
         self.pendingSaveDestinationPrompt = nil
         self.savedFolderPrompt = nil
         self.starWalletSnapshot = .empty
-        self.starPurchaseProducts = environment.configuration.starPurchaseProducts
-        self.starPurchaseNotice = nil
         self.rewardedAdState = .idle
         self.isWatchingStarAd = false
         self.activePreview = nil
@@ -1083,40 +1079,6 @@ final class HomeViewModel: ObservableObject {
         starWalletSnapshot = await environment.starWalletStore.currentSnapshot()
         applyFolderStarBudgetToCurrentBatchIfReady()
         await refreshRewardedAdState(startPollingIfNeeded: true)
-    }
-
-    func refreshStarPurchaseProducts() async {
-        let products = await environment.starPurchaseProvider.availableProducts()
-        starPurchaseProducts = products.isEmpty
-            ? environment.configuration.starPurchaseProducts
-            : products
-        AppLogger.info(
-            "Pro Mode purchase products refreshed",
-            category: .app,
-            metadata: ["count": "\(starPurchaseProducts.count)"]
-        )
-    }
-
-    func beginStarPurchase(product: StarPurchaseProduct) {
-        AppLogger.info(
-            "Pro Mode purchase product selected",
-            category: .app,
-            metadata: [
-                "productID": product.productID,
-                "price": product.displayPrice,
-                "unlimitedStars": "\(product.grantsUnlimitedStars)",
-                "removesAds": "\(product.removesAds)"
-            ]
-        )
-        starPurchaseNotice = StarPurchaseNotice(product: product)
-    }
-
-    func dismissStarPurchaseNotice() {
-        guard starPurchaseNotice != nil else {
-            return
-        }
-        AppLogger.info("Star purchase notice dismissed", category: .app)
-        starPurchaseNotice = nil
     }
 
     private func refreshRewardedAdState(startPollingIfNeeded: Bool) async {

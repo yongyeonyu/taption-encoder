@@ -19,6 +19,7 @@ enum SampleThumbnailCatalog {
         "CineForm.avi": Entry(bytes: 204496, resourceName: "sample-thumbnail-cineform_avi"),
         "Cinepak.mov": Entry(bytes: 138880, resourceName: "sample-thumbnail-cinepak_mov"),
         "DNxHD.mov": Entry(bytes: 227790, resourceName: "sample-thumbnail-dnxhd_mov"),
+        "DVCPro.mov": Entry(bytes: 6961725, resourceName: "sample-thumbnail-dvcpro_mov"),
         "DV.dv": Entry(bytes: 18000000, resourceName: "sample-thumbnail-dv_dv"),
         "DVCPro HD.mov": Entry(bytes: 7223581, resourceName: "sample-thumbnail-dvcpro_hd_mov"),
         "FFV1.avi": Entry(bytes: 202986, resourceName: "sample-thumbnail-ffv1_avi"),

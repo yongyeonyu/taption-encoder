@@ -49,6 +49,7 @@ enum TaptionTestVideoSeeder {
         "HuffYUV.avi",
         "Ut Video.avi",
         "MagicYUV.avi",
+        "DVCPro.mov",
         "DVCPro HD.mov",
         "DV.dv",
         "CineForm.avi",

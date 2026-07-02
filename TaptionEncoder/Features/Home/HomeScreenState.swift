@@ -31,19 +31,6 @@ struct StorageIssue: Equatable {
     var message: String
 }
 
-struct StarPurchaseNotice: Identifiable, Equatable {
-    let id = UUID()
-    var product: StarPurchaseProduct
-
-    var title: String {
-        "Pro Mode Purchase Not Available"
-    }
-
-    var message: String {
-        "\(product.displayName) for \(product.displayPrice) is ready for StoreKit setup. Add and approve the matching non-consumable in-app purchase in App Store Connect before purchases can complete."
-    }
-}
-
 struct LoadedVideoInfo: Equatable {
     var fileName: String
     var inputSummary: String

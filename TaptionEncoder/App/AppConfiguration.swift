@@ -8,7 +8,6 @@ struct AppConfiguration: Equatable {
     let defaultOutputContainer: TaptionVideoContainer
     let defaultOutputCodec: TaptionVideoCodec
     let backgroundEncodingMinimumMajorVersion: Int
-    let starPurchaseProducts: [StarPurchaseProduct]
 
     init(
         appName: String = "Taption Encoder",
@@ -17,23 +16,7 @@ struct AppConfiguration: Equatable {
         outputSuffix: String = "_taption",
         defaultOutputContainer: TaptionVideoContainer = .mp4,
         defaultOutputCodec: TaptionVideoCodec = .hevc,
-        backgroundEncodingMinimumMajorVersion: Int = 26,
-        starPurchaseProducts: [StarPurchaseProduct] = [
-            StarPurchaseProduct(
-                productID: "com.taption.encoder.pro_mode",
-                starCount: 0,
-                displayName: "Pro Mode",
-                displayPrice: "$1",
-                displaySubtitle: "Remove ads and unlock unlimited Stars.",
-                benefitLines: [
-                    "Unlimited encoding starts without Star balance limits.",
-                    "No rewarded ads before saves.",
-                    "One-time non-consumable purchase that can be restored."
-                ],
-                grantsUnlimitedStars: true,
-                removesAds: true
-            )
-        ]
+        backgroundEncodingMinimumMajorVersion: Int = 26
     ) {
         self.appName = appName
         self.bundleIdentifier = bundleIdentifier
@@ -42,6 +25,5 @@ struct AppConfiguration: Equatable {
         self.defaultOutputContainer = defaultOutputContainer
         self.defaultOutputCodec = defaultOutputCodec
         self.backgroundEncodingMinimumMajorVersion = backgroundEncodingMinimumMajorVersion
-        self.starPurchaseProducts = starPurchaseProducts
     }
 }

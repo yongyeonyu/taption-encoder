@@ -1010,6 +1010,28 @@ enum SW_HuffYUVHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
     }
 }
 
+enum SW_DVCProHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .dvcPro,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "DVCPro to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .dvcPro)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "DVCPro",
+            progress: progress
+        )
+    }
+}
+
 enum SW_DVCProHDHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
     static let descriptor = TaptionCodecAlgorithmDescriptor(
         sourceCodec: .dvcProHD,

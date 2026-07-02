@@ -457,11 +457,12 @@ final class CodecRoutePlannerTests: XCTestCase {
                 profile: .softwareOnly
             )
 
-            XCTAssertEqual(selection.support, .planned, codec.displayName)
-            XCTAssertFalse(selection.isEncodableNow, codec.displayName)
-            XCTAssertEqual(selection.executionKind, .planned, codec.displayName)
-            XCTAssertEqual(selection.decodeBackend, .ffmpegFamily, codec.displayName)
-            XCTAssertEqual(selection.encodeBackend, .ffmpegFamily, codec.displayName)
+            XCTAssertEqual(selection.support, .implemented, codec.displayName)
+            XCTAssertTrue(selection.isEncodableNow, codec.displayName)
+            XCTAssertEqual(selection.executionKind, .software, codec.displayName)
+            XCTAssertEqual(selection.selectedMode, .software, codec.displayName)
+            XCTAssertEqual(selection.decodeBackend, .softwareVLCDecoder, codec.displayName)
+            XCTAssertEqual(selection.encodeBackend, .customSoftware, codec.displayName)
         }
 
         let roqSelection = selectRoute(
@@ -1141,7 +1142,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(h261Descriptors.count, 1)
         XCTAssertEqual(h261Descriptors.first?.mode, .software)
         XCTAssertEqual(h261Descriptors.first?.backend, .softwareVLCDecoder)
-        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .roqVideo, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV, .utVideo, .magicYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .y41p, .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo] {
+        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .roqVideo, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV, .utVideo, .magicYUV, .dvcPro, .dvcProHD, .dv, .cineForm, .dnxhd, .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .y41p, .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo] {
             let route = TaptionCodecRoute(sourceCodec: codec, outputCodec: .hevc)
             let codecDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: route)
             XCTAssertEqual(codecDescriptors.count, 1, codec.displayName)
@@ -2441,6 +2442,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     func testNextIntermediateBundledSamplesEncodeToHEVCMP4() async throws {
         let sampleFilenames = [
             "HuffYUV.avi",
+            "DVCPro.mov",
             "DVCPro HD.mov",
             "DV.dv",
             "CineForm.avi",
@@ -2456,6 +2458,8 @@ final class CodecRoutePlannerTests: XCTestCase {
 
     func testRealVideoAndRoQBundledSamplesEncodeToHEVCMP4() async throws {
         let sampleFilenames = [
+            "RealVideo 1.0.rm",
+            "RealVideo.rm",
             "RoQ Video.roq"
         ]
         try await assertBundledSamplesEncodeToHEVCMP4(sampleFilenames)
@@ -3554,10 +3558,10 @@ final class CodecRoutePlannerTests: XCTestCase {
             .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG,
             .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak,
             .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora,
-            .roqVideo, .wmv,
+            .realVideo1, .realVideo, .roqVideo, .wmv,
             .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo,
             .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV,
-            .utVideo, .magicYUV, .dvcProHD, .dv, .cineForm, .dnxhd,
+            .utVideo, .magicYUV, .dvcPro, .dvcProHD, .dv, .cineForm, .dnxhd,
             .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .y41p,
             .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo, .h264, .hevc
         ]
@@ -3591,8 +3595,6 @@ final class CodecRoutePlannerTests: XCTestCase {
             TaptionLaunchSupportCatalog.hardwareGatedInputVideoCodecs,
             [.proRes]
         )
-        XCTAssertTrue(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(.realVideo1))
-        XCTAssertTrue(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(.realVideo))
         XCTAssertFalse(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(.h261))
         for codec in expectedExecutableNowVideoCodecs {
             XCTAssertFalse(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(codec), codec.displayName)
@@ -5343,11 +5345,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(decoded.launchInputReadinessCatalog?.outputContainers, [.mp4, .mov])
         XCTAssertTrue(decoded.launchInputReadinessCatalog?.executableNowVideoCodecs.contains(.h261) == true)
         XCTAssertFalse(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(.h261) == true)
-        XCTAssertTrue(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(.realVideo1) == true)
-        XCTAssertTrue(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(.realVideo) == true)
-        XCTAssertFalse(decoded.launchInputReadinessCatalog?.executableNowVideoCodecs.contains(.realVideo1) == true)
-        XCTAssertFalse(decoded.launchInputReadinessCatalog?.executableNowVideoCodecs.contains(.realVideo) == true)
-        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .roqVideo, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV, .utVideo, .magicYUV, .dvcProHD, .dv, .cineForm, .dnxhd, .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .y41p, .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo] {
+        for codec in [TaptionVideoCodec.realVideo1, .realVideo, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .roqVideo, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV, .utVideo, .magicYUV, .dvcPro, .dvcProHD, .dv, .cineForm, .dnxhd, .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .y41p, .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo] {
             XCTAssertTrue(decoded.launchInputReadinessCatalog?.executableNowVideoCodecs.contains(codec) == true, codec.displayName)
             XCTAssertFalse(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(codec) == true, codec.displayName)
         }
@@ -6590,27 +6588,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(makeStarWalletSnapshot(balance: 1_200).badgeText, "999+")
     }
 
-    func testDefaultStarPurchaseProductsUseProModeOffer() {
-        let products = AppConfiguration().starPurchaseProducts
-
-        XCTAssertEqual(products.map(\.productID), ["com.taption.encoder.pro_mode"])
-        XCTAssertEqual(products.map(\.starCount), [0])
-        XCTAssertEqual(products.map(\.displayName), ["Pro Mode"])
-        XCTAssertEqual(products.map(\.displayPrice), ["$1"])
-        XCTAssertEqual(products.map(\.displaySubtitle), ["Remove ads and unlock unlimited Stars."])
-        XCTAssertEqual(
-            products.first?.benefitLines,
-            [
-                "Unlimited encoding starts without Star balance limits.",
-                "No rewarded ads before saves.",
-                "One-time non-consumable purchase that can be restored."
-            ]
-        )
-        XCTAssertEqual(products.map(\.grantsUnlimitedStars), [true])
-        XCTAssertEqual(products.map(\.removesAds), [true])
-    }
-
-    func testStarBadgeOpensPurchaseSheetWithoutCreditingStarsDirectly() throws {
+    func testStarBadgeRunsRewardedAdFlowWithoutPurchaseSheet() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -6621,33 +6599,23 @@ final class CodecRoutePlannerTests: XCTestCase {
         let viewModelText = try String(contentsOf: homeViewModelURL, encoding: .utf8)
         let stateText = try String(contentsOf: homeStateURL, encoding: .utf8)
 
-        XCTAssertTrue(homeViewText.contains("@State private var isStarPurchaseSheetPresented = false"))
-        XCTAssertTrue(homeViewText.contains(".sheet(isPresented: $isStarPurchaseSheetPresented)"))
-        XCTAssertTrue(homeViewText.contains("StarPurchaseSheetView("))
-        XCTAssertTrue(homeViewText.contains("Button {\n            openStarPurchaseSheet()"))
-        XCTAssertTrue(homeViewText.contains("isStarPurchaseSheetPresented = true"))
-        XCTAssertTrue(homeViewText.contains("await viewModel.refreshStarPurchaseProducts()"))
-        XCTAssertTrue(homeViewText.contains("viewModel.beginStarPurchase(product: product)"))
-        XCTAssertTrue(homeViewText.contains(".starPurchaseNoticeDialog(viewModel: viewModel)"))
-        XCTAssertTrue(homeViewText.contains("accessibilityLabel(\"Open Pro Mode. Balance \\(viewModel.starBalanceDisplayText)\")"))
-        XCTAssertTrue(homeViewText.contains("private struct StarPurchaseSheetView: View"))
-        XCTAssertTrue(homeViewText.contains("private struct StarPurchaseProductRow: View"))
-        XCTAssertTrue(homeViewText.contains("Text(\"Pro Mode\")"))
-        XCTAssertTrue(homeViewText.contains("Text(\"Remove ads. Unlimited Stars.\")"))
-        XCTAssertTrue(homeViewText.contains("Text(\"Purchases will complete here after StoreKit is connected and the matching App Store Connect non-consumable in-app purchase is approved.\")"))
-        XCTAssertTrue(homeViewText.contains(".navigationTitle(\"Pro Mode\")"))
-        XCTAssertTrue(homeViewText.contains("Text(product.displaySubtitle)"))
-        XCTAssertTrue(homeViewText.contains("ForEach(product.benefitLines, id: \\.self)"))
-        XCTAssertTrue(viewModelText.contains("@Published private(set) var starPurchaseProducts: [StarPurchaseProduct]"))
-        XCTAssertTrue(viewModelText.contains("@Published private(set) var starPurchaseNotice: StarPurchaseNotice?"))
-        XCTAssertTrue(viewModelText.contains("func refreshStarPurchaseProducts() async"))
-        XCTAssertTrue(viewModelText.contains("func beginStarPurchase(product: StarPurchaseProduct)"))
-        XCTAssertTrue(viewModelText.contains("starPurchaseNotice = StarPurchaseNotice(product: product)"))
+        XCTAssertTrue(homeViewText.contains("private func watchAdFromStarBadge()"))
+        XCTAssertTrue(homeViewText.contains("viewModel.watchAdForStar()"))
+        XCTAssertTrue(homeViewText.contains("accessibilityLabel(\"Watch Ad for Star. Balance \\(viewModel.starBalanceDisplayText)\")"))
+        XCTAssertFalse(homeViewText.contains("@State private var isStarPurchaseSheetPresented"))
+        XCTAssertFalse(homeViewText.contains("StarPurchaseSheetView("))
+        XCTAssertFalse(homeViewText.contains("StarPurchaseProductRow"))
+        XCTAssertFalse(homeViewText.contains("Pro Mode"))
+        XCTAssertFalse(homeViewText.contains("StoreKit"))
+        XCTAssertFalse(homeViewText.contains(".starPurchaseNoticeDialog(viewModel: viewModel)"))
+        XCTAssertFalse(viewModelText.contains("@Published private(set) var starPurchaseProducts"))
+        XCTAssertFalse(viewModelText.contains("@Published private(set) var starPurchaseNotice"))
+        XCTAssertFalse(viewModelText.contains("func refreshStarPurchaseProducts()"))
+        XCTAssertFalse(viewModelText.contains("func beginStarPurchase(product:"))
         XCTAssertFalse(viewModelText.contains("recordPurchase(product"))
-        XCTAssertTrue(stateText.contains("struct StarPurchaseNotice: Identifiable, Equatable"))
-        XCTAssertTrue(stateText.contains("Pro Mode Purchase Not Available"))
-        XCTAssertTrue(stateText.contains("non-consumable in-app purchase"))
-        XCTAssertTrue(stateText.contains("App Store Connect"))
+        XCTAssertFalse(stateText.contains("struct StarPurchaseNotice"))
+        XCTAssertFalse(stateText.contains("Pro Mode Purchase Not Available"))
+        XCTAssertFalse(stateText.contains("App Store Connect"))
     }
 
     func testStarWalletStoreGrantsInitialInstallBonusOnce() async throws {
@@ -6778,14 +6746,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         _ = try await store.earnStar(source: "rewarded_ad")
-        let expectedSnapshot = try await store.recordPurchase(
-            StarPurchaseProduct(
-                productID: "stars.10",
-                starCount: 10,
-                displayName: "10 Stars",
-                displayPrice: "$1"
-            )
-        )
+        let expectedSnapshot = try await store.earnStar(source: "rewarded_ad")
 
         let reloadedStore = StarWalletStore(
             fileURL: walletFileURL,
@@ -6801,7 +6762,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(reloadedSnapshot.totalPurchased, expectedSnapshot.totalPurchased)
         XCTAssertEqual(reloadedSnapshot.events.map(\.kind), expectedSnapshot.events.map(\.kind))
         XCTAssertEqual(reloadedSnapshot.events.map(\.note), expectedSnapshot.events.map(\.note))
-        XCTAssertEqual(reloadedSnapshot.totalPurchased, 10)
+        XCTAssertEqual(reloadedSnapshot.totalPurchased, 0)
         XCTAssertFalse(try Data(contentsOf: walletFileURL).isEmpty)
     }
 
@@ -9372,9 +9333,6 @@ final class CodecRoutePlannerTests: XCTestCase {
             rewardedAdProvider: rewardedAdProvider,
             starWalletStore: starWalletStore,
             starEarningService: starEarningService,
-            starPurchaseProvider: FakeStarPurchaseProvider(
-                products: configuration.starPurchaseProducts
-            ),
             sessionEndAdProvider: sessionEndAdProvider,
             backgroundCoordinator: FakeBackgroundEncodingCoordinator(),
             projectDocumentStore: FakeProjectFileStore()
@@ -9721,6 +9679,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             ("Sorenson Video 3.mov", .sorensonVideo3),
             ("QuickTime Video.mov", .quickTimeVideo),
             ("Theora.ogv", .theora),
+            ("RealVideo 1.0.rm", .realVideo1),
+            ("RealVideo.rm", .realVideo),
             ("RoQ Video.roq", .roqVideo),
             ("Windows Media Video.wmv", .wmv),
             ("Microsoft Video 1.avi", .microsoftVideo1),
@@ -9735,6 +9695,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             ("HuffYUV.avi", .huffYUV),
             ("Ut Video.avi", .utVideo),
             ("MagicYUV.avi", .magicYUV),
+            ("DVCPro.mov", .dvcPro),
             ("DVCPro HD.mov", .dvcProHD),
             ("DV.dv", .dv),
             ("CineForm.avi", .cineForm),
@@ -9756,10 +9717,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     private func bundledPlannedSampleCodecExpectations() -> [(String, TaptionVideoCodec)] {
-        [
-            ("RealVideo 1.0.rm", .realVideo1),
-            ("RealVideo.rm", .realVideo)
-        ]
+        []
     }
 
     private func requireLocalRealSampleProofs() throws {

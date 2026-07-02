@@ -303,6 +303,8 @@ enum TaptionCodecRegistry {
         TaptionCodecRoute(sourceCodec: .sorensonVideo3, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .quickTimeVideo, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .theora, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .realVideo1, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .realVideo, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .roqVideo, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .wmv, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .microsoftVideo1, outputCodec: .hevc),
@@ -317,6 +319,7 @@ enum TaptionCodecRegistry {
         TaptionCodecRoute(sourceCodec: .huffYUV, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .utVideo, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .magicYUV, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .dvcPro, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .dvcProHD, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .dv, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .cineForm, outputCodec: .hevc),
@@ -540,6 +543,20 @@ enum TaptionCodecRegistry {
             displayName: "Theora to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .realVideo1,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "RealVideo 1.0 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .realVideo,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "RealVideo to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
             sourceCodec: .roqVideo,
             outputCodec: .hevc,
             mode: .software,
@@ -636,6 +653,13 @@ enum TaptionCodecRegistry {
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "MagicYUV to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .dvcPro,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "DVCPro to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
             sourceCodec: .dvcProHD,

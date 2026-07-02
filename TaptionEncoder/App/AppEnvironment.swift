@@ -14,7 +14,6 @@ struct AppEnvironment {
     var rewardedAdProvider: RewardedAdProviding
     var starWalletStore: StarWalletManaging
     var starEarningService: StarEarningServing
-    var starPurchaseProvider: StarPurchaseProviding
     var sessionEndAdProvider: SessionEndAdProviding
     var backgroundCoordinator: BackgroundEncodingCoordinating
     var liveActivityCoordinator: EncodingLiveActivityCoordinating
@@ -34,7 +33,6 @@ struct AppEnvironment {
         rewardedAdProvider: RewardedAdProviding,
         starWalletStore: StarWalletManaging,
         starEarningService: StarEarningServing,
-        starPurchaseProvider: StarPurchaseProviding,
         sessionEndAdProvider: SessionEndAdProviding,
         backgroundCoordinator: BackgroundEncodingCoordinating,
         liveActivityCoordinator: EncodingLiveActivityCoordinating = NoopEncodingLiveActivityCoordinator(),
@@ -53,7 +51,6 @@ struct AppEnvironment {
         self.rewardedAdProvider = rewardedAdProvider
         self.starWalletStore = starWalletStore
         self.starEarningService = starEarningService
-        self.starPurchaseProvider = starPurchaseProvider
         self.sessionEndAdProvider = sessionEndAdProvider
         self.backgroundCoordinator = backgroundCoordinator
         self.liveActivityCoordinator = liveActivityCoordinator
@@ -83,9 +80,6 @@ struct AppEnvironment {
             starEarningService: DefaultStarEarningService(
                 walletStore: starWalletStore,
                 rewardedAdProvider: rewardedAdProvider
-            ),
-            starPurchaseProvider: ConfiguredStarPurchaseProvider(
-                products: configuration.starPurchaseProducts
             ),
             sessionEndAdProvider: AdMobSessionEndAdProvider(configuration: adMobConfiguration),
             backgroundCoordinator: UIApplicationBackgroundEncodingCoordinator(),

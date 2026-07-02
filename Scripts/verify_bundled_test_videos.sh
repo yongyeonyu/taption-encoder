@@ -3,11 +3,11 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_VIDEO_DIR="${1:-"$ROOT_DIR/TaptionEncoder/TestVideos"}"
-EXPECTED_VIDEO_COUNT=55
+EXPECTED_VIDEO_COUNT=56
 MIN_SECONDS=4.85
 MAX_SECONDS=5.15
 SIZE_LIMIT_BYTES=1000000
-SIZE_EXCEPTIONS=("DV.dv" "DVCPro HD.mov")
+SIZE_EXCEPTIONS=("DV.dv" "DVCPro.mov" "DVCPro HD.mov")
 
 if [[ ! -d "$TEST_VIDEO_DIR" ]]; then
   echo "error: bundled test video directory not found: $TEST_VIDEO_DIR" >&2

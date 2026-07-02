@@ -5,8 +5,9 @@ Policy for this folder:
   queue thumbnail and preview verification.
 - Samples should stay 1 MB or smaller when the codec/container can reasonably
   support that at 5 seconds. Fixed-bitrate DV-family samples are the current
-  documented exception: `DV.dv` and `DVCPro HD.mov` preserve the expected codec
-  identity and 5-second duration, so they exceed 1 MB.
+  documented exception: `DV.dv`, `DVCPro.mov`, and `DVCPro HD.mov`
+  preserve the expected codec identity and 5-second duration, so they exceed
+  1 MB.
 - Samples should use official/public test-media sources when available. When
   the official source file is larger than 1 MB, the bundled file may be a
   trimmed, looped, or same-codec transcode derived from that official source.
@@ -34,6 +35,10 @@ Official Blender Open Movie downloads:
 - H.264 AVC.mp4
   Derived from Big Buck Bunny 320x180 02:00-02:05; video re-encoded to H.264
   and the original AAC source audio re-encoded to AAC.
+  https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4
+- DVCPro.mov
+  Derived from Big Buck Bunny 320x180 02:00-02:05; video re-encoded to
+  DVCPro and the original AAC source audio re-encoded to PCM.
   https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4
 - H.265 HEVC.mp4
   Derived from Sintel trailer 00:36-00:41; video re-encoded to H.265 and the
