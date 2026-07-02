@@ -75,6 +75,10 @@ struct StarPurchaseProduct: Codable, Equatable, Identifiable, Sendable {
     var starCount: Int
     var displayName: String
     var displayPrice: String
+    var displaySubtitle: String = "Ad-free saves."
+    var benefitLines: [String] = []
+    var grantsUnlimitedStars: Bool = false
+    var removesAds: Bool = false
 
     var id: String {
         productID

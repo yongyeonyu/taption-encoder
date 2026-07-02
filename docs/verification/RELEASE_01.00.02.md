@@ -4,16 +4,16 @@
 
 - Company release label: `01.00.02`
 - Apple marketing version: `1.0.2`
-- Apple build number: `27`
+- Apple build number: `28`
 - Bundle identifier: `com.taption.encoder`
-- Release date: 2026-07-01
+- Release date: 2026-07-02
 
 ## Scope
 
 - Keep H.265 / HEVC as the only video output codec.
 - Keep output containers constrained to MP4 and MOV.
 - Stabilize queue preview playback, preview badge wrapping, thumbnail generation separation, bundled sample audio, software-inspection fallback metadata, save destination choice, and folder-batch sibling output behavior.
-- Stabilize queue-card editing gestures, grouped queue reordering, multi-select delete, swipe action UI, queue thumbnail play badges, queue-card playback gating, queue-card thumbnail double-tap playback, queue height fit, preview system-volume control, Photos queue behavior, real-device model display naming, and compact output/card information display.
+- Stabilize queue-card editing gestures, grouped queue reordering, multi-select delete, swipe action UI, queue thumbnail play badges, queue-card playback gating, queue-card thumbnail double-tap playback, queue height fit, preview system-volume control, Photos queue behavior, real-device model display naming, compact output/card information display, Pro Mode purchase guidance, and Star-limited queue card preview/edit behavior.
 - Reorganize development documentation so only `AGENTS.md` remains at the project root and typed documents live under `docs/`.
 - Archive old release notes, old reports, completed Taption Encoder handoffs, and rejected Taption-main handoffs under `docs/archive/`.
 
@@ -24,6 +24,7 @@
 - [x] Code review completed for build `25`: queue-card drag was kept on the visible leading handle, recursive SwiftUI drag-preview type inference was fixed with a preview-specific card body, Info.plist build-number tokens were preserved, and build `25` was used to avoid re-uploading build `24`.
 - [x] Code review completed for build `26`: queue-card drag now starts from the full card, queue-card playback opens only from the thumbnail play badge, right-swipe delete keeps the card's leading icon stable, and delete feedback appears as a large trailing trash indicator.
 - [x] Code review completed for build `27`: queue-card preview playback now requires a double tap on the thumbnail surface, the blue play badge is decorative, swipe gestures no longer share the same single-tap playback path, and the accessibility action remains available for the thumbnail preview.
+- [x] Code review completed for build `28`: the Star purchase sheet now presents Pro Mode as a one-time non-consumable setup guide, and Star-limited queue cards keep thumbnails, detail selection, preview playback, multi-select, delete, and reorder behavior while remaining excluded from encoding when the Star budget is insufficient.
 - [x] `plutil -lint TaptionEncoder/Info.plist TaptionEncoderThumbnailExtension/Info.plist TaptionEncoderLiveActivityExtension/Info.plist` passed.
 - [x] Thumbnail extension archive inspection passed: `QLSupportedContentTypes` contains only `com.taption.legacy-video`.
 - [x] Focused queue-edit/device/Photos XCTest passed:
@@ -49,6 +50,14 @@
   - `CodecRoutePlannerTests/testQueueCardGestureControlsAreWiredForSelectionDeleteAndDrag`
 - [x] Build `27` focused queue playback XCTest passed:
   - `CodecRoutePlannerTests/testQueueCardGestureControlsAreWiredForSelectionDeleteAndDrag`
+- [x] Build `28` focused Pro Mode and Star-limited queue-card XCTest passed:
+  - `CodecRoutePlannerTests/testDefaultStarPurchaseProductsUseProModeOffer`
+  - `CodecRoutePlannerTests/testStarBadgeOpensPurchaseSheetWithoutCreditingStarsDirectly`
+  - `CodecRoutePlannerTests/testStarLimitedFolderCardKeepsThumbnailDetailsAndPreviewPlayback`
+  - `CodecRoutePlannerTests/testStarLimitedFolderCardsRemainEditableForSelectionDeleteAndMove`
+  - `CodecRoutePlannerTests/testFolderBatchWithOneStarActivatesOnlyFirstCardBeforeEncoding`
+  - `CodecRoutePlannerTests/testQueueSwipeSelectionAndDeleteSelectedItems`
+  - `CodecRoutePlannerTests/testQueueDragHandleMovesSelectedItemsAsGroup`
 - [x] Focused queue-preview/thumbnail XCTest passed:
   - `CodecRoutePlannerTests/testQuickLookThumbnailExtensionCoversDocumentBrowserVideoTypes`
   - `CodecRoutePlannerTests/testQueuePreviewCanMinimizeIntoBannerOnlyFloatingPlayer`
@@ -65,14 +74,14 @@
   - `CodecRoutePlannerTests/testPendingSaveConflictOpensExportPickerWithoutOverwritePrompt`
 - [x] Build `22` pending-save, rewarded-save, and folder-batch regression XCTest passed.
 - [x] Build `22` file/folder picker and queue-preview XCTest passed.
-- [x] Release archive succeeded at `build/TestFlight-01.00.02-27/TaptionEncoder.xcarchive`; archived app Info.plist reported `com.taption.encoder`, version `1.0.2`, build `27`; both app extensions also reported version `1.0.2`, build `27`; the thumbnail extension archive inspection reported `QLSupportedContentTypes` as `com.taption.legacy-video` only.
+- [x] Release archive succeeded at `build/TestFlight-01.00.02-28/TaptionEncoder.xcarchive`; archived app Info.plist reported `com.taption.encoder`, version `1.0.2`, build `28`; both app extensions also reported version `1.0.2`, build `28`; the thumbnail extension archive inspection reported `QLSupportedContentTypes` as `com.taption.legacy-video` only.
 - [x] TestFlight/App Store Connect export/upload succeeded with `Uploaded package is processing`, `Upload succeeded`, and `Uploaded TaptionEncoder`.
 
 ## Upload Notes
 
-- Build `21` upload remains historical proof for the first thumbnail-extension fix. Build `22` remains historical proof for save-destination stabilization. Build `23` failed App Store Connect validation because `QLSupportedContentTypes` included system-supported types. Build `24` remains historical proof for queue-edit/model/Photos fixes. Build `25` remains historical proof for queue-card UI/output-summary cleanup. Build `26` remains historical proof for full-card drag and trailing delete feedback. Build `27` is the current uploaded package for release `01.00.02`.
-- Upload command used `build/TestFlight-01.00.02-27/ExportOptions.plist` with App Store Connect upload destination.
-- Upload produced non-blocking dSYM warnings for `GoogleMobileAds.framework` UUID `43C7AB5C-296D-3135-AC2E-487F186D2DE0` and `UserMessagingPlatform.framework` UUID `86C677A5-F0D9-3E51-A7B9-898D4C1BC8C6`; the app package upload still succeeded.
+- Build `21` upload remains historical proof for the first thumbnail-extension fix. Build `22` remains historical proof for save-destination stabilization. Build `23` failed App Store Connect validation because `QLSupportedContentTypes` included system-supported types. Build `24` remains historical proof for queue-edit/model/Photos fixes. Build `25` remains historical proof for queue-card UI/output-summary cleanup. Build `26` remains historical proof for full-card drag and trailing delete feedback. Build `27` remains historical proof for double-tap queue preview playback. Build `28` is the current uploaded package for release `01.00.02`.
+- Upload command used `build/TestFlight-01.00.02-28/ExportOptions.plist` with App Store Connect upload destination.
+- Upload produced non-blocking dSYM warnings for `GoogleMobileAds.framework` UUID `58AC087C-B324-396B-984F-94ACCBC7FE33` and `UserMessagingPlatform.framework` UUID `24689432-1B23-391A-B38F-2AFDBF1AA8FA`; the app package upload still succeeded.
 
 ## Boundaries
 

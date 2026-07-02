@@ -1,20 +1,20 @@
 # Taption Encoder Release Action Items
 
-Status date: 2026-07-01
+Status date: 2026-07-02
 
 ## Current State
 
 - Product path is AV1 to H.265 first, broad inputs to H.265 next, H.265-only video output final.
 - Action item count as of the current preview/player/background verification pass: 327 total, 208 completed, 119 remaining.
-- Current execution order for the `01.00.02` release pass: 1) organize development documents under `docs/`, 2) archive completed or stale reports/release notes, 3) update `AGENTS.md` for next-chat handoff, 4) review and stabilize preview/sample/background/save-destination/queue-edit code, 5) run focused and core validation, 6) set Apple version/build to `1.0.2 (27)`, 7) archive/export/upload to TestFlight, 8) commit and push `main`.
+- Current execution order for the `01.00.02` release pass: 1) organize development documents under `docs/`, 2) archive completed or stale reports/release notes, 3) update `AGENTS.md` for next-chat handoff, 4) review and stabilize preview/sample/background/save-destination/queue-edit code, 5) run focused and core validation, 6) set Apple version/build to `1.0.2 (28)`, 7) archive/export/upload to TestFlight, 8) commit and push `main`.
 - Latest preview/sample verification on 2026-06-29: `Scripts/verify_bundled_test_videos.sh` passed for 55 bundled videos normalized to 5 seconds; `Scripts/run_core_codec_truth_checks.sh` passed; focused iPhone simulator XCTest passed for bundled sample matching, source notice policy, codec inspection, software-only readiness, queue thumbnails, File/Folder thumbnail source routing, preview video output, preview close/reset/source-change/encoding-start behavior, and representative bundled H.265/MP4 transcodes.
 - Latest iPhone preview log review on 2026-06-29 copied `Documents/TaptionEncoderLogs/taption-encoder.log` from the paired iPhone 14 Pro. It showed the preview audio session now activates, and identified several VLC preview no-video-output codecs (`Lossless JPEG`, `Microsoft RLE`, `R10K`, `R210`, `Snow`) that should remain encodable but not open a black preview surface in this build.
 - Current bundled `TestVideos` audio policy: samples with readable source audio preserve source audio through codec/container-appropriate re-encoding; raw `H.261.h261` and `RoQ Video.roq` remain documented no-audio exceptions.
 - Active player UX work: File/Folder/external video open should auto-enter full-screen preview when the current build can render the route; full-screen preview keeps controls visible during next/previous navigation, uses fixed one-line `current / duration` timing, supports previous/next queue controls, and suppresses app-open ads for external video-player launches.
 - Files integration follow-up: `test video` seeding now verifies the expected bundled samples after wiping `Documents/test video`; Files app visibility is covered by `UIFileSharingEnabled`, `LSSupportsOpeningDocumentsInPlace`, `UISupportsDocumentBrowser`, legacy-video `Owner` document ownership, standard-video `Owner` handler registration, and bundled sample thumbnails embedded in both the app and thumbnail extension.
 - Current validation for the player/sample/background pass: `plutil -lint TaptionEncoder/Info.plist TaptionEncoderThumbnailExtension/Info.plist TaptionEncoderLiveActivityExtension/Info.plist` passed; `Scripts/verify_bundled_test_videos.sh` passed with 55 videos and the two documented audio exceptions; `Scripts/run_core_codec_truth_checks.sh` passed; external player registration and warm/cold external video player flow verification passed on the iPhone 17 Pro simulator; full app-scheme XCTest passed with parallel testing disabled.
-- Release `01.00.02` is the active release train and maps to Apple marketing version `1.0.2`, build `27`.
-- Release `01.00.01` remains the archived shipped baseline; `01.00.02` build `27` upload proof is verified, while App Store Connect processing completion, TestFlight availability, App Review, and public availability remain separate states.
+- Release `01.00.02` is the active release train and maps to Apple marketing version `1.0.2`, build `28`.
+- Release `01.00.01` remains the archived shipped baseline; `01.00.02` build `28` upload proof is verified, while App Store Connect processing completion, TestFlight availability, App Review, and public availability remain separate states.
 - Release commit is `f5af6b3` (`Prepare Taption Encoder 1.0.1 build 19`).
 - Project shell exists.
 - App is configured for iPhone and iPad.
@@ -33,7 +33,7 @@ Status date: 2026-07-01
 - App Store release assets, app icon, preview/marketing copy, support URL, release metadata, and H.265-only output policy copy were prepared for release `01.00.01`.
 - App Store Connect/TestFlight export upload succeeded for `1.0.1 (19)` and the uploaded package entered processing.
 - Paired iPhone 14 Pro and iPad Pro 12.9-inch (6th generation) install checks both reported `com.taption.encoder` version `1.0.1`, build `19`.
-- Latest release proof: `Scripts/run_core_codec_truth_checks.sh` passed; app-scheme XCTest passed with parallel testing disabled at 284 tests executed, 2 skipped, and 0 failures; build `27` archive/export/upload succeeded and App Store Connect reported the uploaded package is processing. The older `Scripts/verify_codec_fixture_evidence.sh` proof remains 90 fixtures and 180 verified transcodes.
+- Latest release proof: `Scripts/run_core_codec_truth_checks.sh` passed; app-scheme XCTest passed with parallel testing disabled at 284 tests executed, 2 skipped, and 0 failures; build `28` focused Pro Mode/queue-card XCTest passed, archive/export/upload succeeded, and App Store Connect reported the uploaded package is processing. The older `Scripts/verify_codec_fixture_evidence.sh` proof remains 90 fixtures and 180 verified transcodes.
 - The project is in Git and pushed to `https://github.com/yongyeonyu/taption-encoder`.
 
 ## Release 01.00.02 Closeout
@@ -41,10 +41,10 @@ Status date: 2026-07-01
 - [x] Move development documents into typed `docs/` folders and keep only `AGENTS.md` at the project root as the routing document.
 - [x] Archive old release notes, historical reports, completed Taption Encoder handoffs, and rejected Taption-main handoffs under `docs/archive/`.
 - [x] Update Jamini communication scripts and handoff index to use Taption Encoder paths.
-- [x] Set Apple marketing version/build to `1.0.2 (27)`.
+- [x] Set Apple marketing version/build to `1.0.2 (28)`.
 - [x] Run current release validation for `01.00.02`.
 - [x] Commit and push the `01.00.02` release changes to `main`.
-- [x] Archive/export/upload `01.00.02` build `27` to TestFlight/App Store Connect.
+- [x] Archive/export/upload `01.00.02` build `28` to TestFlight/App Store Connect.
 - [x] Record `01.00.02` upload proof separately from App Review, public availability, real-device install, and runtime logs.
 
 ## Release 01.00.01 Closeout

@@ -6590,20 +6590,24 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(makeStarWalletSnapshot(balance: 1_200).badgeText, "999+")
     }
 
-    func testDefaultStarPurchaseProductsUseDraftPriceTiers() {
+    func testDefaultStarPurchaseProductsUseProModeOffer() {
         let products = AppConfiguration().starPurchaseProducts
 
+        XCTAssertEqual(products.map(\.productID), ["com.taption.encoder.pro_mode"])
+        XCTAssertEqual(products.map(\.starCount), [0])
+        XCTAssertEqual(products.map(\.displayName), ["Pro Mode"])
+        XCTAssertEqual(products.map(\.displayPrice), ["$1"])
+        XCTAssertEqual(products.map(\.displaySubtitle), ["Remove ads and unlock unlimited Stars."])
         XCTAssertEqual(
-            products.map(\.productID),
+            products.first?.benefitLines,
             [
-                "com.taption.encoder.stars.30",
-                "com.taption.encoder.stars.100",
-                "com.taption.encoder.stars.300"
+                "Unlimited encoding starts without Star balance limits.",
+                "No rewarded ads before saves.",
+                "One-time non-consumable purchase that can be restored."
             ]
         )
-        XCTAssertEqual(products.map(\.starCount), [30, 100, 300])
-        XCTAssertEqual(products.map(\.displayName), ["30 Stars", "100 Stars", "300 Stars"])
-        XCTAssertEqual(products.map(\.displayPrice), ["$1", "$2", "$3"])
+        XCTAssertEqual(products.map(\.grantsUnlimitedStars), [true])
+        XCTAssertEqual(products.map(\.removesAds), [true])
     }
 
     func testStarBadgeOpensPurchaseSheetWithoutCreditingStarsDirectly() throws {
@@ -6625,10 +6629,15 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("await viewModel.refreshStarPurchaseProducts()"))
         XCTAssertTrue(homeViewText.contains("viewModel.beginStarPurchase(product: product)"))
         XCTAssertTrue(homeViewText.contains(".starPurchaseNoticeDialog(viewModel: viewModel)"))
-        XCTAssertTrue(homeViewText.contains("accessibilityLabel(\"Buy Stars. Balance \\(viewModel.starBalanceDisplayText)\")"))
+        XCTAssertTrue(homeViewText.contains("accessibilityLabel(\"Open Pro Mode. Balance \\(viewModel.starBalanceDisplayText)\")"))
         XCTAssertTrue(homeViewText.contains("private struct StarPurchaseSheetView: View"))
         XCTAssertTrue(homeViewText.contains("private struct StarPurchaseProductRow: View"))
-        XCTAssertTrue(homeViewText.contains("Text(\"Purchases will complete here after the matching App Store Connect in-app purchases are approved.\")"))
+        XCTAssertTrue(homeViewText.contains("Text(\"Pro Mode\")"))
+        XCTAssertTrue(homeViewText.contains("Text(\"Remove ads. Unlimited Stars.\")"))
+        XCTAssertTrue(homeViewText.contains("Text(\"Purchases will complete here after StoreKit is connected and the matching App Store Connect non-consumable in-app purchase is approved.\")"))
+        XCTAssertTrue(homeViewText.contains(".navigationTitle(\"Pro Mode\")"))
+        XCTAssertTrue(homeViewText.contains("Text(product.displaySubtitle)"))
+        XCTAssertTrue(homeViewText.contains("ForEach(product.benefitLines, id: \\.self)"))
         XCTAssertTrue(viewModelText.contains("@Published private(set) var starPurchaseProducts: [StarPurchaseProduct]"))
         XCTAssertTrue(viewModelText.contains("@Published private(set) var starPurchaseNotice: StarPurchaseNotice?"))
         XCTAssertTrue(viewModelText.contains("func refreshStarPurchaseProducts() async"))
@@ -6636,7 +6645,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(viewModelText.contains("starPurchaseNotice = StarPurchaseNotice(product: product)"))
         XCTAssertFalse(viewModelText.contains("recordPurchase(product"))
         XCTAssertTrue(stateText.contains("struct StarPurchaseNotice: Identifiable, Equatable"))
-        XCTAssertTrue(stateText.contains("Purchase Not Available"))
+        XCTAssertTrue(stateText.contains("Pro Mode Purchase Not Available"))
+        XCTAssertTrue(stateText.contains("non-consumable in-app purchase"))
         XCTAssertTrue(stateText.contains("App Store Connect"))
     }
 
@@ -7376,6 +7386,146 @@ final class CodecRoutePlannerTests: XCTestCase {
         ))
         let showCallCount = await rewardedAdProvider.recordedShowCallCount()
         XCTAssertEqual(showCallCount, 0)
+    }
+
+    @MainActor
+    func testStarLimitedFolderCardKeepsThumbnailDetailsAndPreviewPlayback() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let fileURLs = [
+            directoryURL.appendingPathComponent("a.mp4"),
+            directoryURL.appendingPathComponent("b.mp4"),
+            directoryURL.appendingPathComponent("c.mp4")
+        ]
+        for url in fileURLs {
+            try Data("source".utf8).write(to: url)
+        }
+
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 1))
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264)),
+                starWalletStore: walletStore
+            )
+        )
+
+        await viewModel.refreshStarsIfNeeded()
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+
+        let limitedID = fileURLs[1].absoluteString
+        var limitedCard = try XCTUnwrap(viewModel.fileCardSnapshots.first { $0.id == limitedID })
+        XCTAssertFalse(limitedCard.isEnabled)
+        XCTAssertTrue(limitedCard.isStarLimited)
+        XCTAssertTrue(limitedCard.isPreviewable)
+        XCTAssertTrue(limitedCard.isInteractable)
+        XCTAssertEqual(limitedCard.statusText, "Need Stars")
+        XCTAssertEqual(limitedCard.thumbnailSourceURL, fileURLs[1])
+        XCTAssertNotNil(limitedCard.videoInfo)
+
+        viewModel.selectFileCard(id: limitedID)
+        try await waitForCondition(timeout: 2) {
+            viewModel.fileCardSnapshots.first { $0.id == limitedID }?.isSelected == true
+        }
+
+        limitedCard = try XCTUnwrap(viewModel.fileCardSnapshots.first { $0.id == limitedID })
+        XCTAssertTrue(limitedCard.isSelected)
+        XCTAssertNotNil(limitedCard.videoInfo)
+        XCTAssertEqual(limitedCard.thumbnailSourceURL, fileURLs[1])
+
+        viewModel.openPreviewForFileCard(id: limitedID)
+        try await waitForCondition(timeout: 2) {
+            viewModel.activePreview?.sourceURL == fileURLs[1]
+        }
+
+        XCTAssertEqual(viewModel.activePreview?.displayName, "b.mp4")
+        XCTAssertEqual(viewModel.activePreview?.playlist?.positionText, "2 / 3")
+        XCTAssertEqual(viewModel.activePreview?.playlist?.previousName, "a.mp4")
+        XCTAssertEqual(viewModel.activePreview?.playlist?.nextName, "c.mp4")
+    }
+
+    @MainActor
+    func testStarLimitedFolderCardsRemainEditableForSelectionDeleteAndMove() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let fileURLs = [
+            directoryURL.appendingPathComponent("a.mp4"),
+            directoryURL.appendingPathComponent("b.mp4"),
+            directoryURL.appendingPathComponent("c.mp4"),
+            directoryURL.appendingPathComponent("d.mp4")
+        ]
+        for url in fileURLs {
+            try Data("source".utf8).write(to: url)
+        }
+
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 1))
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264)),
+                starWalletStore: walletStore
+            )
+        )
+
+        await viewModel.refreshStarsIfNeeded()
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.fileName), ["a.mp4", "b.mp4", "c.mp4", "d.mp4"])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isEnabled), [true, false, false, false])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isStarLimited), [false, true, true, true])
+
+        viewModel.selectFileCard(id: fileURLs[2].absoluteString)
+        try await waitForCondition(timeout: 2) {
+            viewModel.fileCardSnapshots.first { $0.id == fileURLs[2].absoluteString }?.isSelected == true
+        }
+
+        viewModel.toggleQueueFileSelection(id: fileURLs[1].absoluteString)
+        viewModel.toggleQueueFileSelection(id: fileURLs[2].absoluteString)
+        XCTAssertEqual(
+            viewModel.fileCardSnapshots.filter(\.isMultiSelected).map(\.fileName),
+            ["b.mp4", "c.mp4"]
+        )
+
+        viewModel.moveQueueFiles(
+            draggedID: fileURLs[2].absoluteString,
+            before: fileURLs[0].absoluteString
+        )
+
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.fileName), ["b.mp4", "c.mp4", "a.mp4", "d.mp4"])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isEnabled), [true, false, false, false])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isStarLimited), [false, true, true, true])
+        XCTAssertEqual(
+            viewModel.fileCardSnapshots.filter(\.isMultiSelected).map(\.fileName),
+            ["b.mp4", "c.mp4"]
+        )
+
+        viewModel.finishQueueMove()
+        try await waitForCondition(timeout: 2) {
+            viewModel.state.preparedEncodingReview?.source.url == fileURLs[1]
+        }
+
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.fileName), ["b.mp4", "c.mp4", "a.mp4", "d.mp4"])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isEnabled), [true, false, false, false])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isStarLimited), [false, true, true, true])
+        XCTAssertEqual(
+            viewModel.fileCardSnapshots.filter(\.isMultiSelected).map(\.fileName),
+            ["b.mp4", "c.mp4"]
+        )
+
+        viewModel.deleteQueueFile(id: fileURLs[2].absoluteString)
+
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.fileName), ["a.mp4", "d.mp4"])
+        XCTAssertTrue(viewModel.fileCardSnapshots.allSatisfy { !$0.isMultiSelected })
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isEnabled), [true, false])
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isStarLimited), [false, true])
     }
 
     @MainActor

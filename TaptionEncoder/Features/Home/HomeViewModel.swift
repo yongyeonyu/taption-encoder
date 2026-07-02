@@ -370,11 +370,6 @@ final class HomeViewModel: ObservableObject {
             updatedBatch.itemStates[url] = item
         }
 
-        if let selectedURL = updatedBatch.selectedURL,
-           let selectedItem = updatedBatch.itemStates[selectedURL],
-           selectedItem.isStarLimited {
-            updatedBatch.selectedURL = queueSelectableURL(in: updatedBatch)
-        }
         updatedBatch.currentIndex = firstQueueIndex(for: updatedBatch)
         return updatedBatch
     }
@@ -1096,7 +1091,7 @@ final class HomeViewModel: ObservableObject {
             ? environment.configuration.starPurchaseProducts
             : products
         AppLogger.info(
-            "Star purchase products refreshed",
+            "Pro Mode purchase products refreshed",
             category: .app,
             metadata: ["count": "\(starPurchaseProducts.count)"]
         )
@@ -1104,12 +1099,13 @@ final class HomeViewModel: ObservableObject {
 
     func beginStarPurchase(product: StarPurchaseProduct) {
         AppLogger.info(
-            "Star purchase product selected",
+            "Pro Mode purchase product selected",
             category: .app,
             metadata: [
                 "productID": product.productID,
-                "stars": "\(product.starCount)",
-                "price": product.displayPrice
+                "price": product.displayPrice,
+                "unlimitedStars": "\(product.grantsUnlimitedStars)",
+                "removesAds": "\(product.removesAds)"
             ]
         )
         starPurchaseNotice = StarPurchaseNotice(product: product)
@@ -2122,8 +2118,7 @@ final class HomeViewModel: ObservableObject {
         }
 
         let item = batch.itemStates[selectedURL] ?? .queued
-        guard !item.isStarLimited,
-              item.isEnabled || item.isPreviewable else {
+        guard item.isEnabled || item.isPreviewable else {
             AppLogger.info(
                 "Disabled file card preview ignored",
                 category: .ui,
@@ -2218,7 +2213,6 @@ final class HomeViewModel: ObservableObject {
     private func batchPreview(for url: URL) -> QueueVideoPreview? {
         guard let batch = folderBatch,
               let item = batch.itemStates[url],
-              !item.isStarLimited,
               item.isPreviewable,
               let videoInfo = item.videoInfo,
               item.asset?.videoTrack != nil else {
@@ -2284,8 +2278,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func isQueuePreviewNavigationCandidate(_ item: BatchItemRuntime) -> Bool {
-        !item.isStarLimited
-            && item.isPreviewable
+        item.isPreviewable
             && item.videoInfo != nil
             && item.asset?.videoTrack != nil
     }
@@ -4485,10 +4478,6 @@ final class HomeViewModel: ObservableObject {
             batch.selectedURL = url
         }
         batch.itemStates[url] = item
-        if (item.isEnabled == false || item.isStarLimited),
-           batch.selectedURL == url {
-            batch.selectedURL = queueSelectableURL(in: batch)
-        }
         folderBatch = batch
         objectWillChange.send()
     }

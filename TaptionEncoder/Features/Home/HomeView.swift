@@ -877,7 +877,7 @@ struct HomeView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(TaptionTheme.border, lineWidth: 1)
         )
-        .accessibilityLabel("Buy Stars. Balance \(viewModel.starBalanceDisplayText)")
+        .accessibilityLabel("Open Pro Mode. Balance \(viewModel.starBalanceDisplayText)")
     }
 
     private func exitButton(metrics: HomeLayoutMetrics) -> some View {
@@ -1284,7 +1284,7 @@ private extension View {
 
     func starPurchaseNoticeDialog(viewModel: HomeViewModel) -> some View {
         alert(
-            viewModel.starPurchaseNotice?.title ?? "Purchase Not Available",
+            viewModel.starPurchaseNotice?.title ?? "Pro Mode Purchase Not Available",
             isPresented: Binding(
                 get: { viewModel.starPurchaseNotice != nil },
                 set: { isPresented in
@@ -1322,11 +1322,11 @@ private struct StarPurchaseSheetView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Stars")
+                        Text("Pro Mode")
                             .font(.title3.weight(.semibold))
                             .foregroundStyle(Color.white.opacity(0.94))
-                        Text("Balance \(balanceText)")
-                            .font(.subheadline.monospacedDigit().weight(.semibold))
+                        Text("Remove ads. Unlimited Stars.")
+                            .font(.subheadline.weight(.semibold))
                             .foregroundStyle(TaptionTheme.mutedText)
                     }
                 }
@@ -1342,7 +1342,7 @@ private struct StarPurchaseSheetView: View {
                     }
                 }
 
-                Text("Purchases will complete here after the matching App Store Connect in-app purchases are approved.")
+                Text("Purchases will complete here after StoreKit is connected and the matching App Store Connect non-consumable in-app purchase is approved.")
                     .font(.caption)
                     .foregroundStyle(TaptionTheme.mutedText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1352,7 +1352,7 @@ private struct StarPurchaseSheetView: View {
             .padding(20)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(TaptionTheme.appBackground.ignoresSafeArea())
-            .navigationTitle("Buy Stars")
+            .navigationTitle("Pro Mode")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -1373,9 +1373,16 @@ private struct StarPurchaseProductRow: View {
                 Text(product.displayName)
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(Color.white.opacity(0.94))
-                Text("\(product.starCount) ad-free saves")
+                Text(product.displaySubtitle)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(TaptionTheme.mutedText)
+                ForEach(product.benefitLines, id: \.self) { benefit in
+                    Label(benefit, systemImage: "checkmark.circle.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(TaptionTheme.mutedText)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.8)
+                }
             }
 
             Spacer(minLength: 8)

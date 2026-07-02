@@ -1,6 +1,6 @@
 # Taption Encoder
 
-Taption Encoder is a free iOS video encoder app intended to make phone-based conversion simple. The current release train is `01.00.02`, mapped to Apple marketing version `1.0.2` and build `27`. The product direction remains practical all-input-to-H.265 conversion through hardware, software, or mixed codec paths, old-device compatibility where practical, background encoding where the OS allows it, and multi-video assembly into one H.265 output with lightweight editing.
+Taption Encoder is a free iOS video encoder app intended to make phone-based conversion simple. The current release train is `01.00.02`, mapped to Apple marketing version `1.0.2` and build `28`. The product direction remains practical all-input-to-H.265 conversion through hardware, software, or mixed codec paths, old-device compatibility where practical, background encoding where the OS allows it, and multi-video assembly into one H.265 output with lightweight editing.
 
 Release `01.00.02` keeps the focused standalone H.265 / HEVC encoder scope and stabilizes preview playback, bundled samples, and project documentation. Later releases expand toward "almost any video in, H.265 out" plus simple multi-camera merge workflows. Output video codec is a product constraint: H.265 / HEVC is the only supported video output codec. Routes such as `H.264 -> AV1` or `AV1 -> H.264` are not product routes.
 
@@ -19,9 +19,9 @@ Product path: **AV1 to H.265 first, broad inputs to H.265 next, H.265-only outpu
 ## Release Status
 
 - Current release label: `01.00.02`
-- Apple version/build: `1.0.2 (27)`
-- Release date: 2026-07-01
-- App Store Connect/TestFlight upload: export/upload succeeded for `build/TestFlight-01.00.02-27/TaptionEncoder.xcarchive`; App Store Connect reported the uploaded package is processing.
+- Apple version/build: `1.0.2 (28)`
+- Release date: 2026-07-02
+- App Store Connect/TestFlight upload: export/upload succeeded for `build/TestFlight-01.00.02-28/TaptionEncoder.xcarchive`; App Store Connect reported the uploaded package is processing.
 - Device install proof: verify real-device install separately from TestFlight/App Store Connect state.
 - Verification proof: current `01.00.02` proof is recorded in `docs/verification/RELEASE_01.00.02.md`.
 

@@ -20,22 +20,18 @@ struct AppConfiguration: Equatable {
         backgroundEncodingMinimumMajorVersion: Int = 26,
         starPurchaseProducts: [StarPurchaseProduct] = [
             StarPurchaseProduct(
-                productID: "com.taption.encoder.stars.30",
-                starCount: 30,
-                displayName: "30 Stars",
-                displayPrice: "$1"
-            ),
-            StarPurchaseProduct(
-                productID: "com.taption.encoder.stars.100",
-                starCount: 100,
-                displayName: "100 Stars",
-                displayPrice: "$2"
-            ),
-            StarPurchaseProduct(
-                productID: "com.taption.encoder.stars.300",
-                starCount: 300,
-                displayName: "300 Stars",
-                displayPrice: "$3"
+                productID: "com.taption.encoder.pro_mode",
+                starCount: 0,
+                displayName: "Pro Mode",
+                displayPrice: "$1",
+                displaySubtitle: "Remove ads and unlock unlimited Stars.",
+                benefitLines: [
+                    "Unlimited encoding starts without Star balance limits.",
+                    "No rewarded ads before saves.",
+                    "One-time non-consumable purchase that can be restored."
+                ],
+                grantsUnlimitedStars: true,
+                removesAds: true
             )
         ]
     ) {
