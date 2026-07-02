@@ -267,33 +267,16 @@ struct HomeView: View {
         .pendingSaveDestinationDialog(viewModel: viewModel)
         .savedFolderDialog(viewModel: viewModel)
         .fullScreenCover(
-            item: Binding<QueueVideoPreview?>(
-                get: { viewModel.activePreview },
-                set: { preview in
-                    if preview == nil {
+            isPresented: Binding<Bool>(
+                get: { viewModel.activePreview != nil },
+                set: { isPresented in
+                    if !isPresented {
                         viewModel.dismissPreview()
                     }
                 }
             )
-        ) { preview in
-            QueueVideoPreviewView(
-                preview: preview,
-                adUnitID: viewModel.bannerAdUnitID,
-                onClose: { viewModel.dismissPreview() },
-                onMinimize: {
-                    miniPlayerPreview = preview
-                    autoStartMiniPlayerPiPPreviewID = nil
-                    viewModel.dismissPreview()
-                },
-                onPictureInPictureHome: {
-                    miniPlayerPreview = preview
-                    autoStartMiniPlayerPiPPreviewID = preview.id
-                    viewModel.dismissPreview()
-                },
-                onPrevious: { viewModel.openPreviousPreview() },
-                onNext: { viewModel.openNextPreview() }
-            )
-            .id(preview.id)
+        ) {
+            queueVideoPreviewFullScreenCoverContent
         }
         .photosPicker(
             isPresented: $isPhotosPickerPresented,
@@ -327,6 +310,32 @@ struct HomeView: View {
             openDebugPreviewSampleIfRequested()
             openDebugSampleLibraryIfRequested()
             #endif
+        }
+    }
+
+    @ViewBuilder
+    private var queueVideoPreviewFullScreenCoverContent: some View {
+        if let preview = viewModel.activePreview {
+            QueueVideoPreviewView(
+                preview: preview,
+                adUnitID: viewModel.bannerAdUnitID,
+                onClose: { viewModel.dismissPreview() },
+                onMinimize: {
+                    miniPlayerPreview = preview
+                    autoStartMiniPlayerPiPPreviewID = nil
+                    viewModel.dismissPreview()
+                },
+                onPictureInPictureHome: {
+                    miniPlayerPreview = preview
+                    autoStartMiniPlayerPiPPreviewID = preview.id
+                    viewModel.dismissPreview()
+                },
+                onPrevious: { viewModel.openPreviousPreview() },
+                onNext: { viewModel.openNextPreview() }
+            )
+        } else {
+            Color.black
+                .ignoresSafeArea()
         }
     }
 
@@ -385,7 +394,6 @@ struct HomeView: View {
 
     private func outputSummary(metrics: HomeLayoutMetrics) -> some View {
         OutputSummaryView(
-            title: viewModel.selectedOutputDetailTitle,
             videoCodecText: viewModel.selectedVideoCodecText,
             audioCodecText: viewModel.selectedAudioCodecText,
             contentScale: metrics.contentScale
@@ -1402,6 +1410,9 @@ private struct QueueVideoPreviewView: View {
         .task(id: preview.id) {
             await startPlayback()
         }
+        .onChange(of: preview.id) { _, _ in
+            keepControlsVisibleForPreviewSwitch()
+        }
         .onChange(of: player.isPlaying) { _, isPlaying in
             if isPlaying {
                 showControls(scheduleAutoHide: false)
@@ -2074,6 +2085,7 @@ private struct QueueVideoPreviewView: View {
         guard preview.playlist?.hasPrevious == true else {
             return
         }
+        keepControlsVisibleForPreviewSwitch()
         onPrevious()
     }
 
@@ -2081,6 +2093,7 @@ private struct QueueVideoPreviewView: View {
         guard preview.playlist?.hasNext == true else {
             return
         }
+        keepControlsVisibleForPreviewSwitch()
         onNext()
     }
 
@@ -2304,6 +2317,18 @@ private struct QueueVideoPreviewView: View {
 
         withAnimation(.easeInOut(duration: 0.18)) {
             areControlsVisible = false
+        }
+    }
+
+    private func keepControlsVisibleForPreviewSwitch() {
+        isScrubbing = false
+        dragMode = nil
+        dragSeekPreviewPosition = nil
+        gestureFeedback = nil
+        gestureFeedbackTask?.cancel()
+        gestureFeedbackTask = nil
+        withTransaction(Transaction(animation: nil)) {
+            areControlsVisible = true
         }
     }
 

@@ -9,6 +9,16 @@ private enum QueueCardSwipeIntent {
     case delete
 }
 
+private enum QueueAutoScrollDirection: Equatable {
+    case up
+    case down
+}
+
+private struct QueueAutoScrollRequest: Equatable {
+    var targetID: String
+    var direction: QueueAutoScrollDirection
+}
+
 struct LoadedFilesPanelView: View {
     var files: [EncodingFileCardSnapshot]
     var contentScale: CGFloat
@@ -22,6 +32,9 @@ struct LoadedFilesPanelView: View {
 
     @State private var draggedFileID: String?
     @State private var pressedGroupAnchorID: String?
+    @State private var hoveredDropTargetID: String?
+    @State private var lastAutoScrollAt: Date = .distantPast
+    @State private var lastAutoScrollRequest: QueueAutoScrollRequest?
 
     private var selectedFileCount: Int {
         files.filter(\.isMultiSelected).count
@@ -36,58 +49,97 @@ struct LoadedFilesPanelView: View {
             if files.isEmpty {
                 emptyState
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 8 * contentScale) {
-                        ForEach(files) { file in
-                            EncodingFileCardView(
-                                file: file,
-                                contentScale: contentScale,
-                                selectedGroupCount: selectedFileCount,
-                                isGroupPressAnchor: pressedGroupAnchorID == file.id,
-                                isBundledByGroupPress: isGroupPressActive
-                                    && file.isMultiSelected
-                                    && pressedGroupAnchorID != file.id,
-                                onSelect: { onSelect(file.id) },
-                                onPlay: { onPlay(file.id) },
-                                onToggleSelection: { onToggleSelection(file.id) },
-                                onDelete: { onDelete(file.id) },
-                                onDragStarted: {
-                                    draggedFileID = file.id
-                                    if file.isMultiSelected && selectedFileCount > 1 {
-                                        withAnimation(queueSpringAnimation) {
-                                            pressedGroupAnchorID = file.id
-                                        }
-                                    }
-                                },
-                                onGroupPressChanged: { isPressing in
-                                    guard file.isMultiSelected && selectedFileCount > 1 else {
-                                        return
-                                    }
-                                    withAnimation(queueSpringAnimation) {
-                                        pressedGroupAnchorID = isPressing ? file.id : nil
-                                    }
-                                }
-                            )
-                            .zIndex(pressedGroupAnchorID == file.id ? 2 : 0)
-                            .onDrop(
-                                of: [UTType.plainText],
-                                delegate: QueueFileDropDelegate(
+                ScrollViewReader { scrollProxy in
+                    ScrollView {
+                        LazyVStack(spacing: 8 * contentScale) {
+                            ForEach(files) { file in
+                                QueueFileDropContainer(
                                     targetID: file.id,
                                     draggedFileID: $draggedFileID,
+                                    contentScale: contentScale,
                                     onMove: onMove,
                                     onMoveEnded: {
                                         onMoveEnded()
                                         withAnimation(queueSpringAnimation) {
                                             pressedGroupAnchorID = nil
                                         }
+                                        hoveredDropTargetID = nil
+                                    },
+                                    onAutoScroll: { targetID, direction in
+                                        autoScrollQueue(
+                                            from: targetID,
+                                            direction: direction,
+                                            proxy: scrollProxy
+                                        )
+                                    },
+                                    onHover: { targetID in
+                                        hoveredDropTargetID = targetID
                                     }
-                                )
-                            )
+                                ) {
+                                    EncodingFileCardView(
+                                        file: file,
+                                        contentScale: contentScale,
+                                        selectedGroupCount: selectedFileCount,
+                                        isGroupPressAnchor: pressedGroupAnchorID == file.id,
+                                        isBundledByGroupPress: isGroupPressActive
+                                            && file.isMultiSelected
+                                            && pressedGroupAnchorID != file.id,
+                                        onSelect: { onSelect(file.id) },
+                                        onPlay: { onPlay(file.id) },
+                                        onToggleSelection: { onToggleSelection(file.id) },
+                                        onDelete: { onDelete(file.id) },
+                                        onDragStarted: {
+                                            draggedFileID = file.id
+                                            if file.isMultiSelected && selectedFileCount > 1 {
+                                                withAnimation(queueSpringAnimation) {
+                                                    pressedGroupAnchorID = file.id
+                                                }
+                                            }
+                                        },
+                                        onGroupPressChanged: { isPressing in
+                                            guard file.isMultiSelected && selectedFileCount > 1 else {
+                                                return
+                                            }
+                                            withAnimation(queueSpringAnimation) {
+                                                pressedGroupAnchorID = isPressing ? file.id : nil
+                                            }
+                                        }
+                                    )
+                                    .id(file.id)
+                                    .zIndex(pressedGroupAnchorID == file.id ? 2 : 0)
+                                }
+                            }
                         }
+                        .animation(queueSpringAnimation, value: files.map(\.id))
+                        .animation(queueSpringAnimation, value: pressedGroupAnchorID)
+                        .padding(8 * contentScale)
                     }
-                    .animation(queueSpringAnimation, value: files.map(\.id))
-                    .animation(queueSpringAnimation, value: pressedGroupAnchorID)
-                    .padding(8 * contentScale)
+                    .onDrop(
+                        of: [UTType.plainText],
+                        delegate: QueuePanelDropDelegate(
+                            panelHeight: panelHeight,
+                            contentScale: contentScale,
+                            draggedFileID: $draggedFileID,
+                            anchorTargetID: hoveredDropTargetID,
+                            onMoveEnded: {
+                                onMoveEnded()
+                                withAnimation(queueSpringAnimation) {
+                                    pressedGroupAnchorID = nil
+                                }
+                                hoveredDropTargetID = nil
+                            },
+                            onAutoScroll: { direction in
+                                guard let anchorID = hoveredDropTargetID ?? draggedFileID else {
+                                    return
+                                }
+                                autoScrollQueue(
+                                    from: anchorID,
+                                    direction: direction,
+                                    proxy: scrollProxy
+                                )
+                            }
+                        )
+                    )
                 }
             }
         }
@@ -103,6 +155,45 @@ struct LoadedFilesPanelView: View {
 
     private var queueSpringAnimation: Animation {
         .spring(response: 0.28, dampingFraction: 0.84)
+    }
+
+    private func autoScrollQueue(
+        from targetID: String,
+        direction: QueueAutoScrollDirection,
+        proxy: ScrollViewProxy
+    ) {
+        guard draggedFileID != nil,
+              let targetIndex = files.firstIndex(where: { $0.id == targetID }) else {
+            return
+        }
+        hoveredDropTargetID = targetID
+
+        let destinationIndex: Int
+        let anchor: UnitPoint
+        switch direction {
+        case .up:
+            destinationIndex = max(files.startIndex, targetIndex - 1)
+            anchor = .top
+        case .down:
+            destinationIndex = min(files.index(before: files.endIndex), targetIndex + 1)
+            anchor = .bottom
+        }
+        guard destinationIndex != targetIndex else {
+            return
+        }
+
+        let request = QueueAutoScrollRequest(targetID: targetID, direction: direction)
+        let now = Date()
+        guard request != lastAutoScrollRequest
+            || now.timeIntervalSince(lastAutoScrollAt) >= 0.16 else {
+            return
+        }
+
+        lastAutoScrollRequest = request
+        lastAutoScrollAt = now
+        withAnimation(.linear(duration: 0.14)) {
+            proxy.scrollTo(files[destinationIndex].id, anchor: anchor)
+        }
     }
 
     private var emptyState: some View {
@@ -292,10 +383,17 @@ private struct EncodingFileCardView: View {
     }
 
     private var statusColor: Color {
+        if file.isStarLimited || file.statusText == "Need Stars" {
+            return starLimitedStatusColor
+        }
         if !file.isInteractable {
             return TaptionTheme.disabledText
         }
         return file.isSelected || file.isActive ? Color.white.opacity(0.92) : TaptionTheme.mutedText
+    }
+
+    private var starLimitedStatusColor: Color {
+        Color(red: 0.96, green: 0.18, blue: 0.22)
     }
 
     private var swipeGesture: some Gesture {
@@ -559,17 +657,122 @@ private struct EncodingFileCardView: View {
     }
 }
 
+private struct QueueFileDropContainer<Content: View>: View {
+    let targetID: String
+    @Binding var draggedFileID: String?
+    var contentScale: CGFloat
+    var onMove: (String, String) -> Void
+    var onMoveEnded: () -> Void
+    var onAutoScroll: (String, QueueAutoScrollDirection) -> Void
+    var onHover: (String) -> Void
+
+    @State private var targetHeight: CGFloat = 0
+
+    private var content: Content
+
+    init(
+        targetID: String,
+        draggedFileID: Binding<String?>,
+        contentScale: CGFloat,
+        onMove: @escaping (String, String) -> Void,
+        onMoveEnded: @escaping () -> Void,
+        onAutoScroll: @escaping (String, QueueAutoScrollDirection) -> Void,
+        onHover: @escaping (String) -> Void,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.targetID = targetID
+        self._draggedFileID = draggedFileID
+        self.contentScale = contentScale
+        self.onMove = onMove
+        self.onMoveEnded = onMoveEnded
+        self.onAutoScroll = onAutoScroll
+        self.onHover = onHover
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .background(
+                GeometryReader { geometry in
+                    Color.clear
+                        .onAppear {
+                            targetHeight = geometry.size.height
+                        }
+                        .onChange(of: geometry.size) { _, newSize in
+                            targetHeight = newSize.height
+                        }
+                }
+            )
+            .onDrop(
+                of: [UTType.plainText],
+                delegate: QueueFileDropDelegate(
+                    targetID: targetID,
+                    targetHeight: targetHeight,
+                    contentScale: contentScale,
+                    draggedFileID: $draggedFileID,
+                    onMove: onMove,
+                    onMoveEnded: onMoveEnded,
+                    onAutoScroll: onAutoScroll,
+                    onHover: onHover
+                )
+            )
+    }
+}
+
+private struct QueuePanelDropDelegate: DropDelegate {
+    let panelHeight: CGFloat
+    let contentScale: CGFloat
+    @Binding var draggedFileID: String?
+    var anchorTargetID: String?
+    var onMoveEnded: () -> Void
+    var onAutoScroll: (QueueAutoScrollDirection) -> Void
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        guard draggedFileID != nil,
+              let direction = autoScrollDirection(for: info.location.y) else {
+            return DropProposal(operation: .move)
+        }
+        onAutoScroll(direction)
+        return DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+            onMoveEnded()
+        }
+        draggedFileID = nil
+        return true
+    }
+
+    private func autoScrollDirection(for locationY: CGFloat) -> QueueAutoScrollDirection? {
+        let height = max(panelHeight, 160 * contentScale)
+        let edgeBand = min(max(36, 58 * contentScale), height * 0.24)
+        if locationY <= edgeBand {
+            return .up
+        }
+        if locationY >= height - edgeBand {
+            return .down
+        }
+        return nil
+    }
+}
+
 private struct QueueFileDropDelegate: DropDelegate {
     let targetID: String
+    let targetHeight: CGFloat
+    let contentScale: CGFloat
     @Binding var draggedFileID: String?
     var onMove: (String, String) -> Void
     var onMoveEnded: () -> Void
+    var onAutoScroll: (String, QueueAutoScrollDirection) -> Void
+    var onHover: (String) -> Void
 
     func dropEntered(info: DropInfo) {
         guard let draggedFileID,
               draggedFileID != targetID else {
             return
         }
+        onHover(targetID)
         withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
             onMove(draggedFileID, targetID)
         }
@@ -584,7 +787,25 @@ private struct QueueFileDropDelegate: DropDelegate {
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
+        onHover(targetID)
+        if let direction = autoScrollDirection(for: info.location.y) {
+            onAutoScroll(targetID, direction)
+        }
+        return DropProposal(operation: .move)
+    }
+
+    private func autoScrollDirection(for locationY: CGFloat) -> QueueAutoScrollDirection? {
+        let fallbackHeight = max(92, 112 * contentScale)
+        let height = max(targetHeight, fallbackHeight)
+        let edgeBand = min(max(24, 34 * contentScale), height * 0.34)
+
+        if locationY <= edgeBand {
+            return .up
+        }
+        if locationY >= height - edgeBand {
+            return .down
+        }
+        return nil
     }
 }
 

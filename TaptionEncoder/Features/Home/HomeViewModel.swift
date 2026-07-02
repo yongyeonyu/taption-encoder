@@ -46,14 +46,6 @@ struct UIDeviceBatteryPowerMonitor: BatteryPowerMonitoring {
 
 @MainActor
 final class HomeViewModel: ObservableObject {
-    private static let previewKnownNoVideoOutputCodecs: Set<TaptionVideoCodec> = [
-        .losslessJPEG,
-        .microsoftRLE,
-        .r10k,
-        .r210,
-        .snow
-    ]
-
     @Published private(set) var state: HomeScreenState
     @Published private(set) var selectedOutput: TaptionOutputSelection
     @Published private(set) var pendingSaveDestinationPrompt: PendingSaveDestinationPrompt?
@@ -400,42 +392,12 @@ final class HomeViewModel: ObservableObject {
         "\(selectedOutput.summary) / same folder + \(environment.configuration.outputSuffix)"
     }
 
-    var selectedOutputDetailTitle: String {
-        "Selected Codec[\(selectedCodecModeText)]"
-    }
-
     var selectedVideoCodecText: String {
         "Video: \(selectedOutput.videoCodec.displayName)"
     }
 
     var selectedAudioCodecText: String {
         "Audio: \(selectedOutput.audioCodec.displayName)"
-    }
-
-    private var selectedCodecModeText: String {
-        guard let info = currentReview?.videoInfo else {
-            return "Auto"
-        }
-
-        let videoMode = info.codecPathBadge
-        let audioMode = info.audioPathBadge
-
-        if videoMode == "Unsupported" || audioMode == "Unsupported" {
-            return "Unsupported"
-        }
-        if videoMode == "Blocked" || audioMode == "Blocked" {
-            return "Blocked"
-        }
-        if videoMode == "HW/SW" || audioMode == "HW/SW" {
-            return "HW/SW"
-        }
-        if videoMode == "SW" || audioMode == "SW" {
-            return "SW"
-        }
-        if videoMode == "HW" || audioMode == "HW" || audioMode == "Copy" || audioMode == "None" {
-            return "HW"
-        }
-        return videoMode
     }
 
     var outputCodecOptions: [TaptionVideoCodec] {
@@ -4729,10 +4691,6 @@ final class HomeViewModel: ObservableObject {
 
     private func isPreviewableInCurrentBuild(asset: TaptionVideoAsset) -> Bool {
         guard let videoTrack = asset.videoTrack else {
-            return false
-        }
-
-        guard !Self.previewKnownNoVideoOutputCodecs.contains(videoTrack.codec) else {
             return false
         }
 

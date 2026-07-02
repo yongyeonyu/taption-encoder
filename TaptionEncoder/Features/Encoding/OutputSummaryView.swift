@@ -1,25 +1,21 @@
 import SwiftUI
 
 struct OutputSummaryView: View {
-    var title: String
     var videoCodecText: String
     var audioCodecText: String
     var contentScale: CGFloat = 1
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10 * contentScale) {
-            Label(title, systemImage: "film")
+        HStack(alignment: .firstTextBaseline, spacing: 8 * contentScale) {
+            Image(systemName: "film")
                 .font(contentScale < 0.9 ? .subheadline.weight(.semibold) : .headline)
-                .foregroundStyle(Color.white.opacity(0.92))
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-
-            Spacer(minLength: 4 * contentScale)
+                .foregroundStyle(TaptionTheme.accent)
 
             HStack(alignment: .firstTextBaseline, spacing: 8 * contentScale) {
                 codecLine(videoCodecText)
                 codecLine(audioCodecText)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10 * contentScale)

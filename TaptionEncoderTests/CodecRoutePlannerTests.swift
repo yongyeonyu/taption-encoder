@@ -3144,6 +3144,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("Queue mini player auto PiP requested"))
         XCTAssertTrue(homeViewText.contains("Queue mini player auto PiP state checked"))
         XCTAssertTrue(homeViewText.contains("autoStartPictureInPicture: autoStartMiniPlayerPiPPreviewID == preview.id"))
+        XCTAssertTrue(homeViewText.contains(".onChange(of: preview.id)"))
+        XCTAssertTrue(homeViewText.contains("keepControlsVisibleForPreviewSwitch()"))
+        XCTAssertFalse(homeViewText.contains(".id(preview.id)"))
+        XCTAssertTrue(homeViewText.contains("isPresented: Binding<Bool>"))
+        XCTAssertTrue(homeViewText.contains("get: { viewModel.activePreview != nil }"))
+        XCTAssertTrue(homeViewText.contains("queueVideoPreviewFullScreenCoverContent"))
+        XCTAssertFalse(homeViewText.contains("item: Binding<QueueVideoPreview?>"))
         XCTAssertTrue(homeViewText.contains("viewModel.restorePreview(preview)"))
         XCTAssertTrue(homeViewText.contains("queueMiniPlayer"))
         XCTAssertTrue(homeViewText.contains("let isFullScreenVideoPlaybackActive = viewModel.activePreview != nil"))
@@ -8577,7 +8584,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testKnownNoVideoOutputCodecDoesNotAutoOpenPreview() async throws {
+    func testLegacyPreviewCodecCanOpenPreview() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -8597,6 +8604,71 @@ final class CodecRoutePlannerTests: XCTestCase {
         try await waitForReadyToStartState(in: viewModel)
 
         XCTAssertNil(viewModel.activePreview)
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.isPreviewable, true)
+
+        viewModel.openPreviewForFileCard(id: "lossless.avi")
+        try await waitForCondition(timeout: 2) {
+            viewModel.activePreview?.sourceURL == sourceURL
+        }
+        XCTAssertEqual(viewModel.activePreview?.displayName, "lossless.avi")
+    }
+
+    @MainActor
+    func testLegacyAndProResPreviewCodecsStayPlayableInQueue() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let previewInputs: [(filename: String, codec: TaptionVideoCodec)] = [
+            ("Snow.avi", .snow),
+            ("R210.avi", .r210),
+            ("R10K.mov", .r10k),
+            ("Microsoft RLE.avi", .microsoftRLE),
+            ("Lossless JPEG.avi", .losslessJPEG),
+            ("Apple ProRes.mov", .proRes)
+        ]
+        let fileURLs = try previewInputs.map { input in
+            let url = directoryURL.appendingPathComponent(input.filename)
+            try Data("source".utf8).write(to: url)
+            return url
+        }
+        let assetsByName = Dictionary(
+            uniqueKeysWithValues: previewInputs.map { input in
+                (input.filename, makeAsset(sourceCodec: input.codec))
+            }
+        )
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: URLMappedMediaInspector(
+                    assetsByLastPathComponent: assetsByName,
+                    fallbackAsset: makeAsset(sourceCodec: .h264)
+                )
+            )
+        )
+
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+        try await waitForCondition(timeout: 2) {
+            viewModel.fileCardSnapshots.count == previewInputs.count
+        }
+
+        for input in previewInputs {
+            let snapshot = try XCTUnwrap(
+                viewModel.fileCardSnapshots.first { $0.fileName == input.filename }
+            )
+            XCTAssertTrue(snapshot.isPreviewable, "\(input.filename) should allow queue preview playback.")
+            XCTAssertEqual(snapshot.thumbnailSourceURL?.lastPathComponent, input.filename)
+        }
+
+        let firstURL = try XCTUnwrap(fileURLs.first)
+        viewModel.openPreviewForFileCard(id: firstURL.absoluteString)
+        try await waitForCondition(timeout: 2) {
+            viewModel.activePreview?.sourceURL == firstURL
+        }
+        XCTAssertEqual(viewModel.activePreview?.displayName, firstURL.lastPathComponent)
     }
 
     @MainActor
