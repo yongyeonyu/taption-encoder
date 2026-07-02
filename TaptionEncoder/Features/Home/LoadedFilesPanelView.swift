@@ -187,7 +187,7 @@ private struct EncodingFileCardView: View {
 
             VStack(alignment: .leading, spacing: 7 * contentScale) {
                 headerRow
-                selectedDetailSection
+                informationSection
                 progressSection
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -227,19 +227,21 @@ private struct EncodingFileCardView: View {
     }
 
     @ViewBuilder
-    private var selectedDetailSection: some View {
-        if file.isSelected {
-            if let info = file.videoInfo {
-                infoGrid(info)
-            } else if let detailText = file.detailText {
-                Text(detailText)
-                    .font(contentScale < 0.9 ? .caption2 : .caption)
-                    .foregroundStyle(file.isInteractable ? TaptionTheme.mutedText : TaptionTheme.disabledText)
-                    .lineLimit(detailLineLimit)
-                    .minimumScaleFactor(0.8)
-                    .fixedSize(horizontal: false, vertical: detailLineLimit == nil)
-                    .textSelection(.enabled)
-            }
+    private var informationSection: some View {
+        if let info = file.videoInfo {
+            infoGrid(info)
+        } else if file.isSelected, let detailText = file.detailText {
+            Text(detailText)
+                .font(contentScale < 0.9 ? .caption2 : .caption)
+                .foregroundStyle(file.isInteractable ? TaptionTheme.mutedText : TaptionTheme.disabledText)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(height: infoTableHeight, alignment: .center)
+        } else {
+            Color.clear
+                .frame(height: infoTableHeight)
         }
     }
 
@@ -294,15 +296,6 @@ private struct EncodingFileCardView: View {
             return TaptionTheme.disabledText
         }
         return file.isSelected || file.isActive ? Color.white.opacity(0.92) : TaptionTheme.mutedText
-    }
-
-    private var detailLineLimit: Int? {
-        switch file.statusText {
-        case "Failed", "Unreadable", "Not supported yet":
-            return nil
-        default:
-            return 2
-        }
     }
 
     private var swipeGesture: some Gesture {
@@ -429,7 +422,7 @@ private struct EncodingFileCardView: View {
 
             VStack(alignment: .leading, spacing: 7 * contentScale) {
                 headerRow
-                selectedDetailSection
+                informationSection
                 progressSection
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -510,48 +503,21 @@ private struct EncodingFileCardView: View {
 
     private func infoGrid(_ info: LoadedVideoInfo) -> some View {
         VStack(alignment: .leading, spacing: 5 * contentScale) {
-            metricTable(info)
-            codecFlowTable(info)
-        }
-    }
-
-    private func metricTable(_ info: LoadedVideoInfo) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 10 * contentScale, verticalSpacing: 3 * contentScale) {
-            GridRow {
+            HStack(spacing: 8 * contentScale) {
                 tableValue(info.duration)
                 tableValue(info.frameRate)
-            }
-            GridRow {
                 tableValue(info.resolution)
                 tableValue(info.fileSize)
             }
-        }
-    }
 
-    private func codecFlowTable(_ info: LoadedVideoInfo) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 10 * contentScale, verticalSpacing: 2 * contentScale) {
-            GridRow {
-                tableValue(info.inputSummary)
+            HStack(spacing: 10 * contentScale) {
+                tableValue(inputVideoCodecText(info.inputSummary))
                 tableValue(info.audio)
-            }
-            GridRow {
-                codecFlowArrow()
-                codecFlowArrow()
-            }
-            GridRow {
-                tableValue(info.outputSummary)
-                tableValue(info.audioOutputSummary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func codecFlowArrow() -> some View {
-        Image(systemName: "arrow.down")
-            .font(.system(size: max(9, 10 * contentScale), weight: .bold))
-            .foregroundStyle(defaultValueColor.opacity(file.isInteractable ? 0.72 : 0.5))
-            .frame(maxWidth: .infinity, alignment: .center)
-            .accessibilityHidden(true)
+        .frame(height: infoTableHeight, alignment: .center)
+        .accessibilityElement(children: .combine)
     }
 
     private func tableValue(_ value: String) -> some View {
@@ -561,6 +527,17 @@ private struct EncodingFileCardView: View {
             .lineLimit(1)
             .minimumScaleFactor(0.7)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func inputVideoCodecText(_ inputSummary: String) -> String {
+        inputSummary
+            .components(separatedBy: " / ")
+            .first
+            .map { $0.isEmpty ? inputSummary : $0 } ?? inputSummary
+    }
+
+    private var infoTableHeight: CGFloat {
+        max(44, 50 * contentScale)
     }
 
     private var defaultValueColor: Color {

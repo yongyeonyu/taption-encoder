@@ -702,7 +702,7 @@ struct LoadedVideoPathInfo: Equatable {
                 videoReadiness: videoReadiness
             ),
             detail: detailParts.joined(separator: " "),
-            outputSummary: outputSelection.summary,
+            outputSummary: outputSelection.videoCodec.displayName,
             isRouteEncodable: routeSelection.isEncodableNow
                 && routeImplementationState == .implemented
         )

@@ -887,46 +887,6 @@ struct HomeView: View {
     private func outputSelector(metrics: HomeLayoutMetrics) -> some View {
         HStack(spacing: 8 * metrics.contentScale) {
             outputMenu(
-                title: "Output",
-                value: "\(viewModel.selectedOutput.container.defaultFileExtension.uppercased())",
-                systemImage: "shippingbox",
-                isEnabled: viewModel.canChangeOutputSelection,
-                metrics: metrics
-            ) {
-                let availableContainers = viewModel.outputContainerOptions.filter { viewModel.outputContainerIsAvailableNow($0) }
-                let unavailableContainers = viewModel.outputContainerOptions.filter { !viewModel.outputContainerIsAvailableNow($0) }
-
-                ForEach(availableContainers, id: \.self) { container in
-                    Button {
-                        viewModel.selectOutputContainer(container)
-                    } label: {
-                        menuItemLabel(
-                            title: viewModel.outputContainerMenuTitle(container),
-                            isSelected: container == viewModel.selectedOutput.container,
-                            isEnabled: true
-                        )
-                    }
-                }
-
-                if !availableContainers.isEmpty && !unavailableContainers.isEmpty {
-                    Divider()
-                }
-
-                ForEach(unavailableContainers, id: \.self) { container in
-                    Button {
-                        viewModel.selectOutputContainer(container)
-                    } label: {
-                        menuItemLabel(
-                            title: viewModel.outputContainerMenuTitle(container),
-                            isSelected: container == viewModel.selectedOutput.container,
-                            isEnabled: false
-                        )
-                    }
-                    .disabled(true)
-                }
-            }
-
-            outputMenu(
                 title: "Resolution",
                 value: viewModel.selectedOutput.resolutionPreset.menuTitle,
                 secondaryValue: viewModel.selectedResolutionAspectRatioText,
