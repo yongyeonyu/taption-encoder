@@ -484,18 +484,96 @@ private struct SW_VLCMediaInspector: MediaInspecting {
     }
 
     private func makeVideoTrackInfo(from track: Track, url: URL) -> TaptionVideoTrackInfo {
-        let width = max(track.width ?? 0, 2)
-        let height = max(track.height ?? 0, 2)
         let codec = videoCodec(from: track, url: url)
+        let headerInfo = codec == .theora ? theoraHeaderInfo(for: url) : nil
+        let headerSize = headerInfo?.size
+        let parsedWidth = track.width.flatMap { $0 > 2 ? $0 : nil }
+        let parsedHeight = track.height.flatMap { $0 > 2 ? $0 : nil }
+        let width = max(parsedWidth ?? headerSize?.width ?? 0, 2)
+        let height = max(parsedHeight ?? headerSize?.height ?? 0, 2)
         return TaptionVideoTrackInfo(
             codec: codec,
             naturalSize: TaptionPixelSize(width: width, height: height),
             displaySize: TaptionPixelSize(width: width, height: height),
-            nominalFrameRate: frameRate(from: track.frameRate),
+            nominalFrameRate: frameRate(from: track.frameRate) ?? headerInfo?.frameRate,
             estimatedBitrate: track.bitrate > 0 ? track.bitrate : nil,
             color: TaptionColorDescription(),
             rotationDegrees: 0
         )
+    }
+
+    private struct TheoraHeaderInfo {
+        var size: TaptionPixelSize
+        var frameRate: TaptionRationalFrameRate?
+    }
+
+    private func theoraHeaderInfo(for url: URL) -> TheoraHeaderInfo? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else {
+            return nil
+        }
+        defer {
+            try? handle.close()
+        }
+
+        let data = handle.readData(ofLength: 128 * 1024)
+        let bytes = [UInt8](data)
+        let signature = Array("theora".utf8)
+        guard let signatureStart = bytes.indices.first(where: { index in
+            index > 0
+                && bytes[index - 1] == 0x80
+                && index + signature.count <= bytes.count
+                && Array(bytes[index..<index + signature.count]) == signature
+        }) else {
+            return nil
+        }
+
+        let packetStart = signatureStart - 1
+        guard packetStart + 30 <= bytes.count else {
+            return nil
+        }
+
+        let pictureWidth = readUInt24(bytes, at: packetStart + 14)
+        let pictureHeight = readUInt24(bytes, at: packetStart + 17)
+        guard pictureWidth > 0,
+              pictureHeight > 0 else {
+            return nil
+        }
+
+        let frameRateNumerator = readUInt32(bytes, at: packetStart + 22)
+        let frameRateDenominator = readUInt32(bytes, at: packetStart + 26)
+        let frameRate: TaptionRationalFrameRate?
+        if frameRateNumerator > 0, frameRateDenominator > 0 {
+            frameRate = TaptionRationalFrameRate(
+                numerator: Int(frameRateNumerator),
+                denominator: Int(frameRateDenominator)
+            )
+        } else {
+            frameRate = nil
+        }
+
+        return TheoraHeaderInfo(
+            size: TaptionPixelSize(width: Int(pictureWidth), height: Int(pictureHeight)),
+            frameRate: frameRate
+        )
+    }
+
+    private func readUInt24(_ bytes: [UInt8], at index: Int) -> UInt32 {
+        guard index + 2 < bytes.count else {
+            return 0
+        }
+        return UInt32(bytes[index]) << 16
+            | UInt32(bytes[index + 1]) << 8
+            | UInt32(bytes[index + 2])
+    }
+
+    private func readUInt32(_ bytes: [UInt8], at index: Int) -> UInt32 {
+        guard index + 3 < bytes.count else {
+            return 0
+        }
+        return UInt32(bytes[index]) << 24
+            | UInt32(bytes[index + 1]) << 16
+            | UInt32(bytes[index + 2]) << 8
+            | UInt32(bytes[index + 3])
     }
 
     private func videoCodec(from track: Track, url: URL) -> TaptionVideoCodec {

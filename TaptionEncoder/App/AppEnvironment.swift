@@ -11,6 +11,7 @@ struct AppEnvironment {
     var pendingSaveStore: PendingSaveStoring
     var adGate: AdGate
     var bannerAdProvider: BannerAdProviding
+    var nativeAdProvider: NativeAdProviding
     var rewardedAdProvider: RewardedAdProviding
     var starWalletStore: StarWalletManaging
     var starEarningService: StarEarningServing
@@ -31,6 +32,7 @@ struct AppEnvironment {
         pendingSaveStore: PendingSaveStoring,
         adGate: AdGate,
         bannerAdProvider: BannerAdProviding,
+        nativeAdProvider: NativeAdProviding,
         rewardedAdProvider: RewardedAdProviding,
         starWalletStore: StarWalletManaging,
         starEarningService: StarEarningServing,
@@ -50,6 +52,7 @@ struct AppEnvironment {
         self.pendingSaveStore = pendingSaveStore
         self.adGate = adGate
         self.bannerAdProvider = bannerAdProvider
+        self.nativeAdProvider = nativeAdProvider
         self.rewardedAdProvider = rewardedAdProvider
         self.starWalletStore = starWalletStore
         self.starEarningService = starEarningService
@@ -78,6 +81,7 @@ struct AppEnvironment {
             pendingSaveStore: pendingSaveStore,
             adGate: adGate,
             bannerAdProvider: AdMobBannerAdProvider(configuration: adMobConfiguration),
+            nativeAdProvider: AdMobNativeAdProvider(configuration: adMobConfiguration),
             rewardedAdProvider: rewardedAdProvider,
             starWalletStore: starWalletStore,
             starEarningService: DefaultStarEarningService(

@@ -7,26 +7,192 @@ import UIKit
 import XCTest
 @testable import Taption_Encoder
 
+private final class RecordingSourcePreservingOutputVerifier: SourcePreservingOutputVerifying {
+    struct Call: Equatable {
+        var planID: UUID
+        var outputURL: URL
+    }
+
+    private(set) var calls: [Call] = []
+    var result: Result<TaptionSourcePreservingOutputVerificationReport, Error>
+
+    init(result: Result<TaptionSourcePreservingOutputVerificationReport, Error> = .success(
+        TaptionSourcePreservingOutputVerificationReport(
+            failures: [],
+            warnings: [],
+            metadata: ["sourcePreservingOutput": "test-verified"]
+        )
+    )) {
+        self.result = result
+    }
+
+    func verify(
+        plan: TaptionEncodingPlan,
+        outputURL: URL
+    ) async throws -> TaptionSourcePreservingOutputVerificationReport {
+        calls.append(Call(planID: plan.id, outputURL: outputURL))
+        return try result.get()
+    }
+}
+
 final class CodecRoutePlannerTests: XCTestCase {
+    func testBackgroundReliabilityPresenterWarnsToKeepAppOpenBeforeContinuedProcessingOS() {
+        let message = HomeBackgroundReliabilityPresenter.message(
+            currentOSMajorVersion: 25,
+            backgroundEncodingMinimumMajorVersion: 26,
+            liveActivitiesEnabled: false
+        )
+
+        XCTAssertTrue(message.contains("Keep Taption Encoder open"))
+        XCTAssertTrue(message.contains("iOS/iPadOS 18-25"))
+        XCTAssertTrue(message.contains("pause the job"))
+    }
+
+    func testBackgroundReliabilityPresenterUsesLockScreenCopyOnContinuedProcessingOS() {
+        let enabledMessage = HomeBackgroundReliabilityPresenter.message(
+            currentOSMajorVersion: 26,
+            backgroundEncodingMinimumMajorVersion: 26,
+            liveActivitiesEnabled: true
+        )
+        let disabledMessage = HomeBackgroundReliabilityPresenter.message(
+            currentOSMajorVersion: 26,
+            backgroundEncodingMinimumMajorVersion: 26,
+            liveActivitiesEnabled: false
+        )
+
+        XCTAssertTrue(enabledMessage.contains("Lock Screen and Dynamic Island"))
+        XCTAssertTrue(disabledMessage.contains("Turn on Live Activities"))
+    }
+
+    func testHomeErrorPresenterFormatsEnglishRecoveryBeforeDiagnostics() {
+        let providerError = NSError(
+            domain: "TaptionEncoderTests",
+            code: 42,
+            userInfo: [NSLocalizedDescriptionKey: "Provider rejected the source"]
+        )
+
+        let error = HomeErrorPresenter.error(
+            title: "Import failed",
+            summary: "The app could not import the selected video.",
+            recovery: "Open the source again from Files or Photos.",
+            error: providerError
+        )
+
+        XCTAssertEqual(error.title, "Import failed")
+        XCTAssertTrue(error.message.hasPrefix("The app could not import the selected video."))
+        XCTAssertTrue(error.message.contains("Cause: iOS or the selected provider returned an error."))
+        XCTAssertTrue(error.message.contains("Fix: Open the source again from Files or Photos."))
+        XCTAssertTrue(error.message.contains("Log:"))
+        XCTAssertTrue(error.message.contains("TaptionEncoderTests"))
+        XCTAssertNotEqual(error.message, providerError.localizedDescription)
+    }
+
+    func testHomeErrorPresenterCardDetailKeepsActionableTextBeforeRawDiagnostic() {
+        let routeError = TaptionVideoCoreError.unsupportedSourceCodec(.vp9)
+
+        let detail = HomeErrorPresenter.cardDetail(
+            summary: "The app could not prepare this video for encoding.",
+            recovery: "Choose another source or output setting, then try again.",
+            error: routeError
+        )
+
+        XCTAssertTrue(detail.hasPrefix("The app could not prepare this video for encoding."))
+        XCTAssertTrue(detail.contains("Choose another source or output setting"))
+        XCTAssertTrue(detail.contains("Log:"))
+    }
+
     func testProductionAdMobConfigurationRejectsGoogleDemoAdUnitIDs() {
         let configuration = AdMobRuntimeConfiguration.productionConfiguration(
             appOpenAdUnitID: "ca-app-pub-3940256099942544/5575463023",
             homeBannerAdUnitID: " ca-app-pub-3940256099942544/2934735716 ",
+            nativeAdUnitID: "ca-app-pub-3940256099942544/3986624511",
             rewardedSaveAdUnitID: nil,
             sessionEndInterstitialAdUnitID: "ca-app-pub-3940256099942544/4411468910"
         )
         let adUnitIDs = [
             configuration.appOpenAdUnitID,
             configuration.homeBannerAdUnitID,
+            configuration.nativeAdUnitID,
             configuration.rewardedSaveAdUnitID,
             configuration.sessionEndInterstitialAdUnitID
         ]
 
         XCTAssertEqual(configuration.appOpenAdUnitID, "ca-app-pub-9754025737691277/9568683076")
         XCTAssertEqual(configuration.homeBannerAdUnitID, "ca-app-pub-9754025737691277/6794641076")
+        XCTAssertEqual(configuration.nativeAdUnitID, "")
         XCTAssertEqual(configuration.rewardedSaveAdUnitID, "ca-app-pub-9754025737691277/2855396062")
         XCTAssertEqual(configuration.sessionEndInterstitialAdUnitID, "ca-app-pub-9754025737691277/6942519738")
         XCTAssertFalse(adUnitIDs.contains { $0.hasPrefix(AdMobRuntimeConfiguration.googleDemoAdUnitPrefix) })
+    }
+
+    func testAdPlacementPolicyDecodesRuntimeSwitchesAndFrequencyCaps() throws {
+        let json = """
+        {
+          "disabledPlacements": ["homeBanner", "nativeCompleted"],
+          "minimumIntervals": {
+            "appOpen": 120,
+            "startInterstitial": 600
+          }
+        }
+        """
+
+        let policy = try XCTUnwrap(AdPlacementPolicy.decode(jsonString: json))
+
+        XCTAssertFalse(policy.isEnabled(.homeBanner))
+        XCTAssertTrue(policy.isEnabled(.nativeIdle))
+        XCTAssertFalse(policy.isEnabled(.nativeCompleted))
+        XCTAssertEqual(policy.minimumInterval(for: .appOpen), 120)
+        XCTAssertEqual(policy.minimumInterval(for: .startInterstitial), 600)
+        XCTAssertEqual(policy.minimumInterval(for: .sessionEndInterstitial), 8 * 60)
+    }
+
+    @MainActor
+    func testAdPlacementFrequencyLimiterBlocksUntilMinimumIntervalPasses() {
+        let limiter = AdPlacementFrequencyLimiter.shared
+        let now = Date()
+        let policy = AdPlacementPolicy(
+            minimumIntervals: [.appOpen: 60]
+        )
+        limiter.reset()
+
+        XCTAssertTrue(limiter.canPresent(.appOpen, now: now, policy: policy))
+        limiter.recordPresentation(.appOpen, now: now)
+        XCTAssertFalse(limiter.canPresent(.appOpen, now: now.addingTimeInterval(20), policy: policy))
+        XCTAssertTrue(limiter.canPresent(.appOpen, now: now.addingTimeInterval(61), policy: policy))
+
+        limiter.reset()
+    }
+
+    func testAdMobPrivacyNativeAndPlacementSurfacesAreWired() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let adProvidersURL = rootURL.appendingPathComponent("TaptionEncoder/Core/Ads/AdProviders.swift")
+        let appEnvironmentURL = rootURL.appendingPathComponent("TaptionEncoder/App/AppEnvironment.swift")
+        let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
+        let menuURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeMenuSheetView.swift")
+        let adProvidersText = try String(contentsOf: adProvidersURL, encoding: .utf8)
+        let appEnvironmentText = try String(contentsOf: appEnvironmentURL, encoding: .utf8)
+        let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
+        let menuText = try String(contentsOf: menuURL, encoding: .utf8)
+
+        XCTAssertTrue(adProvidersText.contains("protocol NativeAdProviding"))
+        XCTAssertTrue(adProvidersText.contains("struct AdMobNativeAdProvider"))
+        XCTAssertTrue(adProvidersText.contains("AdMobNativeAdSlotView"))
+        XCTAssertTrue(adProvidersText.contains("AdLoader("))
+        XCTAssertTrue(adProvidersText.contains("adTypes: [.native]"))
+        XCTAssertTrue(adProvidersText.contains("ConsentForm.presentPrivacyOptionsForm"))
+        XCTAssertTrue(adProvidersText.contains("Extras()"))
+        XCTAssertTrue(adProvidersText.contains("[\"npa\": \"1\"]"))
+        XCTAssertTrue(adProvidersText.contains("TaptionAdPlacementPolicyJSON"))
+        XCTAssertTrue(adProvidersText.contains("AdPlacementFrequencyLimiter"))
+        XCTAssertTrue(appEnvironmentText.contains("nativeAdProvider: AdMobNativeAdProvider"))
+        XCTAssertTrue(homeViewText.contains("AdMobNativeAdSlotView("))
+        XCTAssertTrue(homeViewText.contains("showsNativeAdSlot: viewModel.showsNativeAdSlot"))
+        XCTAssertTrue(homeViewText.contains(".padding(.top, metrics.footerAdSeparationHeight)"))
+        XCTAssertTrue(menuText.contains("Privacy & Ads"))
+        XCTAssertTrue(menuText.contains("Report Ad Issue"))
+        XCTAssertTrue(menuText.contains("help@taption.com"))
     }
 
     func testEncodingActivitySnapshotFormatsLiveActivityContent() {
@@ -2490,6 +2656,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         } else {
             filteredSampleFilenames = sampleFilenames
         }
+        let expectedDisplaySizes = [
+            "H.261.h261": TaptionPixelSize(width: 176, height: 144),
+            "Theora.ogv": TaptionPixelSize(width: 320, height: 240),
+            "JPEG-LS.avi": TaptionPixelSize(width: 80, height: 80),
+            "QuickTime Video.mov": TaptionPixelSize(width: 160, height: 120),
+            "Flash Video.flv": TaptionPixelSize(width: 160, height: 120)
+        ]
 
         for filename in filteredSampleFilenames {
             do {
@@ -2510,6 +2683,10 @@ final class CodecRoutePlannerTests: XCTestCase {
                 XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path), filename)
                 XCTAssertEqual(outputAsset.container, .mp4, filename)
                 XCTAssertEqual(outputAsset.videoTrack?.codec, .hevc, filename)
+                if let expectedDisplaySize = expectedDisplaySizes[filename] {
+                    XCTAssertEqual(job.asset.videoTrack?.displaySize, expectedDisplaySize, filename)
+                    XCTAssertEqual(outputAsset.videoTrack?.displaySize, expectedDisplaySize, filename)
+                }
             } catch {
                 XCTFail("\(filename): \(error)")
             }
@@ -2692,6 +2869,287 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(policy.advancedOptions.targetBitrate, track.estimatedBitrate)
         XCTAssertEqual(policy.advancedOptions.color, sourceColor)
         XCTAssertEqual(policy.advancedOptions.rotationDegrees, 90)
+    }
+
+    func testSingleAssetPlanCarriesSourcePreservationRequirementsIntoExecutionAudit() throws {
+        let sourceColor = TaptionColorDescription(
+            primaries: .bt2020,
+            transfer: .pq,
+            matrix: .bt2020NonConstantLuminance,
+            bitDepth: 10,
+            isHDR: true
+        )
+        let track = TaptionVideoTrackInfo(
+            codec: .h264,
+            naturalSize: TaptionPixelSize(width: 3840, height: 2160),
+            displaySize: TaptionPixelSize(width: 2160, height: 3840),
+            nominalFrameRate: TaptionRationalFrameRate(numerator: 60000, denominator: 1001),
+            estimatedBitrate: 80_000_000,
+            color: sourceColor,
+            rotationDegrees: 90
+        )
+        let asset = TaptionVideoAsset(
+            displayName: "portrait-hdr.mp4",
+            location: TaptionVideoAssetLocation(kind: .file),
+            container: .mp4,
+            duration: 2,
+            videoTrack: track
+        )
+
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: asset,
+            sourceURL: URL(fileURLWithPath: "/tmp/portrait-hdr.mp4"),
+            temporaryOutputURL: URL(fileURLWithPath: "/tmp/portrait-hdr_taption.mp4"),
+            outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4)
+        )
+
+        XCTAssertEqual(
+            plan.sourcePreservationRequirements,
+            TaptionSourcePreservationRequirements(asset: asset)
+        )
+        XCTAssertEqual(plan.outputPolicy.advancedOptions.resizeTo, track.displaySize)
+        XCTAssertEqual(plan.outputPolicy.advancedOptions.frameRate, track.nominalFrameRate)
+        XCTAssertEqual(plan.outputPolicy.advancedOptions.targetBitrate, track.estimatedBitrate)
+        XCTAssertEqual(plan.outputPolicy.advancedOptions.color, sourceColor)
+        XCTAssertEqual(plan.outputPolicy.advancedOptions.rotationDegrees, 90)
+        XCTAssertNoThrow(try TaptionSourcePreservingExecutionAudit.validate(plan: plan))
+
+        let metadata = TaptionSourcePreservingExecutionAudit.logMetadata(for: plan)
+        XCTAssertEqual(metadata["sourcePreserving"], "tracked")
+        XCTAssertEqual(metadata["sourcePreservingMissing"], "")
+        XCTAssertEqual(metadata["preserveResolution"], "2160x3840")
+        XCTAssertEqual(metadata["preserveFrameRate"], "60000/1001")
+        XCTAssertEqual(metadata["preserveBitrate"], "80000000")
+        XCTAssertEqual(metadata["preserveOrientation"], "90")
+        XCTAssertEqual(metadata["preserveColor"], "bt2020/pq/bt2020NonConstantLuminance/hdr:true")
+    }
+
+    func testSourcePreservingOutputVerificationAcceptsMatchingOutputMetadata() throws {
+        let sourceColor = TaptionColorDescription(
+            primaries: .bt709,
+            transfer: .bt709,
+            matrix: .bt709,
+            bitDepth: 8,
+            isHDR: false
+        )
+        let sourceAsset = TaptionVideoAsset(
+            displayName: "source.mp4",
+            location: TaptionVideoAssetLocation(kind: .file),
+            duration: 4,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .h264,
+                naturalSize: TaptionPixelSize(width: 1920, height: 1080),
+                displaySize: TaptionPixelSize(width: 1920, height: 1080),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 30000, denominator: 1001),
+                estimatedBitrate: 12_000_000,
+                color: sourceColor,
+                rotationDegrees: 0
+            ),
+            audioTracks: [
+                TaptionAudioTrackInfo(codec: .aac, channelCount: 2, sampleRate: 48_000)
+            ]
+        )
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: sourceAsset,
+            sourceURL: URL(fileURLWithPath: "/tmp/source.mp4"),
+            temporaryOutputURL: URL(fileURLWithPath: "/tmp/output.mp4"),
+            outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4)
+        )
+        let outputAsset = TaptionVideoAsset(
+            displayName: "output.mp4",
+            location: TaptionVideoAssetLocation(kind: .temporary),
+            container: .mp4,
+            duration: 4.03,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .hevc,
+                naturalSize: TaptionPixelSize(width: 1920, height: 1080),
+                displaySize: TaptionPixelSize(width: 1920, height: 1080),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 2997, denominator: 100),
+                color: sourceColor,
+                rotationDegrees: 0
+            ),
+            audioTracks: [
+                TaptionAudioTrackInfo(codec: .aac, channelCount: 2, sampleRate: 48_000)
+            ]
+        )
+
+        let report = try TaptionSourcePreservingExecutionAudit.verifyOutput(
+            plan: plan,
+            outputAsset: outputAsset
+        )
+
+        XCTAssertTrue(report.isPassing)
+        XCTAssertEqual(report.metadata["sourcePreservingOutput"], "checked")
+        XCTAssertEqual(report.metadata["actualResolution"], "1920x1080")
+        XCTAssertEqual(report.metadata["actualAudioTracks"], "1")
+    }
+
+    func testSourcePreservingOutputVerificationRejectsMismatchedOutputMetadata() {
+        let sourceAsset = TaptionVideoAsset(
+            displayName: "source.mp4",
+            location: TaptionVideoAssetLocation(kind: .file),
+            duration: 10,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .h264,
+                naturalSize: TaptionPixelSize(width: 1920, height: 1080),
+                displaySize: TaptionPixelSize(width: 1920, height: 1080),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 30),
+                color: TaptionColorDescription(primaries: .bt709, transfer: .bt709, matrix: .bt709),
+                rotationDegrees: 0
+            ),
+            audioTracks: [
+                TaptionAudioTrackInfo(codec: .aac, channelCount: 2, sampleRate: 48_000)
+            ]
+        )
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: sourceAsset,
+            sourceURL: URL(fileURLWithPath: "/tmp/source.mp4"),
+            temporaryOutputURL: URL(fileURLWithPath: "/tmp/output.mp4"),
+            outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4)
+        )
+        let outputAsset = TaptionVideoAsset(
+            displayName: "output.mp4",
+            location: TaptionVideoAssetLocation(kind: .temporary),
+            container: .mp4,
+            duration: 7,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .hevc,
+                naturalSize: TaptionPixelSize(width: 1280, height: 720),
+                displaySize: TaptionPixelSize(width: 1280, height: 720),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 24),
+                color: TaptionColorDescription(primaries: .bt2020, transfer: .bt709, matrix: .bt709),
+                rotationDegrees: 0
+            ),
+            audioTracks: []
+        )
+
+        XCTAssertThrowsError(try TaptionSourcePreservingExecutionAudit.verifyOutput(
+            plan: plan,
+            outputAsset: outputAsset
+        )) { error in
+            let message = (error as? LocalizedError)?.errorDescription ?? "\(error)"
+            XCTAssertTrue(message.contains("resolution expected 1920x1080 but got 1280x720"))
+            XCTAssertTrue(message.contains("frame rate expected 30/1 but got 24/1"))
+            XCTAssertTrue(message.contains("duration expected 10.000s but got 7.000s"))
+            XCTAssertTrue(message.contains("audio track was missing"))
+        }
+    }
+
+    func testSourcePreservingVisualQualityComparatorAcceptsSimilarSamples() {
+        let sourceSample = TaptionVisualQualitySample(
+            width: 96,
+            height: 54,
+            averageRed: 0.42,
+            averageGreen: 0.50,
+            averageBlue: 0.44,
+            averageLuma: 0.48,
+            lumaStandardDeviation: 0.18,
+            nonBlackRatio: 0.96
+        )
+        let outputSample = TaptionVisualQualitySample(
+            width: 96,
+            height: 54,
+            averageRed: 0.40,
+            averageGreen: 0.49,
+            averageBlue: 0.43,
+            averageLuma: 0.47,
+            lumaStandardDeviation: 0.16,
+            nonBlackRatio: 0.95
+        )
+
+        let report = TaptionSourcePreservingVisualQualityComparator.verify(
+            sourceSample: sourceSample,
+            outputSample: outputSample
+        )
+
+        XCTAssertTrue(report.isPassing)
+        XCTAssertEqual(report.metadata["visualQuality"], "checked")
+        XCTAssertNotNil(report.metadata["visualLumaDelta"])
+        XCTAssertNotNil(report.metadata["visualColorDelta"])
+    }
+
+    func testSourcePreservingVisualQualityComparatorRejectsCollapsedOutput() {
+        let sourceSample = TaptionVisualQualitySample(
+            width: 96,
+            height: 54,
+            averageRed: 0.62,
+            averageGreen: 0.50,
+            averageBlue: 0.31,
+            averageLuma: 0.52,
+            lumaStandardDeviation: 0.22,
+            nonBlackRatio: 0.90
+        )
+        let outputSample = TaptionVisualQualitySample(
+            width: 96,
+            height: 54,
+            averageRed: 0.01,
+            averageGreen: 0.01,
+            averageBlue: 0.01,
+            averageLuma: 0.01,
+            lumaStandardDeviation: 0.001,
+            nonBlackRatio: 0.0
+        )
+
+        let report = TaptionSourcePreservingVisualQualityComparator.verify(
+            sourceSample: sourceSample,
+            outputSample: outputSample
+        )
+
+        XCTAssertFalse(report.isPassing)
+        XCTAssertTrue(report.failures.contains("visual sample lost source contrast and appears flat"))
+        XCTAssertTrue(report.failures.contains("visual sample collapsed to near-black output"))
+    }
+
+    func testSourcePreservingVisualQualityComparatorPassesWithoutSourceSampleButWarns() {
+        let outputSample = TaptionVisualQualitySample(
+            width: 96,
+            height: 54,
+            averageRed: 0.30,
+            averageGreen: 0.35,
+            averageBlue: 0.40,
+            averageLuma: 0.34,
+            lumaStandardDeviation: 0.08,
+            nonBlackRatio: 0.80
+        )
+
+        let report = TaptionSourcePreservingVisualQualityComparator.verify(
+            sourceSample: nil,
+            outputSample: outputSample
+        )
+
+        XCTAssertTrue(report.isPassing)
+        XCTAssertEqual(report.metadata["sourceVisualSample"], "unavailable")
+        XCTAssertTrue(report.warnings.contains("Source visual sample was unavailable; output visual decodability was verified only."))
+    }
+
+    func testSourcePreservingExecutionAuditRejectsMissingKnownSourceFields() {
+        let plan = TaptionEncodingPlan(
+            input: TaptionEncodingInput(kind: .singleAsset),
+            outputPolicy: TaptionVideoOutputPolicy(
+                videoCodec: .hevc,
+                container: .mp4,
+                qualityPolicy: .preserveSourceVisuals,
+                advancedOptions: .preserveSource
+            ),
+            codecRoute: TaptionCodecRoute(sourceCodec: .h264, outputCodec: .hevc),
+            codecExecutionKind: .hardware,
+            sourcePreservationRequirements: TaptionSourcePreservationRequirements(
+                displaySize: TaptionPixelSize(width: 1920, height: 1080),
+                frameRate: TaptionRationalFrameRate(numerator: 30),
+                targetBitrate: 12_000_000,
+                color: TaptionColorDescription(primaries: .bt709, transfer: .bt709, matrix: .bt709),
+                rotationDegrees: 0
+            ),
+            sourceURL: URL(fileURLWithPath: "/tmp/input.mp4"),
+            temporaryOutputURL: URL(fileURLWithPath: "/tmp/output.mp4")
+        )
+
+        XCTAssertThrowsError(try TaptionSourcePreservingExecutionAudit.validate(plan: plan)) { error in
+            XCTAssertEqual(
+                error as? TaptionSourcePreservingVerificationError,
+                .failed("Source-preserving output plan is incomplete: resolution, frame rate, bitrate, color metadata, orientation.")
+            )
+        }
     }
 
     func testSourcePreservingOutputResolverKeepsExplicitAdvancedOptions() {
@@ -3093,19 +3551,26 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(previewText.localizedCaseInsensitiveContains("appOpen"))
     }
 
-    func testVideoPlaybackSuppressesFullScreenAdsUntilPreviewCloses() throws {
+    func testProtectedAppFlowsSuppressFullScreenAdsUntilTheyClose() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let adProvidersURL = rootURL.appendingPathComponent("TaptionEncoder/Core/Ads/AdProviders.swift")
+        let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
+        let viewModelURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeViewModel.swift")
         let adProvidersText = try String(contentsOf: adProvidersURL, encoding: .utf8)
+        let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
+        let viewModelText = try String(contentsOf: viewModelURL, encoding: .utf8)
 
         XCTAssertTrue(adProvidersText.contains("activeVideoPlaybackSuppressionCount"))
+        XCTAssertTrue(adProvidersText.contains("activeCriticalFlowSuppressionCount"))
         XCTAssertTrue(adProvidersText.contains("beginVideoPlaybackAdSuppression(reason:"))
         XCTAssertTrue(adProvidersText.contains("endVideoPlaybackAdSuppression(reason:"))
-        XCTAssertTrue(adProvidersText.contains("if activeVideoPlaybackSuppressionCount > 0"))
+        XCTAssertTrue(adProvidersText.contains("beginFullScreenAdSuppression(reason:"))
+        XCTAssertTrue(adProvidersText.contains("endFullScreenAdSuppression(reason:"))
+        XCTAssertTrue(adProvidersText.contains("activeVideoPlaybackSuppressionCount + activeCriticalFlowSuppressionCount"))
         XCTAssertTrue(adProvidersText.contains("shouldSkipNonBannerAdRequest(placement: String, action: String)"))
-        XCTAssertTrue(adProvidersText.contains("Non-banner ad request skipped during video playback"))
+        XCTAssertTrue(adProvidersText.contains("Non-banner ad request skipped during protected app flow"))
         XCTAssertTrue(adProvidersText.contains("placement: \"rewarded\", action: \"load\""))
         XCTAssertTrue(adProvidersText.contains("placement: \"interstitial\", action: \"load\""))
         XCTAssertTrue(adProvidersText.contains("placement: \"appOpen\", action: \"load\""))
@@ -3113,6 +3578,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(adProvidersText.contains("placement: \"allNonBanner\", action: \"refreshOnActive\""))
         XCTAssertTrue(adProvidersText.contains("placement: \"appOpen\", action: \"showAppOpen\""))
         XCTAssertTrue(adProvidersText.contains("App open ad skipped for external playback"))
+        XCTAssertTrue(homeViewText.contains("beginDocumentPickerAdSuppressionIfNeeded(reason:"))
+        XCTAssertTrue(homeViewText.contains("beginPhotosPickerAdSuppressionIfNeeded()"))
+        XCTAssertTrue(viewModelText.contains("beginEncodingAdSuppressionIfNeeded()"))
+        XCTAssertTrue(viewModelText.contains("endEncodingAdSuppressionIfNeeded()"))
     }
 
     func testQueuePreviewCanMinimizeIntoBannerOnlyFloatingPlayer() throws {
@@ -4256,30 +4725,49 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertNil(job.plan.audioPlan?.commandPlan)
     }
 
-    func testVorbisToAACOnMP4UsesBundledSoftwareDecodeAndIsRunnableNow() {
-        let selection = TaptionAudioCodecRoutePlanner.selectRoute(
-            sourceCodec: .vorbis,
-            outputCodec: .aac,
-            outputContainer: .mp4
+    func testBundledVLCAudioDecodeFeedsAACForRepresentativeCurrentBuildCodecs() {
+        XCTAssertEqual(
+            SW_AudioCodecSupportCatalog.currentBuildBundledDecodeBackend(
+                for: .aac,
+                outputCodec: .aac,
+                outputContainer: .mp4
+            ),
+            .softwareVLCDecoder
         )
-        let readiness = TaptionAudioCodecExecutionReadinessReporter.item(
-            for: TaptionAudioCodecRoute(sourceCodec: .vorbis, outputCodec: .aac),
-            outputContainer: .mp4
-        )
-        let preferredDescriptor = TaptionAudioCodecDescriptorRegistry(
-            outputContainer: .mp4
-        ).preferredDescriptor(
-            for: TaptionAudioCodecRoute(sourceCodec: .vorbis, outputCodec: .aac)
+        XCTAssertEqual(
+            SW_AudioCodecSupportCatalog.currentBuildBundledDecodeBackend(
+                for: .mp3,
+                outputCodec: .aac,
+                outputContainer: .mp4
+            ),
+            .softwareVLCDecoder
         )
 
-        XCTAssertEqual(selection.support, .softwareTranscode)
-        XCTAssertEqual(selection.decodeBackend, .softwareVLCDecoder)
-        XCTAssertEqual(selection.encodeBackend, .appleAVAssetExport)
-        XCTAssertEqual(readiness.readiness, .softwareBackendExecutable)
-        XCTAssertTrue(readiness.isRunnableInCurrentBuild)
-        XCTAssertFalse(readiness.hasCommandPlan)
-        XCTAssertEqual(readiness.commandBackend, .softwareVLCDecoder)
-        XCTAssertEqual(preferredDescriptor?.backend, .softwareVLCDecoder)
+        for sourceCodec in [TaptionAudioCodec.opus, .vorbis] {
+            let route = TaptionAudioCodecRoute(sourceCodec: sourceCodec, outputCodec: .aac)
+            let selection = TaptionAudioCodecRoutePlanner.selectRoute(
+                sourceCodec: sourceCodec,
+                outputCodec: .aac,
+                outputContainer: .mp4,
+                preserveWhenPossible: false
+            )
+            let readiness = TaptionAudioCodecExecutionReadinessReporter.item(
+                for: route,
+                outputContainer: .mp4
+            )
+            let preferredDescriptor = TaptionAudioCodecDescriptorRegistry(
+                outputContainer: .mp4
+            ).preferredDescriptor(for: route)
+
+            XCTAssertEqual(selection.support, .softwareTranscode, sourceCodec.displayName)
+            XCTAssertEqual(selection.decodeBackend, .softwareVLCDecoder, sourceCodec.displayName)
+            XCTAssertEqual(selection.encodeBackend, .appleAVAssetExport, sourceCodec.displayName)
+            XCTAssertEqual(readiness.readiness, .softwareBackendExecutable, sourceCodec.displayName)
+            XCTAssertTrue(readiness.isRunnableInCurrentBuild, sourceCodec.displayName)
+            XCTAssertFalse(readiness.hasCommandPlan, sourceCodec.displayName)
+            XCTAssertEqual(readiness.commandBackend, .softwareVLCDecoder, sourceCodec.displayName)
+            XCTAssertEqual(preferredDescriptor?.backend, .softwareVLCDecoder, sourceCodec.displayName)
+        }
     }
 
     func testLocalRealVP8WebMSampleCanEncodeHEVCWithAACAudio() async throws {
@@ -5154,7 +5642,7 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertEqual(selection.support, .softwareTranscode)
         XCTAssertFalse(selection.shouldCopy)
-        XCTAssertEqual(selection.decodeBackend, .ffmpegFamily)
+        XCTAssertEqual(selection.decodeBackend, .softwareVLCDecoder)
         XCTAssertEqual(selection.encodeBackend, .appleAVAssetExport)
     }
 
@@ -5702,7 +6190,11 @@ final class CodecRoutePlannerTests: XCTestCase {
                 return SW_FFmpegCommandRunResult(exitCode: 0, stderr: "frame=12")
             }
         )
-        let service = AVFoundationHEVCEncoderService(softwareExecutor: executor)
+        let outputVerifier = RecordingSourcePreservingOutputVerifier()
+        let service = AVFoundationHEVCEncoderService(
+            softwareExecutor: executor,
+            outputVerifier: outputVerifier
+        )
         var progressStages: [TaptionEncodingStage] = []
 
         let result = try await service.encode(plan: plan) { progress in
@@ -5718,8 +6210,54 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(result.usedMode, .software)
         XCTAssertEqual(progressStages, [.preparing, .encoding, .completed])
         XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+        XCTAssertEqual(outputVerifier.calls, [
+            RecordingSourcePreservingOutputVerifier.Call(planID: plan.id, outputURL: outputURL)
+        ])
 
         try? FileManager.default.removeItem(at: outputURL)
+    }
+
+    func testEncoderServiceFailsWhenSourcePreservingOutputVerificationFails() async throws {
+        let outputURL = temporaryTestURL(fileName: "jpeg-to-hevc-verification-fails.mp4")
+        try? FileManager.default.removeItem(at: outputURL)
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: makeAsset(sourceCodec: .jpeg),
+            sourceURL: URL(fileURLWithPath: "/tmp/jpeg-source.mp4"),
+            temporaryOutputURL: outputURL,
+            outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4),
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+        )
+        let executor = SW_FFmpegCommandExecutor(
+            readinessReport: readyBroadSoftwareBackendReport(),
+            runner: FakeFFmpegCommandRunner { commandPlan in
+                try FileManager.default.createDirectory(
+                    at: commandPlan.outputURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try Data("encoded output with bad metadata".utf8).write(to: commandPlan.outputURL)
+                return SW_FFmpegCommandRunResult(exitCode: 0, stderr: "frame=12")
+            }
+        )
+        let verificationError = TaptionVideoCoreError.exportFailed(
+            "Source-preserving output verification failed: audio track was missing from the output."
+        )
+        let outputVerifier = RecordingSourcePreservingOutputVerifier(result: .failure(verificationError))
+        let service = AVFoundationHEVCEncoderService(
+            softwareExecutor: executor,
+            outputVerifier: outputVerifier
+        )
+
+        do {
+            _ = try await service.encode(plan: plan, progress: { _ in })
+            XCTFail("Source-preserving output verification failure should fail the encode.")
+        } catch {
+            XCTAssertEqual(error as? TaptionVideoCoreError, verificationError)
+        }
+
+        XCTAssertEqual(outputVerifier.calls, [
+            RecordingSourcePreservingOutputVerifier.Call(planID: plan.id, outputURL: outputURL)
+        ])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
     }
 
     func testEncoderServiceKeepsPreparedNoAudioSoftwareCommandPlan() async throws {
@@ -5759,7 +6297,10 @@ final class CodecRoutePlannerTests: XCTestCase {
                 return SW_FFmpegCommandRunResult(exitCode: 0, stderr: "frame=10")
             }
         )
-        let service = AVFoundationHEVCEncoderService(softwareExecutor: executor)
+        let service = AVFoundationHEVCEncoderService(
+            softwareExecutor: executor,
+            outputVerifier: DisabledSourcePreservingOutputVerifier()
+        )
 
         let result = try await service.encode(plan: plan, progress: { _ in })
 
@@ -5841,9 +6382,11 @@ final class CodecRoutePlannerTests: XCTestCase {
                 return SW_FFmpegCommandRunResult(exitCode: 0)
             }
         )
+        let outputVerifier = RecordingSourcePreservingOutputVerifier()
         let service = AVFoundationHEVCEncoderService(
             registry: registry,
-            softwareExecutor: executor
+            softwareExecutor: executor,
+            outputVerifier: outputVerifier
         )
         var progressStages: [TaptionEncodingStage] = []
 
@@ -5856,6 +6399,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(result.usedMode, .software)
         XCTAssertEqual(progressStages, [.preparing, .encoding, .completed])
         XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path))
+        XCTAssertEqual(outputVerifier.calls, [
+            RecordingSourcePreservingOutputVerifier.Call(planID: plan.id, outputURL: outputURL)
+        ])
 
         try? FileManager.default.removeItem(at: outputURL)
     }
@@ -8407,14 +8953,17 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(loadedFilesPanelText.contains("selectedGroupCount"))
         XCTAssertTrue(loadedFilesPanelText.contains("groupStackLayer"))
         XCTAssertTrue(loadedFilesPanelText.contains("withAnimation(.spring(response: 0.28, dampingFraction: 0.84))"))
-        XCTAssertTrue(loadedFilesPanelText.contains("metricTable(info)"))
-        XCTAssertTrue(loadedFilesPanelText.contains("codecFlowTable(info)"))
-        XCTAssertTrue(loadedFilesPanelText.contains("tableValue(info.inputSummary)"))
+        XCTAssertTrue(loadedFilesPanelText.contains("infoGrid(info)"))
+        XCTAssertTrue(loadedFilesPanelText.contains("tableValue(info.duration)"))
+        XCTAssertTrue(loadedFilesPanelText.contains("tableValue(info.frameRate)"))
+        XCTAssertTrue(loadedFilesPanelText.contains("tableValue(info.resolution)"))
+        XCTAssertTrue(loadedFilesPanelText.contains("tableValue(info.fileSize)"))
+        XCTAssertTrue(loadedFilesPanelText.contains("tableValue(inputVideoCodecText(info.inputSummary))"))
         XCTAssertTrue(loadedFilesPanelText.contains("tableValue(info.audio)"))
-        XCTAssertTrue(loadedFilesPanelText.contains("codecFlowArrow()"))
-        XCTAssertTrue(loadedFilesPanelText.contains("tableValue(info.outputSummary)"))
-        XCTAssertTrue(loadedFilesPanelText.contains("tableValue(info.audioOutputSummary)"))
-        XCTAssertTrue(loadedFilesPanelText.contains("Image(systemName: \"arrow.down\")"))
+        XCTAssertFalse(loadedFilesPanelText.contains("codecFlowTable(info)"))
+        XCTAssertFalse(loadedFilesPanelText.contains("tableValue(info.outputSummary)"))
+        XCTAssertFalse(loadedFilesPanelText.contains("tableValue(info.audioOutputSummary)"))
+        XCTAssertFalse(loadedFilesPanelText.contains("Image(systemName: \"arrow.down\")"))
         XCTAssertFalse(loadedFilesPanelText.contains("Text(\"->\")"))
         XCTAssertFalse(loadedFilesPanelText.contains("codecFlowRow(input:"))
         XCTAssertTrue(loadedFilesPanelText.contains("if file.isSelected {\n            return TaptionTheme.accent"))
@@ -8461,10 +9010,11 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewModelText.contains("batch.multiSelectedURLs.removeAll()"))
         XCTAssertTrue(homeViewModelText.contains("standaloneSelectedQueueIDs.removeAll()"))
         XCTAssertTrue(homeViewText.contains("reservesFailureLogArea: reservesFailureLogArea"))
-        XCTAssertTrue(homeLayoutMetricsText.contains("init(size: CGSize, reservesFailureLogArea: Bool = false)"))
+        XCTAssertTrue(homeLayoutMetricsText.contains("init(\n        size: CGSize,\n        reservesFailureLogArea: Bool = false,\n        showsNativeAdSlot: Bool = false\n    )"))
         XCTAssertTrue(homeLayoutMetricsText.contains("let availableHeight = max(1, size.height)"))
         XCTAssertTrue(homeLayoutMetricsText.contains("let heightScale = min(max(availableHeight / referenceHeight, minimumScale), maximumScale)"))
-        XCTAssertTrue(homeLayoutMetricsText.contains("let visibleSpacingCount: CGFloat = reservesFailureLogArea ? 8 : 9"))
+        XCTAssertTrue(homeLayoutMetricsText.contains("showsNativeAdSlot: Bool = false"))
+        XCTAssertTrue(homeLayoutMetricsText.contains("footerAdSeparationHeight = max(8, 12 * contentScale)"))
         XCTAssertTrue(homeLayoutMetricsText.contains("filePanelHeight = max(0, remainingHeight)"))
         XCTAssertFalse(homeLayoutMetricsText.contains("filePanelHeight = max(remainingHeight, minimumFilePanelHeight)"))
     }
@@ -8478,6 +9028,23 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertLessThan(compactLandscapeMetrics.filePanelHeight, portraitMetrics.filePanelHeight)
         XCTAssertLessThanOrEqual(compactLandscapeMetrics.filePanelHeight, 1)
         XCTAssertGreaterThanOrEqual(compactLandscapeMetrics.filePanelHeight, 0)
+    }
+
+    func testHomeLayoutMetricsSubtractsNativeAdSlotFromQueuePanel() {
+        let baselineMetrics = HomeLayoutMetrics(
+            size: CGSize(width: 393, height: 852),
+            showsNativeAdSlot: false
+        )
+        let nativeAdMetrics = HomeLayoutMetrics(
+            size: CGSize(width: 393, height: 852),
+            showsNativeAdSlot: true
+        )
+
+        XCTAssertGreaterThan(nativeAdMetrics.nativeAdSlotHeight, 0)
+        XCTAssertGreaterThan(nativeAdMetrics.footerAdSeparationHeight, 0)
+        XCTAssertEqual(baselineMetrics.nativeAdSlotHeight, 0)
+        XCTAssertLessThan(nativeAdMetrics.filePanelHeight, baselineMetrics.filePanelHeight)
+        XCTAssertGreaterThanOrEqual(nativeAdMetrics.filePanelHeight, 0)
     }
 
     @MainActor
@@ -9404,6 +9971,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             pendingSaveStore: pendingSaveStore,
             adGate: FakeAdGate(),
             bannerAdProvider: FakeBannerAdProvider(),
+            nativeAdProvider: FakeNativeAdProvider(),
             rewardedAdProvider: rewardedAdProvider,
             starWalletStore: starWalletStore,
             starEarningService: starEarningService,

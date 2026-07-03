@@ -157,6 +157,8 @@ struct HomeView: View {
     @State private var autoStartMiniPlayerPiPPreviewID: String?
     @State private var lastExternalVideoOpenURL: URL?
     @State private var lastExternalVideoOpenDate: Date?
+    @State private var isDocumentPickerAdSuppressed = false
+    @State private var isPhotosPickerAdSuppressed = false
     #if DEBUG
     @State private var didOpenDebugPreviewFile = false
     @State private var didOpenDebugPreviewSample = false
@@ -172,7 +174,8 @@ struct HomeView: View {
             let reservesFailureLogArea = viewModel.state.reservesFailureLogArea
             let metrics = HomeLayoutMetrics(
                 size: geometry.size,
-                reservesFailureLogArea: reservesFailureLogArea
+                reservesFailureLogArea: reservesFailureLogArea,
+                showsNativeAdSlot: viewModel.showsNativeAdSlot
             )
             let isFullScreenVideoPlaybackActive = viewModel.activePreview != nil
 
@@ -287,6 +290,11 @@ struct HomeView: View {
         .onChange(of: selectedPhotoItem) { _, newItem in
             handleSelectedPhotoItemChange(newItem)
         }
+        .onChange(of: isPhotosPickerPresented) { _, isPresented in
+            if !isPresented {
+                endPhotosPickerAdSuppressionIfNeeded()
+            }
+        }
         .onOpenURL { url in
             handleExternalVideoOpen(url: url, source: "scene")
         }
@@ -347,12 +355,18 @@ struct HomeView: View {
             sourceControls(metrics: metrics)
             outputSelector(metrics: metrics)
             outputSummary(metrics: metrics)
+            if viewModel.showsIdleNativeAdSlot {
+                nativeAdSlot(metrics: metrics)
+            }
             loadedFilesPanel(metrics: metrics)
             encodingControls(
                 metrics: metrics,
                 reservesFailureLogArea: reservesFailureLogArea,
                 showsPlaybackActions: showsPlaybackActions
             )
+            if viewModel.showsCompletedNativeAdSlot {
+                nativeAdSlot(metrics: metrics)
+            }
 
             if !reservesFailureLogArea {
                 Spacer(minLength: 0)
@@ -364,6 +378,7 @@ struct HomeView: View {
                 adUnitID: viewModel.bannerAdUnitID,
                 displayScale: metrics.bannerScale
             )
+            .padding(.top, metrics.footerAdSeparationHeight)
         }
         .padding(.horizontal, metrics.horizontalPadding)
         .padding(.vertical, metrics.verticalPadding)
@@ -391,6 +406,15 @@ struct HomeView: View {
             audioCodecText: viewModel.selectedAudioCodecText,
             contentScale: metrics.contentScale
         )
+    }
+
+    private func nativeAdSlot(metrics: HomeLayoutMetrics) -> some View {
+        AdMobNativeAdSlotView(
+            adUnitID: viewModel.nativeAdUnitID,
+            displayScale: metrics.contentScale,
+            title: viewModel.nativeAdSlotTitle
+        )
+        .frame(height: metrics.nativeAdSlotHeight)
     }
 
     private func loadedFilesPanel(metrics: HomeLayoutMetrics) -> some View {
@@ -498,16 +522,19 @@ struct HomeView: View {
 
     private func openFilesImportBrowser() {
         AppLogger.info("File button tapped", category: .ui)
+        beginDocumentPickerAdSuppressionIfNeeded(reason: "filePicker")
         activeSystemDocumentPicker = .files
     }
 
     private func openFolderImportBrowser() {
         AppLogger.info("Folder button tapped", category: .ui)
+        beginDocumentPickerAdSuppressionIfNeeded(reason: "folderPicker")
         activeSystemDocumentPicker = .folder
     }
 
     private func presentPhotosPicker() {
         AppLogger.info("Album button tapped", category: .ui)
+        beginPhotosPickerAdSuppressionIfNeeded()
         isPhotosPickerPresented = true
     }
 
@@ -527,6 +554,7 @@ struct HomeView: View {
         mode: HomeSystemDocumentPickerMode,
         result: Result<[URL], Error>
     ) {
+        endDocumentPickerAdSuppressionIfNeeded(reason: mode.rawValue)
         switch mode {
         case .files:
             handleFilePickerResult(result)
@@ -600,12 +628,13 @@ struct HomeView: View {
 
             completePhotosImport(importedVideo)
         } catch {
-            failPhotosImport(message: error.localizedDescription)
+            failPhotosImport(error: error)
         }
     }
 
     @MainActor
     private func completePhotosImport(_ importedVideo: ImportedPhotoVideo) {
+        endPhotosPickerAdSuppressionIfNeeded()
         AppLogger.info(
             "Photos video imported",
             category: .photosImport,
@@ -620,6 +649,7 @@ struct HomeView: View {
 
     @MainActor
     private func failPhotosImport(message: String) {
+        endPhotosPickerAdSuppressionIfNeeded()
         AppLogger.error(
             "Photos picker import failed",
             category: .photosImport,
@@ -627,6 +657,54 @@ struct HomeView: View {
         )
         viewModel.fail(message: message)
         selectedPhotoItem = nil
+    }
+
+    @MainActor
+    private func failPhotosImport(error: Error) {
+        endPhotosPickerAdSuppressionIfNeeded()
+        AppLogger.error(
+            "Photos picker import failed",
+            category: .photosImport,
+            metadata: ["error": error.localizedDescription]
+        )
+        viewModel.fail(
+            error: error,
+            summary: "The selected Photos video could not be imported.",
+            recovery: "Choose the video again from Photos, then try importing it one more time."
+        )
+        selectedPhotoItem = nil
+    }
+
+    private func beginDocumentPickerAdSuppressionIfNeeded(reason: String) {
+        guard !isDocumentPickerAdSuppressed else {
+            return
+        }
+        isDocumentPickerAdSuppressed = true
+        AdMobBootstrapper.beginFullScreenAdSuppression(reason: reason)
+    }
+
+    private func endDocumentPickerAdSuppressionIfNeeded(reason: String) {
+        guard isDocumentPickerAdSuppressed else {
+            return
+        }
+        isDocumentPickerAdSuppressed = false
+        AdMobBootstrapper.endFullScreenAdSuppression(reason: reason)
+    }
+
+    private func beginPhotosPickerAdSuppressionIfNeeded() {
+        guard !isPhotosPickerAdSuppressed else {
+            return
+        }
+        isPhotosPickerAdSuppressed = true
+        AdMobBootstrapper.beginFullScreenAdSuppression(reason: "photosPicker")
+    }
+
+    private func endPhotosPickerAdSuppressionIfNeeded() {
+        guard isPhotosPickerAdSuppressed else {
+            return
+        }
+        isPhotosPickerAdSuppressed = false
+        AdMobBootstrapper.endFullScreenAdSuppression(reason: "photosPicker")
     }
 
     private func importFromBrowser(mode: HomeImportBrowserMode) {
@@ -783,6 +861,12 @@ struct HomeView: View {
                     activeMenuSheet = .batterySettings
                 } label: {
                     Label("Battery Settings", systemImage: "battery.100percent")
+                }
+
+                Button {
+                    activeMenuSheet = .privacyAds
+                } label: {
+                    Label("Privacy & Ads", systemImage: "hand.raised")
                 }
 
                 Button {

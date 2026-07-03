@@ -92,6 +92,7 @@ final class HomeViewModel: ObservableObject {
     private var lastEncodingActivitySnapshot: TaptionEncodingActivitySnapshot?
     private var deferredBatteryStopReason: BatteryEncodingBlockReason?
     private var batteryObservationTokens: [NSObjectProtocol] = []
+    private var isEncodingAdSuppressed = false
 
     init(
         environment: AppEnvironment = .phase0,
@@ -390,7 +391,12 @@ final class HomeViewModel: ObservableObject {
     }
 
     var progressDetailText: String {
-        return state.detail
+        switch state {
+        case .readyToStart, .encoding:
+            return "\(backgroundSummary) \(state.detail)"
+        default:
+            return state.detail
+        }
     }
 
     var outputSummary: String {
@@ -541,13 +547,11 @@ final class HomeViewModel: ObservableObject {
     }
 
     var backgroundSummary: String {
-        if #available(iOS 26.0, *) {
-            if environment.liveActivityCoordinator.areActivitiesEnabled {
-                return "Background encoding can continue after lock. Progress appears on the Lock Screen and Dynamic Island."
-            }
-            return "Background encoding can continue after lock. Turn on Live Activities in iOS settings to show Lock Screen progress."
-        }
-        return "Keep Taption Encoder open for reliable encoding on this iOS version."
+        HomeBackgroundReliabilityPresenter.message(
+            currentOSMajorVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+            backgroundEncodingMinimumMajorVersion: environment.configuration.backgroundEncodingMinimumMajorVersion,
+            liveActivitiesEnabled: environment.liveActivityCoordinator.areActivitiesEnabled
+        )
     }
 
     var showsSaveAction: Bool {
@@ -575,6 +579,44 @@ final class HomeViewModel: ObservableObject {
 
     var bannerAdUnitID: String {
         environment.bannerAdProvider.bannerAdUnitID
+    }
+
+    var nativeAdUnitID: String {
+        environment.nativeAdProvider.nativeAdUnitID
+    }
+
+    var showsNativeAdSlot: Bool {
+        showsIdleNativeAdSlot || showsCompletedNativeAdSlot
+    }
+
+    var showsIdleNativeAdSlot: Bool {
+        guard !nativeAdUnitID.isEmpty,
+              AdPlacementPolicy.current().isEnabled(.nativeIdle) else {
+            return false
+        }
+        if case .idle = state {
+            return true
+        }
+        return false
+    }
+
+    var showsCompletedNativeAdSlot: Bool {
+        guard !nativeAdUnitID.isEmpty,
+              pendingSaveQueue.isEmpty,
+              AdPlacementPolicy.current().isEnabled(.nativeCompleted) else {
+            return false
+        }
+        if case .completed = state {
+            return true
+        }
+        return false
+    }
+
+    var nativeAdSlotTitle: String {
+        if showsCompletedNativeAdSlot {
+            return "Sponsored after save"
+        }
+        return "Sponsored"
     }
 
     private var currentStorageIssue: StorageIssue? {
@@ -1032,9 +1074,11 @@ final class HomeViewModel: ObservableObject {
                 category: .saving,
                 metadata: ["error": error.localizedDescription]
             )
-            state = .failed(HomeEncodingError(
+            state = .failed(HomeErrorPresenter.error(
                 title: "Restore failed",
-                message: error.localizedDescription
+                summary: "The app could not restore pending save jobs.",
+                recovery: "Open the completed output again or retry the save from the pending queue.",
+                error: error
             ))
         }
     }
@@ -1632,9 +1676,11 @@ final class HomeViewModel: ObservableObject {
                 ]
             )
             stopSecurityScopedAccess()
-            state = .failed(HomeEncodingError(
+            state = .failed(HomeErrorPresenter.error(
                 title: "Folder failed",
-                message: error.localizedDescription
+                summary: "The selected folder could not be opened.",
+                recovery: "Choose the folder again from Files and keep Taption Encoder open until the queue appears.",
+                error: error
             ))
             requestSessionEndAd(reason: .failedEncoding)
         }
@@ -1673,9 +1719,11 @@ final class HomeViewModel: ObservableObject {
                 category: .folderImport,
                 metadata: ["error": error.localizedDescription]
             )
-            state = .failed(HomeEncodingError(
+            state = .failed(HomeErrorPresenter.error(
                 title: "Samples failed",
-                message: error.localizedDescription
+                summary: "The sample library could not be prepared.",
+                recovery: "Reset the samples and try opening the sample library again.",
+                error: error
             ))
             requestSessionEndAd(reason: .failedEncoding)
         }
@@ -2577,6 +2625,7 @@ final class HomeViewModel: ObservableObject {
         activeTask?.cancel()
         activeTask = nil
         stopResourceMonitoring()
+        endEncodingAdSuppressionIfNeeded()
         selectionInspectionTask?.cancel()
         selectionInspectionTask = nil
         currentReview = nil
@@ -2625,15 +2674,44 @@ final class HomeViewModel: ObservableObject {
     }
 
     func fail(message: String) {
+        fail(
+            with: HomeErrorPresenter.messageError(
+                title: "Import failed",
+                summary: "The app could not import the selected video.",
+                recovery: "Open the source again from Files or Photos.",
+                diagnostic: message
+            ),
+            logMessage: message
+        )
+    }
+
+    func fail(
+        error: Error,
+        summary: String = "The app could not import the selected video.",
+        recovery: String = "Open the source again from Files or Photos."
+    ) {
+        fail(
+            with: HomeErrorPresenter.error(
+                title: "Import failed",
+                summary: summary,
+                recovery: recovery,
+                error: error
+            ),
+            logMessage: error.localizedDescription
+        )
+    }
+
+    private func fail(with error: HomeEncodingError, logMessage: String) {
         AppLogger.error(
             "Home flow failed",
             category: .app,
-            metadata: ["message": message]
+            metadata: ["message": logMessage]
         )
         dismissPreview()
         activeTask?.cancel()
         activeTask = nil
         stopResourceMonitoring()
+        endEncodingAdSuppressionIfNeeded()
         selectionInspectionTask?.cancel()
         selectionInspectionTask = nil
         currentReview = nil
@@ -2647,7 +2725,7 @@ final class HomeViewModel: ObservableObject {
         folderPreviewContext = nil
         folderBatch = nil
         inspectedMediaCache.removeAll()
-        state = .failed(HomeEncodingError(title: "Import failed", message: message))
+        state = .failed(error)
         stopSecurityScopedAccess()
     }
 
@@ -3027,21 +3105,29 @@ final class HomeViewModel: ObservableObject {
                         "error": error.localizedDescription
                     ]
                 )
+                let failure = HomeErrorPresenter.error(
+                    title: "Encoding failed",
+                    summary: "The app could not prepare this video for encoding.",
+                    recovery: "Choose another source or output setting, then try again.",
+                    error: error
+                )
+                let cardDetail = HomeErrorPresenter.cardDetail(
+                    summary: "The app could not prepare this video for encoding.",
+                    recovery: "Choose another source or output setting, then try again.",
+                    error: error
+                )
                 markBatchItem(
                     source.url,
                     statusText: "Failed",
-                    detailText: error.localizedDescription,
+                    detailText: cardDetail,
                     progress: nil,
                     isActive: false
                 )
-                if handleFolderItemFailure(source: source, errorMessage: error.localizedDescription) {
+                if handleFolderItemFailure(source: source, errorMessage: cardDetail) {
                     trace.finish("failed", metadata: ["error": error.localizedDescription])
                     return
                 }
-                state = .failed(HomeEncodingError(
-                    title: "Encoding failed",
-                    message: error.localizedDescription
-                ))
+                state = .failed(failure)
                 activeTask = nil
                 stopSecurityScopedAccess()
                 requestSessionEndAd(reason: .failedEncoding)
@@ -3055,21 +3141,29 @@ final class HomeViewModel: ObservableObject {
                         "error": error.localizedDescription
                     ]
                 )
+                let failure = HomeErrorPresenter.error(
+                    title: "Encoding failed",
+                    summary: "The app could not prepare this video for encoding.",
+                    recovery: "Choose another source or output setting, then try again.",
+                    error: error
+                )
+                let cardDetail = HomeErrorPresenter.cardDetail(
+                    summary: "The app could not prepare this video for encoding.",
+                    recovery: "Choose another source or output setting, then try again.",
+                    error: error
+                )
                 markBatchItem(
                     source.url,
                     statusText: "Failed",
-                    detailText: error.localizedDescription,
+                    detailText: cardDetail,
                     progress: nil,
                     isActive: false
                 )
-                if handleFolderItemFailure(source: source, errorMessage: error.localizedDescription) {
+                if handleFolderItemFailure(source: source, errorMessage: cardDetail) {
                     trace.finish("failed", metadata: ["error": error.localizedDescription])
                     return
                 }
-                state = .failed(HomeEncodingError(
-                    title: "Encoding failed",
-                    message: error.localizedDescription
-                ))
+                state = .failed(failure)
                 activeTask = nil
                 stopSecurityScopedAccess()
                 requestSessionEndAd(reason: .failedEncoding)
@@ -3100,6 +3194,7 @@ final class HomeViewModel: ObservableObject {
         stopResourceMonitoring()
         currentReview = review
         deferredBatteryStopReason = nil
+        beginEncodingAdSuppressionIfNeeded()
         let trace = TaptionEncodingPerformanceTrace(
             name: "home_encode_flow",
             category: .encoding,
@@ -3230,6 +3325,7 @@ final class HomeViewModel: ObservableObject {
                     state: restorablePendingState
                 )
                 stopResourceMonitoring()
+                endEncodingAdSuppressionIfNeeded()
                 enqueuePendingSaveJob(pendingJob)
                 markBatchItem(
                     review.source.url,
@@ -3258,6 +3354,7 @@ final class HomeViewModel: ObservableObject {
                     metadata: ["name": review.source.displayName]
                 )
                 stopResourceMonitoring()
+                endEncodingAdSuppressionIfNeeded()
                 clearActiveStarCharge(for: review.source)
                 markBatchItem(
                     review.source.url,
@@ -3285,23 +3382,32 @@ final class HomeViewModel: ObservableObject {
                     ]
                 )
                 stopResourceMonitoring()
+                endEncodingAdSuppressionIfNeeded()
                 refundActiveStarChargeIfNeeded(for: review.source)
+                let failure = HomeErrorPresenter.error(
+                    title: "Encoding failed",
+                    summary: "The app could not finish encoding this video.",
+                    recovery: "Keep the app open and try again. If it repeats, choose another source or output setting.",
+                    error: error
+                )
+                let cardDetail = HomeErrorPresenter.cardDetail(
+                    summary: "The app could not finish encoding this video.",
+                    recovery: "Keep the app open and try again. If it repeats, choose another source or output setting.",
+                    error: error
+                )
                 markBatchItem(
                     review.source.url,
                     videoInfo: review.videoInfo,
                     statusText: "Failed",
-                    detailText: error.localizedDescription,
+                    detailText: cardDetail,
                     progress: nil,
                     isActive: false
                 )
-                if handleFolderItemFailure(source: review.source, errorMessage: error.localizedDescription) {
+                if handleFolderItemFailure(source: review.source, errorMessage: cardDetail) {
                     trace.finish("failed", metadata: ["error": error.localizedDescription])
                     return
                 }
-                state = .failed(HomeEncodingError(
-                    title: "Encoding failed",
-                    message: error.localizedDescription
-                ))
+                state = .failed(failure)
                 endEncodingActivity(statusText: "Failed", fractionCompleted: lastEncodingActivitySnapshot?.fractionCompleted ?? 0)
                 activeTask = nil
                 stopSecurityScopedAccess()
@@ -3317,23 +3423,32 @@ final class HomeViewModel: ObservableObject {
                     ]
                 )
                 stopResourceMonitoring()
+                endEncodingAdSuppressionIfNeeded()
                 refundActiveStarChargeIfNeeded(for: review.source)
+                let failure = HomeErrorPresenter.error(
+                    title: "Encoding failed",
+                    summary: "The app could not finish encoding this video.",
+                    recovery: "Keep the app open and try again. If it repeats, choose another source or output setting.",
+                    error: error
+                )
+                let cardDetail = HomeErrorPresenter.cardDetail(
+                    summary: "The app could not finish encoding this video.",
+                    recovery: "Keep the app open and try again. If it repeats, choose another source or output setting.",
+                    error: error
+                )
                 markBatchItem(
                     review.source.url,
                     videoInfo: review.videoInfo,
                     statusText: "Failed",
-                    detailText: error.localizedDescription,
+                    detailText: cardDetail,
                     progress: nil,
                     isActive: false
                 )
-                if handleFolderItemFailure(source: review.source, errorMessage: error.localizedDescription) {
+                if handleFolderItemFailure(source: review.source, errorMessage: cardDetail) {
                     trace.finish("failed", metadata: ["error": error.localizedDescription])
                     return
                 }
-                state = .failed(HomeEncodingError(
-                    title: "Encoding failed",
-                    message: error.localizedDescription
-                ))
+                state = .failed(failure)
                 endEncodingActivity(statusText: "Failed", fractionCompleted: lastEncodingActivitySnapshot?.fractionCompleted ?? 0)
                 activeTask = nil
                 stopSecurityScopedAccess()
@@ -3546,6 +3661,22 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
+    private func beginEncodingAdSuppressionIfNeeded() {
+        guard !isEncodingAdSuppressed else {
+            return
+        }
+        isEncodingAdSuppressed = true
+        AdMobBootstrapper.beginFullScreenAdSuppression(reason: "encoding")
+    }
+
+    private func endEncodingAdSuppressionIfNeeded() {
+        guard isEncodingAdSuppressed else {
+            return
+        }
+        isEncodingAdSuppressed = false
+        AdMobBootstrapper.endFullScreenAdSuppression(reason: "encoding")
+    }
+
     private func requestSaveDestinationIfNeeded(for job: PendingSaveJob) {
         let routedJob = applySelectedFolderBatchDestination(to: job)
         if routedJob.state.saveDestinationWasChosen == true {
@@ -3731,9 +3862,11 @@ final class HomeViewModel: ObservableObject {
                     metadata: ["error": error.localizedDescription]
                 )
                 activeTask = nil
-                state = .failed(HomeEncodingError(
+                state = .failed(HomeErrorPresenter.error(
                     title: "Folder failed",
-                    message: error.localizedDescription
+                    summary: "The app could not prepare this folder queue.",
+                    recovery: "Choose the folder again from Files, then retry the queue.",
+                    error: error
                 ))
                 requestSessionEndAd(reason: .failedEncoding)
             }
@@ -3876,7 +4009,11 @@ final class HomeViewModel: ObservableObject {
             markBatchItem(
                 url,
                 statusText: "Not supported yet",
-                detailText: "Not supported yet. \(error.localizedDescription)",
+                detailText: HomeErrorPresenter.cardDetail(
+                    summary: "This video could not be inspected.",
+                    recovery: "Keep it in the queue for preview if available, or choose another source.",
+                    error: error
+                ),
                 progress: nil,
                 isActive: false,
                 isEnabled: false,
@@ -4033,6 +4170,7 @@ final class HomeViewModel: ObservableObject {
         currentReview = nil
         activeTask = nil
         stopResourceMonitoring()
+        endEncodingAdSuppressionIfNeeded()
         if let nextPendingJob = pendingSaveQueue.first {
             state = .pendingSave(nextPendingJob)
         } else {
@@ -4118,9 +4256,11 @@ final class HomeViewModel: ObservableObject {
                     "error": error.localizedDescription
                 ]
             )
-            state = .failed(HomeEncodingError(
+            state = .failed(HomeErrorPresenter.error(
                 title: "Star error",
-                message: error.localizedDescription
+                summary: "The app could not reserve a Star before encoding.",
+                recovery: "Refresh Stars or watch an ad, then start again.",
+                error: error
             ))
         } catch {
             AppLogger.error(
@@ -4131,9 +4271,11 @@ final class HomeViewModel: ObservableObject {
                     "error": error.localizedDescription
                 ]
             )
-            state = .failed(HomeEncodingError(
+            state = .failed(HomeErrorPresenter.error(
                 title: "Star error",
-                message: error.localizedDescription
+                summary: "The app could not reserve a Star before encoding.",
+                recovery: "Refresh Stars or watch an ad, then start again.",
+                error: error
             ))
         }
     }

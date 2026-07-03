@@ -1645,7 +1645,7 @@ extension SW_AV1HEVCTranscoder {
                 mediaType: .audio,
                 outputSettings: audioConfiguration.writerOutputSettings
             )
-            audioInput.expectsMediaDataInRealTime = false
+            audioInput.expectsMediaDataInRealTime = true
 
             guard writer.canAdd(audioInput) else {
                 AppLogger.error(
@@ -1774,6 +1774,7 @@ extension SW_AV1HEVCTranscoder {
         var sawAnyFrame = false
         var lastObservedFrameCount = 0
         var lastFrameProgressUptime = startUptime
+        var expectedFrameReachedUptime: TimeInterval?
 
         while true {
             try throwIfCancelled()
@@ -1794,17 +1795,30 @@ extension SW_AV1HEVCTranscoder {
                 lastFrameProgressUptime = ProcessInfo.processInfo.systemUptime
             }
 
+            let audioDidDrainNow = audioContext?.didDrain ?? true
+            let audioDidWriteSamplesNow = audioContext?.didWriteAnySamples ?? true
             if configuration.limitsToExpectedFrameCount,
-               context.didReachExpectedFrameCount,
-               !stopRequested {
-                stopRequested = true
-                _ = libvlc_media_player_stop_async(player)
+               context.didReachExpectedFrameCount {
+                let now = ProcessInfo.processInfo.systemUptime
+                if expectedFrameReachedUptime == nil {
+                    expectedFrameReachedUptime = now
+                }
+                let waitedForAudio = now - (expectedFrameReachedUptime ?? now)
+                let audioReadyForStop = audioContext == nil
+                    || audioDidWriteSamplesNow
+                    || audioDidDrainNow
+                    || waitedForAudio > max(2.0, configuration.frameDuration.seconds * 12)
+                if audioReadyForStop,
+                   !stopRequested {
+                    stopRequested = true
+                    _ = libvlc_media_player_stop_async(player)
+                }
             }
 
             let state = libvlc_media_player_get_state(player)
             if sawAnyFrame {
-                let audioDidDrain = audioContext?.didDrain ?? true
-                let audioDidWriteSamples = audioContext?.didWriteAnySamples ?? true
+                let audioDidDrain = audioDidDrainNow
+                let audioDidWriteSamples = audioDidWriteSamplesNow
                 let playbackPosition = libvlc_media_player_get_position(player)
                 let playbackTimeMilliseconds = libvlc_media_player_get_time(player)
                 let playbackTimeSeconds = playbackTimeMilliseconds > 0
@@ -1813,14 +1827,17 @@ extension SW_AV1HEVCTranscoder {
                 let idleDuration = ProcessInfo.processInfo.systemUptime - lastFrameProgressUptime
                 let settleDuration = max(1.0, configuration.frameDuration.seconds * 12)
                 let stallDuration = max(8.0, configuration.frameDuration.seconds * 180)
+                let audioNoSampleWaitExceeded = audioContext != nil
+                    && !audioDidWriteSamples
+                    && idleDuration > max(2.0, settleDuration)
                 let audioReadyToFinish = audioDidDrain || (audioDidWriteSamples && idleDuration > settleDuration)
                 if (state == libvlc_Stopped || state == libvlc_Stopping),
-                   audioReadyToFinish,
+                   (audioReadyToFinish || audioNoSampleWaitExceeded),
                    idleDuration > max(0.5, configuration.frameDuration.seconds * 6) {
                     break
                 }
                 if stopRequested,
-                   audioReadyToFinish,
+                   (audioReadyToFinish || audioNoSampleWaitExceeded),
                    idleDuration > settleDuration {
                     break
                 }
@@ -1828,13 +1845,12 @@ extension SW_AV1HEVCTranscoder {
                     let isNearPlaybackEnd = playbackPosition >= 0.995
                         || playbackTimeSeconds >= max(configuration.duration.seconds - 0.25, 0)
                     if isNearPlaybackEnd,
-                       audioReadyToFinish,
+                       (audioReadyToFinish || audioNoSampleWaitExceeded),
                        idleDuration > max(0.5, configuration.frameDuration.seconds * 6) {
                         break
                     }
                 }
-                if idleDuration > stallDuration,
-                   audioDidWriteSamples {
+                if idleDuration > stallDuration {
                     if !stopRequested {
                         AppLogger.warning(
                             "Software \(sourceCodecLabel) decoder stopped producing frames; finalizing partial decoded stream",

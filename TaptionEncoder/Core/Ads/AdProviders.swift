@@ -33,6 +33,11 @@ protocol BannerAdProviding {
     func currentBannerState() async -> AdLoadState
 }
 
+protocol NativeAdProviding {
+    var nativeAdUnitID: String { get }
+    func currentNativeState() async -> AdLoadState
+}
+
 protocol RewardedAdProviding {
     func currentRewardedState() async -> AdLoadState
     func preloadRewardedAd() async -> AdLoadState
@@ -58,17 +63,20 @@ protocol SessionEndAdProviding {
 struct AdMobRuntimeConfiguration: Equatable, Sendable {
     static let infoDictionaryAppOpenAdUnitIDKey = "TaptionAppOpenAdUnitID"
     static let infoDictionaryHomeBannerAdUnitIDKey = "TaptionHomeBannerAdUnitID"
+    static let infoDictionaryNativeAdUnitIDKey = "TaptionNativeAdUnitID"
     static let infoDictionaryRewardedSaveAdUnitIDKey = "TaptionRewardedSaveAdUnitID"
     static let infoDictionarySessionEndInterstitialAdUnitIDKey = "TaptionSessionEndInterstitialAdUnitID"
     static let googleDemoAdUnitPrefix = "ca-app-pub-3940256099942544/"
 
     private static let productionAppOpenAdUnitID = "ca-app-pub-9754025737691277/9568683076"
     private static let productionHomeBannerAdUnitID = "ca-app-pub-9754025737691277/6794641076"
+    private static let productionNativeAdUnitID = ""
     private static let productionRewardedSaveAdUnitID = "ca-app-pub-9754025737691277/2855396062"
     private static let productionSessionEndInterstitialAdUnitID = "ca-app-pub-9754025737691277/6942519738"
 
     let appOpenAdUnitID: String
     let homeBannerAdUnitID: String
+    let nativeAdUnitID: String
     let rewardedSaveAdUnitID: String
     let sessionEndInterstitialAdUnitID: String
 
@@ -77,6 +85,7 @@ struct AdMobRuntimeConfiguration: Equatable, Sendable {
         AdMobRuntimeConfiguration(
             appOpenAdUnitID: "ca-app-pub-3940256099942544/5575463023",
             homeBannerAdUnitID: "ca-app-pub-3940256099942544/2934735716",
+            nativeAdUnitID: "ca-app-pub-3940256099942544/3986624511",
             rewardedSaveAdUnitID: "ca-app-pub-3940256099942544/1712485313",
             sessionEndInterstitialAdUnitID: "ca-app-pub-3940256099942544/4411468910"
         )
@@ -84,6 +93,7 @@ struct AdMobRuntimeConfiguration: Equatable, Sendable {
         productionConfiguration(
             appOpenAdUnitID: bundle.object(forInfoDictionaryKey: infoDictionaryAppOpenAdUnitIDKey) as? String,
             homeBannerAdUnitID: bundle.object(forInfoDictionaryKey: infoDictionaryHomeBannerAdUnitIDKey) as? String,
+            nativeAdUnitID: bundle.object(forInfoDictionaryKey: infoDictionaryNativeAdUnitIDKey) as? String,
             rewardedSaveAdUnitID: bundle.object(forInfoDictionaryKey: infoDictionaryRewardedSaveAdUnitIDKey) as? String,
             sessionEndInterstitialAdUnitID: bundle.object(forInfoDictionaryKey: infoDictionarySessionEndInterstitialAdUnitIDKey) as? String
         )
@@ -93,6 +103,7 @@ struct AdMobRuntimeConfiguration: Equatable, Sendable {
     static func productionConfiguration(
         appOpenAdUnitID: String?,
         homeBannerAdUnitID: String?,
+        nativeAdUnitID: String? = nil,
         rewardedSaveAdUnitID: String?,
         sessionEndInterstitialAdUnitID: String?
     ) -> AdMobRuntimeConfiguration {
@@ -104,6 +115,10 @@ struct AdMobRuntimeConfiguration: Equatable, Sendable {
             homeBannerAdUnitID: productionAdUnitID(
                 homeBannerAdUnitID,
                 fallback: productionHomeBannerAdUnitID
+            ),
+            nativeAdUnitID: productionAdUnitID(
+                nativeAdUnitID,
+                fallback: productionNativeAdUnitID
             ),
             rewardedSaveAdUnitID: productionAdUnitID(
                 rewardedSaveAdUnitID,
@@ -133,12 +148,145 @@ struct AdMobRuntimeConfiguration: Equatable, Sendable {
     }
 }
 
+enum AdPlacementKind: String, CaseIterable, Codable, Hashable, Sendable {
+    case appOpen
+    case homeBanner
+    case nativeIdle
+    case nativeCompleted
+    case rewardedSave
+    case startInterstitial
+    case sessionEndInterstitial
+}
+
+struct AdPlacementPolicy: Equatable, Sendable {
+    static let overrideJSONKey = "TaptionAdPlacementPolicyJSON"
+
+    var disabledPlacements: Set<AdPlacementKind>
+    var minimumIntervals: [AdPlacementKind: TimeInterval]
+
+    init(
+        disabledPlacements: Set<AdPlacementKind> = [],
+        minimumIntervals: [AdPlacementKind: TimeInterval] = Self.defaultMinimumIntervals
+    ) {
+        self.disabledPlacements = disabledPlacements
+        self.minimumIntervals = minimumIntervals
+    }
+
+    static let defaultMinimumIntervals: [AdPlacementKind: TimeInterval] = [
+        .appOpen: 15 * 60,
+        .startInterstitial: 10 * 60,
+        .sessionEndInterstitial: 8 * 60
+    ]
+
+    static let defaultPolicy = AdPlacementPolicy()
+
+    static func current(
+        defaults: UserDefaults = .standard,
+        bundle: Bundle = .main
+    ) -> AdPlacementPolicy {
+        if let json = defaults.string(forKey: overrideJSONKey),
+           let decoded = decode(jsonString: json) {
+            return decoded
+        }
+        if let json = bundle.object(forInfoDictionaryKey: overrideJSONKey) as? String,
+           let decoded = decode(jsonString: json) {
+            return decoded
+        }
+        return defaultPolicy
+    }
+
+    static func decode(jsonString: String) -> AdPlacementPolicy? {
+        guard let data = jsonString.data(using: .utf8) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(AdPlacementPolicyPayload.self, from: data).policy
+    }
+
+    func isEnabled(_ placement: AdPlacementKind) -> Bool {
+        !disabledPlacements.contains(placement)
+    }
+
+    func minimumInterval(for placement: AdPlacementKind) -> TimeInterval? {
+        minimumIntervals[placement]
+    }
+}
+
+private struct AdPlacementPolicyPayload: Decodable {
+    var enabledPlacements: [AdPlacementKind]?
+    var disabledPlacements: [AdPlacementKind]?
+    var minimumIntervals: [String: TimeInterval]?
+
+    var policy: AdPlacementPolicy {
+        let disabled: Set<AdPlacementKind>
+        if let enabledPlacements {
+            disabled = Set(AdPlacementKind.allCases).subtracting(enabledPlacements)
+        } else {
+            disabled = Set(disabledPlacements ?? [])
+        }
+
+        var intervals = AdPlacementPolicy.defaultMinimumIntervals
+        for (key, value) in minimumIntervals ?? [:] {
+            guard let placement = AdPlacementKind(rawValue: key) else {
+                continue
+            }
+            intervals[placement] = max(0, value)
+        }
+
+        return AdPlacementPolicy(
+            disabledPlacements: disabled,
+            minimumIntervals: intervals
+        )
+    }
+}
+
+@MainActor
+final class AdPlacementFrequencyLimiter {
+    static let shared = AdPlacementFrequencyLimiter()
+
+    private var lastPresentationDates: [AdPlacementKind: Date] = [:]
+
+    private init() {}
+
+    func canPresent(
+        _ placement: AdPlacementKind,
+        now: Date = Date(),
+        policy: AdPlacementPolicy = .current()
+    ) -> Bool {
+        guard policy.isEnabled(placement) else {
+            return false
+        }
+        guard let minimumInterval = policy.minimumInterval(for: placement),
+              let lastPresentationDate = lastPresentationDates[placement] else {
+            return true
+        }
+        return now.timeIntervalSince(lastPresentationDate) >= minimumInterval
+    }
+
+    func recordPresentation(_ placement: AdPlacementKind, now: Date = Date()) {
+        lastPresentationDates[placement] = now
+    }
+
+    func reset() {
+        lastPresentationDates.removeAll()
+    }
+}
+
 struct FakeBannerAdProvider: BannerAdProviding {
     var bannerAdUnitID: String {
         "test.banner"
     }
 
     func currentBannerState() async -> AdLoadState {
+        .ready
+    }
+}
+
+struct FakeNativeAdProvider: NativeAdProviding {
+    var nativeAdUnitID: String {
+        "test.native"
+    }
+
+    func currentNativeState() async -> AdLoadState {
         .ready
     }
 }
@@ -169,11 +317,27 @@ struct AdMobBannerAdProvider: BannerAdProviding {
     }
 
     var bannerAdUnitID: String {
-        configuration.homeBannerAdUnitID
+        AdPlacementPolicy.current().isEnabled(.homeBanner) ? configuration.homeBannerAdUnitID : ""
     }
 
     func currentBannerState() async -> AdLoadState {
-        configuration.homeBannerAdUnitID.isEmpty ? .unavailable : .ready
+        bannerAdUnitID.isEmpty ? .unavailable : .ready
+    }
+}
+
+struct AdMobNativeAdProvider: NativeAdProviding {
+    let configuration: AdMobRuntimeConfiguration
+
+    init(configuration: AdMobRuntimeConfiguration = .current()) {
+        self.configuration = configuration
+    }
+
+    var nativeAdUnitID: String {
+        configuration.nativeAdUnitID
+    }
+
+    func currentNativeState() async -> AdLoadState {
+        configuration.nativeAdUnitID.isEmpty ? .unavailable : .ready
     }
 }
 
@@ -185,6 +349,9 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
     }
 
     func currentRewardedState() async -> AdLoadState {
+        guard AdPlacementPolicy.current().isEnabled(.rewardedSave) else {
+            return .unavailable
+        }
         #if canImport(GoogleMobileAds)
         return await AdMobRewardedAdManager.shared.currentState(
             adUnitID: configuration.rewardedSaveAdUnitID
@@ -195,6 +362,9 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
     }
 
     func preloadRewardedAd() async -> AdLoadState {
+        guard AdPlacementPolicy.current().isEnabled(.rewardedSave) else {
+            return .unavailable
+        }
         #if canImport(GoogleMobileAds)
         if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "preload") {
             return .unavailable
@@ -211,6 +381,9 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
     }
 
     func retryRewardedAdNow() async -> AdLoadState {
+        guard AdPlacementPolicy.current().isEnabled(.rewardedSave) else {
+            return .unavailable
+        }
         #if canImport(GoogleMobileAds)
         if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "retry") {
             return .unavailable
@@ -228,6 +401,9 @@ struct AdMobRewardedAdProvider: RewardedAdProviding {
     }
 
     func showRewardedAd() async -> RewardedAdShowResult {
+        guard AdPlacementPolicy.current().isEnabled(.rewardedSave) else {
+            return .unavailable
+        }
         #if canImport(GoogleMobileAds)
         if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "rewarded", action: "show") {
             return .unavailable
@@ -253,6 +429,10 @@ struct AdMobSessionEndAdProvider: SessionEndAdProviding {
 
     func preloadSessionEndAd() async {
         #if canImport(GoogleMobileAds)
+        let policy = AdPlacementPolicy.current()
+        guard policy.isEnabled(.startInterstitial) || policy.isEnabled(.sessionEndInterstitial) else {
+            return
+        }
         if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "interstitial", action: "preload") {
             return
         }
@@ -265,17 +445,42 @@ struct AdMobSessionEndAdProvider: SessionEndAdProviding {
 
     func showSessionEndAd(reason: SessionEndAdReason) async {
         #if canImport(GoogleMobileAds)
+        let placement = adPlacement(for: reason)
+        let policy = AdPlacementPolicy.current()
+        guard await AdPlacementFrequencyLimiter.shared.canPresent(
+            placement,
+            policy: policy
+        ) else {
+            AppLogger.info(
+                "Interstitial ad skipped by placement policy",
+                category: .ads,
+                metadata: ["placement": placement.rawValue]
+            )
+            return
+        }
         if await AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "interstitial", action: "show") {
             return
         }
         guard await AdMobBootstrapper.ensureReadyForAds() else {
             return
         }
-        await AdMobInterstitialAdManager.shared.showIfAvailable(
+        let didPresent = await AdMobInterstitialAdManager.shared.showIfAvailable(
             adUnitID: configuration.sessionEndInterstitialAdUnitID,
             reason: reason
         )
+        if didPresent {
+            await AdPlacementFrequencyLimiter.shared.recordPresentation(placement)
+        }
         #endif
+    }
+
+    private func adPlacement(for reason: SessionEndAdReason) -> AdPlacementKind {
+        switch reason {
+        case .startingEncoding:
+            return .startInterstitial
+        case .completedSave, .cancelledEncoding, .failedEncoding:
+            return .sessionEndInterstitial
+        }
     }
 }
 
@@ -372,6 +577,67 @@ final class AdMobConsentManager {
         return didStartMobileAds
     }
 
+    func presentPrivacyOptionsIfAvailable() async -> Bool {
+        #if canImport(UserMessagingPlatform)
+        refreshConsentStatusIfNeeded()
+        do {
+            try await ConsentForm.presentPrivacyOptionsForm(
+                from: AdMobRootViewControllerProvider.topViewController()
+            )
+            updateConsentState()
+            startMobileAdsIfAllowed()
+            AppLogger.info("AdMob privacy options form presented", category: .ads)
+            return true
+        } catch {
+            lastErrorDescription = error.localizedDescription
+            AppLogger.warning(
+                "AdMob privacy options form unavailable",
+                category: .ads,
+                metadata: ["error": error.localizedDescription]
+            )
+            return false
+        }
+        #else
+        return false
+        #endif
+    }
+
+    var privacyOptionsStatusText: String {
+        #if canImport(UserMessagingPlatform)
+        switch ConsentInformation.shared.privacyOptionsRequirementStatus {
+        case .required:
+            return "Required"
+        case .notRequired:
+            return "Not required"
+        case .unknown:
+            return "Checking"
+        @unknown default:
+            return "Checking"
+        }
+        #else
+        return "Unavailable"
+        #endif
+    }
+
+    var consentStatusText: String {
+        #if canImport(UserMessagingPlatform)
+        switch ConsentInformation.shared.consentStatus {
+        case .required:
+            return "Required"
+        case .notRequired:
+            return "Not required"
+        case .obtained:
+            return "Obtained"
+        case .unknown:
+            return "Checking"
+        @unknown default:
+            return "Checking"
+        }
+        #else
+        return "Unavailable"
+        #endif
+    }
+
     private func loadAndPresentConsentFormIfRequired() async {
         #if canImport(UserMessagingPlatform)
         guard !isPresentingConsentForm else {
@@ -450,6 +716,8 @@ enum AdMobBootstrapper {
     private static var appOpenAdSuppressedUntil: Date?
     @MainActor
     private static var activeVideoPlaybackSuppressionCount = 0
+    @MainActor
+    private static var activeCriticalFlowSuppressionCount = 0
 
     static func start() {
         #if canImport(GoogleMobileAds)
@@ -496,6 +764,32 @@ enum AdMobBootstrapper {
     }
 
     @MainActor
+    static func beginFullScreenAdSuppression(reason: String) {
+        activeCriticalFlowSuppressionCount += 1
+        AppLogger.info(
+            "Full-screen ads suppressed during critical flow",
+            category: .ads,
+            metadata: [
+                "reason": reason,
+                "count": "\(activeCriticalFlowSuppressionCount)"
+            ]
+        )
+    }
+
+    @MainActor
+    static func endFullScreenAdSuppression(reason: String) {
+        activeCriticalFlowSuppressionCount = max(activeCriticalFlowSuppressionCount - 1, 0)
+        AppLogger.info(
+            "Critical flow ad suppression released",
+            category: .ads,
+            metadata: [
+                "reason": reason,
+                "count": "\(activeCriticalFlowSuppressionCount)"
+            ]
+        )
+    }
+
+    @MainActor
     static func endVideoPlaybackAdSuppression(reason: String) {
         activeVideoPlaybackSuppressionCount = max(activeVideoPlaybackSuppressionCount - 1, 0)
         AppLogger.info(
@@ -510,16 +804,17 @@ enum AdMobBootstrapper {
 
     @MainActor
     static func shouldSkipNonBannerAdRequest(placement: String, action: String) -> Bool {
-        guard activeVideoPlaybackSuppressionCount > 0 else {
+        let suppressionCount = activeVideoPlaybackSuppressionCount + activeCriticalFlowSuppressionCount
+        guard suppressionCount > 0 else {
             return false
         }
         AppLogger.info(
-            "Non-banner ad request skipped during video playback",
+            "Non-banner ad request skipped during protected app flow",
             category: .ads,
             metadata: [
                 "placement": placement,
                 "action": action,
-                "count": "\(activeVideoPlaybackSuppressionCount)"
+                "count": "\(suppressionCount)"
             ]
         )
         return true
@@ -527,6 +822,11 @@ enum AdMobBootstrapper {
 
     static func showAppOpenAdIfAvailable() async {
         #if canImport(GoogleMobileAds)
+        let policy = AdPlacementPolicy.current()
+        guard await AdPlacementFrequencyLimiter.shared.canPresent(.appOpen, policy: policy) else {
+            AppLogger.info("App open ad skipped by placement policy", category: .ads)
+            return
+        }
         if await shouldSkipNonBannerAdRequest(placement: "appOpen", action: "showAppOpen") {
             return
         }
@@ -540,13 +840,16 @@ enum AdMobBootstrapper {
             return
         }
         AppLogger.info("App open ad show requested", category: .ads)
-        await AdMobAppOpenAdManager.shared.showIfAvailable(adUnitID: configuration.appOpenAdUnitID)
+        let didPresent = await AdMobAppOpenAdManager.shared.showIfAvailable(adUnitID: configuration.appOpenAdUnitID)
+        if didPresent {
+            await AdPlacementFrequencyLimiter.shared.recordPresentation(.appOpen)
+        }
         #endif
     }
 
     @MainActor
     private static var isAppOpenAdSuppressed: Bool {
-        if activeVideoPlaybackSuppressionCount > 0 {
+        if activeVideoPlaybackSuppressionCount + activeCriticalFlowSuppressionCount > 0 {
             return true
         }
         guard let until = appOpenAdSuppressedUntil else {
@@ -578,21 +881,28 @@ enum AdMobBootstrapper {
             return
         }
         let configuration = AdMobRuntimeConfiguration.current()
+        let policy = AdPlacementPolicy.current()
         AppLogger.info(
             "AdMob preload started",
             category: .ads,
             metadata: [
                 "appOpen": configuration.appOpenAdUnitID,
                 "banner": configuration.homeBannerAdUnitID,
+                "native": configuration.nativeAdUnitID,
                 "rewarded": configuration.rewardedSaveAdUnitID,
                 "interstitial": configuration.sessionEndInterstitialAdUnitID
             ]
         )
-        if !configuration.appOpenAdUnitID.isEmpty {
+        if policy.isEnabled(.appOpen),
+           !configuration.appOpenAdUnitID.isEmpty {
             await AdMobAppOpenAdManager.shared.loadIfNeeded(adUnitID: configuration.appOpenAdUnitID)
         }
-        _ = await AdMobInterstitialAdManager.shared.loadIfNeeded(adUnitID: configuration.sessionEndInterstitialAdUnitID)
-        _ = await AdMobRewardedAdManager.shared.loadIfNeeded(adUnitID: configuration.rewardedSaveAdUnitID)
+        if policy.isEnabled(.startInterstitial) || policy.isEnabled(.sessionEndInterstitial) {
+            _ = await AdMobInterstitialAdManager.shared.loadIfNeeded(adUnitID: configuration.sessionEndInterstitialAdUnitID)
+        }
+        if policy.isEnabled(.rewardedSave) {
+            _ = await AdMobRewardedAdManager.shared.loadIfNeeded(adUnitID: configuration.rewardedSaveAdUnitID)
+        }
     }
     #endif
 }
@@ -654,10 +964,64 @@ struct AdMobBannerSlotView: View {
     }
 }
 
+struct AdMobNativeAdSlotView: View {
+    let adUnitID: String
+    var displayScale: CGFloat = 1
+    var title: String = "Sponsored"
+
+    var body: some View {
+        let clampedScale = min(max(displayScale, 0.72), 1)
+        ZStack {
+            nativeSlotPlaceholder
+            #if canImport(GoogleMobileAds)
+            AdMobNativeAdRepresentable(adUnitID: adUnitID)
+                .frame(height: 76)
+            #endif
+        }
+        .frame(maxWidth: .infinity, minHeight: 76 * clampedScale, maxHeight: 76 * clampedScale)
+        .scaleEffect(clampedScale)
+        .accessibilityLabel("Native ad")
+    }
+
+    private var nativeSlotPlaceholder: some View {
+        HStack(spacing: 10) {
+            Text("Ad")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Color.black.opacity(0.72))
+                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.black.opacity(0.74))
+                Text("Loading")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(Color.black.opacity(0.54))
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, minHeight: 76, maxHeight: 76)
+        .background(Color.white.opacity(0.96))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .stroke(TaptionTheme.accent.opacity(0.45), lineWidth: 1)
+        )
+    }
+}
+
 #if canImport(GoogleMobileAds)
 private enum AdMobRequestFactory {
     static func makeRequest() -> Request {
-        Request()
+        let request = Request()
+        let extras = Extras()
+        extras.additionalParameters = ["npa": "1"]
+        request.register(extras)
+        return request
     }
 }
 
@@ -848,6 +1212,206 @@ private struct AdMobBannerRepresentable: UIViewRepresentable {
             )
             loadedAdUnitID = ""
             scheduleFillRetry(for: bannerView, adUnitID: adUnitID)
+        }
+    }
+}
+
+private struct AdMobNativeAdRepresentable: UIViewRepresentable {
+    let adUnitID: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> NativeAdView {
+        let view = NativeAdView()
+        context.coordinator.configure(view)
+        context.coordinator.loadIfPossible(adUnitID: adUnitID, into: view)
+        return view
+    }
+
+    func updateUIView(_ view: NativeAdView, context: Context) {
+        context.coordinator.configure(view)
+        context.coordinator.loadIfPossible(adUnitID: adUnitID, into: view)
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, AdLoaderDelegate, NativeAdLoaderDelegate {
+        private weak var nativeAdView: NativeAdView?
+        private var loadedAdUnitID = ""
+        private var adLoader: AdLoader?
+        private var retryWorkItem: DispatchWorkItem?
+        private var retryCount = 0
+
+        private weak var headlineLabel: UILabel?
+        private weak var bodyLabel: UILabel?
+        private weak var callToActionButton: UIButton?
+        private weak var advertiserLabel: UILabel?
+
+        func configure(_ view: NativeAdView) {
+            guard nativeAdView !== view else {
+                return
+            }
+
+            view.subviews.forEach { $0.removeFromSuperview() }
+            view.backgroundColor = UIColor.white.withAlphaComponent(0.96)
+            view.layer.cornerRadius = 4
+            view.clipsToBounds = true
+
+            let adLabel = UILabel()
+            adLabel.text = "Ad"
+            adLabel.font = .systemFont(ofSize: 11, weight: .bold)
+            adLabel.textAlignment = .center
+            adLabel.textColor = .white
+            adLabel.backgroundColor = UIColor.black.withAlphaComponent(0.72)
+            adLabel.layer.cornerRadius = 4
+            adLabel.clipsToBounds = true
+            adLabel.translatesAutoresizingMaskIntoConstraints = false
+
+            let headlineLabel = UILabel()
+            headlineLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+            headlineLabel.textColor = UIColor.black.withAlphaComponent(0.82)
+            headlineLabel.numberOfLines = 1
+
+            let bodyLabel = UILabel()
+            bodyLabel.font = .systemFont(ofSize: 11, weight: .medium)
+            bodyLabel.textColor = UIColor.black.withAlphaComponent(0.58)
+            bodyLabel.numberOfLines = 1
+
+            let advertiserLabel = UILabel()
+            advertiserLabel.font = .systemFont(ofSize: 10, weight: .medium)
+            advertiserLabel.textColor = UIColor.black.withAlphaComponent(0.46)
+            advertiserLabel.numberOfLines = 1
+
+            let textStack = UIStackView(arrangedSubviews: [headlineLabel, bodyLabel, advertiserLabel])
+            textStack.axis = .vertical
+            textStack.spacing = 2
+            textStack.alignment = .fill
+            textStack.translatesAutoresizingMaskIntoConstraints = false
+
+            let callToActionButton = UIButton(type: .system)
+            callToActionButton.titleLabel?.font = .systemFont(ofSize: 12, weight: .semibold)
+            var callToActionConfiguration = UIButton.Configuration.filled()
+            callToActionConfiguration.baseForegroundColor = .white
+            callToActionConfiguration.baseBackgroundColor = UIColor(red: 0.18, green: 0.55, blue: 1.0, alpha: 1)
+            callToActionConfiguration.cornerStyle = .small
+            callToActionConfiguration.contentInsets = NSDirectionalEdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10)
+            callToActionButton.configuration = callToActionConfiguration
+            callToActionButton.clipsToBounds = true
+            callToActionButton.isUserInteractionEnabled = false
+            callToActionButton.translatesAutoresizingMaskIntoConstraints = false
+
+            let row = UIStackView(arrangedSubviews: [adLabel, textStack, callToActionButton])
+            row.axis = .horizontal
+            row.alignment = .center
+            row.spacing = 10
+            row.translatesAutoresizingMaskIntoConstraints = false
+
+            view.addSubview(row)
+            NSLayoutConstraint.activate([
+                row.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 12),
+                row.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -12),
+                row.topAnchor.constraint(equalTo: view.topAnchor, constant: 10),
+                row.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -10),
+                adLabel.widthAnchor.constraint(equalToConstant: 32),
+                adLabel.heightAnchor.constraint(equalToConstant: 24),
+                callToActionButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 70)
+            ])
+
+            view.headlineView = headlineLabel
+            view.bodyView = bodyLabel
+            view.callToActionView = callToActionButton
+            view.advertiserView = advertiserLabel
+
+            self.nativeAdView = view
+            self.headlineLabel = headlineLabel
+            self.bodyLabel = bodyLabel
+            self.callToActionButton = callToActionButton
+            self.advertiserLabel = advertiserLabel
+        }
+
+        func loadIfPossible(adUnitID: String, into view: NativeAdView) {
+            nativeAdView = view
+
+            guard !adUnitID.isEmpty else {
+                AppLogger.warning("Native ad load skipped because ad unit is empty", category: .ads)
+                return
+            }
+
+            guard AdMobConsentManager.shared.canRequestAds else {
+                scheduleRetry(adUnitID: adUnitID)
+                return
+            }
+
+            guard loadedAdUnitID != adUnitID else {
+                return
+            }
+
+            guard let rootController = AdMobRootViewControllerProvider.topViewController() else {
+                AppLogger.warning("Native ad root view controller missing; scheduling retry", category: .ads)
+                scheduleRetry(adUnitID: adUnitID)
+                return
+            }
+
+            loadedAdUnitID = adUnitID
+            retryWorkItem?.cancel()
+            retryWorkItem = nil
+            retryCount = 0
+
+            let loader = AdLoader(
+                adUnitID: adUnitID,
+                rootViewController: rootController,
+                adTypes: [.native],
+                options: nil
+            )
+            loader.delegate = self
+            adLoader = loader
+            AppLogger.info("Native ad load requested", category: .ads, metadata: ["adUnit": adUnitID])
+            loader.load(AdMobRequestFactory.makeRequest())
+        }
+
+        func adLoader(_ adLoader: AdLoader, didReceive nativeAd: NativeAd) {
+            guard let view = nativeAdView else {
+                return
+            }
+
+            nativeAd.rootViewController = AdMobRootViewControllerProvider.topViewController()
+            headlineLabel?.text = nativeAd.headline ?? "Sponsored"
+            bodyLabel?.text = nativeAd.body ?? nativeAd.advertiser ?? "Recommended"
+            advertiserLabel?.text = nativeAd.advertiser
+            advertiserLabel?.isHidden = nativeAd.advertiser == nil
+            callToActionButton?.setTitle(nativeAd.callToAction ?? "Open", for: .normal)
+            view.nativeAd = nativeAd
+            AppLogger.info("Native ad loaded", category: .ads)
+        }
+
+        func adLoader(_ adLoader: AdLoader, didFailToReceiveAdWithError error: Error) {
+            AppLogger.error(
+                "Native ad failed to load",
+                category: .ads,
+                metadata: AdMobErrorMetadata.make(error: error, adUnitID: loadedAdUnitID)
+            )
+            loadedAdUnitID = ""
+            scheduleRetry(adUnitID: adLoader.adUnitID)
+        }
+
+        private func scheduleRetry(adUnitID: String) {
+            guard retryCount < 12,
+                  !adUnitID.isEmpty else {
+                return
+            }
+            retryWorkItem?.cancel()
+            retryCount += 1
+            let delay = min(30, retryCount * 2)
+            let workItem = DispatchWorkItem { [weak self] in
+                guard let self,
+                      let view = self.nativeAdView else {
+                    return
+                }
+                self.loadIfPossible(adUnitID: adUnitID, into: view)
+            }
+            retryWorkItem = workItem
+            DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(delay), execute: workItem)
         }
     }
 }
@@ -1289,13 +1853,13 @@ final class AdMobInterstitialAdManager: NSObject, FullScreenContentDelegate {
         }
     }
 
-    func showIfAvailable(adUnitID: String, reason: SessionEndAdReason) async {
+    func showIfAvailable(adUnitID: String, reason: SessionEndAdReason) async -> Bool {
         guard !AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "interstitial", action: "show") else {
-            return
+            return false
         }
         guard !isShowing else {
             AppLogger.info("Interstitial ad show skipped because another ad is showing", category: .ads)
-            return
+            return false
         }
 
         if preparedAd == nil || preparedAdUnitID != adUnitID {
@@ -1309,7 +1873,7 @@ final class AdMobInterstitialAdManager: NSObject, FullScreenContentDelegate {
                 category: .ads,
                 metadata: ["reason": reason.rawValue]
             )
-            return
+            return false
         }
 
         AppLogger.info(
@@ -1322,6 +1886,7 @@ final class AdMobInterstitialAdManager: NSObject, FullScreenContentDelegate {
         isShowing = true
         ad.fullScreenContentDelegate = self
         ad.present(from: rootViewController)
+        return true
     }
 
     func adDidDismissFullScreenContent(_ ad: any FullScreenPresentingAd) {
@@ -1400,13 +1965,13 @@ final class AdMobAppOpenAdManager: NSObject, FullScreenContentDelegate {
         }
     }
 
-    func showIfAvailable(adUnitID: String) async {
+    func showIfAvailable(adUnitID: String) async -> Bool {
         guard !AdMobBootstrapper.shouldSkipNonBannerAdRequest(placement: "appOpen", action: "show") else {
-            return
+            return false
         }
         guard !isShowing else {
             AppLogger.info("App open ad show skipped because another app open ad is showing", category: .ads)
-            return
+            return false
         }
 
         if isLoading {
@@ -1421,7 +1986,7 @@ final class AdMobAppOpenAdManager: NSObject, FullScreenContentDelegate {
               isAdAvailable(for: adUnitID),
               let rootViewController = AdMobRootViewControllerProvider.topViewController() else {
             AppLogger.warning("App open ad show unavailable", category: .ads)
-            return
+            return false
         }
 
         AppLogger.info("App open ad presenting", category: .ads)
@@ -1431,6 +1996,7 @@ final class AdMobAppOpenAdManager: NSObject, FullScreenContentDelegate {
         isShowing = true
         appOpenAd.fullScreenContentDelegate = self
         appOpenAd.present(from: rootViewController)
+        return true
     }
 
     private func waitForCurrentLoad(adUnitID: String) async {

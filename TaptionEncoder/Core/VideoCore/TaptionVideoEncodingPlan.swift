@@ -79,6 +79,467 @@ struct TaptionVideoOutputPolicy: Codable, Equatable {
 
 typealias TaptionHEVCOutputPolicy = TaptionVideoOutputPolicy
 
+struct TaptionSourcePreservationRequirements: Codable, Equatable {
+    var displaySize: TaptionPixelSize?
+    var frameRate: TaptionRationalFrameRate?
+    var targetBitrate: Int?
+    var color: TaptionColorDescription?
+    var rotationDegrees: Int?
+    var duration: TimeInterval?
+    var expectsAudio: Bool
+    var audioSampleRate: Double?
+    var audioChannelCount: Int?
+
+    init(
+        displaySize: TaptionPixelSize? = nil,
+        frameRate: TaptionRationalFrameRate? = nil,
+        targetBitrate: Int? = nil,
+        color: TaptionColorDescription? = nil,
+        rotationDegrees: Int? = nil,
+        duration: TimeInterval? = nil,
+        expectsAudio: Bool = false,
+        audioSampleRate: Double? = nil,
+        audioChannelCount: Int? = nil
+    ) {
+        self.displaySize = displaySize
+        self.frameRate = frameRate
+        self.targetBitrate = targetBitrate
+        self.color = color
+        self.rotationDegrees = rotationDegrees
+        self.duration = duration
+        self.expectsAudio = expectsAudio
+        self.audioSampleRate = audioSampleRate
+        self.audioChannelCount = audioChannelCount
+    }
+
+    init(videoTrack: TaptionVideoTrackInfo) {
+        self.init(
+            displaySize: videoTrack.displaySize,
+            frameRate: videoTrack.nominalFrameRate,
+            targetBitrate: videoTrack.estimatedBitrate,
+            color: videoTrack.color,
+            rotationDegrees: videoTrack.rotationDegrees
+        )
+    }
+
+    init(asset: TaptionVideoAsset) {
+        self.init(
+            displaySize: asset.videoTrack?.displaySize,
+            frameRate: asset.videoTrack?.nominalFrameRate,
+            targetBitrate: asset.videoTrack?.estimatedBitrate,
+            color: asset.videoTrack?.color,
+            rotationDegrees: asset.videoTrack?.rotationDegrees,
+            duration: asset.duration,
+            expectsAudio: !asset.audioTracks.isEmpty,
+            audioSampleRate: asset.audioTracks.first?.sampleRate,
+            audioChannelCount: asset.audioTracks.first?.channelCount
+        )
+    }
+
+    func missingFields(in outputPolicy: TaptionVideoOutputPolicy) -> [String] {
+        guard outputPolicy.qualityPolicy == .preserveSourceVisuals else {
+            return []
+        }
+
+        let options = outputPolicy.advancedOptions
+        var missing: [String] = []
+        if displaySize != nil, options.resizeTo == nil {
+            missing.append("resolution")
+        }
+        if frameRate != nil, options.frameRate == nil {
+            missing.append("frame rate")
+        }
+        if targetBitrate != nil, options.targetBitrate == nil {
+            missing.append("bitrate")
+        }
+        if color != nil, options.color == nil {
+            missing.append("color metadata")
+        }
+        if rotationDegrees != nil, options.rotationDegrees == nil {
+            missing.append("orientation")
+        }
+        return missing
+    }
+}
+
+struct TaptionSourcePreservingOutputVerificationReport: Equatable {
+    var failures: [String]
+    var warnings: [String]
+    var metadata: [String: String]
+
+    var isPassing: Bool {
+        failures.isEmpty
+    }
+}
+
+enum TaptionSourcePreservingVerificationError: Error, Equatable {
+    case failed(String)
+}
+
+extension TaptionSourcePreservingVerificationError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .failed(let message):
+            return message
+        }
+    }
+}
+
+struct TaptionVisualQualitySample: Equatable {
+    var width: Int
+    var height: Int
+    var averageRed: Double
+    var averageGreen: Double
+    var averageBlue: Double
+    var averageLuma: Double
+    var lumaStandardDeviation: Double
+    var nonBlackRatio: Double
+
+    init(
+        width: Int,
+        height: Int,
+        averageRed: Double,
+        averageGreen: Double,
+        averageBlue: Double,
+        averageLuma: Double,
+        lumaStandardDeviation: Double,
+        nonBlackRatio: Double
+    ) {
+        self.width = width
+        self.height = height
+        self.averageRed = averageRed
+        self.averageGreen = averageGreen
+        self.averageBlue = averageBlue
+        self.averageLuma = averageLuma
+        self.lumaStandardDeviation = lumaStandardDeviation
+        self.nonBlackRatio = nonBlackRatio
+    }
+}
+
+struct TaptionSourcePreservingVisualQualityReport: Equatable {
+    var failures: [String]
+    var warnings: [String]
+    var metadata: [String: String]
+
+    var isPassing: Bool {
+        failures.isEmpty
+    }
+}
+
+enum TaptionSourcePreservingVisualQualityComparator {
+    static func verify(
+        sourceSample: TaptionVisualQualitySample?,
+        outputSample: TaptionVisualQualitySample
+    ) -> TaptionSourcePreservingVisualQualityReport {
+        var failures: [String] = []
+        var warnings: [String] = []
+        var metadata: [String: String] = [
+            "visualQuality": "checked",
+            "outputVisualSample": sampleString(outputSample)
+        ]
+
+        guard outputSample.width > 0,
+              outputSample.height > 0,
+              outputSample.averageLuma.isFinite,
+              outputSample.lumaStandardDeviation.isFinite else {
+            return TaptionSourcePreservingVisualQualityReport(
+                failures: ["output visual sample was invalid"],
+                warnings: warnings,
+                metadata: metadata
+            )
+        }
+
+        guard let sourceSample else {
+            warnings.append("Source visual sample was unavailable; output visual decodability was verified only.")
+            metadata["sourceVisualSample"] = "unavailable"
+            return TaptionSourcePreservingVisualQualityReport(
+                failures: failures,
+                warnings: warnings,
+                metadata: metadata
+            )
+        }
+
+        metadata["sourceVisualSample"] = sampleString(sourceSample)
+
+        let sourceHasVisibleContrast = sourceSample.lumaStandardDeviation >= 0.035
+        let outputIsFlat = outputSample.lumaStandardDeviation < 0.006
+        if sourceHasVisibleContrast,
+           outputIsFlat {
+            failures.append("visual sample lost source contrast and appears flat")
+        }
+
+        let sourceHasVisibleBrightness = sourceSample.averageLuma >= 0.06
+        let lumaDelta = abs(sourceSample.averageLuma - outputSample.averageLuma)
+        metadata["visualLumaDelta"] = String(format: "%.4f", lumaDelta)
+        if sourceHasVisibleBrightness,
+           lumaDelta > 0.45 {
+            failures.append("visual sample brightness changed too much")
+        }
+
+        let colorDelta = (
+            abs(sourceSample.averageRed - outputSample.averageRed)
+                + abs(sourceSample.averageGreen - outputSample.averageGreen)
+                + abs(sourceSample.averageBlue - outputSample.averageBlue)
+        ) / 3
+        metadata["visualColorDelta"] = String(format: "%.4f", colorDelta)
+        if sourceHasVisibleBrightness,
+           colorDelta > 0.50 {
+            failures.append("visual sample color changed too much")
+        }
+
+        if sourceSample.nonBlackRatio > 0.20,
+           outputSample.nonBlackRatio < 0.02 {
+            failures.append("visual sample collapsed to near-black output")
+        }
+
+        return TaptionSourcePreservingVisualQualityReport(
+            failures: failures,
+            warnings: warnings,
+            metadata: metadata
+        )
+    }
+
+    private static func sampleString(_ sample: TaptionVisualQualitySample) -> String {
+        [
+            "\(sample.width)x\(sample.height)",
+            "rgb:\(String(format: "%.3f", sample.averageRed))/\(String(format: "%.3f", sample.averageGreen))/\(String(format: "%.3f", sample.averageBlue))",
+            "luma:\(String(format: "%.3f", sample.averageLuma))",
+            "sigma:\(String(format: "%.3f", sample.lumaStandardDeviation))",
+            "nonBlack:\(String(format: "%.3f", sample.nonBlackRatio))"
+        ].joined(separator: ",")
+    }
+}
+
+enum TaptionSourcePreservingExecutionAudit {
+    static func validate(plan: TaptionEncodingPlan) throws {
+        guard let requirements = plan.sourcePreservationRequirements else {
+            return
+        }
+        let missingFields = requirements.missingFields(in: plan.outputPolicy)
+        guard missingFields.isEmpty else {
+            throw TaptionSourcePreservingVerificationError.failed(
+                "Source-preserving output plan is incomplete: \(missingFields.joined(separator: ", "))."
+            )
+        }
+    }
+
+    static func logMetadata(for plan: TaptionEncodingPlan) -> [String: String] {
+        guard let requirements = plan.sourcePreservationRequirements else {
+            return ["sourcePreserving": "not-tracked"]
+        }
+
+        let options = plan.outputPolicy.advancedOptions
+        var metadata: [String: String] = [
+            "sourcePreserving": "tracked",
+            "sourcePreservingMissing": requirements.missingFields(in: plan.outputPolicy).joined(separator: "|")
+        ]
+        if let displaySize = options.resizeTo {
+            metadata["preserveResolution"] = "\(displaySize.width)x\(displaySize.height)"
+        }
+        if let frameRate = options.frameRate {
+            metadata["preserveFrameRate"] = "\(frameRate.numerator)/\(frameRate.denominator)"
+        }
+        if let targetBitrate = options.targetBitrate {
+            metadata["preserveBitrate"] = "\(targetBitrate)"
+        }
+        if let color = options.color {
+            metadata["preserveColor"] = "\(color.primaries.rawValue)/\(color.transfer.rawValue)/\(color.matrix.rawValue)/hdr:\(color.isHDR)"
+        }
+        if let rotationDegrees = options.rotationDegrees {
+            metadata["preserveOrientation"] = "\(rotationDegrees)"
+        }
+        return metadata
+    }
+
+    static func verifyOutput(
+        plan: TaptionEncodingPlan,
+        outputAsset: TaptionVideoAsset
+    ) throws -> TaptionSourcePreservingOutputVerificationReport {
+        guard let requirements = plan.sourcePreservationRequirements else {
+            return TaptionSourcePreservingOutputVerificationReport(
+                failures: [],
+                warnings: ["Source preservation requirements were not tracked for this plan."],
+                metadata: ["sourcePreservingOutput": "not-tracked"]
+            )
+        }
+
+        var failures: [String] = []
+        var warnings: [String] = []
+        var metadata: [String: String] = [
+            "sourcePreservingOutput": "checked"
+        ]
+
+        guard let outputTrack = outputAsset.videoTrack else {
+            throw TaptionSourcePreservingVerificationError.failed("Source-preserving output verification failed: missing output video track.")
+        }
+
+        if let expectedSize = requirements.displaySize {
+            metadata["expectedResolution"] = "\(expectedSize.width)x\(expectedSize.height)"
+            metadata["actualResolution"] = "\(outputTrack.displaySize.width)x\(outputTrack.displaySize.height)"
+            if !sizesMatch(expectedSize, outputTrack.displaySize) {
+                failures.append("resolution expected \(expectedSize.width)x\(expectedSize.height) but got \(outputTrack.displaySize.width)x\(outputTrack.displaySize.height)")
+            }
+        }
+
+        if let expectedFrameRate = requirements.frameRate {
+            metadata["expectedFrameRate"] = frameRateString(expectedFrameRate)
+            if let actualFrameRate = outputTrack.nominalFrameRate {
+                metadata["actualFrameRate"] = frameRateString(actualFrameRate)
+                if !frameRatesMatch(expectedFrameRate, actualFrameRate) {
+                    failures.append("frame rate expected \(frameRateString(expectedFrameRate)) but got \(frameRateString(actualFrameRate))")
+                }
+            } else {
+                failures.append("frame rate metadata was missing from the output")
+            }
+        }
+
+        if let expectedColor = requirements.color {
+            metadata["expectedColor"] = colorString(expectedColor)
+            metadata["actualColor"] = colorString(outputTrack.color)
+            failures += colorFailures(expected: expectedColor, actual: outputTrack.color)
+        }
+
+        if let expectedRotation = requirements.rotationDegrees {
+            metadata["expectedOrientation"] = "\(expectedRotation)"
+            metadata["actualOrientation"] = "\(outputTrack.rotationDegrees)"
+            let normalizedOrientationPreserved = expectedRotation != 0
+                && requirements.displaySize.map { sizesMatch($0, outputTrack.displaySize) } == true
+            if outputTrack.rotationDegrees != expectedRotation,
+               !normalizedOrientationPreserved {
+                failures.append("orientation expected \(expectedRotation) degrees but got \(outputTrack.rotationDegrees) degrees")
+            }
+        }
+
+        if let expectedDuration = requirements.duration,
+           expectedDuration.isFinite,
+           expectedDuration > 0 {
+            metadata["expectedDuration"] = String(format: "%.3f", expectedDuration)
+            if let actualDuration = outputAsset.duration,
+               actualDuration.isFinite,
+               actualDuration > 0 {
+                metadata["actualDuration"] = String(format: "%.3f", actualDuration)
+                if abs(actualDuration - expectedDuration) > durationTolerance(for: expectedDuration) {
+                    failures.append("duration expected \(String(format: "%.3f", expectedDuration))s but got \(String(format: "%.3f", actualDuration))s")
+                }
+            } else {
+                failures.append("duration metadata was missing from the output")
+            }
+        }
+
+        metadata["expectedAudio"] = requirements.expectsAudio ? "yes" : "no"
+        metadata["actualAudioTracks"] = "\(outputAsset.audioTracks.count)"
+        if requirements.expectsAudio {
+            guard let firstAudioTrack = outputAsset.audioTracks.first else {
+                failures.append("audio track was missing from the output")
+                let report = TaptionSourcePreservingOutputVerificationReport(
+                    failures: failures,
+                    warnings: warnings,
+                    metadata: metadata
+                )
+                try throwIfNeeded(report)
+                return report
+            }
+
+            if let expectedSampleRate = requirements.audioSampleRate,
+               let actualSampleRate = firstAudioTrack.sampleRate {
+                metadata["expectedAudioSampleRate"] = "\(Int(expectedSampleRate.rounded()))"
+                metadata["actualAudioSampleRate"] = "\(Int(actualSampleRate.rounded()))"
+                if abs(actualSampleRate - expectedSampleRate) > 1 {
+                    failures.append("audio sample rate expected \(Int(expectedSampleRate)) Hz but got \(Int(actualSampleRate)) Hz")
+                }
+            }
+            if let expectedChannelCount = requirements.audioChannelCount,
+               let actualChannelCount = firstAudioTrack.channelCount {
+                metadata["expectedAudioChannels"] = "\(expectedChannelCount)"
+                metadata["actualAudioChannels"] = "\(actualChannelCount)"
+                if actualChannelCount != expectedChannelCount {
+                    failures.append("audio channels expected \(expectedChannelCount) but got \(actualChannelCount)")
+                }
+            }
+        } else if !outputAsset.audioTracks.isEmpty {
+            warnings.append("Output contains audio even though the source plan did not expect audio.")
+        }
+
+        warnings.append("Visual quality is not bit-for-bit lossless; use fixture or device playback proof for perceptual quality.")
+
+        let report = TaptionSourcePreservingOutputVerificationReport(
+            failures: failures,
+            warnings: warnings,
+            metadata: metadata
+        )
+        try throwIfNeeded(report)
+        return report
+    }
+
+    private static func throwIfNeeded(_ report: TaptionSourcePreservingOutputVerificationReport) throws {
+        guard report.isPassing else {
+            throw TaptionSourcePreservingVerificationError.failed(
+                "Source-preserving output verification failed: \(report.failures.joined(separator: "; "))."
+            )
+        }
+    }
+
+    private static func sizesMatch(_ expected: TaptionPixelSize, _ actual: TaptionPixelSize) -> Bool {
+        abs(expected.width - actual.width) <= 1
+            && abs(expected.height - actual.height) <= 1
+    }
+
+    private static func frameRatesMatch(
+        _ expected: TaptionRationalFrameRate,
+        _ actual: TaptionRationalFrameRate
+    ) -> Bool {
+        let expectedValue = expected.value
+        let actualValue = actual.value
+        guard expectedValue.isFinite,
+              actualValue.isFinite,
+              expectedValue > 0,
+              actualValue > 0 else {
+            return false
+        }
+        return abs(expectedValue - actualValue) <= max(0.05, expectedValue * 0.0025)
+    }
+
+    private static func durationTolerance(for duration: TimeInterval) -> TimeInterval {
+        max(0.5, duration * 0.02)
+    }
+
+    private static func colorFailures(
+        expected: TaptionColorDescription,
+        actual: TaptionColorDescription
+    ) -> [String] {
+        var failures: [String] = []
+        if expected.isHDR != actual.isHDR {
+            failures.append("HDR/SDR expected \(expected.isHDR ? "HDR" : "SDR") but got \(actual.isHDR ? "HDR" : "SDR")")
+        }
+        if expected.primaries != .unknown,
+           actual.primaries != expected.primaries {
+            failures.append("color primaries expected \(expected.primaries.rawValue) but got \(actual.primaries.rawValue)")
+        }
+        if expected.transfer != .unknown,
+           actual.transfer != expected.transfer {
+            failures.append("color transfer expected \(expected.transfer.rawValue) but got \(actual.transfer.rawValue)")
+        }
+        if expected.matrix != .unknown,
+           actual.matrix != expected.matrix {
+            failures.append("color matrix expected \(expected.matrix.rawValue) but got \(actual.matrix.rawValue)")
+        }
+        if let expectedBitDepth = expected.bitDepth,
+           let actualBitDepth = actual.bitDepth,
+           expectedBitDepth != actualBitDepth {
+            failures.append("bit depth expected \(expectedBitDepth) but got \(actualBitDepth)")
+        }
+        return failures
+    }
+
+    private static func frameRateString(_ frameRate: TaptionRationalFrameRate) -> String {
+        "\(frameRate.numerator)/\(frameRate.denominator)"
+    }
+
+    private static func colorString(_ color: TaptionColorDescription) -> String {
+        "\(color.primaries.rawValue)/\(color.transfer.rawValue)/\(color.matrix.rawValue)/hdr:\(color.isHDR)"
+    }
+}
+
 enum TaptionSourcePreservingOutputPolicyResolver {
     static func resolvedPolicy(
         for asset: TaptionVideoAsset,
@@ -184,6 +645,7 @@ struct TaptionEncodingPlan: Identifiable, Codable, Equatable {
     var codecExecutionKind: TaptionCodecRouteExecutionKind?
     var videoCommandPlan: SW_FFmpegCommandPlan?
     var audioPlan: TaptionAudioTranscodePlan?
+    var sourcePreservationRequirements: TaptionSourcePreservationRequirements?
     var savePolicy: TaptionSavePolicy
     var encoderSelection: TaptionEncoderSelection
     var estimatedOutputBytes: Int64?
@@ -199,6 +661,7 @@ struct TaptionEncodingPlan: Identifiable, Codable, Equatable {
         codecExecutionKind: TaptionCodecRouteExecutionKind? = nil,
         videoCommandPlan: SW_FFmpegCommandPlan? = nil,
         audioPlan: TaptionAudioTranscodePlan? = nil,
+        sourcePreservationRequirements: TaptionSourcePreservationRequirements? = nil,
         savePolicy: TaptionSavePolicy = TaptionSavePolicy(),
         encoderSelection: TaptionEncoderSelection = TaptionEncoderSelection(),
         estimatedOutputBytes: Int64? = nil,
@@ -213,6 +676,7 @@ struct TaptionEncodingPlan: Identifiable, Codable, Equatable {
         self.codecExecutionKind = codecExecutionKind
         self.videoCommandPlan = videoCommandPlan
         self.audioPlan = audioPlan
+        self.sourcePreservationRequirements = sourcePreservationRequirements
         self.savePolicy = savePolicy
         self.encoderSelection = encoderSelection
         self.estimatedOutputBytes = estimatedOutputBytes
@@ -494,6 +958,9 @@ enum TaptionEncodingPlanner {
             outputPolicy: resolvedOutputPolicy,
             audioPlan: audioPlan
         )
+        let sourcePreservationRequirements = asset.videoTrack == nil
+            ? nil
+            : TaptionSourcePreservationRequirements(asset: asset)
         return TaptionEncodingPlan(
             input: TaptionEncodingInput(kind: .singleAsset, assetID: asset.id),
             outputPolicy: resolvedOutputPolicy,
@@ -501,6 +968,7 @@ enum TaptionEncodingPlanner {
             codecExecutionKind: routeSelection.executionKind,
             videoCommandPlan: videoCommandPlan,
             audioPlan: audioPlan,
+            sourcePreservationRequirements: sourcePreservationRequirements,
             savePolicy: savePolicy,
             encoderSelection: routeSelection.encoderSelection,
             estimatedOutputBytes: estimatedOutputBytes(

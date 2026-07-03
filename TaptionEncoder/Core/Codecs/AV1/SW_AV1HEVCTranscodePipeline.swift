@@ -98,6 +98,7 @@ final class SW_AV1AudioWriterContext: @unchecked Sendable {
             stateLock.unlock()
             guard !shouldAbort else { return }
 
+            let waitStartedAt = ProcessInfo.processInfo.systemUptime
             while !audioInput.isReadyForMoreMediaData {
                 stateLock.lock()
                 let cancelled = cancellationRequested || pendingError != nil
@@ -105,6 +106,9 @@ final class SW_AV1AudioWriterContext: @unchecked Sendable {
                 backpressureWaitMicrosecondsStorage += 2_000
                 stateLock.unlock()
                 if cancelled {
+                    return
+                }
+                if ProcessInfo.processInfo.systemUptime - waitStartedAt > 0.35 {
                     return
                 }
                 usleep(2_000)

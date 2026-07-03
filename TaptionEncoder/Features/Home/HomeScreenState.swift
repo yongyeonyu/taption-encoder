@@ -1114,6 +1114,111 @@ struct HomeEncodingError: Equatable {
     var message: String
 }
 
+enum HomeBackgroundReliabilityPresenter {
+    static func message(
+        currentOSMajorVersion: Int,
+        backgroundEncodingMinimumMajorVersion: Int,
+        liveActivitiesEnabled: Bool
+    ) -> String {
+        if currentOSMajorVersion >= backgroundEncodingMinimumMajorVersion {
+            if liveActivitiesEnabled {
+                return "Background encoding can continue after lock. Progress appears on the Lock Screen and Dynamic Island."
+            }
+            return "Background encoding can continue after lock. Turn on Live Activities in iOS settings to show Lock Screen progress."
+        }
+        return "Keep Taption Encoder open while encoding on iOS/iPadOS 18-25. Locking the screen or leaving the app can pause the job."
+    }
+}
+
+enum HomeErrorPresenter {
+    static func error(
+        title: String,
+        summary: String,
+        recovery: String,
+        error: Error
+    ) -> HomeEncodingError {
+        HomeEncodingError(
+            title: title,
+            message: message(
+                summary: summary,
+                cause: causeDescription(for: error),
+                recovery: recovery,
+                diagnostic: diagnosticDescription(for: error)
+            )
+        )
+    }
+
+    static func messageError(
+        title: String,
+        summary: String,
+        recovery: String,
+        diagnostic: String
+    ) -> HomeEncodingError {
+        HomeEncodingError(
+            title: title,
+            message: message(
+                summary: summary,
+                cause: "The selected source could not be imported by iOS.",
+                recovery: recovery,
+                diagnostic: normalizedDiagnostic(diagnostic)
+            )
+        )
+    }
+
+    static func cardDetail(
+        summary: String,
+        recovery: String,
+        error: Error
+    ) -> String {
+        "\(summary) \(recovery) Log: \(diagnosticDescription(for: error))"
+    }
+
+    static func cardDetail(
+        summary: String,
+        recovery: String,
+        diagnostic: String
+    ) -> String {
+        "\(summary) \(recovery) Log: \(normalizedDiagnostic(diagnostic))"
+    }
+
+    private static func message(
+        summary: String,
+        cause: String,
+        recovery: String,
+        diagnostic: String
+    ) -> String {
+        [
+            summary,
+            "Cause: \(cause)",
+            "Fix: \(recovery)",
+            "Log: \(diagnostic)"
+        ].joined(separator: "\n")
+    }
+
+    private static func causeDescription(for error: Error) -> String {
+        switch error {
+        case is TaptionVideoCoreError:
+            return "The selected route, source, or output path is not executable in this build."
+        case is StarWalletError:
+            return "The Star balance could not be updated before encoding started."
+        default:
+            return "iOS or the selected provider returned an error."
+        }
+    }
+
+    private static func diagnosticDescription(for error: Error) -> String {
+        let nsError = error as NSError
+        let typeName = String(reflecting: Swift.type(of: error))
+        let message = normalizedDiagnostic(nsError.localizedDescription)
+        return "\(typeName) domain=\(nsError.domain) code=\(nsError.code) message=\(message)"
+    }
+
+    private static func normalizedDiagnostic(_ diagnostic: String) -> String {
+        let trimmed = diagnostic.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "No technical detail was provided." : trimmed
+    }
+}
+
 enum HomeScreenState: Equatable {
     case idle
     case importing(HomeSelectedSource)

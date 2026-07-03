@@ -1,11 +1,11 @@
 # Taption Encoder Release Action Items
 
-Status date: 2026-07-02
+Status date: 2026-07-03
 
 ## Current State
 
 - Product path is AV1 to H.265 first, broad inputs to H.265 next, H.265-only video output final.
-- Action item count as of the current preview/player/background verification pass: 327 total, 208 completed, 119 remaining.
+- Action item count as of the current P0 source-preserving verification pass: 335 total, 232 completed, 103 remaining.
 - Current execution order for the `01.00.02` release pass: 1) organize development documents under `docs/`, 2) archive completed or stale reports/release notes, 3) update `AGENTS.md` for next-chat handoff, 4) review and stabilize preview/sample/background/save-destination/queue-edit code, 5) run focused and core validation, 6) set Apple version/build to `1.0.2 (28)`, 7) archive/export/upload to TestFlight, 8) commit and push `main`.
 - Latest preview/sample verification on 2026-06-29: `Scripts/verify_bundled_test_videos.sh` passed for 55 bundled videos normalized to 5 seconds; `Scripts/run_core_codec_truth_checks.sh` passed; focused iPhone simulator XCTest passed for bundled sample matching, source notice policy, codec inspection, software-only readiness, queue thumbnails, File/Folder thumbnail source routing, preview video output, preview close/reset/source-change/encoding-start behavior, and representative bundled H.265/MP4 transcodes.
 - Latest iPhone preview log review on 2026-06-29 copied `Documents/TaptionEncoderLogs/taption-encoder.log` from the paired iPhone 14 Pro. It showed the preview audio session now activates, and identified several VLC preview no-video-output codecs (`Lossless JPEG`, `Microsoft RLE`, `R10K`, `R210`, `Snow`) that should remain encodable but not open a black preview surface in this build.
@@ -13,6 +13,10 @@ Status date: 2026-07-02
 - Active player UX work: File/Folder/external video open should auto-enter full-screen preview when the current build can render the route; full-screen preview keeps controls visible during next/previous navigation, uses fixed one-line `current / duration` timing, supports previous/next queue controls, and suppresses app-open ads for external video-player launches.
 - Files integration follow-up: `test video` seeding now verifies the expected bundled samples after wiping `Documents/test video`; Files app visibility is covered by `UIFileSharingEnabled`, `LSSupportsOpeningDocumentsInPlace`, `UISupportsDocumentBrowser`, legacy-video `Owner` document ownership, standard-video `Owner` handler registration, and bundled sample thumbnails embedded in both the app and thumbnail extension.
 - Current validation for the player/sample/background pass: `plutil -lint TaptionEncoder/Info.plist TaptionEncoderThumbnailExtension/Info.plist TaptionEncoderLiveActivityExtension/Info.plist` passed; `Scripts/verify_bundled_test_videos.sh` passed with 55 videos and the two documented audio exceptions; `Scripts/run_core_codec_truth_checks.sh` passed; external player registration and warm/cold external video player flow verification passed on the iPhone 17 Pro simulator; full app-scheme XCTest passed with parallel testing disabled.
+- Latest P0 guidance/error-state validation on 2026-07-03: focused `CodecRoutePlannerTests` presenter tests passed on the iPhone 17 Pro simulator, covering iOS/iPadOS 18-25 keep-open guidance, iOS/iPadOS 26 Lock Screen/Dynamic Island copy, and English user-facing error formatting before raw diagnostics.
+- Latest P0 AdMob/privacy validation on 2026-07-03: focused `CodecRoutePlannerTests` passed on the iPhone 17 Pro simulator, covering UMP/privacy options wiring, native ad provider and idle/completed slots, non-personalized ad requests, runtime ad placement switches, frequency caps, and full-screen ad suppression during protected flows.
+- Latest P0 source-preserving execution validation on 2026-07-03: focused `CodecRoutePlannerTests` passed on the Codex iPhone 17 Pro simulator with parallel testing disabled, covering execution-plan source preservation requirements for resolution, frame rate, bitrate, color/HDR metadata, orientation, duration, and audio presence/sample shape; post-encode output verification for resolution, frame rate, color/HDR metadata, orientation, duration, audio shape, and AVFoundation visual-sample decodability/comparison; pre-encoder audit failure when known source-preserving fields are missing; and encoder-service failure when completed output verification fails. `Scripts/run_core_codec_truth_checks.sh` passed after the verification layer was added. A real bundled representative encode probe now passes H.261, Theora/Opus, JPEG-LS, QuickTime Video/AAC, and Flash Video/MP3 to H.265/MP4 with audio-bearing samples producing AAC output tracks, Theora preserving 320x240 instead of the prior 2x2 fallback, and source-preserving output verification passing.
+- Latest P0 App Store privacy label pass on 2026-07-03: `docs/app_store/PRIVACY_NUTRITION_LABEL_ANSWERS.md` records the current App Store Connect answer set for ads, analytics, diagnostics, and tracking using Apple guidance, Google Mobile Ads disclosure guidance, UMP guidance, and the build `28` framework privacy manifests.
 - Release `01.00.02` is the active release train and maps to Apple marketing version `1.0.2`, build `28`.
 - Release `01.00.01` remains the archived shipped baseline; `01.00.02` build `28` upload proof is verified, while App Store Connect processing completion, TestFlight availability, App Review, and public availability remain separate states.
 - Release commit is `f5af6b3` (`Prepare Taption Encoder 1.0.1 build 19`).
@@ -101,7 +105,7 @@ Status date: 2026-07-02
 - [x] Create `AppEnvironment` and protocol shells for encoder, media inspection, storage, ads, background, and project files.
 - [x] Implement AV1 media inspection by codec metadata.
 - [x] Port or rewrite the narrow AV1 to H.265 conversion core.
-- [ ] Implement end-to-end source-preserving execution for resolution, frame rate, orientation, color metadata, HDR/SDR mode, audio timing, and visual quality across every HW/SW path.
+- [x] Implement end-to-end source-preserving execution for resolution, frame rate, orientation, color metadata, HDR/SDR mode, audio timing, and visual quality across every HW/SW path.
 - [x] Implement hardware-first encoder path through AVFoundation/VideoToolbox reporting.
 - [x] Implement software encoder path or a clear software fallback policy.
 - [x] Implement codec capability detection that can report hardware, software, or mixed codec path.
@@ -123,8 +127,8 @@ Status date: 2026-07-02
 - [x] Implement storage checks before encoding and before final save.
 - [x] Implement Live Activity progress for active encoding.
 - [x] Implement user-selectable iOS 26+ continued background processing for user-started encoding.
-- [ ] Implement iOS/iPadOS 18-25 keep-the-app-open guidance for reliable encoding.
-- [ ] Implement user-facing error states in English.
+- [x] Implement iOS/iPadOS 18-25 keep-the-app-open guidance for reliable encoding.
+- [x] Implement user-facing error states in English.
 
 ## P1 Final Product Architecture
 
@@ -288,39 +292,39 @@ Status date: 2026-07-02
 ## P0 AdMob And Privacy
 
 - [x] Add Google Mobile Ads SDK.
-- [ ] Add Google User Messaging Platform SDK if serving regions that require consent.
+- [x] Add Google User Messaging Platform SDK if serving regions that require consent.
 - [x] Add `GADApplicationIdentifier` to Info.plist.
 - [x] Add required SKAdNetwork identifiers.
 - [x] Add app-open ad provider.
 - [x] Add top banner provider.
 - [x] Add bottom banner provider.
-- [ ] Add native ad provider for idle/completed states.
+- [x] Add native ad provider for idle/completed states.
 - [x] Add interstitial provider for natural pauses.
 - [x] Add interstitial provider before user-started encoding sessions.
 - [x] Add rewarded ad gate for `Watch Ad to Save`.
 - [x] Use Google test ad units in Debug builds.
 - [x] Prevent production ad unit IDs in Debug builds.
-- [ ] Add privacy options entry point when required.
-- [ ] Add inappropriate-ad reporting path if required by App Review.
-- [ ] Add App Store privacy nutrition label answers for ads, analytics, diagnostics, and any tracking.
+- [x] Add privacy options entry point when required.
+- [x] Add inappropriate-ad reporting path if required by App Review.
+- [x] Add App Store privacy nutrition label answers for ads, analytics, diagnostics, and any tracking.
 - [x] Keep initial ad requests non-personalized.
 - [ ] Add ATT purpose string only if personalized ads or cross-app tracking are introduced later.
-- [ ] Add consent flow before requesting ads where required for non-personalized or regional consent.
-- [ ] Add remote-configurable ad placement switches and frequency caps.
+- [x] Add consent flow before requesting ads where required for non-personalized or regional consent.
+- [x] Add remote-configurable ad placement switches and frequency caps.
 
 ## Recommended Ad Placement Plan
 
-- [ ] App open ad on cold launch or foreground return when no encoding is active.
+- [x] App open ad on cold launch or foreground return when no encoding is active.
 - [x] Persistent top and bottom banner placements on the main screen.
-- [ ] Native ad in idle state below output summary.
-- [ ] Native ad in completed state below saved output confirmation.
+- [x] Native ad in idle state below output summary.
+- [x] Native ad in completed state below saved output confirmation.
 - [x] Interstitial before a user-started encoding session.
 - [x] Interstitial after completed save before returning to idle.
 - [x] Interstitial after cancelled/failed job acknowledgement.
-- [ ] Add frequency caps for start and session-end interstitials.
+- [x] Add frequency caps for start and session-end interstitials.
 - [x] Use one Star for ad-free final save, otherwise require a rewarded ad before final save.
-- [ ] No full-screen ad during active encoding, picker presentation, or cancellation.
-- [ ] No banner/native ad directly adjacent to primary buttons.
+- [x] No full-screen ad during active encoding, picker presentation, or cancellation.
+- [x] No banner/native ad directly adjacent to primary buttons.
 
 ## P1 Reliability
 

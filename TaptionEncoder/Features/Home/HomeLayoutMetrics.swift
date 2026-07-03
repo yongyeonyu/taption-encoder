@@ -11,12 +11,18 @@ struct HomeLayoutMetrics {
     var verticalPadding: CGFloat
     var controlHeight: CGFloat
     var filePanelHeight: CGFloat
+    var nativeAdSlotHeight: CGFloat
+    var footerAdSeparationHeight: CGFloat
     var footerExitButtonHeight: CGFloat
     var headerIconSize: CGFloat
     var headerFont: Font
     var buttonFont: Font
 
-    init(size: CGSize, reservesFailureLogArea: Bool = false) {
+    init(
+        size: CGSize,
+        reservesFailureLogArea: Bool = false,
+        showsNativeAdSlot: Bool = false
+    ) {
         let isPad = UIDevice.current.userInterfaceIdiom == .pad
         let availableWidth = max(1, size.width)
         let availableHeight = max(1, size.height)
@@ -57,17 +63,22 @@ struct HomeLayoutMetrics {
         let sourceActionHeight = (controlHeight * 2) + 10
         let outputSelectorHeight = max(controlHeight, 52 * contentScale)
         let codecSummaryHeight = max(66, 78 * contentScale)
+        nativeAdSlotHeight = showsNativeAdSlot ? max(52, 76 * contentScale) : 0
+        footerAdSeparationHeight = max(8, 12 * contentScale)
         let progressCardHeight = reservesFailureLogArea
             ? max(150, 188 * contentScale)
             : max(92, 116 * contentScale)
-        let visibleSpacingCount: CGFloat = reservesFailureLogArea ? 8 : 9
+        let visibleSpacingCount: CGFloat = (reservesFailureLogArea ? 8 : 9)
+            + (showsNativeAdSlot ? 1 : 0)
         let fixedComponentHeight = (bannerHeight * 2)
             + headerHeight
             + sourceActionHeight
             + outputSelectorHeight
             + codecSummaryHeight
+            + nativeAdSlotHeight
             + progressCardHeight
             + footerExitButtonHeight
+            + footerAdSeparationHeight
             + (verticalSpacing * visibleSpacingCount)
             + (verticalPadding * 2)
         let remainingHeight = canvasHeight - fixedComponentHeight

@@ -1,6 +1,224 @@
+@preconcurrency import AVFoundation
+import CoreGraphics
 import Foundation
 
 protocol EncoderServicing: TaptionVideoEncoding {}
+
+protocol SourcePreservingOutputVerifying {
+    func verify(
+        plan: TaptionEncodingPlan,
+        outputURL: URL
+    ) async throws -> TaptionSourcePreservingOutputVerificationReport
+}
+
+struct AVFoundationSourcePreservingOutputVerifier: SourcePreservingOutputVerifying {
+    private let visualQualityVerifier: SourcePreservingVisualQualityVerifying
+
+    init(
+        visualQualityVerifier: SourcePreservingVisualQualityVerifying = AVFoundationSourcePreservingVisualQualityVerifier()
+    ) {
+        self.visualQualityVerifier = visualQualityVerifier
+    }
+
+    func verify(
+        plan: TaptionEncodingPlan,
+        outputURL: URL
+    ) async throws -> TaptionSourcePreservingOutputVerificationReport {
+        let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: outputURL)
+        var report = try TaptionSourcePreservingExecutionAudit.verifyOutput(
+            plan: plan,
+            outputAsset: outputAsset
+        )
+        let visualReport = try await visualQualityVerifier.verify(
+            plan: plan,
+            outputURL: outputURL
+        )
+        report.warnings += visualReport.warnings
+        report.metadata.merge(visualReport.metadata, uniquingKeysWith: { _, newValue in newValue })
+        return report
+    }
+}
+
+protocol SourcePreservingVisualQualityVerifying {
+    func verify(
+        plan: TaptionEncodingPlan,
+        outputURL: URL
+    ) async throws -> TaptionSourcePreservingVisualQualityReport
+}
+
+struct AVFoundationSourcePreservingVisualQualityVerifier: SourcePreservingVisualQualityVerifying {
+    func verify(
+        plan: TaptionEncodingPlan,
+        outputURL: URL
+    ) async throws -> TaptionSourcePreservingVisualQualityReport {
+        let outputSample = try await visualSample(
+            at: outputURL,
+            preferredDuration: plan.sourcePreservationRequirements?.duration
+        )
+        var sourceSample: TaptionVisualQualitySample?
+        var sourceWarning: String?
+        if let sourceURL = plan.sourceURL {
+            do {
+                sourceSample = try await visualSample(
+                    at: sourceURL,
+                    preferredDuration: plan.sourcePreservationRequirements?.duration
+                )
+            } catch {
+                sourceWarning = "Source visual sample could not be generated: \(error.localizedDescription)"
+            }
+        } else {
+            sourceWarning = "Source visual sample could not be generated because the source URL was missing."
+        }
+
+        var report = TaptionSourcePreservingVisualQualityComparator.verify(
+            sourceSample: sourceSample,
+            outputSample: outputSample
+        )
+        if let sourceWarning {
+            report.warnings.append(sourceWarning)
+        }
+        guard report.isPassing else {
+            throw TaptionVideoCoreError.exportFailed(
+                "Source-preserving visual quality verification failed: \(report.failures.joined(separator: "; "))."
+            )
+        }
+        return report
+    }
+
+    private func visualSample(
+        at url: URL,
+        preferredDuration: TimeInterval?
+    ) async throws -> TaptionVisualQualitySample {
+        let asset = AVURLAsset(url: url)
+        let duration = try? await asset.load(.duration)
+        let sampleTime = sampleTime(
+            duration: duration?.seconds,
+            preferredDuration: preferredDuration
+        )
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 96, height: 96)
+        generator.requestedTimeToleranceBefore = CMTime(seconds: 0.35, preferredTimescale: 600)
+        generator.requestedTimeToleranceAfter = CMTime(seconds: 0.35, preferredTimescale: 600)
+
+        let image = try await generatedImage(
+            using: generator,
+            at: sampleTime
+        )
+        return try visualSample(from: image)
+    }
+
+    private func generatedImage(
+        using generator: AVAssetImageGenerator,
+        at sampleTime: CMTime
+    ) async throws -> CGImage {
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                generator.generateCGImageAsynchronously(for: sampleTime) { image, _, error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                    } else if let image {
+                        continuation.resume(returning: image)
+                    } else {
+                        continuation.resume(throwing: TaptionVideoCoreError.exportFailed("Visual quality sample image could not be generated."))
+                    }
+                }
+            }
+        } onCancel: {
+            generator.cancelAllCGImageGeneration()
+        }
+    }
+
+    private func sampleTime(
+        duration: TimeInterval?,
+        preferredDuration: TimeInterval?
+    ) -> CMTime {
+        let candidateDuration = [duration, preferredDuration]
+            .compactMap { $0 }
+            .first { $0.isFinite && $0 > 0 }
+        guard let candidateDuration else {
+            return .zero
+        }
+        let seconds = min(max(candidateDuration * 0.5, 0), max(candidateDuration - 0.05, 0))
+        return CMTime(seconds: seconds, preferredTimescale: 600)
+    }
+
+    private func visualSample(from image: CGImage) throws -> TaptionVisualQualitySample {
+        let width = max(1, min(64, image.width))
+        let height = max(1, min(64, image.height))
+        let bytesPerPixel = 4
+        let bytesPerRow = width * bytesPerPixel
+        var pixels = [UInt8](repeating: 0, count: height * bytesPerRow)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            throw TaptionVideoCoreError.exportFailed("Visual quality sample buffer could not be created.")
+        }
+
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        var redSum = 0.0
+        var greenSum = 0.0
+        var blueSum = 0.0
+        var lumaSum = 0.0
+        var lumaSquaredSum = 0.0
+        var nonBlackCount = 0
+        let pixelCount = width * height
+
+        for offset in stride(from: 0, to: pixels.count, by: bytesPerPixel) {
+            let red = Double(pixels[offset]) / 255
+            let green = Double(pixels[offset + 1]) / 255
+            let blue = Double(pixels[offset + 2]) / 255
+            let luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+            redSum += red
+            greenSum += green
+            blueSum += blue
+            lumaSum += luma
+            lumaSquaredSum += luma * luma
+            if luma > 0.035 {
+                nonBlackCount += 1
+            }
+        }
+
+        let divisor = Double(max(pixelCount, 1))
+        let averageLuma = lumaSum / divisor
+        let lumaVariance = max(0, lumaSquaredSum / divisor - averageLuma * averageLuma)
+        return TaptionVisualQualitySample(
+            width: image.width,
+            height: image.height,
+            averageRed: redSum / divisor,
+            averageGreen: greenSum / divisor,
+            averageBlue: blueSum / divisor,
+            averageLuma: averageLuma,
+            lumaStandardDeviation: sqrt(lumaVariance),
+            nonBlackRatio: Double(nonBlackCount) / divisor
+        )
+    }
+}
+
+struct DisabledSourcePreservingOutputVerifier: SourcePreservingOutputVerifying {
+    func verify(
+        plan: TaptionEncodingPlan,
+        outputURL: URL
+    ) async throws -> TaptionSourcePreservingOutputVerificationReport {
+        TaptionSourcePreservingOutputVerificationReport(
+            failures: [],
+            warnings: ["Source-preserving output verification is disabled for this injected encoder path."],
+            metadata: [
+                "sourcePreservingOutput": "disabled",
+                "output": outputURL.lastPathComponent,
+                "plan": plan.id.uuidString
+            ]
+        )
+    }
+}
 
 struct FakeEncoderService: EncoderServicing {
     func encode(
@@ -51,13 +269,16 @@ struct FakeEncoderService: EncoderServicing {
 final class AVFoundationHEVCEncoderService: EncoderServicing {
     private let registry: TaptionCodecTranscodingRegistry
     private let softwareExecutor: SW_FFmpegCommandExecutor
+    private let outputVerifier: SourcePreservingOutputVerifying
 
     init(
         registry: TaptionCodecTranscodingRegistry = .live,
-        softwareExecutor: SW_FFmpegCommandExecutor = SW_FFmpegCommandExecutor()
+        softwareExecutor: SW_FFmpegCommandExecutor = SW_FFmpegCommandExecutor(),
+        outputVerifier: SourcePreservingOutputVerifying = AVFoundationSourcePreservingOutputVerifier()
     ) {
         self.registry = registry
         self.softwareExecutor = softwareExecutor
+        self.outputVerifier = outputVerifier
     }
 
     func encode(
@@ -90,6 +311,7 @@ final class AVFoundationHEVCEncoderService: EncoderServicing {
         try? FileManager.default.removeItem(at: temporaryOutputURL)
 
         let executionKind = plan.codecExecutionKind ?? .software
+        try TaptionSourcePreservingExecutionAudit.validate(plan: plan)
         let request = TaptionCodecTranscodeRequest(
             sourceURL: sourceURL,
             outputURL: temporaryOutputURL,
@@ -100,18 +322,24 @@ final class AVFoundationHEVCEncoderService: EncoderServicing {
                 preserveAudioWhenPossible: plan.audioPlan != nil
             )
         )
+        var startMetadata = [
+            "plan": plan.id.uuidString,
+            "source": sourceURL.lastPathComponent,
+            "route": route.displayName,
+            "audioRoute": plan.audioPlan?.route.displayName ?? "No audio",
+            "audioPath": plan.audioPlan?.shortDisplayName ?? "None",
+            "executionKind": executionKind.rawValue,
+            "output": "\(plan.outputPolicy.videoCodec.displayName) / \(plan.outputPolicy.container.defaultFileExtension.uppercased())"
+        ]
+        startMetadata.merge(
+            TaptionSourcePreservingExecutionAudit.logMetadata(for: plan),
+            uniquingKeysWith: { _, newValue in newValue }
+        )
+
         AppLogger.info(
             "Codec transcode started",
             category: .encoding,
-            metadata: [
-                "plan": plan.id.uuidString,
-                "source": sourceURL.lastPathComponent,
-                "route": route.displayName,
-                "audioRoute": plan.audioPlan?.route.displayName ?? "No audio",
-                "audioPath": plan.audioPlan?.shortDisplayName ?? "None",
-                "executionKind": executionKind.rawValue,
-                "output": "\(plan.outputPolicy.videoCodec.displayName) / \(plan.outputPolicy.container.defaultFileExtension.uppercased())"
-            ]
+            metadata: startMetadata
         )
 
         do {
@@ -121,6 +349,7 @@ final class AVFoundationHEVCEncoderService: EncoderServicing {
                     request: request,
                     progress: progress
                 )
+                try await verifyCompletedOutput(plan: plan, outputURL: output.outputURL)
                 return TaptionEncodingResult(
                     planID: plan.id,
                     temporaryOutputURL: output.outputURL,
@@ -146,6 +375,7 @@ final class AVFoundationHEVCEncoderService: EncoderServicing {
             guard FileManager.default.fileExists(atPath: temporaryOutputURL.path) else {
                 throw TaptionVideoCoreError.exportFailed("The encoded output file was not created.")
             }
+            try await verifyCompletedOutput(plan: plan, outputURL: temporaryOutputURL)
 
             AppLogger.info(
                 "Codec transcode completed",
@@ -255,5 +485,24 @@ final class AVFoundationHEVCEncoderService: EncoderServicing {
             ]
         )
         return output
+    }
+
+    private func verifyCompletedOutput(
+        plan: TaptionEncodingPlan,
+        outputURL: URL
+    ) async throws {
+        let report = try await outputVerifier.verify(
+            plan: plan,
+            outputURL: outputURL
+        )
+        var metadata = report.metadata
+        metadata["plan"] = plan.id.uuidString
+        metadata["output"] = outputURL.lastPathComponent
+        metadata["warnings"] = report.warnings.joined(separator: " | ")
+        AppLogger.info(
+            "Source-preserving output verification passed",
+            category: .encoding,
+            metadata: metadata
+        )
     }
 }

@@ -32,7 +32,10 @@ enum SW_AudioCodecSupportCatalog {
         .muLaw
     ]
 
-    static let bundledNativeAACDecodeCodecs: Set<TaptionAudioCodec> = [
+    static let currentBuildVLCAACDecodeCodecs: Set<TaptionAudioCodec> = [
+        .aac,
+        .opus,
+        .mp3,
         .vorbis
     ]
 
@@ -81,7 +84,7 @@ enum SW_AudioCodecSupportCatalog {
     ) -> TaptionEncodingBackend? {
         guard outputCodec == .aac,
               outputContainer == .mp4,
-              bundledNativeAACDecodeCodecs.contains(sourceCodec) else {
+              currentBuildVLCAACDecodeCodecs.contains(sourceCodec) else {
             return nil
         }
         return .softwareVLCDecoder
