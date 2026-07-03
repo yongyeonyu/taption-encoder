@@ -260,6 +260,8 @@ struct HomeView: View {
                 }
             )
         }
+        .multiFileEncodingDialog(viewModel: viewModel)
+        .multiFileMergeUnavailableAlert(viewModel: viewModel)
         .pendingSaveDestinationDialog(viewModel: viewModel)
         .savedFolderDialog(viewModel: viewModel)
         .fullScreenCover(
@@ -1253,6 +1255,55 @@ struct HomeView: View {
 
 @MainActor
 private extension View {
+    func multiFileEncodingDialog(viewModel: HomeViewModel) -> some View {
+        confirmationDialog(
+            viewModel.multiFileEncodingPrompt?.title ?? "Encode Multiple Files",
+            isPresented: Binding(
+                get: { viewModel.multiFileEncodingPrompt != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.dismissMultiFileEncodingPrompt()
+                    }
+                }
+            ),
+            titleVisibility: .visible,
+            presenting: viewModel.multiFileEncodingPrompt
+        ) { prompt in
+            Button("Encode Separately") {
+                viewModel.chooseSeparateEncodingForMultiFilePrompt(prompt: prompt)
+            }
+            Button("Merge into One") {
+                viewModel.chooseMergeEncodingForMultiFilePrompt(prompt: prompt)
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.dismissMultiFileEncodingPrompt()
+            }
+        } message: { prompt in
+            Text(prompt.message)
+        }
+    }
+
+    func multiFileMergeUnavailableAlert(viewModel: HomeViewModel) -> some View {
+        alert(
+            viewModel.multiFileMergeUnavailableAlert?.title ?? "Merge Unavailable",
+            isPresented: Binding(
+                get: { viewModel.multiFileMergeUnavailableAlert != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.dismissMultiFileMergeUnavailableAlert()
+                    }
+                }
+            ),
+            presenting: viewModel.multiFileMergeUnavailableAlert
+        ) { _ in
+            Button("OK") {
+                viewModel.dismissMultiFileMergeUnavailableAlert()
+            }
+        } message: { alert in
+            Text(alert.message)
+        }
+    }
+
     func pendingSaveDestinationDialog(viewModel: HomeViewModel) -> some View {
         confirmationDialog(
             viewModel.pendingSaveDestinationPrompt?.title ?? "Save To",

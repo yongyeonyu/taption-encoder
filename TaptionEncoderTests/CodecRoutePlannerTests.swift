@@ -7619,6 +7619,97 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
+    func testMultiFileStartPromptsBeforeEncodingAndMergeChoiceShowsUnavailableAlert() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let fileURLs = [
+            directoryURL.appendingPathComponent("a.mp4"),
+            directoryURL.appendingPathComponent("b.mp4")
+        ]
+        for url in fileURLs {
+            try Data("source".utf8).write(to: url)
+        }
+
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 2))
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264)),
+                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
+                starWalletStore: walletStore
+            )
+        )
+
+        await viewModel.refreshStarsIfNeeded()
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+
+        viewModel.startPreparedEncoding()
+
+        let prompt = try XCTUnwrap(viewModel.multiFileEncodingPrompt)
+        XCTAssertEqual(prompt.fileCount, 2)
+        XCTAssertEqual(prompt.title, "Encode Multiple Files")
+        XCTAssertEqual(viewModel.state.title, "Ready to encode")
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("a_taption.mp4").path
+        ))
+
+        viewModel.chooseMergeEncodingForMultiFilePrompt(prompt: prompt)
+
+        XCTAssertNil(viewModel.multiFileEncodingPrompt)
+        XCTAssertEqual(viewModel.multiFileMergeUnavailableAlert?.title, "Merge Unavailable")
+        XCTAssertEqual(viewModel.state.title, "Ready to encode")
+        XCTAssertEqual(viewModel.starWalletSnapshot.balance, 2)
+    }
+
+    @MainActor
+    func testMultiFilePromptEncodeSeparatelyContinuesBatchEncoding() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let fileURLs = [
+            directoryURL.appendingPathComponent("a.mp4"),
+            directoryURL.appendingPathComponent("b.mp4")
+        ]
+        for url in fileURLs {
+            try Data("source".utf8).write(to: url)
+        }
+
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 2))
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264)),
+                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
+                starWalletStore: walletStore
+            )
+        )
+
+        await viewModel.refreshStarsIfNeeded()
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+        viewModel.startPreparedEncoding()
+
+        let prompt = try XCTUnwrap(viewModel.multiFileEncodingPrompt)
+        viewModel.chooseSeparateEncodingForMultiFilePrompt(prompt: prompt)
+        try await waitForCompletedSave(in: viewModel, timeout: 3)
+
+        XCTAssertEqual(viewModel.state.title, "Save Complete")
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("a_taption.mp4").path
+        ))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: directoryURL.appendingPathComponent("b_taption.mp4").path
+        ))
+        XCTAssertEqual(viewModel.starWalletSnapshot.balance, 0)
+    }
+
+    @MainActor
     func testBatteryLimitBlocksStartBeforeStarDebit() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
@@ -10162,7 +10253,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         timeout: TimeInterval = 2
     ) async throws {
         try await waitForCondition(timeout: timeout) {
-            viewModel.pendingSaveDestinationPrompt != nil
+            if let prompt = viewModel.multiFileEncodingPrompt {
+                viewModel.chooseSeparateEncodingForMultiFilePrompt(prompt: prompt)
+            }
+            return viewModel.pendingSaveDestinationPrompt != nil
         }
     }
 
@@ -10182,6 +10276,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         timeout: TimeInterval = 2
     ) async throws {
         try await waitForCondition(timeout: timeout) {
+            if let prompt = viewModel.multiFileEncodingPrompt {
+                viewModel.chooseSeparateEncodingForMultiFilePrompt(prompt: prompt)
+            }
             if let prompt = viewModel.pendingSaveDestinationPrompt {
                 viewModel.chooseFolderForPendingSave(prompt: prompt)
             }

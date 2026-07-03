@@ -1059,6 +1059,30 @@ struct FolderPreviewContext: Identifiable, Equatable {
     }
 }
 
+struct MultiFileEncodingPrompt: Identifiable, Equatable {
+    let id = UUID()
+    var fileCount: Int
+
+    var title: String {
+        "Encode Multiple Files"
+    }
+
+    var message: String {
+        "Encode \(fileCount) selected videos separately, or merge them into one output video?"
+    }
+}
+
+struct MultiFileMergeUnavailableAlert: Identifiable, Equatable {
+    let id = UUID()
+
+    var title: String {
+        "Merge Unavailable"
+    }
+
+    var message: String {
+        "Merging selected videos into one output is not available in this build yet. Choose Encode Separately to continue."
+    }
+}
 
 struct PendingSaveDestinationPrompt: Identifiable, Equatable {
     var id: UUID {

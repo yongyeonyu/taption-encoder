@@ -48,6 +48,8 @@ struct UIDeviceBatteryPowerMonitor: BatteryPowerMonitoring {
 final class HomeViewModel: ObservableObject {
     @Published private(set) var state: HomeScreenState
     @Published private(set) var selectedOutput: TaptionOutputSelection
+    @Published private(set) var multiFileEncodingPrompt: MultiFileEncodingPrompt?
+    @Published private(set) var multiFileMergeUnavailableAlert: MultiFileMergeUnavailableAlert?
     @Published private(set) var pendingSaveDestinationPrompt: PendingSaveDestinationPrompt?
     @Published private(set) var savedFolderPrompt: SavedFolderPrompt?
     @Published private(set) var starWalletSnapshot: StarWalletSnapshot
@@ -87,6 +89,7 @@ final class HomeViewModel: ObservableObject {
     private var importBrowserSelectedFileURLs: Set<URL> = []
     private var activeStarCharge: ActiveStarCharge?
     private var shouldAutoResumeBatchAfterStarEarn = false
+    private var hasConfirmedSeparateMultiFileEncoding = false
     private var rewardedAdStatePollingTask: Task<Void, Never>?
     private var activeEncodingActivitySessionID: UUID?
     private var lastEncodingActivitySnapshot: TaptionEncodingActivitySnapshot?
@@ -108,6 +111,8 @@ final class HomeViewModel: ObservableObject {
             container: environment.configuration.defaultOutputContainer
         )
         self.state = .idle
+        self.multiFileEncodingPrompt = nil
+        self.multiFileMergeUnavailableAlert = nil
         self.pendingSaveDestinationPrompt = nil
         self.savedFolderPrompt = nil
         self.starWalletSnapshot = .empty
@@ -278,6 +283,16 @@ final class HomeViewModel: ObservableObject {
         )
     }
 
+    private var shouldPromptForMultiFileEncodingMode: Bool {
+        guard let folderBatch,
+              folderBatch.sourceKind == .files,
+              folderBatch.remainingEncodableFileCount > 1,
+              !hasConfirmedSeparateMultiFileEncoding else {
+            return false
+        }
+        return true
+    }
+
     private func estimatedStartStarCost(for review: PreparedEncodingReview) -> Int {
         guard review.videoInfo.isRouteEncodable else {
             return 0
@@ -311,6 +326,12 @@ final class HomeViewModel: ObservableObject {
         shouldAutoResumeBatchAfterStarEarn = false
         activeTask = nil
         state = .readyToStart(review)
+    }
+
+    private func resetMultiFileEncodingDecision() {
+        multiFileEncodingPrompt = nil
+        multiFileMergeUnavailableAlert = nil
+        hasConfirmedSeparateMultiFileEncoding = false
     }
 
     private func applyFolderStarBudgetToCurrentBatchIfReady() {
@@ -1244,6 +1265,7 @@ final class HomeViewModel: ObservableObject {
         previewInspectionTask?.cancel()
         currentReview = nil
         standaloneSelectedQueueIDs.removeAll()
+        resetMultiFileEncodingDecision()
         lastBatchFileCards = []
         folderPreviewContext = nil
         folderBatch = nil
@@ -1433,6 +1455,7 @@ final class HomeViewModel: ObservableObject {
         previewInspectionTask?.cancel()
         currentReview = nil
         standaloneSelectedQueueIDs.removeAll()
+        resetMultiFileEncodingDecision()
         lastBatchFileCards = []
         folderPreviewContext = nil
         folderBatch = FolderEncodingBatch(
@@ -1490,6 +1513,7 @@ final class HomeViewModel: ObservableObject {
         previewInspectionTask?.cancel()
         currentReview = nil
         standaloneSelectedQueueIDs.removeAll()
+        resetMultiFileEncodingDecision()
         lastBatchFileCards = []
         folderPreviewContext = nil
         folderBatch = FolderEncodingBatch(
@@ -1550,6 +1574,7 @@ final class HomeViewModel: ObservableObject {
         folderPreviewContext = nil
         currentReview = nil
         standaloneSelectedQueueIDs.removeAll()
+        resetMultiFileEncodingDecision()
         lastBatchFileCards = []
         let source = HomeSelectedSource(
             kind: .files,
@@ -1596,6 +1621,7 @@ final class HomeViewModel: ObservableObject {
         selectionInspectionTask?.cancel()
         currentReview = nil
         standaloneSelectedQueueIDs.removeAll()
+        resetMultiFileEncodingDecision()
         lastBatchFileCards = []
         folderPreviewContext = nil
         folderBatch = FolderEncodingBatch(
@@ -1633,6 +1659,7 @@ final class HomeViewModel: ObservableObject {
         activeTask?.cancel()
         selectionInspectionTask?.cancel()
         currentReview = nil
+        resetMultiFileEncodingDecision()
         lastBatchFileCards = []
         folderPreviewContext = nil
         folderBatch = nil
@@ -1744,6 +1771,7 @@ final class HomeViewModel: ObservableObject {
         folderPreviewContext = nil
         currentReview = nil
         standaloneSelectedQueueIDs.removeAll()
+        resetMultiFileEncodingDecision()
         lastBatchFileCards = []
         let source = HomeSelectedSource(
             kind: .photos,
@@ -2067,6 +2095,16 @@ final class HomeViewModel: ObservableObject {
                 review: review,
                 requiredStarCount: requiredStarCount,
                 availableStarCount: starWalletSnapshot.balance
+            )
+            return
+        }
+        if shouldPromptForMultiFileEncodingMode {
+            let fileCount = folderBatch?.remainingEncodableFileCount ?? 0
+            multiFileEncodingPrompt = MultiFileEncodingPrompt(fileCount: fileCount)
+            AppLogger.info(
+                "Multi-file encoding prompt opened",
+                category: .encoding,
+                metadata: ["count": "\(fileCount)"]
             )
             return
         }
@@ -2521,6 +2559,52 @@ final class HomeViewModel: ObservableObject {
         savedFolderPrompt = nil
     }
 
+    func dismissMultiFileEncodingPrompt() {
+        guard multiFileEncodingPrompt != nil else {
+            return
+        }
+        AppLogger.info("Multi-file encoding prompt dismissed", category: .encoding)
+        multiFileEncodingPrompt = nil
+    }
+
+    func chooseSeparateEncodingForMultiFilePrompt(prompt: MultiFileEncodingPrompt) {
+        guard multiFileEncodingPrompt?.id == prompt.id else {
+            return
+        }
+        AppLogger.info(
+            "Multi-file encoding mode selected",
+            category: .encoding,
+            metadata: [
+                "mode": "separate",
+                "count": "\(prompt.fileCount)"
+            ]
+        )
+        multiFileEncodingPrompt = nil
+        hasConfirmedSeparateMultiFileEncoding = true
+        startPreparedEncoding()
+    }
+
+    func chooseMergeEncodingForMultiFilePrompt(prompt: MultiFileEncodingPrompt) {
+        guard multiFileEncodingPrompt?.id == prompt.id else {
+            return
+        }
+        AppLogger.warning(
+            "Multi-file merge requested but unavailable",
+            category: .encoding,
+            metadata: ["count": "\(prompt.fileCount)"]
+        )
+        multiFileEncodingPrompt = nil
+        multiFileMergeUnavailableAlert = MultiFileMergeUnavailableAlert()
+    }
+
+    func dismissMultiFileMergeUnavailableAlert() {
+        guard multiFileMergeUnavailableAlert != nil else {
+            return
+        }
+        AppLogger.info("Multi-file merge unavailable alert dismissed", category: .encoding)
+        multiFileMergeUnavailableAlert = nil
+    }
+
     func openSavedFolder(prompt: SavedFolderPrompt) {
         guard savedFolderPrompt?.id == prompt.id else {
             return
@@ -2633,6 +2717,7 @@ final class HomeViewModel: ObservableObject {
         activeStarCharge = nil
         shouldAutoResumeBatchAfterStarEarn = false
         cancelEncodingActivity()
+        resetMultiFileEncodingDecision()
         pendingSaveDestinationPrompt = nil
         folderPreviewContext = nil
         clearImportBrowserState(stoppingAccess: false)
@@ -2717,6 +2802,7 @@ final class HomeViewModel: ObservableObject {
         currentReview = nil
         activeStarCharge = nil
         shouldAutoResumeBatchAfterStarEarn = false
+        resetMultiFileEncodingDecision()
         endEncodingActivity(
             statusText: "Failed",
             fractionCompleted: lastEncodingActivitySnapshot?.fractionCompleted ?? 0
@@ -4168,6 +4254,7 @@ final class HomeViewModel: ObservableObject {
         lastBatchFileCards = batch.cardSnapshots()
         folderBatch = nil
         currentReview = nil
+        resetMultiFileEncodingDecision()
         activeTask = nil
         stopResourceMonitoring()
         endEncodingAdSuppressionIfNeeded()
