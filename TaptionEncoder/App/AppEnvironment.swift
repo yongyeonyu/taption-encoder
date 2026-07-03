@@ -17,6 +17,7 @@ struct AppEnvironment {
     var sessionEndAdProvider: SessionEndAdProviding
     var backgroundCoordinator: BackgroundEncodingCoordinating
     var liveActivityCoordinator: EncodingLiveActivityCoordinating
+    var resourceMonitor: EncodingResourceMonitoring
     var projectDocumentStore: ProjectDocumentStoring
 
     init(
@@ -36,6 +37,7 @@ struct AppEnvironment {
         sessionEndAdProvider: SessionEndAdProviding,
         backgroundCoordinator: BackgroundEncodingCoordinating,
         liveActivityCoordinator: EncodingLiveActivityCoordinating = NoopEncodingLiveActivityCoordinator(),
+        resourceMonitor: EncodingResourceMonitoring = SystemEncodingResourceMonitor(),
         projectDocumentStore: ProjectDocumentStoring
     ) {
         self.configuration = configuration
@@ -54,6 +56,7 @@ struct AppEnvironment {
         self.sessionEndAdProvider = sessionEndAdProvider
         self.backgroundCoordinator = backgroundCoordinator
         self.liveActivityCoordinator = liveActivityCoordinator
+        self.resourceMonitor = resourceMonitor
         self.projectDocumentStore = projectDocumentStore
     }
 

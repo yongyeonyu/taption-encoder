@@ -39,6 +39,7 @@
 		3A2B3C4D5E6F701000000019 /* SaveFailurePresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2B3C4D5E6F701000000313 /* SaveFailurePresentation.swift */; };
 		3A2B3C4D5E6F701000000020 /* FCPXMLProjectDocumentStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2B3C4D5E6F701000000314 /* FCPXMLProjectDocumentStore.swift */; };
 		3A2B3C4D5E6F701000000021 /* Stars.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2B3C4D5E6F701000000104 /* Stars.swift */; };
+		3A2B3C4D5E6F701000000022 /* EncodingResourceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A2B3C4D5E6F701000000315 /* EncodingResourceMonitor.swift */; };
 		4A2B3C4D5E6F701000000001 /* SourceActionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000101 /* SourceActionBar.swift */; };
 		4A2B3C4D5E6F701000000002 /* EncoderModePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000102 /* EncoderModePicker.swift */; };
 		4A2B3C4D5E6F701000000003 /* EncodingProgressView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000103 /* EncodingProgressView.swift */; };
@@ -173,6 +174,7 @@
 		3A2B3C4D5E6F701000000312 /* AppLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLogger.swift; sourceTree = "<group>"; };
 		3A2B3C4D5E6F701000000313 /* SaveFailurePresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaveFailurePresentation.swift; sourceTree = "<group>"; };
 		3A2B3C4D5E6F701000000314 /* FCPXMLProjectDocumentStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FCPXMLProjectDocumentStore.swift; sourceTree = "<group>"; };
+		3A2B3C4D5E6F701000000315 /* EncodingResourceMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncodingResourceMonitor.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000101 /* SourceActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceActionBar.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000102 /* EncoderModePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncoderModePicker.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000103 /* EncodingProgressView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EncodingProgressView.swift; sourceTree = "<group>"; };
@@ -475,6 +477,7 @@
 			isa = PBXGroup;
 			children = (
 				3A2B3C4D5E6F701000000312 /* AppLogger.swift */,
+				3A2B3C4D5E6F701000000315 /* EncodingResourceMonitor.swift */,
 			);
 			path = Diagnostics;
 			sourceTree = "<group>";
@@ -808,6 +811,7 @@
 				3A2B3C4D5E6F701000000020 /* FCPXMLProjectDocumentStore.swift in Sources */,
 				3A2B3C4D5E6F701000000017 /* FCPXMLValidator.swift in Sources */,
 				3A2B3C4D5E6F701000000018 /* AppLogger.swift in Sources */,
+				3A2B3C4D5E6F701000000022 /* EncodingResourceMonitor.swift in Sources */,
 				3A2B3C4D5E6F701000000019 /* SaveFailurePresentation.swift in Sources */,
 				4A2B3C4D5E6F701000000001 /* SourceActionBar.swift in Sources */,
 				4A2B3C4D5E6F701000000002 /* EncoderModePicker.swift in Sources */,

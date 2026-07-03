@@ -9413,6 +9413,77 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
     }
 
+    func testEncodingResourceMonitorMathCalculatesPerCoreCPUUsage() {
+        let previous = [
+            EncodingCPUCoreTicks(user: 10, system: 20, idle: 70, nice: 0),
+            EncodingCPUCoreTicks(user: 5, system: 5, idle: 90, nice: 0)
+        ]
+        let current = [
+            EncodingCPUCoreTicks(user: 40, system: 30, idle: 130, nice: 0),
+            EncodingCPUCoreTicks(user: 5, system: 15, idle: 180, nice: 0)
+        ]
+
+        let usages = EncodingResourceMonitorMath.cpuUsages(
+            previous: previous,
+            current: current
+        )
+
+        XCTAssertEqual(usages.count, 2)
+        XCTAssertEqual(usages[0].index, 0)
+        XCTAssertEqual(usages[0].percent, 40, accuracy: 0.01)
+        XCTAssertEqual(usages[1].index, 1)
+        XCTAssertEqual(usages[1].percent, 10, accuracy: 0.01)
+    }
+
+    func testEncodingResourceUsageSnapshotFormatsMemory() {
+        let snapshot = EncodingResourceUsageSnapshot(
+            timestamp: Date(timeIntervalSince1970: 0),
+            cpuCores: [
+                EncodingCPUCoreUsage(index: 0, percent: 12.4),
+                EncodingCPUCoreUsage(index: 1, percent: 88.8)
+            ],
+            appMemoryBytes: 512 * 1_024 * 1_024,
+            totalPhysicalMemoryBytes: 4 * 1_024 * 1_024 * 1_024
+        )
+
+        XCTAssertEqual(snapshot.cpuCores[0].percentText, "12%")
+        XCTAssertEqual(snapshot.cpuCores[1].percentText, "89%")
+        XCTAssertEqual(snapshot.memoryPercentText, "13%")
+        XCTAssertTrue(snapshot.memoryUsageText.contains("512"))
+    }
+
+    func testEncodingProgressViewDisplaysResourceUsageWidgetDuringEncodingOnly() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let progressViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Encoding/EncodingProgressView.swift")
+        let source = try String(contentsOf: progressViewURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("EncodingResourceUsageWidget"))
+        XCTAssertTrue(source.contains("state.progress?.resourceUsage"))
+        XCTAssertTrue(source.contains("state.canCancel"))
+        XCTAssertTrue(source.contains("Device CPU"))
+        XCTAssertTrue(source.contains("App Memory"))
+    }
+
+    func testHomeViewModelStartsAndStopsResourceMonitoringAroundEncoding() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let viewModelURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeViewModel.swift")
+        let source = try String(contentsOf: viewModelURL, encoding: .utf8)
+
+        XCTAssertTrue(source.contains("private func startResourceMonitoring()"))
+        XCTAssertTrue(source.contains("private func stopResourceMonitoring()"))
+        XCTAssertTrue(source.contains("latestResourceUsage"))
+        XCTAssertTrue(source.contains("resourceUsage: latestResourceUsage"))
+        XCTAssertTrue(source.contains("stopResourceMonitoring()"))
+    }
+
+    func testAppEnvironmentInjectsEncodingResourceMonitor() {
+        XCTAssertTrue(AppEnvironment.phase0.resourceMonitor is SystemEncodingResourceMonitor)
+    }
+
     @MainActor
     func testEncodingProgressCoalescerEmitsFirstStageThresholdAndFinalProgress() {
         var coalescer = EncodingProgressCoalescer(

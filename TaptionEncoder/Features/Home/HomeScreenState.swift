@@ -865,6 +865,7 @@ struct EncodingProgressSnapshot: Equatable {
     var estimatedRemainingTime: TimeInterval?
     var backendLabel: String
     var outputSummary: String?
+    var resourceUsage: EncodingResourceUsageSnapshot?
 
     init(
         stage: TaptionEncodingStage,
@@ -872,7 +873,8 @@ struct EncodingProgressSnapshot: Equatable {
         elapsedTime: TimeInterval,
         estimatedRemainingTime: TimeInterval?,
         backendLabel: String,
-        outputSummary: String? = nil
+        outputSummary: String? = nil,
+        resourceUsage: EncodingResourceUsageSnapshot? = nil
     ) {
         self.stage = stage
         self.fractionCompleted = min(max(fractionCompleted, 0), 1)
@@ -880,6 +882,7 @@ struct EncodingProgressSnapshot: Equatable {
         self.estimatedRemainingTime = estimatedRemainingTime
         self.backendLabel = backendLabel
         self.outputSummary = outputSummary
+        self.resourceUsage = resourceUsage
     }
 
     var percentText: String {
@@ -915,7 +918,8 @@ struct EncodingProgressSnapshot: Equatable {
         elapsedTime: 0,
         estimatedRemainingTime: nil,
         backendLabel: "Automatic Codec Path",
-        outputSummary: nil
+        outputSummary: nil,
+        resourceUsage: nil
     )
 }
 

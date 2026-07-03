@@ -61,9 +61,12 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var batteryEncodingAlert: BatteryEncodingAlert?
 
     private let environment: AppEnvironment
+    private let resourceMonitor: EncodingResourceMonitoring
     private let batteryPowerMonitor: any BatteryPowerMonitoring
     private let batterySettingsProvider: () -> BatteryEncodingSettings
     private var activeTask: Task<Void, Never>?
+    private var resourceMonitorTask: Task<Void, Never>?
+    private var latestResourceUsage: EncodingResourceUsageSnapshot?
     private var folderBatch: FolderEncodingBatch?
     private var currentReview: PreparedEncodingReview?
     private var standaloneSelectedQueueIDs: Set<String> = []
@@ -96,6 +99,7 @@ final class HomeViewModel: ObservableObject {
         batterySettingsProvider: @escaping () -> BatteryEncodingSettings = { BatteryEncodingSettings.load() }
     ) {
         self.environment = environment
+        self.resourceMonitor = environment.resourceMonitor
         self.batteryPowerMonitor = batteryPowerMonitor
         self.batterySettingsProvider = batterySettingsProvider
         self.selectedOutput = TaptionOutputSelection(
@@ -125,6 +129,7 @@ final class HomeViewModel: ObservableObject {
     deinit {
         AppLogger.info("HomeViewModel deinitialized", category: .app)
         activeTask?.cancel()
+        resourceMonitorTask?.cancel()
         selectionInspectionTask?.cancel()
         previewInspectionTask?.cancel()
         rewardedAdStatePollingTask?.cancel()
@@ -2571,6 +2576,7 @@ final class HomeViewModel: ObservableObject {
         dismissPreview()
         activeTask?.cancel()
         activeTask = nil
+        stopResourceMonitoring()
         selectionInspectionTask?.cancel()
         selectionInspectionTask = nil
         currentReview = nil
@@ -2610,6 +2616,7 @@ final class HomeViewModel: ObservableObject {
         }
         AppLogger.warning("Cancel requested", category: .encoding)
         state = .cancelling
+        stopResourceMonitoring()
         endEncodingActivity(
             statusText: "Cancelling",
             fractionCompleted: lastEncodingActivitySnapshot?.fractionCompleted ?? 0
@@ -2626,6 +2633,7 @@ final class HomeViewModel: ObservableObject {
         dismissPreview()
         activeTask?.cancel()
         activeTask = nil
+        stopResourceMonitoring()
         selectionInspectionTask?.cancel()
         selectionInspectionTask = nil
         currentReview = nil
@@ -3089,6 +3097,7 @@ final class HomeViewModel: ObservableObject {
             ]
         )
         activeTask?.cancel()
+        stopResourceMonitoring()
         currentReview = review
         deferredBatteryStopReason = nil
         let trace = TaptionEncodingPerformanceTrace(
@@ -3118,6 +3127,7 @@ final class HomeViewModel: ObservableObject {
         )
         state = .encoding(initialProgress)
         startEncodingActivity(for: review, progress: initialProgress)
+        startResourceMonitoring()
 
         activeTask = Task { [weak self] in
             guard let self else {
@@ -3219,6 +3229,7 @@ final class HomeViewModel: ObservableObject {
                     sourceName: review.source.displayName,
                     state: restorablePendingState
                 )
+                stopResourceMonitoring()
                 enqueuePendingSaveJob(pendingJob)
                 markBatchItem(
                     review.source.url,
@@ -3246,6 +3257,7 @@ final class HomeViewModel: ObservableObject {
                     category: .encoding,
                     metadata: ["name": review.source.displayName]
                 )
+                stopResourceMonitoring()
                 clearActiveStarCharge(for: review.source)
                 markBatchItem(
                     review.source.url,
@@ -3272,6 +3284,7 @@ final class HomeViewModel: ObservableObject {
                         "error": error.localizedDescription
                     ]
                 )
+                stopResourceMonitoring()
                 refundActiveStarChargeIfNeeded(for: review.source)
                 markBatchItem(
                     review.source.url,
@@ -3303,6 +3316,7 @@ final class HomeViewModel: ObservableObject {
                         "error": error.localizedDescription
                     ]
                 )
+                stopResourceMonitoring()
                 refundActiveStarChargeIfNeeded(for: review.source)
                 markBatchItem(
                     review.source.url,
@@ -4018,6 +4032,7 @@ final class HomeViewModel: ObservableObject {
         folderBatch = nil
         currentReview = nil
         activeTask = nil
+        stopResourceMonitoring()
         if let nextPendingJob = pendingSaveQueue.first {
             state = .pendingSave(nextPendingJob)
         } else {
@@ -4177,6 +4192,40 @@ final class HomeViewModel: ObservableObject {
         return updatedBatch
     }
 
+    private func startResourceMonitoring() {
+        stopResourceMonitoring()
+        let initialSample = resourceMonitor.sample()
+        latestResourceUsage = initialSample
+        updateCurrentEncodingProgressResourceUsage(initialSample)
+
+        resourceMonitorTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard !Task.isCancelled,
+                      let self else {
+                    return
+                }
+                let sample = self.resourceMonitor.sample()
+                self.latestResourceUsage = sample
+                self.updateCurrentEncodingProgressResourceUsage(sample)
+            }
+        }
+    }
+
+    private func stopResourceMonitoring() {
+        resourceMonitorTask?.cancel()
+        resourceMonitorTask = nil
+        latestResourceUsage = nil
+    }
+
+    private func updateCurrentEncodingProgressResourceUsage(_ snapshot: EncodingResourceUsageSnapshot) {
+        guard case .encoding(var progress) = state else {
+            return
+        }
+        progress.resourceUsage = snapshot
+        state = .encoding(progress)
+    }
+
     private func startEncodingActivity(
         for review: PreparedEncodingReview,
         progress: EncodingProgressSnapshot
@@ -4319,7 +4368,8 @@ final class HomeViewModel: ObservableObject {
             elapsedTime: 0,
             estimatedRemainingTime: nil,
             backendLabel: review.folderQueue?.statusText ?? "Starting Codec Path",
-            outputSummary: review.videoInfo.outputSummary
+            outputSummary: review.videoInfo.outputSummary,
+            resourceUsage: latestResourceUsage
         )
     }
 
@@ -4337,7 +4387,8 @@ final class HomeViewModel: ObservableObject {
                 elapsedTime: progress.elapsedTime,
                 estimatedRemainingTime: progress.estimatedRemainingTime,
                 backendLabel: batch.snapshot(currentFileName: sourceName).statusText,
-                outputSummary: currentReview?.videoInfo.outputSummary
+                outputSummary: currentReview?.videoInfo.outputSummary,
+                resourceUsage: latestResourceUsage
             )
         }
 
@@ -4347,7 +4398,8 @@ final class HomeViewModel: ObservableObject {
             elapsedTime: progress.elapsedTime,
             estimatedRemainingTime: progress.estimatedRemainingTime,
             backendLabel: currentReview?.videoInfo.codecPathTitle ?? "Automatic Codec Path",
-            outputSummary: currentReview?.videoInfo.outputSummary
+            outputSummary: currentReview?.videoInfo.outputSummary,
+            resourceUsage: latestResourceUsage
         )
     }
 

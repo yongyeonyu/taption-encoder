@@ -33,6 +33,14 @@ struct EncodingProgressView: View {
                     Spacer(minLength: 0)
                 }
 
+                if let resourceUsage = state.progress?.resourceUsage,
+                   state.canCancel {
+                    EncodingResourceUsageWidget(
+                        resourceUsage: resourceUsage,
+                        contentScale: contentScale
+                    )
+                }
+
                 VStack(spacing: 8 * contentScale) {
                     if showsPrimaryAction {
                         actionButton
@@ -216,5 +224,96 @@ struct EncodingProgressView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .disabled(!canWatchAd)
         .opacity(canWatchAd ? 1 : 0.58)
+    }
+}
+
+private struct EncodingResourceUsageWidget: View {
+    var resourceUsage: EncodingResourceUsageSnapshot
+    var contentScale: CGFloat
+
+    private var coreColumns: [GridItem] {
+        [
+            GridItem(.flexible(minimum: 0), spacing: 8 * contentScale),
+            GridItem(.flexible(minimum: 0), spacing: 8 * contentScale)
+        ]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8 * contentScale) {
+            HStack(spacing: 8 * contentScale) {
+                Label("Device CPU", systemImage: "cpu")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.82))
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Label(resourceUsage.memoryPercentText, systemImage: "memorychip")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(TaptionTheme.accent)
+                    .lineLimit(1)
+            }
+
+            if resourceUsage.cpuCores.isEmpty {
+                Text("CPU unavailable")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(TaptionTheme.mutedText)
+            } else {
+                LazyVGrid(columns: coreColumns, alignment: .leading, spacing: 6 * contentScale) {
+                    ForEach(resourceUsage.cpuCores) { core in
+                        EncodingCoreUsageRow(core: core, contentScale: contentScale)
+                    }
+                }
+            }
+
+            HStack(spacing: 6 * contentScale) {
+                Text("App Memory")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(TaptionTheme.mutedText)
+                Spacer(minLength: 6)
+                Text(resourceUsage.memoryUsageText)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.82))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+        }
+        .padding(.horizontal, 10 * contentScale)
+        .padding(.vertical, 8 * contentScale)
+        .background(TaptionTheme.elevatedSurface)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(TaptionTheme.accent.opacity(0.18), lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+private struct EncodingCoreUsageRow: View {
+    var core: EncodingCPUCoreUsage
+    var contentScale: CGFloat
+
+    var body: some View {
+        HStack(spacing: 5 * contentScale) {
+            Text("C\(core.index + 1)")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(TaptionTheme.mutedText)
+                .frame(width: max(20, 22 * contentScale), alignment: .leading)
+
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.08))
+                    Capsule()
+                        .fill(TaptionTheme.accent)
+                        .frame(width: max(3, proxy.size.width * core.fraction))
+                }
+            }
+            .frame(height: 5)
+
+            Text(core.percentText)
+                .font(.caption2.monospacedDigit().weight(.semibold))
+                .foregroundStyle(Color.white.opacity(0.78))
+                .frame(width: max(32, 34 * contentScale), alignment: .trailing)
+        }
+        .frame(minHeight: 14 * contentScale)
     }
 }
