@@ -54,6 +54,7 @@
 		4A2B3C4D5E6F701000000014 /* HomeQueueModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000114 /* HomeQueueModels.swift */; };
 		4A2B3C4D5E6F701000000015 /* HomeMenuSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000115 /* HomeMenuSheetView.swift */; };
 		4A2B3C4D5E6F701000000016 /* SampleThumbnailCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000116 /* SampleThumbnailCatalog.swift */; };
+		4A2B3C4D5E6F701000000017 /* QueuePreviewViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000117 /* QueuePreviewViews.swift */; };
 		5A2B3C4D5E6F701000000001 /* SwiftVLC in Frameworks */ = {isa = PBXBuildFile; productRef = 5A2B3C4D5E6F701000000102 /* SwiftVLC */; };
 		61307C1F20466F17394D6B86 /* TaptionEncoderLiveActivityExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ACC87F4CD4CF9E262B4F4A5D /* TaptionEncoderLiveActivityExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		6A2B3C4D5E6F701000000001 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = 6A2B3C4D5E6F701000000102 /* GoogleMobileAds */; };
@@ -187,6 +188,7 @@
 		4A2B3C4D5E6F701000000114 /* HomeQueueModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeQueueModels.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000115 /* HomeMenuSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeMenuSheetView.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000116 /* SampleThumbnailCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleThumbnailCatalog.swift; sourceTree = "<group>"; };
+		4A2B3C4D5E6F701000000117 /* QueuePreviewViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueuePreviewViews.swift; sourceTree = "<group>"; };
 		61752A4CFD225BC9A187B244 /* EncodingLiveActivityCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EncodingLiveActivityCoordinator.swift; sourceTree = "<group>"; };
 		6F29AE51B747E6175D860B6F /* EncodingLiveActivityWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EncodingLiveActivityWidget.swift; sourceTree = "<group>"; };
 		7A2B3C4D5E6F701000000101 /* CodecAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecAlgorithm.swift; sourceTree = "<group>"; };
@@ -362,6 +364,7 @@
 				3A2B3C4D5E6F701000000402 /* Home */,
 				4A2B3C4D5E6F701000000201 /* Encoding */,
 				4A2B3C4D5E6F701000000202 /* PendingSave */,
+				4A2B3C4D5E6F701000000209 /* Preview */,
 			);
 			path = Features;
 			sourceTree = "<group>";
@@ -389,6 +392,14 @@
 				3A2B3C4D5E6F701000000301 /* EncoderService.swift */,
 			);
 			path = Encoding;
+			sourceTree = "<group>";
+		};
+		4A2B3C4D5E6F701000000209 /* Preview */ = {
+			isa = PBXGroup;
+			children = (
+				4A2B3C4D5E6F701000000117 /* QueuePreviewViews.swift */,
+			);
+			path = Preview;
 			sourceTree = "<group>";
 		};
 		3A2B3C4D5E6F701000000404 /* MediaInspection */ = {
@@ -813,6 +824,7 @@
 				4A2B3C4D5E6F701000000014 /* HomeQueueModels.swift in Sources */,
 				4A2B3C4D5E6F701000000015 /* HomeMenuSheetView.swift in Sources */,
 				4A2B3C4D5E6F701000000016 /* SampleThumbnailCatalog.swift in Sources */,
+				4A2B3C4D5E6F701000000017 /* QueuePreviewViews.swift in Sources */,
 				7A2B3C4D5E6F701000000001 /* CodecAlgorithm.swift in Sources */,
 				7A2B3C4D5E6F701000000002 /* HW_AV1HEVCCodecAlgorithm.swift in Sources */,
 				7A2B3C4D5E6F701000000003 /* SW_AV1HEVCCodecAlgorithm.swift in Sources */,
