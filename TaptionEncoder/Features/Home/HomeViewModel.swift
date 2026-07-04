@@ -106,9 +106,11 @@ final class HomeViewModel: ObservableObject {
         self.resourceMonitor = environment.resourceMonitor
         self.batteryPowerMonitor = batteryPowerMonitor
         self.batterySettingsProvider = batterySettingsProvider
+        let initialBatterySettings = batterySettingsProvider()
         self.selectedOutput = TaptionOutputSelection(
             videoCodec: environment.configuration.defaultOutputCodec,
-            container: environment.configuration.defaultOutputContainer
+            container: environment.configuration.defaultOutputContainer,
+            optimizationProfile: initialBatterySettings.optimizationProfile
         )
         self.state = .idle
         self.multiFileEncodingPrompt = nil
@@ -432,6 +434,14 @@ final class HomeViewModel: ObservableObject {
         "Audio: \(selectedOutput.audioCodec.displayName)"
     }
 
+    var selectedEncodingOptimizationTitle: String {
+        selectedOutput.optimizationProfile.menuTitle
+    }
+
+    var selectedEncodingOptimizationDetail: String {
+        selectedOutput.optimizationProfile.detailText
+    }
+
     var outputCodecOptions: [TaptionVideoCodec] {
         TaptionOutputSelection.videoCodecOptions
     }
@@ -600,44 +610,6 @@ final class HomeViewModel: ObservableObject {
 
     var bannerAdUnitID: String {
         environment.bannerAdProvider.bannerAdUnitID
-    }
-
-    var nativeAdUnitID: String {
-        environment.nativeAdProvider.nativeAdUnitID
-    }
-
-    var showsNativeAdSlot: Bool {
-        showsIdleNativeAdSlot || showsCompletedNativeAdSlot
-    }
-
-    var showsIdleNativeAdSlot: Bool {
-        guard !nativeAdUnitID.isEmpty,
-              AdPlacementPolicy.current().isEnabled(.nativeIdle) else {
-            return false
-        }
-        if case .idle = state {
-            return true
-        }
-        return false
-    }
-
-    var showsCompletedNativeAdSlot: Bool {
-        guard !nativeAdUnitID.isEmpty,
-              pendingSaveQueue.isEmpty,
-              AdPlacementPolicy.current().isEnabled(.nativeCompleted) else {
-            return false
-        }
-        if case .completed = state {
-            return true
-        }
-        return false
-    }
-
-    var nativeAdSlotTitle: String {
-        if showsCompletedNativeAdSlot {
-            return "Sponsored after save"
-        }
-        return "Sponsored"
     }
 
     private var currentStorageIssue: StorageIssue? {
@@ -812,6 +784,37 @@ final class HomeViewModel: ObservableObject {
         )
         refreshPreparedSourceAfterOutputChange()
     }
+
+    func selectEncodingOptimizationProfile(_ profile: TaptionEncodingOptimizationProfile) {
+        guard selectedOutput.optimizationProfile != profile else {
+            return
+        }
+
+        selectedOutput.optimizationProfile = profile
+        AppLogger.info(
+            "Encoding optimization profile selected",
+            category: .ui,
+            metadata: ["profile": profile.rawValue]
+        )
+        refreshPreparedSourceAfterOutputChange()
+    }
+
+    #if DEBUG
+    func applyDebugEncodingOptimizationProfileIfRequested() {
+        guard let requestedProfile = ProcessInfo.processInfo.environment["TAPTION_CODEC_PROBE_PROFILE"]
+            ?? ProcessInfo.processInfo.environment["TAPTION_ENCODING_OPTIMIZATION_PROFILE"],
+              let profile = TaptionEncodingOptimizationProfile.fromDebugString(requestedProfile) else {
+            return
+        }
+
+        selectEncodingOptimizationProfile(profile)
+        AppLogger.info(
+            "Debug encoding optimization profile applied",
+            category: .encoding,
+            metadata: ["profile": profile.rawValue]
+        )
+    }
+    #endif
 
     func outputCodecMenuTitle(_ codec: TaptionVideoCodec) -> String {
         "\(codec.displayName) - \(outputCodecStatusText(codec))"
@@ -1550,19 +1553,33 @@ final class HomeViewModel: ObservableObject {
         )
         startFilesFlow(url: url, autoStartAfterPrepare: true)
     }
+
+    func openDebugFileAndAutoOpenPreview(url: URL) {
+        AppLogger.info(
+            "Debug file routed into auto-preview flow",
+            category: .fileImport,
+            metadata: ["name": url.lastPathComponent]
+        )
+        startFilesFlow(url: url, autoStartAfterPrepare: false, autoOpenPreviewAfterPrepare: true)
+    }
     #endif
 
     func startFilesFlow(url: URL) {
         startFilesFlow(url: url, autoStartAfterPrepare: false)
     }
 
-    private func startFilesFlow(url: URL, autoStartAfterPrepare: Bool) {
+    private func startFilesFlow(
+        url: URL,
+        autoStartAfterPrepare: Bool,
+        autoOpenPreviewAfterPrepare: Bool = false
+    ) {
         AppLogger.info(
             "Single file flow started",
             category: .fileImport,
             metadata: [
                 "name": url.lastPathComponent,
-                "autoStart": "\(autoStartAfterPrepare)"
+                "autoStart": "\(autoStartAfterPrepare)",
+                "autoOpenPreview": "\(autoOpenPreviewAfterPrepare)"
             ]
         )
         guard canStartNewSourceFlow() else {
@@ -1582,7 +1599,11 @@ final class HomeViewModel: ObservableObject {
             url: url
         )
         beginSecurityScopedAccessIfNeeded(for: url)
-        prepareEncodingFlow(source: source, autoStartAfterPrepare: autoStartAfterPrepare)
+        prepareEncodingFlow(
+            source: source,
+            autoStartAfterPrepare: autoStartAfterPrepare,
+            autoOpenPreviewAfterPrepare: autoOpenPreviewAfterPrepare
+        )
     }
 
     func startFilesFlow(urls: [URL]) {
@@ -3268,12 +3289,14 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
+        let optimizationProfile = encodingOptimizationProfile(for: review)
         AppLogger.info(
             "Encoding task started",
             category: .encoding,
             metadata: [
                 "name": review.source.displayName,
-                "plan": review.job.plan.id.uuidString
+                "plan": review.job.plan.id.uuidString,
+                "optimizationProfile": optimizationProfile.rawValue
             ]
         )
         activeTask?.cancel()
@@ -3287,7 +3310,8 @@ final class HomeViewModel: ObservableObject {
             metadata: [
                 "name": review.source.displayName,
                 "plan": review.job.plan.id.uuidString,
-                "route": review.job.plan.codecRoute?.displayName ?? "unknown"
+                "route": review.job.plan.codecRoute?.displayName ?? "unknown",
+                "optimizationProfile": optimizationProfile.rawValue
             ]
         )
         let initialProgress = EncodingProgressSnapshot(
@@ -3308,9 +3332,9 @@ final class HomeViewModel: ObservableObject {
         )
         state = .encoding(initialProgress)
         startEncodingActivity(for: review, progress: initialProgress)
-        startResourceMonitoring()
+        startResourceMonitoring(sampleIntervalNanoseconds: optimizationProfile.resourceSampleIntervalNanoseconds)
 
-        activeTask = Task { [weak self] in
+        activeTask = Task(priority: taskPriority(for: optimizationProfile)) { [weak self] in
             guard let self else {
                 return
             }
@@ -3381,7 +3405,8 @@ final class HomeViewModel: ObservableObject {
                     "encode_completed",
                     metadata: [
                         "mode": result.usedMode.rawValue,
-                        "backend": result.usedBackend.rawValue
+                        "backend": result.usedBackend.rawValue,
+                        "optimizationProfile": optimizationProfile.rawValue
                     ]
                 )
 
@@ -3402,8 +3427,15 @@ final class HomeViewModel: ObservableObject {
                         "plan": result.planID.uuidString,
                         "mode": result.usedMode.rawValue,
                         "backend": result.usedBackend.rawValue,
-                        "temporary": result.temporaryOutputURL.lastPathComponent
+                        "temporary": result.temporaryOutputURL.lastPathComponent,
+                        "temporaryBytes": fileSizeInBytes(at: result.temporaryOutputURL).map(String.init) ?? "unknown",
+                        "optimizationProfile": optimizationProfile.rawValue
                     ]
+                )
+                logCodecBenchmarkProbeCompletionIfNeeded(
+                    sourceName: review.source.displayName,
+                    result: result,
+                    optimizationProfile: optimizationProfile
                 )
                 clearActiveStarCharge(for: review.source)
                 let pendingJob = PendingSaveJob(
@@ -4297,6 +4329,26 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
+        #if DEBUG
+        if debugBenchmarkAllowsFreeEncoding {
+            AppLogger.info(
+                "Debug benchmark encoding start bypassed Star charge",
+                category: .encoding,
+                metadata: [
+                    "name": review.source.displayName,
+                    "plan": review.job.plan.id.uuidString,
+                    "probeID": debugCodecProbeID ?? "none"
+                ]
+            )
+            shouldAutoResumeBatchAfterStarEarn = false
+            startEncoding(
+                review: reviewWithSaveGate(.none, for: review),
+                allowsBusyState: true
+            )
+            return
+        }
+        #endif
+
         starWalletSnapshot = await environment.starWalletStore.currentSnapshot()
         let requiredStarCount = estimatedStartStarCost(for: review)
         guard startStarShortage(
@@ -4421,15 +4473,16 @@ final class HomeViewModel: ObservableObject {
         return updatedBatch
     }
 
-    private func startResourceMonitoring() {
+    private func startResourceMonitoring(sampleIntervalNanoseconds: UInt64) {
         stopResourceMonitoring()
         let initialSample = resourceMonitor.sample()
         latestResourceUsage = initialSample
         updateCurrentEncodingProgressResourceUsage(initialSample)
+        let interval = max(sampleIntervalNanoseconds, 250_000_000)
 
         resourceMonitorTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                try? await Task.sleep(nanoseconds: interval)
                 guard !Task.isCancelled,
                       let self else {
                     return
@@ -4440,6 +4493,58 @@ final class HomeViewModel: ObservableObject {
             }
         }
     }
+
+    private func encodingOptimizationProfile(for review: PreparedEncodingReview) -> TaptionEncodingOptimizationProfile {
+        review.job.plan.outputPolicy.advancedOptions.optimizationProfile
+            ?? selectedOutput.optimizationProfile
+    }
+
+    private func taskPriority(for profile: TaptionEncodingOptimizationProfile) -> TaskPriority {
+        switch profile {
+        case .batterySaver:
+            return .utility
+        case .balanced:
+            return .userInitiated
+        case .performance:
+            return .high
+        }
+    }
+
+    private func logCodecBenchmarkProbeCompletionIfNeeded(
+        sourceName: String,
+        result: TaptionEncodingResult,
+        optimizationProfile: TaptionEncodingOptimizationProfile
+    ) {
+        #if DEBUG
+        guard let probeID = debugCodecProbeID else {
+            return
+        }
+        AppLogger.info(
+            "Codec benchmark probe completed",
+            category: .encoding,
+            metadata: [
+                "probeID": probeID,
+                "source": sourceName,
+                "plan": result.planID.uuidString,
+                "mode": result.usedMode.rawValue,
+                "backend": result.usedBackend.rawValue,
+                "temporary": result.temporaryOutputURL.lastPathComponent,
+                "temporaryBytes": fileSizeInBytes(at: result.temporaryOutputURL).map(String.init) ?? "unknown",
+                "optimizationProfile": optimizationProfile.rawValue
+            ]
+        )
+        #endif
+    }
+
+    #if DEBUG
+    private var debugCodecProbeID: String? {
+        ProcessInfo.processInfo.environment["TAPTION_CODEC_PROBE_ID"]
+    }
+
+    private var debugBenchmarkAllowsFreeEncoding: Bool {
+        ProcessInfo.processInfo.environment["TAPTION_DEBUG_BENCHMARK_ALLOW_FREE_ENCODING"] == "1"
+    }
+    #endif
 
     private func stopResourceMonitoring() {
         resourceMonitorTask?.cancel()

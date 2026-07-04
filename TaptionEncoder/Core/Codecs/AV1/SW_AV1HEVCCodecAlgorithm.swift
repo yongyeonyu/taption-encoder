@@ -15,6 +15,7 @@ struct SW_AV1HEVCTranscodeConfiguration {
     let duration: CMTime
     let outputURL: URL
     let outputFileType: AVFileType
+    let optimizationProfile: TaptionEncodingOptimizationProfile
 
     static func make(
         asset: TaptionVideoAsset,
@@ -56,7 +57,8 @@ struct SW_AV1HEVCTranscodeConfiguration {
             limitsToExpectedFrameCount: hasKnownDuration,
             duration: duration,
             outputURL: outputURL,
-            outputFileType: avFileType(for: options.outputPolicy.container)
+            outputFileType: avFileType(for: options.outputPolicy.container),
+            optimizationProfile: options.outputPolicy.advancedOptions.optimizationProfile ?? .balanced
         )
     }
 
@@ -1619,10 +1621,15 @@ extension SW_AV1HEVCTranscoder {
             mediaType: .video,
             outputSettings: writerVideoOutputSettings(
                 targetSize: configuration.targetSize,
-                targetBitrate: configuration.targetBitrate
+                targetBitrate: configuration.targetBitrate,
+                frameDuration: configuration.frameDuration,
+                optimizationProfile: configuration.optimizationProfile
             )
         )
         videoInput.expectsMediaDataInRealTime = false
+        if configuration.optimizationProfile == .performance {
+            videoInput.performsMultiPassEncodingIfSupported = false
+        }
 
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(
             assetWriterInput: videoInput,
@@ -1962,17 +1969,26 @@ extension SW_AV1HEVCTranscoder {
 
     private static func writerVideoOutputSettings(
         targetSize: CGSize,
-        targetBitrate: Int
+        targetBitrate: Int,
+        frameDuration: CMTime,
+        optimizationProfile: TaptionEncodingOptimizationProfile
     ) -> [String: Any] {
         let width = Int(max(targetSize.width.rounded(), 2))
         let height = Int(max(targetSize.height.rounded(), 2))
+        var compressionProperties: [String: Any] = [
+            AVVideoAverageBitRateKey: targetBitrate
+        ]
+        if optimizationProfile == .performance {
+            let fps = frameDuration.seconds > 0 ? Int((1.0 / frameDuration.seconds).rounded()) : 30
+            compressionProperties[AVVideoExpectedSourceFrameRateKey] = min(max(fps, 1), 240)
+            compressionProperties[AVVideoAllowFrameReorderingKey] = false
+            compressionProperties[AVVideoMaxKeyFrameIntervalKey] = min(max(fps, 1), 240)
+        }
         return [
             AVVideoCodecKey: AVVideoCodecType.hevc,
             AVVideoWidthKey: width,
             AVVideoHeightKey: height,
-            AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: targetBitrate
-            ]
+            AVVideoCompressionPropertiesKey: compressionProperties
         ]
     }
 

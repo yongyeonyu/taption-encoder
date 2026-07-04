@@ -331,6 +331,7 @@ struct TaptionOutputSelection: Identifiable, Equatable {
     var resolutionPreset: TaptionOutputResolutionPreset
     var sizePreset: TaptionOutputSizePreset
     var targetSizeMB: Double?
+    var optimizationProfile: TaptionEncodingOptimizationProfile
 
     init(
         videoCodec: TaptionVideoCodec = .hevc,
@@ -338,7 +339,8 @@ struct TaptionOutputSelection: Identifiable, Equatable {
         container: TaptionVideoContainer = .mp4,
         resolutionPreset: TaptionOutputResolutionPreset = .source,
         sizePreset: TaptionOutputSizePreset = .auto,
-        targetSizeMB: Double? = nil
+        targetSizeMB: Double? = nil,
+        optimizationProfile: TaptionEncodingOptimizationProfile = .balanced
     ) {
         self.videoCodec = videoCodec
         self.audioCodec = audioCodec
@@ -346,11 +348,12 @@ struct TaptionOutputSelection: Identifiable, Equatable {
         self.resolutionPreset = resolutionPreset
         self.sizePreset = sizePreset
         self.targetSizeMB = targetSizeMB
+        self.optimizationProfile = optimizationProfile
     }
 
     var id: String {
         let sizeValue = targetSizeMB.map { String(Int($0.rounded())) } ?? "auto"
-        return "\(videoCodec.rawValue)-\(audioCodec.rawValue)-\(container.rawValue)-\(resolutionPreset.rawValue)-\(sizePreset.rawValue)-\(sizeValue)"
+        return "\(videoCodec.rawValue)-\(audioCodec.rawValue)-\(container.rawValue)-\(resolutionPreset.rawValue)-\(sizePreset.rawValue)-\(sizeValue)-\(optimizationProfile.rawValue)"
     }
 
     func outputPolicy(for asset: TaptionVideoAsset? = nil) -> TaptionVideoOutputPolicy {
@@ -362,7 +365,9 @@ struct TaptionOutputSelection: Identifiable, Equatable {
             qualityPolicy: .preserveSourceVisuals,
             advancedOptions: TaptionAdvancedOutputOptions(
                 resizeTo: resolvedResizeTarget(for: asset?.videoTrack),
-                targetBitrate: resolvedTargetBitrate(for: asset)
+                frameRate: resolvedFrameRate(for: asset?.videoTrack),
+                targetBitrate: resolvedTargetBitrate(for: asset),
+                optimizationProfile: optimizationProfile
             )
         )
     }
@@ -487,8 +492,16 @@ struct TaptionOutputSelection: Identifiable, Equatable {
     }
 
     private func resolvedResizeTarget(for track: TaptionVideoTrackInfo?) -> TaptionPixelSize? {
-        guard resolutionPreset != .source else {
-            return nil
+        if resolutionPreset == .source {
+            guard let track,
+                  let maximumAutomaticResolution = optimizationProfile.maximumAutomaticResolution else {
+                return nil
+            }
+            let fittedMaximum = fittedSize(
+                sourceSize: track.displaySize,
+                boundingSize: maximumAutomaticResolution.aligned(to: track.displaySize)
+            )
+            return fittedMaximum == track.displaySize ? nil : fittedMaximum
         }
 
         let baseSize = baseResizeSize(for: track)
@@ -523,6 +536,15 @@ struct TaptionOutputSelection: Identifiable, Equatable {
             width: min(size.width, maxWidth),
             height: min(size.height, maxHeight)
         )
+    }
+
+    private func resolvedFrameRate(for track: TaptionVideoTrackInfo?) -> TaptionRationalFrameRate? {
+        guard let maximumFrameRate = optimizationProfile.maximumFrameRate,
+              let sourceFrameRate = track?.nominalFrameRate,
+              sourceFrameRate.value > maximumFrameRate.value else {
+            return nil
+        }
+        return maximumFrameRate
     }
 
     private func fittedSize(
@@ -565,9 +587,9 @@ struct TaptionOutputSelection: Identifiable, Equatable {
             let totalBitBudget = Int((targetSizeMB * 8_000_000).rounded())
             let audioBitrate = estimatedAudioBitrate(for: asset)
             let targetBitrate = Int((Double(totalBitBudget) / duration).rounded()) - audioBitrate
-            return max(targetBitrate, 300_000)
+            return adjustedBitrate(max(targetBitrate, 300_000))
         case .auto, .low, .medium, .high:
-            return estimatedVideoBitrate(for: asset, preset: sizePreset)
+            return adjustedBitrate(estimatedVideoBitrate(for: asset, preset: sizePreset))
         }
     }
 
@@ -621,9 +643,17 @@ struct TaptionOutputSelection: Identifiable, Equatable {
 
         let targetSize = resolvedResizeTarget(for: track) ?? track.displaySize
         let pixels = max(1, targetSize.width * targetSize.height)
-        let fps = min(max(track.nominalFrameRate?.value ?? 30, 1), 120)
+        let fps = min(max(resolvedFrameRate(for: track)?.value ?? track.nominalFrameRate?.value ?? 30, 1), 120)
         let estimated = Double(pixels) * fps * bitsPerPixel
         return min(max(Int(estimated.rounded()), 300_000), 120_000_000)
+    }
+
+    private func adjustedBitrate(_ bitrate: Int?) -> Int? {
+        guard let bitrate else {
+            return nil
+        }
+        let adjusted = Double(bitrate) * optimizationProfile.bitrateMultiplier
+        return min(max(Int(adjusted.rounded()), 300_000), 120_000_000)
     }
 
     private func estimatedAudioBitrate(for asset: TaptionVideoAsset) -> Int {
@@ -663,6 +693,13 @@ struct TaptionOutputSelection: Identifiable, Equatable {
 private extension TaptionPixelSize {
     var isPortrait: Bool {
         height > width
+    }
+
+    func aligned(to sourceSize: TaptionPixelSize) -> TaptionPixelSize {
+        guard sourceSize.isPortrait != isPortrait else {
+            return self
+        }
+        return TaptionPixelSize(width: height, height: width)
     }
 }
 

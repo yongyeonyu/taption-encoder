@@ -28,25 +28,137 @@ enum TaptionEncodingStage: String, Codable, Equatable {
     case failed
 }
 
+enum TaptionEncodingOptimizationProfile: String, Codable, Equatable, CaseIterable {
+    case batterySaver
+    case balanced
+    case performance
+
+    var menuTitle: String {
+        switch self {
+        case .batterySaver:
+            return "Battery Saver"
+        case .balanced:
+            return "Balanced"
+        case .performance:
+            return "Max Performance"
+        }
+    }
+
+    var detailText: String {
+        switch self {
+        case .batterySaver:
+            return "Caps automatic source output at 1080p and 30 fps, lowers bitrate, and samples device usage less often."
+        case .balanced:
+            return "Preserves source resolution, frame rate, and the normal automatic bitrate target."
+        case .performance:
+            return "Prioritizes the fastest path, raises the automatic bitrate budget, disables frame reordering where the writer path allows it, and samples usage more often."
+        }
+    }
+
+    var sliderValue: Double {
+        switch self {
+        case .batterySaver:
+            return 0
+        case .balanced:
+            return 1
+        case .performance:
+            return 2
+        }
+    }
+
+    var bitrateMultiplier: Double {
+        switch self {
+        case .batterySaver:
+            return 0.70
+        case .balanced:
+            return 1.0
+        case .performance:
+            return 1.35
+        }
+    }
+
+    var maximumAutomaticResolution: TaptionPixelSize? {
+        switch self {
+        case .batterySaver:
+            return TaptionPixelSize(width: 1920, height: 1080)
+        case .balanced, .performance:
+            return nil
+        }
+    }
+
+    var maximumFrameRate: TaptionRationalFrameRate? {
+        switch self {
+        case .batterySaver:
+            return TaptionRationalFrameRate(numerator: 30)
+        case .balanced, .performance:
+            return nil
+        }
+    }
+
+    var resourceSampleIntervalNanoseconds: UInt64 {
+        switch self {
+        case .batterySaver:
+            return 2_000_000_000
+        case .balanced:
+            return 1_000_000_000
+        case .performance:
+            return 500_000_000
+        }
+    }
+
+    static func fromSliderValue(_ value: Double) -> TaptionEncodingOptimizationProfile {
+        switch Int(value.rounded()) {
+        case ...0:
+            return .batterySaver
+        case 1:
+            return .balanced
+        default:
+            return .performance
+        }
+    }
+
+    static func fromDebugString(_ value: String) -> TaptionEncodingOptimizationProfile? {
+        let normalized = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
+        switch normalized {
+        case "battery", "batterysaver", "savebattery", "lowpower":
+            return .batterySaver
+        case "balanced", "balance", "default":
+            return .balanced
+        case "performance", "maxperformance", "maximumperformance", "max", "fast", "fastest":
+            return .performance
+        default:
+            return nil
+        }
+    }
+}
+
 struct TaptionAdvancedOutputOptions: Codable, Equatable {
     var resizeTo: TaptionPixelSize?
     var frameRate: TaptionRationalFrameRate?
     var targetBitrate: Int?
     var color: TaptionColorDescription?
     var rotationDegrees: Int?
+    var optimizationProfile: TaptionEncodingOptimizationProfile?
 
     init(
         resizeTo: TaptionPixelSize? = nil,
         frameRate: TaptionRationalFrameRate? = nil,
         targetBitrate: Int? = nil,
         color: TaptionColorDescription? = nil,
-        rotationDegrees: Int? = nil
+        rotationDegrees: Int? = nil,
+        optimizationProfile: TaptionEncodingOptimizationProfile? = nil
     ) {
         self.resizeTo = resizeTo
         self.frameRate = frameRate
         self.targetBitrate = targetBitrate
         self.color = color
         self.rotationDegrees = rotationDegrees
+        self.optimizationProfile = optimizationProfile
     }
 
     static let preserveSource = TaptionAdvancedOutputOptions()
@@ -567,7 +679,8 @@ enum TaptionSourcePreservingOutputPolicyResolver {
             frameRate: requestedOptions.frameRate ?? videoTrack.nominalFrameRate,
             targetBitrate: requestedOptions.targetBitrate ?? videoTrack.estimatedBitrate,
             color: requestedOptions.color ?? videoTrack.color,
-            rotationDegrees: requestedOptions.rotationDegrees ?? videoTrack.rotationDegrees
+            rotationDegrees: requestedOptions.rotationDegrees ?? videoTrack.rotationDegrees,
+            optimizationProfile: requestedOptions.optimizationProfile
         )
     }
 }

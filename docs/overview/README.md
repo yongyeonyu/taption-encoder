@@ -1,8 +1,8 @@
 # Taption Encoder
 
-Taption Encoder is a free iOS video encoder app intended to make phone-based conversion simple. The current release train is `01.00.02`, mapped to Apple marketing version `1.0.2` and build `28`. The product direction remains practical all-input-to-H.265 conversion through hardware, software, or mixed codec paths, old-device compatibility where practical, background encoding where the OS allows it, and multi-video assembly into one H.265 output with lightweight editing.
+Taption Encoder is a free iOS video encoder app intended to make phone-based conversion simple. The current release train is `01.01.00`, mapped to Apple marketing version `1.1.0` and build `29`. The product direction remains practical all-input-to-H.265 conversion through hardware, software, or mixed codec paths, old-device compatibility where practical, background encoding where the OS allows it, and multi-video assembly into one H.265 output with lightweight editing.
 
-Release `01.00.02` keeps the focused standalone H.265 / HEVC encoder scope and stabilizes preview playback, bundled samples, and project documentation. Later releases expand toward "almost any video in, H.265 out" plus simple multi-camera merge workflows. Output video codec is a product constraint: H.265 / HEVC is the only supported video output codec. Routes such as `H.264 -> AV1` or `AV1 -> H.264` are not product routes.
+Release `01.01.00` keeps the focused standalone H.265 / HEVC encoder scope and carries forward preview playback, bundled samples, project documentation, queue editing, source-preserving validation, privacy/ad, and multi-file encoding-mode prompt stabilization. Later releases expand toward "almost any video in, H.265 out" plus simple multi-camera merge workflows. Output video codec is a product constraint: H.265 / HEVC is the only supported video output codec. Routes such as `H.264 -> AV1` or `AV1 -> H.264` are not product routes.
 
 Product path: **AV1 to H.265 first, broad inputs to H.265 next, H.265-only output final.**
 
@@ -18,12 +18,14 @@ Product path: **AV1 to H.265 first, broad inputs to H.265 next, H.265-only outpu
 
 ## Release Status
 
-- Current release label: `01.00.02`
-- Apple version/build: `1.0.2 (28)`
-- Release date: 2026-07-02
-- App Store Connect/TestFlight upload: export/upload succeeded for `build/TestFlight-01.00.02-28/TaptionEncoder.xcarchive`; App Store Connect reported the uploaded package is processing.
+- Current release label: `01.01.00`
+- Apple version/build: `1.1.0 (29)`
+- Release preparation date: 2026-07-03
+- App Store Connect/TestFlight upload: export/upload succeeded for `build/TestFlight-01.01.00-29/TaptionEncoder.xcarchive`; App Store Connect reported the uploaded package is processing. App Review submission and public release were not performed.
+- App Store Connect version metadata: version `1.1.0` exists in `PREPARE_FOR_SUBMISSION`, release type is `MANUAL`, and English/Korean What's New text has been filled in.
 - Device install proof: verify real-device install separately from TestFlight/App Store Connect state.
-- Verification proof: current `01.00.02` proof is recorded in `docs/verification/RELEASE_01.00.02.md`.
+- Verification proof: current `01.01.00` proof is recorded in `docs/verification/RELEASE_01.01.00.md`.
+- Latest local performance proof: Battery Options encoding profiles and the 2026-07-04 bundled-codec simulator benchmark are recorded in `docs/verification/CODEC_BENCHMARK_2026-07-04.md`. This is local Debug simulator evidence, not TestFlight/App Store Connect proof.
 
 ## Source Core To Port
 
@@ -48,9 +50,10 @@ Next implementation pass should isolate the media conversion core before importi
 - Audio fixture policy and script: [`docs/codecs/AUDIO_CODEC_FIXTURES.md`](../codecs/AUDIO_CODEC_FIXTURES.md)
 - Device codec route simulation: [`docs/codecs/DEVICE_CODEC_ROUTE_SIMULATION.md`](../codecs/DEVICE_CODEC_ROUTE_SIMULATION.md)
 - Local H.265 transcode fixture results: [`docs/verification/HEVC_TRANSCODE_TEST_RESULTS.md`](../verification/HEVC_TRANSCODE_TEST_RESULTS.md)
+- Local bundled-codec simulator benchmark: [`docs/verification/CODEC_BENCHMARK_2026-07-04.md`](../verification/CODEC_BENCHMARK_2026-07-04.md)
 - Release action items and launch blockers: [`docs/planning/ACTION_ITEMS.md`](../planning/ACTION_ITEMS.md)
 - Release closeout for `01.00.01`: [`docs/archive/releases/RELEASE_01.00.01.md`](../archive/releases/RELEASE_01.00.01.md)
-- Current release proof for `01.00.02`: [`docs/verification/RELEASE_01.00.02.md`](../verification/RELEASE_01.00.02.md)
+- Current release proof for `01.01.00`: [`docs/verification/RELEASE_01.01.00.md`](../verification/RELEASE_01.01.00.md)
 
 ## Release 01.00.01 Scope
 

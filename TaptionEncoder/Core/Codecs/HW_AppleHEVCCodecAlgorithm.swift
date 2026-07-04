@@ -99,7 +99,8 @@ enum HW_AppleHEVCCodecAlgorithm {
             exportSession.shouldOptimizeForNetworkUse = true
             exportSession.videoComposition = try await videoCompositionIfNeeded(
                 for: asset,
-                targetSize: request.options.outputPolicy.advancedOptions.resizeTo
+                targetSize: request.options.outputPolicy.advancedOptions.resizeTo,
+                targetFrameRate: request.options.outputPolicy.advancedOptions.frameRate
             )
             trace.mark(
                 "export_session_configured",
@@ -187,13 +188,9 @@ enum HW_AppleHEVCCodecAlgorithm {
 
     private static func videoCompositionIfNeeded(
         for asset: AVAsset,
-        targetSize: TaptionPixelSize?
+        targetSize: TaptionPixelSize?,
+        targetFrameRate: TaptionRationalFrameRate?
     ) async throws -> AVMutableVideoComposition? {
-        guard let targetSize,
-              targetSize.isValid else {
-            return nil
-        }
-
         let tracks = try await asset.loadTracks(withMediaType: .video)
         guard let videoTrack = tracks.first else {
             return nil
@@ -209,16 +206,35 @@ enum HW_AppleHEVCCodecAlgorithm {
             width: abs(displayedRect.width),
             height: abs(displayedRect.height)
         )
-        let renderSize = evenSize(CGSize(
-            width: CGFloat(targetSize.width),
-            height: CGFloat(targetSize.height)
-        ))
-
         guard displayedSize.width > 0,
-              displayedSize.height > 0,
-              renderSize.width > 0,
+              displayedSize.height > 0 else {
+            return nil
+        }
+
+        let renderSize: CGSize
+        if let targetSize,
+           targetSize.isValid {
+            renderSize = evenSize(CGSize(
+                width: CGFloat(targetSize.width),
+                height: CGFloat(targetSize.height)
+            ))
+        } else {
+            renderSize = evenSize(displayedSize)
+        }
+
+        let targetFrameRateValue = targetFrameRate?.value
+        let frameRateShouldChange = targetFrameRateValue.map { target in
+            target.isFinite
+                && target > 0
+                && nominalFrameRate.isFinite
+                && nominalFrameRate > 0
+                && abs(Double(nominalFrameRate) - target) > 0.1
+        } ?? false
+        let sizeShouldChange = !sizesAreEquivalent(displayedSize, renderSize)
+
+        guard renderSize.width > 0,
               renderSize.height > 0,
-              !sizesAreEquivalent(displayedSize, renderSize) else {
+              sizeShouldChange || frameRateShouldChange else {
             return nil
         }
 
@@ -253,7 +269,7 @@ enum HW_AppleHEVCCodecAlgorithm {
 
         let composition = AVMutableVideoComposition()
         composition.renderSize = renderSize
-        composition.frameDuration = frameDuration(for: nominalFrameRate)
+        composition.frameDuration = frameDuration(for: targetFrameRateValue ?? Double(nominalFrameRate))
         composition.instructions = [instruction]
         return composition
     }
@@ -275,12 +291,12 @@ enum HW_AppleHEVCCodecAlgorithm {
             && abs(lhs.height.rounded() - rhs.height.rounded()) < 1
     }
 
-    private static func frameDuration(for nominalFrameRate: Float) -> CMTime {
+    private static func frameDuration(for nominalFrameRate: Double) -> CMTime {
         guard nominalFrameRate.isFinite,
               nominalFrameRate > 0 else {
             return CMTime(value: 1, timescale: 30)
         }
-        return CMTime(seconds: 1.0 / Double(nominalFrameRate), preferredTimescale: 600)
+        return CMTime(seconds: 1.0 / nominalFrameRate, preferredTimescale: 600)
     }
 
     private static func export(_ exportSessionBox: HW_AppleHEVCExportSessionBox) async throws {

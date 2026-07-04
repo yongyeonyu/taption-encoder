@@ -174,8 +174,7 @@ struct HomeView: View {
             let reservesFailureLogArea = viewModel.state.reservesFailureLogArea
             let metrics = HomeLayoutMetrics(
                 size: geometry.size,
-                reservesFailureLogArea: reservesFailureLogArea,
-                showsNativeAdSlot: viewModel.showsNativeAdSlot
+                reservesFailureLogArea: reservesFailureLogArea
             )
             let isFullScreenVideoPlaybackActive = viewModel.activePreview != nil
 
@@ -240,7 +239,10 @@ struct HomeView: View {
             .presentationDragIndicator(.visible)
         }
         .sheet(item: $activeMenuSheet) { sheet in
-            HomeMenuSheetView(sheet: sheet)
+            HomeMenuSheetView(
+                sheet: sheet,
+                onOptimizationProfileChanged: { viewModel.selectEncodingOptimizationProfile($0) }
+            )
         }
         .alert(
             item: Binding(
@@ -357,18 +359,12 @@ struct HomeView: View {
             sourceControls(metrics: metrics)
             outputSelector(metrics: metrics)
             outputSummary(metrics: metrics)
-            if viewModel.showsIdleNativeAdSlot {
-                nativeAdSlot(metrics: metrics)
-            }
             loadedFilesPanel(metrics: metrics)
             encodingControls(
                 metrics: metrics,
                 reservesFailureLogArea: reservesFailureLogArea,
                 showsPlaybackActions: showsPlaybackActions
             )
-            if viewModel.showsCompletedNativeAdSlot {
-                nativeAdSlot(metrics: metrics)
-            }
 
             if !reservesFailureLogArea {
                 Spacer(minLength: 0)
@@ -408,15 +404,6 @@ struct HomeView: View {
             audioCodecText: viewModel.selectedAudioCodecText,
             contentScale: metrics.contentScale
         )
-    }
-
-    private func nativeAdSlot(metrics: HomeLayoutMetrics) -> some View {
-        AdMobNativeAdSlotView(
-            adUnitID: viewModel.nativeAdUnitID,
-            displayScale: metrics.contentScale,
-            title: viewModel.nativeAdSlotTitle
-        )
-        .frame(height: metrics.nativeAdSlotHeight)
     }
 
     private func loadedFilesPanel(metrics: HomeLayoutMetrics) -> some View {
@@ -747,7 +734,10 @@ struct HomeView: View {
         )
         AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
         if debugAutoStartEncodingRequested {
+            viewModel.applyDebugEncodingOptimizationProfileIfRequested()
             viewModel.openDebugFileAndStartEncoding(url: previewURL)
+        } else if debugAutoStartPictureInPictureRequested {
+            viewModel.openDebugFileAndAutoOpenPreview(url: previewURL)
         } else {
             viewModel.openExternalPlayerFile(url: previewURL)
         }
@@ -774,7 +764,14 @@ struct HomeView: View {
                 ]
             )
             AdMobBootstrapper.suppressAppOpenAdsForExternalPlayback()
-            viewModel.openExternalPlayerFile(url: previewURL)
+            if debugAutoStartEncodingRequested {
+                viewModel.applyDebugEncodingOptimizationProfileIfRequested()
+                viewModel.openDebugFileAndStartEncoding(url: previewURL)
+            } else if debugAutoStartPictureInPictureRequested {
+                viewModel.openDebugFileAndAutoOpenPreview(url: previewURL)
+            } else {
+                viewModel.openExternalPlayerFile(url: previewURL)
+            }
         } catch {
             AppLogger.error(
                 "Debug preview sample failed",
@@ -808,8 +805,14 @@ struct HomeView: View {
             || ProcessInfo.processInfo.arguments.contains("--taption-auto-start-encoding")
     }
 
+    private var debugAutoStartPictureInPictureRequested: Bool {
+        ProcessInfo.processInfo.environment["TAPTION_AUTO_START_PIP"] == "1"
+            || ProcessInfo.processInfo.arguments.contains("--taption-auto-start-pip")
+    }
+
     private var debugProbeID: String? {
         ProcessInfo.processInfo.environment["TAPTION_PIP_PROBE_ID"]
+            ?? ProcessInfo.processInfo.environment["TAPTION_CODEC_PROBE_ID"]
     }
     #endif
 

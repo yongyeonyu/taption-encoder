@@ -1,12 +1,12 @@
 # Taption Encoder Release Action Items
 
-Status date: 2026-07-03
+Status date: 2026-07-04
 
 ## Current State
 
 - Product path is AV1 to H.265 first, broad inputs to H.265 next, H.265-only video output final.
-- Action item count as of the current P0 source-preserving verification pass: 335 total, 232 completed, 103 remaining.
-- Current execution order for the `01.00.02` release pass: 1) organize development documents under `docs/`, 2) archive completed or stale reports/release notes, 3) update `AGENTS.md` for next-chat handoff, 4) review and stabilize preview/sample/background/save-destination/queue-edit code, 5) run focused and core validation, 6) set Apple version/build to `1.0.2 (28)`, 7) archive/export/upload to TestFlight, 8) commit and push `main`.
+- Action item count as of the current P0 source-preserving verification pass: 339 total, 236 completed, 103 remaining.
+- Current execution order for the `01.01.00` release preparation pass: 1) set Apple version/build to `1.1.0 (29)`, 2) update release docs and next-chat handoff, 3) run focused and core validation, 4) create a local release archive, 5) upload to App Store Connect/TestFlight preparation, 6) create the App Store Connect `1.1.0` version page and fill English/Korean What's New text, 7) keep App Review submission and public release as owner-decided follow-up steps.
 - Latest preview/sample verification on 2026-06-29: `Scripts/verify_bundled_test_videos.sh` passed for 55 bundled videos normalized to 5 seconds; `Scripts/run_core_codec_truth_checks.sh` passed; focused iPhone simulator XCTest passed for bundled sample matching, source notice policy, codec inspection, software-only readiness, queue thumbnails, File/Folder thumbnail source routing, preview video output, preview close/reset/source-change/encoding-start behavior, and representative bundled H.265/MP4 transcodes.
 - Latest iPhone preview log review on 2026-06-29 copied `Documents/TaptionEncoderLogs/taption-encoder.log` from the paired iPhone 14 Pro. It showed the preview audio session now activates, and identified several VLC preview no-video-output codecs (`Lossless JPEG`, `Microsoft RLE`, `R10K`, `R210`, `Snow`) that should remain encodable but not open a black preview surface in this build.
 - Current bundled `TestVideos` audio policy: samples with readable source audio preserve source audio through codec/container-appropriate re-encoding; raw `H.261.h261` and `RoQ Video.roq` remain documented no-audio exceptions.
@@ -17,8 +17,9 @@ Status date: 2026-07-03
 - Latest P0 AdMob/privacy validation on 2026-07-03: focused `CodecRoutePlannerTests` passed on the iPhone 17 Pro simulator, covering UMP/privacy options wiring, native ad provider and idle/completed slots, non-personalized ad requests, runtime ad placement switches, frequency caps, and full-screen ad suppression during protected flows.
 - Latest P0 source-preserving execution validation on 2026-07-03: focused `CodecRoutePlannerTests` passed on the Codex iPhone 17 Pro simulator with parallel testing disabled, covering execution-plan source preservation requirements for resolution, frame rate, bitrate, color/HDR metadata, orientation, duration, and audio presence/sample shape; post-encode output verification for resolution, frame rate, color/HDR metadata, orientation, duration, audio shape, and AVFoundation visual-sample decodability/comparison; pre-encoder audit failure when known source-preserving fields are missing; and encoder-service failure when completed output verification fails. `Scripts/run_core_codec_truth_checks.sh` passed after the verification layer was added. A real bundled representative encode probe now passes H.261, Theora/Opus, JPEG-LS, QuickTime Video/AAC, and Flash Video/MP3 to H.265/MP4 with audio-bearing samples producing AAC output tracks, Theora preserving 320x240 instead of the prior 2x2 fallback, and source-preserving output verification passing.
 - Latest P0 App Store privacy label pass on 2026-07-03: `docs/app_store/PRIVACY_NUTRITION_LABEL_ANSWERS.md` records the current App Store Connect answer set for ads, analytics, diagnostics, and tracking using Apple guidance, Google Mobile Ads disclosure guidance, UMP guidance, and the build `28` framework privacy manifests.
-- Release `01.00.02` is the active release train and maps to Apple marketing version `1.0.2`, build `28`.
-- Release `01.00.01` remains the archived shipped baseline; `01.00.02` build `28` upload proof is verified, while App Store Connect processing completion, TestFlight availability, App Review, and public availability remain separate states.
+- Latest local performance/battery pass on 2026-07-04: Battery Options now include Battery Saver, Balanced, and Max Performance encoding profiles; Max Performance raises bitrate and task/resource-monitoring aggressiveness, Battery Saver caps automatic source output to 1080p/30fps and lowers bitrate. `Scripts/benchmark_bundled_codecs_simulator.sh` exercised all 56 bundled samples on the iPhone 17 Pro simulator in performance mode; 37 encoded successfully, 17 failed, 1 was route-blocked, and 1 timed out. Proof is recorded in `docs/verification/CODEC_BENCHMARK_2026-07-04.md`. This is local Debug simulator proof and not TestFlight/App Store Connect proof.
+- Release `01.01.00` is the active release train and maps to Apple marketing version `1.1.0`, build `29`.
+- Release `01.00.02` remains the previous uploaded release train; `01.01.00` App Store Connect upload has succeeded and the uploaded package is processing. The App Store Connect `1.1.0` version page exists in `PREPARE_FOR_SUBMISSION` with `MANUAL` release type and localized English/Korean What's New text. App Review submission and public availability remain owner-decided follow-up states and are not part of release preparation unless explicitly requested.
 - Release commit is `f5af6b3` (`Prepare Taption Encoder 1.0.1 build 19`).
 - Project shell exists.
 - App is configured for iPhone and iPad.
@@ -37,7 +38,7 @@ Status date: 2026-07-03
 - App Store release assets, app icon, preview/marketing copy, support URL, release metadata, and H.265-only output policy copy were prepared for release `01.00.01`.
 - App Store Connect/TestFlight export upload succeeded for `1.0.1 (19)` and the uploaded package entered processing.
 - Paired iPhone 14 Pro and iPad Pro 12.9-inch (6th generation) install checks both reported `com.taption.encoder` version `1.0.1`, build `19`.
-- Latest release proof: `Scripts/run_core_codec_truth_checks.sh` passed; app-scheme XCTest passed with parallel testing disabled at 284 tests executed, 2 skipped, and 0 failures; build `28` focused Pro Mode/queue-card XCTest passed, archive/export/upload succeeded, and App Store Connect reported the uploaded package is processing. The older `Scripts/verify_codec_fixture_evidence.sh` proof remains 90 fixtures and 180 verified transcodes.
+- Latest release preparation proof for `01.01.00`: Apple version/build are set to `1.1.0 (29)`; plist lint passed; focused multi-file/folder XCTest passed; `Scripts/run_core_codec_truth_checks.sh` passed; local archive creation and archive Info.plist inspection passed at `build/TestFlight-01.01.00-29/TaptionEncoder.xcarchive`; App Store Connect/TestFlight upload succeeded and the uploaded package is processing; App Store Connect version `1.1.0` was created in `PREPARE_FOR_SUBMISSION` with `MANUAL` release type and localized English/Korean What's New text. App Review submission, public release, real-device install, and runtime logs were not performed for `01.01.00` and remain separate owner-decided proof surfaces. The upload completed with non-fatal third-party framework dSYM warnings for GoogleMobileAds and UserMessagingPlatform. The previous uploaded `01.00.02` build `28` proof remains separate.
 - The project is in Git and pushed to `https://github.com/yongyeonyu/taption-encoder`.
 
 ## Release 01.00.02 Closeout
@@ -50,6 +51,24 @@ Status date: 2026-07-03
 - [x] Commit and push the `01.00.02` release changes to `main`.
 - [x] Archive/export/upload `01.00.02` build `28` to TestFlight/App Store Connect.
 - [x] Record `01.00.02` upload proof separately from App Review, public availability, real-device install, and runtime logs.
+
+## Release 01.01.00 Preparation
+
+- [x] Set Apple marketing version/build to `1.1.0 (29)`.
+- [x] Run focused validation for the latest queue/source-preserving/privacy/multi-file encoding-mode changes.
+- [x] Run current core validation for `01.01.00`.
+- [x] Create local release archive under `build/TestFlight-01.01.00-29/`.
+- [x] Upload `01.01.00` build `29` to App Store Connect/TestFlight preparation.
+- [x] Create App Store Connect version `1.1.0` and fill English/Korean What's New text.
+- [x] Record `01.01.00` preparation proof separately from App Review submission, public availability, real-device install, and runtime logs.
+- [ ] Owner decision pending: select build/submit/release in App Store Connect.
+
+## Encoding Performance And Battery Options
+
+- [x] Add Battery Options encoding optimization selector with Battery Saver, Balanced, and Max Performance modes.
+- [x] Apply Battery Saver output caps for automatic source output and lower bitrate, while preserving explicit user resolution choices.
+- [x] Apply Max Performance scheduling, bitrate multiplier, resource sampling, and HEVC writer settings for the highest-performance local path.
+- [x] Add bundled-codec simulator benchmark script and record the 2026-07-04 full-sample performance-mode run separately from release upload proof.
 
 ## Release 01.00.01 Closeout
 

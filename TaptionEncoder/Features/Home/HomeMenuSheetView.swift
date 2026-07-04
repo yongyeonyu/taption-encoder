@@ -28,6 +28,7 @@ enum HomeMenuSheet: String, Identifiable {
 
 struct HomeMenuSheetView: View {
     var sheet: HomeMenuSheet
+    var onOptimizationProfileChanged: (TaptionEncodingOptimizationProfile) -> Void = { _ in }
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -56,7 +57,9 @@ struct HomeMenuSheetView: View {
         case .help:
             HelpSheetContentView()
         case .batterySettings:
-            BatterySettingsSheetContentView()
+            BatterySettingsSheetContentView(
+                onOptimizationProfileChanged: onOptimizationProfileChanged
+            )
         case .privacyAds:
             PrivacyAdsSheetContentView()
         case .openSource:
@@ -305,11 +308,69 @@ private struct HelpSheetContentView: View {
 }
 
 private struct BatterySettingsSheetContentView: View {
-    @State private var settings = BatteryEncodingSettings.load()
+    @State private var settings: BatteryEncodingSettings
+    @State private var optimizationSliderValue: Double
+    private let onOptimizationProfileChanged: (TaptionEncodingOptimizationProfile) -> Void
+
+    init(onOptimizationProfileChanged: @escaping (TaptionEncodingOptimizationProfile) -> Void) {
+        let loadedSettings = BatteryEncodingSettings.load()
+        self._settings = State(initialValue: loadedSettings)
+        self._optimizationSliderValue = State(initialValue: loadedSettings.optimizationProfile.sliderValue)
+        self.onOptimizationProfileChanged = onOptimizationProfileChanged
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Encoding Optimization")
+                            .font(.headline)
+                            .foregroundStyle(.white)
+
+                        Spacer()
+
+                        Text(settings.optimizationProfile.menuTitle)
+                            .font(.headline)
+                            .foregroundStyle(TaptionTheme.accent)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+
+                    Slider(
+                        value: Binding(
+                            get: { optimizationSliderValue },
+                            set: { updateOptimizationProfile(TaptionEncodingOptimizationProfile.fromSliderValue($0)) }
+                        ),
+                        in: 0...2,
+                        step: 1
+                    )
+                    .tint(TaptionTheme.accent)
+
+                    HStack(alignment: .top) {
+                        ForEach(TaptionEncodingOptimizationProfile.allCases, id: \.self) { profile in
+                            Text(profile.menuTitle)
+                                .font(.caption2.weight(profile == settings.optimizationProfile ? .bold : .regular))
+                                .foregroundStyle(profile == settings.optimizationProfile ? TaptionTheme.accent : TaptionTheme.mutedText)
+                                .frame(maxWidth: .infinity, alignment: alignment(for: profile))
+                                .multilineTextAlignment(textAlignment(for: profile))
+                        }
+                    }
+
+                    Text(settings.optimizationProfile.detailText)
+                        .font(.caption)
+                        .foregroundStyle(Color.white.opacity(0.68))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(TaptionTheme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(TaptionTheme.border, lineWidth: 1)
+                )
+
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(alignment: .firstTextBaseline) {
                         Text("Battery Limit")
@@ -390,6 +451,38 @@ private struct BatterySettingsSheetContentView: View {
     private func updatePowerConnectedOnly(_ isEnabled: Bool) {
         settings.powerConnectedOnly = isEnabled
         settings.save()
+    }
+
+    private func updateOptimizationProfile(_ profile: TaptionEncodingOptimizationProfile) {
+        optimizationSliderValue = profile.sliderValue
+        guard settings.optimizationProfile != profile else {
+            return
+        }
+        settings.optimizationProfile = profile
+        settings.save()
+        onOptimizationProfileChanged(profile)
+    }
+
+    private func alignment(for profile: TaptionEncodingOptimizationProfile) -> Alignment {
+        switch profile {
+        case .batterySaver:
+            return .leading
+        case .balanced:
+            return .center
+        case .performance:
+            return .trailing
+        }
+    }
+
+    private func textAlignment(for profile: TaptionEncodingOptimizationProfile) -> TextAlignment {
+        switch profile {
+        case .batterySaver:
+            return .leading
+        case .balanced:
+            return .center
+        case .performance:
+            return .trailing
+        }
     }
 }
 

@@ -187,8 +187,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(adProvidersText.contains("TaptionAdPlacementPolicyJSON"))
         XCTAssertTrue(adProvidersText.contains("AdPlacementFrequencyLimiter"))
         XCTAssertTrue(appEnvironmentText.contains("nativeAdProvider: AdMobNativeAdProvider"))
-        XCTAssertTrue(homeViewText.contains("AdMobNativeAdSlotView("))
-        XCTAssertTrue(homeViewText.contains("showsNativeAdSlot: viewModel.showsNativeAdSlot"))
+        XCTAssertFalse(homeViewText.contains("AdMobNativeAdSlotView("))
+        XCTAssertFalse(homeViewText.contains("showsNativeAdSlot"))
         XCTAssertTrue(homeViewText.contains(".padding(.top, metrics.footerAdSeparationHeight)"))
         XCTAssertTrue(menuText.contains("Privacy & Ads"))
         XCTAssertTrue(menuText.contains("Report Ad Issue"))
@@ -3224,6 +3224,88 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         XCTAssertEqual(policy.advancedOptions.resizeTo, TaptionPixelSize(width: 720, height: 1280))
+    }
+
+    func testEncodingOptimizationProfileSliderMappingAndSettingsPersistence() {
+        XCTAssertEqual(TaptionEncodingOptimizationProfile.fromSliderValue(-1), .batterySaver)
+        XCTAssertEqual(TaptionEncodingOptimizationProfile.fromSliderValue(1), .balanced)
+        XCTAssertEqual(TaptionEncodingOptimizationProfile.fromSliderValue(2), .performance)
+        XCTAssertEqual(TaptionEncodingOptimizationProfile.fromDebugString("max-performance"), .performance)
+
+        let suiteName = "BatteryEncodingSettingsTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let settings = BatteryEncodingSettings(
+            batteryLimitPercent: 45,
+            powerConnectedOnly: true,
+            optimizationProfile: .performance
+        )
+        settings.save(defaults: defaults)
+
+        XCTAssertEqual(BatteryEncodingSettings.load(defaults: defaults), settings)
+    }
+
+    func testBatterySaverOutputPolicyCapsAutomaticSourceResolutionFrameRateAndBitrate() {
+        let asset = makeAsset(
+            sourceCodec: .h264,
+            displaySize: TaptionPixelSize(width: 3840, height: 2160),
+            frameRate: TaptionRationalFrameRate(numerator: 60)
+        )
+        let balancedPolicy = TaptionOutputSelection(
+            videoCodec: .hevc,
+            container: .mp4,
+            optimizationProfile: .balanced
+        ).outputPolicy(for: asset)
+        let batteryPolicy = TaptionOutputSelection(
+            videoCodec: .hevc,
+            container: .mp4,
+            optimizationProfile: .batterySaver
+        ).outputPolicy(for: asset)
+
+        XCTAssertNil(balancedPolicy.advancedOptions.resizeTo)
+        XCTAssertNil(balancedPolicy.advancedOptions.frameRate)
+        XCTAssertEqual(batteryPolicy.advancedOptions.resizeTo, TaptionPixelSize(width: 1920, height: 1080))
+        XCTAssertEqual(batteryPolicy.advancedOptions.frameRate, TaptionRationalFrameRate(numerator: 30))
+        XCTAssertEqual(batteryPolicy.advancedOptions.optimizationProfile, .batterySaver)
+        XCTAssertNotNil(balancedPolicy.advancedOptions.targetBitrate)
+        XCTAssertNotNil(batteryPolicy.advancedOptions.targetBitrate)
+        XCTAssertLessThan(
+            batteryPolicy.advancedOptions.targetBitrate ?? Int.max,
+            balancedPolicy.advancedOptions.targetBitrate ?? 0
+        )
+    }
+
+    func testPerformanceOutputPolicyRaisesBitrateAndCarriesProfile() {
+        let asset = makeAsset(
+            sourceCodec: .h264,
+            displaySize: TaptionPixelSize(width: 1920, height: 1080),
+            frameRate: TaptionRationalFrameRate(numerator: 30)
+        )
+        let balancedPolicy = TaptionOutputSelection(
+            videoCodec: .hevc,
+            container: .mp4,
+            optimizationProfile: .balanced
+        ).outputPolicy(for: asset)
+        let performancePolicy = TaptionOutputSelection(
+            videoCodec: .hevc,
+            container: .mp4,
+            optimizationProfile: .performance
+        ).outputPolicy(for: asset)
+
+        XCTAssertEqual(performancePolicy.advancedOptions.optimizationProfile, .performance)
+        XCTAssertNil(performancePolicy.advancedOptions.resizeTo)
+        XCTAssertNil(performancePolicy.advancedOptions.frameRate)
+        XCTAssertGreaterThan(
+            performancePolicy.advancedOptions.targetBitrate ?? 0,
+            balancedPolicy.advancedOptions.targetBitrate ?? Int.max
+        )
+        XCTAssertLessThan(
+            TaptionEncodingOptimizationProfile.performance.resourceSampleIntervalNanoseconds,
+            TaptionEncodingOptimizationProfile.balanced.resourceSampleIntervalNanoseconds
+        )
     }
 
     func testOutputCatalogSeparatesImplementedCommandPlanReadyPlannedAndUnsupportedOutputs() {
@@ -9101,10 +9183,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewModelText.contains("batch.multiSelectedURLs.removeAll()"))
         XCTAssertTrue(homeViewModelText.contains("standaloneSelectedQueueIDs.removeAll()"))
         XCTAssertTrue(homeViewText.contains("reservesFailureLogArea: reservesFailureLogArea"))
-        XCTAssertTrue(homeLayoutMetricsText.contains("init(\n        size: CGSize,\n        reservesFailureLogArea: Bool = false,\n        showsNativeAdSlot: Bool = false\n    )"))
+        XCTAssertTrue(homeLayoutMetricsText.contains("init(\n        size: CGSize,\n        reservesFailureLogArea: Bool = false\n    )"))
         XCTAssertTrue(homeLayoutMetricsText.contains("let availableHeight = max(1, size.height)"))
         XCTAssertTrue(homeLayoutMetricsText.contains("let heightScale = min(max(availableHeight / referenceHeight, minimumScale), maximumScale)"))
-        XCTAssertTrue(homeLayoutMetricsText.contains("showsNativeAdSlot: Bool = false"))
+        XCTAssertFalse(homeLayoutMetricsText.contains("showsNativeAdSlot"))
         XCTAssertTrue(homeLayoutMetricsText.contains("footerAdSeparationHeight = max(8, 12 * contentScale)"))
         XCTAssertTrue(homeLayoutMetricsText.contains("filePanelHeight = max(0, remainingHeight)"))
         XCTAssertFalse(homeLayoutMetricsText.contains("filePanelHeight = max(remainingHeight, minimumFilePanelHeight)"))
@@ -9121,21 +9203,69 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(compactLandscapeMetrics.filePanelHeight, 0)
     }
 
-    func testHomeLayoutMetricsSubtractsNativeAdSlotFromQueuePanel() {
-        let baselineMetrics = HomeLayoutMetrics(
-            size: CGSize(width: 393, height: 852),
-            showsNativeAdSlot: false
-        )
-        let nativeAdMetrics = HomeLayoutMetrics(
-            size: CGSize(width: 393, height: 852),
-            showsNativeAdSlot: true
-        )
+    func testHomeLayoutMetricsDoesNotReserveMiddleNativeAdSlot() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
+        let homeLayoutMetricsURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeLayoutMetrics.swift")
+        let homeViewModelURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeViewModel.swift")
+        let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
+        let homeLayoutMetricsText = try String(contentsOf: homeLayoutMetricsURL, encoding: .utf8)
+        let homeViewModelText = try String(contentsOf: homeViewModelURL, encoding: .utf8)
+        let metrics = HomeLayoutMetrics(size: CGSize(width: 393, height: 852))
 
-        XCTAssertGreaterThan(nativeAdMetrics.nativeAdSlotHeight, 0)
-        XCTAssertGreaterThan(nativeAdMetrics.footerAdSeparationHeight, 0)
-        XCTAssertEqual(baselineMetrics.nativeAdSlotHeight, 0)
-        XCTAssertLessThan(nativeAdMetrics.filePanelHeight, baselineMetrics.filePanelHeight)
-        XCTAssertGreaterThanOrEqual(nativeAdMetrics.filePanelHeight, 0)
+        XCTAssertGreaterThan(metrics.footerAdSeparationHeight, 0)
+        XCTAssertGreaterThanOrEqual(metrics.filePanelHeight, 0)
+        XCTAssertFalse(homeViewText.contains("nativeAdSlot(metrics:"))
+        XCTAssertFalse(homeLayoutMetricsText.contains("nativeAdSlotHeight"))
+        XCTAssertFalse(homeViewModelText.contains("showsIdleNativeAdSlot"))
+        XCTAssertFalse(homeViewModelText.contains("showsCompletedNativeAdSlot"))
+    }
+
+    func testBatterySettingsSheetContainsEncodingOptimizationSlider() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let menuSheetURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeMenuSheetView.swift")
+        let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
+        let menuSheetText = try String(contentsOf: menuSheetURL, encoding: .utf8)
+        let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
+
+        XCTAssertTrue(menuSheetText.contains("Encoding Optimization"))
+        XCTAssertTrue(menuSheetText.contains("TaptionEncodingOptimizationProfile.allCases"))
+        XCTAssertTrue(menuSheetText.contains("updateOptimizationProfile"))
+        XCTAssertTrue(menuSheetText.contains("settings.optimizationProfile.menuTitle"))
+        XCTAssertTrue(homeViewText.contains("onOptimizationProfileChanged: { viewModel.selectEncodingOptimizationProfile($0) }"))
+    }
+
+    func testBundledCodecBenchmarkScriptCoversPlaybackEncodingAndProfiles() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let scriptURL = rootURL.appendingPathComponent("Scripts/benchmark_bundled_codecs_simulator.sh")
+        let homeViewText = try String(
+            contentsOf: rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift"),
+            encoding: .utf8
+        )
+        let homeViewModelText = try String(
+            contentsOf: rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeViewModel.swift"),
+            encoding: .utf8
+        )
+        let scriptText = try String(contentsOf: scriptURL, encoding: .utf8)
+
+        XCTAssertTrue(scriptText.contains("--mode MODE"))
+        XCTAssertTrue(scriptText.contains("TAPTION_AUTO_START_PIP"))
+        XCTAssertTrue(scriptText.contains("TAPTION_AUTO_START_ENCODING"))
+        XCTAssertTrue(scriptText.contains("TAPTION_CODEC_PROBE_PROFILE"))
+        XCTAssertTrue(scriptText.contains("TAPTION_DEBUG_BENCHMARK_ALLOW_FREE_ENCODING"))
+        XCTAssertTrue(scriptText.contains("Codec benchmark probe completed"))
+        XCTAssertTrue(scriptText.contains("verify_bundled_test_videos.sh"))
+        XCTAssertTrue(homeViewText.contains("applyDebugEncodingOptimizationProfileIfRequested()"))
+        XCTAssertTrue(homeViewText.contains("debugAutoStartPictureInPictureRequested"))
+        XCTAssertTrue(homeViewModelText.contains("openDebugFileAndAutoOpenPreview"))
+        XCTAssertTrue(homeViewModelText.contains("Debug benchmark encoding start bypassed Star charge"))
+        XCTAssertTrue(homeViewModelText.contains("Codec benchmark probe completed"))
     }
 
     @MainActor
@@ -10132,7 +10262,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         let viewModelURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeViewModel.swift")
         let source = try String(contentsOf: viewModelURL, encoding: .utf8)
 
-        XCTAssertTrue(source.contains("private func startResourceMonitoring()"))
+        XCTAssertTrue(source.contains("private func startResourceMonitoring(sampleIntervalNanoseconds: UInt64)"))
+        XCTAssertTrue(source.contains("optimizationProfile.resourceSampleIntervalNanoseconds"))
+        XCTAssertTrue(source.contains("Task(priority: taskPriority(for: optimizationProfile))"))
         XCTAssertTrue(source.contains("private func stopResourceMonitoring()"))
         XCTAssertTrue(source.contains("latestResourceUsage"))
         XCTAssertTrue(source.contains("resourceUsage: latestResourceUsage"))
@@ -10562,6 +10694,8 @@ final class CodecRoutePlannerTests: XCTestCase {
     private func makeAsset(
         sourceCodec: TaptionVideoCodec,
         displaySize: TaptionPixelSize = TaptionPixelSize(width: 1920, height: 1080),
+        frameRate: TaptionRationalFrameRate = TaptionRationalFrameRate(numerator: 30),
+        videoBitrate: Int? = nil,
         duration: TimeInterval = 1,
         fileSize: Int64 = 1_000_000,
         fingerprint: TaptionMediaFingerprint? = nil
@@ -10575,7 +10709,8 @@ final class CodecRoutePlannerTests: XCTestCase {
                 codec: sourceCodec,
                 naturalSize: displaySize,
                 displaySize: displaySize,
-                nominalFrameRate: TaptionRationalFrameRate(numerator: 30)
+                nominalFrameRate: frameRate,
+                estimatedBitrate: videoBitrate
             ),
             audioTracks: [
                 TaptionAudioTrackInfo(

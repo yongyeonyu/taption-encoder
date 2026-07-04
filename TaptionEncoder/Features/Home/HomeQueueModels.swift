@@ -7,16 +7,20 @@ struct BatteryEncodingSettings: Equatable {
 
     private static let batteryLimitPercentKey = "batteryEncoding.limitPercent"
     private static let powerConnectedOnlyKey = "batteryEncoding.powerConnectedOnly"
+    private static let optimizationProfileKey = "batteryEncoding.optimizationProfile"
 
     var batteryLimitPercent: Int
     var powerConnectedOnly: Bool
+    var optimizationProfile: TaptionEncodingOptimizationProfile
 
     init(
         batteryLimitPercent: Int = Self.defaultLimitPercent,
-        powerConnectedOnly: Bool = false
+        powerConnectedOnly: Bool = false,
+        optimizationProfile: TaptionEncodingOptimizationProfile = .balanced
     ) {
         self.batteryLimitPercent = Self.clampLimitPercent(batteryLimitPercent)
         self.powerConnectedOnly = powerConnectedOnly
+        self.optimizationProfile = optimizationProfile
     }
 
     static var sliderRange: ClosedRange<Double> {
@@ -30,15 +34,19 @@ struct BatteryEncodingSettings: Equatable {
         let storedPowerOnly = defaults.object(forKey: powerConnectedOnlyKey) == nil
             ? nil
             : defaults.bool(forKey: powerConnectedOnlyKey)
+        let storedOptimizationProfile = defaults.string(forKey: optimizationProfileKey)
+            .flatMap(TaptionEncodingOptimizationProfile.init(rawValue:))
         return BatteryEncodingSettings(
             batteryLimitPercent: storedLimit ?? defaultLimitPercent,
-            powerConnectedOnly: storedPowerOnly ?? false
+            powerConnectedOnly: storedPowerOnly ?? false,
+            optimizationProfile: storedOptimizationProfile ?? .balanced
         )
     }
 
     func save(defaults: UserDefaults = .standard) {
         defaults.set(batteryLimitPercent, forKey: Self.batteryLimitPercentKey)
         defaults.set(powerConnectedOnly, forKey: Self.powerConnectedOnlyKey)
+        defaults.set(optimizationProfile.rawValue, forKey: Self.optimizationProfileKey)
     }
 
     static func clampLimitPercent(_ value: Int) -> Int {
