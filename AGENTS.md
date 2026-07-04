@@ -67,6 +67,7 @@ This project is the standalone app shell for Taption's AV1 to H.265 conversion f
 - `AGENTS.md`: root routing file and next-chat handoff source.
 - `docs/overview/README.md`: product overview, release summary, and verification commands.
 - `docs/planning/ACTION_ITEMS.md`, `docs/planning/DEVELOPMENT_PLAN.md`, `docs/planning/DETAILED_DEVELOPMENT_PLAN.md`: active planning and roadmap documents.
+- `docs/planning/COMPLETED_ACTION_ITEMS.md`: completed checklist items moved out of `ACTION_ITEMS.md` so the active list stays focused on remaining work.
 - `docs/architecture/APP_ARCHITECTURE.md`: app/module architecture.
 - `docs/codecs/`: codec matrices, generated fixture policy, and route simulation docs.
 - `docs/verification/`: current verification summaries.

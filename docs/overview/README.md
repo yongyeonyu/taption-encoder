@@ -51,7 +51,8 @@ Next implementation pass should isolate the media conversion core before importi
 - Device codec route simulation: [`docs/codecs/DEVICE_CODEC_ROUTE_SIMULATION.md`](../codecs/DEVICE_CODEC_ROUTE_SIMULATION.md)
 - Local H.265 transcode fixture results: [`docs/verification/HEVC_TRANSCODE_TEST_RESULTS.md`](../verification/HEVC_TRANSCODE_TEST_RESULTS.md)
 - Local bundled-codec simulator benchmark: [`docs/verification/CODEC_BENCHMARK_2026-07-04.md`](../verification/CODEC_BENCHMARK_2026-07-04.md)
-- Release action items and launch blockers: [`docs/planning/ACTION_ITEMS.md`](../planning/ACTION_ITEMS.md)
+- Remaining release action items and launch blockers: [`docs/planning/ACTION_ITEMS.md`](../planning/ACTION_ITEMS.md)
+- Completed release action items: [`docs/planning/COMPLETED_ACTION_ITEMS.md`](../planning/COMPLETED_ACTION_ITEMS.md)
 - Release closeout for `01.00.01`: [`docs/archive/releases/RELEASE_01.00.01.md`](../archive/releases/RELEASE_01.00.01.md)
 - Current release proof for `01.01.00`: [`docs/verification/RELEASE_01.01.00.md`](../verification/RELEASE_01.01.00.md)
 
