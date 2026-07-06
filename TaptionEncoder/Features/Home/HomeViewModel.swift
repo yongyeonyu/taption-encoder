@@ -88,6 +88,14 @@ final class HomeViewModel: ObservableObject {
     private var importBrowserHistory: [URL] = []
     private var importBrowserSelectedFileURLs: Set<URL> = []
     private var activeStarCharge: ActiveStarCharge?
+
+    private static let currentBuildPreviewBlockedVideoCodecs: Set<TaptionVideoCodec> = [
+        .losslessJPEG,
+        .microsoftRLE,
+        .r10k,
+        .r210,
+        .snow
+    ]
     private var shouldAutoResumeBatchAfterStarEarn = false
     private var hasConfirmedSeparateMultiFileEncoding = false
     private var rewardedAdStatePollingTask: Task<Void, Never>?
@@ -5128,6 +5136,10 @@ final class HomeViewModel: ObservableObject {
 
     private func isPreviewableInCurrentBuild(asset: TaptionVideoAsset) -> Bool {
         guard let videoTrack = asset.videoTrack else {
+            return false
+        }
+
+        guard !Self.currentBuildPreviewBlockedVideoCodecs.contains(videoTrack.codec) else {
             return false
         }
 

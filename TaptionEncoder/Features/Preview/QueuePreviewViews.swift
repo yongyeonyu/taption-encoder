@@ -49,6 +49,33 @@ enum QueuePreviewPlaybackMath {
         return min(max(value, 0), 1)
     }
 
+    static func hasUsableTimeline(durationSeconds: Double?) -> Bool {
+        guard let durationSeconds,
+              durationSeconds.isFinite else {
+            return false
+        }
+        return durationSeconds > 0
+    }
+
+    static func displayedSliderPosition(
+        playerPosition: Double,
+        isScrubbing: Bool,
+        scrubberPosition: Double,
+        dragSeekPreviewPosition: Double?,
+        durationSeconds: Double?
+    ) -> Double {
+        guard hasUsableTimeline(durationSeconds: durationSeconds) else {
+            return 0
+        }
+        if isScrubbing {
+            return clampedPosition(scrubberPosition)
+        }
+        if let dragSeekPreviewPosition {
+            return clampedPosition(dragSeekPreviewPosition)
+        }
+        return clampedPosition(playerPosition)
+    }
+
     static func horizontalDragPosition(
         startPosition: Double,
         translation: CGFloat,
@@ -392,6 +419,9 @@ struct QueueVideoPreviewView: View {
                 value: Binding(
                     get: { displayedSliderPosition },
                     set: { newValue in
+                        guard hasUsableTimeline else {
+                            return
+                        }
                         isScrubbing = true
                         scrubberPosition = QueuePreviewPlaybackMath.clampedPosition(newValue)
                         showControls(scheduleAutoHide: false)
@@ -408,7 +438,7 @@ struct QueueVideoPreviewView: View {
                     }
                 }
             )
-            .disabled(!player.isSeekable && player.duration == nil)
+            .disabled(!hasUsableTimeline)
             .tint(Color.white)
 
             HStack(spacing: 6) {
@@ -577,13 +607,13 @@ struct QueueVideoPreviewView: View {
     }
 
     private var displayedSliderPosition: Double {
-        if isScrubbing {
-            return QueuePreviewPlaybackMath.clampedPosition(scrubberPosition)
-        }
-        if let dragSeekPreviewPosition {
-            return QueuePreviewPlaybackMath.clampedPosition(dragSeekPreviewPosition)
-        }
-        return QueuePreviewPlaybackMath.clampedPosition(player.position)
+        QueuePreviewPlaybackMath.displayedSliderPosition(
+            playerPosition: player.position,
+            isScrubbing: isScrubbing,
+            scrubberPosition: scrubberPosition,
+            dragSeekPreviewPosition: dragSeekPreviewPosition,
+            durationSeconds: durationSeconds
+        )
     }
 
     private var displayedCurrentTimeText: String {
@@ -600,6 +630,10 @@ struct QueueVideoPreviewView: View {
 
     private var durationSeconds: Double? {
         QueuePreviewPlaybackMath.seconds(from: player.duration)
+    }
+
+    private var hasUsableTimeline: Bool {
+        QueuePreviewPlaybackMath.hasUsableTimeline(durationSeconds: durationSeconds)
     }
 
     private var isPictureInPictureActive: Bool {
@@ -877,6 +911,10 @@ struct QueueVideoPreviewView: View {
     }
 
     private func seekBy(seconds: Double) {
+        guard hasUsableTimeline else {
+            showControls(scheduleAutoHide: false)
+            return
+        }
         let offset = Duration.seconds(seconds)
         if (try? player.seek(by: offset, fast: true)) == nil {
             _ = player.jump(by: offset)
@@ -885,6 +923,13 @@ struct QueueVideoPreviewView: View {
     }
 
     private func finishScrubbing() {
+        guard hasUsableTimeline else {
+            isScrubbing = false
+            scrubberPosition = 0
+            showControls(scheduleAutoHide: false)
+            return
+        }
+
         let target = QueuePreviewPlaybackMath.clampedPosition(scrubberPosition)
         if player.isSeekable, player.duration != nil {
             try? player.seek(to: PlaybackPosition(target))
@@ -1043,6 +1088,9 @@ struct QueueVideoPreviewView: View {
                value.translation.width < 0,
                preview.playlist?.hasNext == true {
                 return .nextItem
+            }
+            guard hasUsableTimeline else {
+                return nil
             }
             return .seek(startPosition: player.position)
         }

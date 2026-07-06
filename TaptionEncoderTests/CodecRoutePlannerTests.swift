@@ -3636,6 +3636,39 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertEqual(QueuePreviewPlaybackMath.clampedPosition(-0.4), 0)
         XCTAssertEqual(QueuePreviewPlaybackMath.clampedPosition(1.4), 1)
+        XCTAssertFalse(QueuePreviewPlaybackMath.hasUsableTimeline(durationSeconds: nil))
+        XCTAssertFalse(QueuePreviewPlaybackMath.hasUsableTimeline(durationSeconds: 0))
+        XCTAssertTrue(QueuePreviewPlaybackMath.hasUsableTimeline(durationSeconds: 5))
+        XCTAssertEqual(
+            QueuePreviewPlaybackMath.displayedSliderPosition(
+                playerPosition: 1,
+                isScrubbing: false,
+                scrubberPosition: 0.6,
+                dragSeekPreviewPosition: nil,
+                durationSeconds: nil
+            ),
+            0
+        )
+        XCTAssertEqual(
+            QueuePreviewPlaybackMath.displayedSliderPosition(
+                playerPosition: 0.4,
+                isScrubbing: false,
+                scrubberPosition: 0.6,
+                dragSeekPreviewPosition: nil,
+                durationSeconds: 5
+            ),
+            0.4
+        )
+        XCTAssertEqual(
+            QueuePreviewPlaybackMath.displayedSliderPosition(
+                playerPosition: 0.4,
+                isScrubbing: true,
+                scrubberPosition: 0.6,
+                dragSeekPreviewPosition: nil,
+                durationSeconds: 5
+            ),
+            0.6
+        )
         XCTAssertEqual(
             QueuePreviewPlaybackMath.horizontalDragPosition(
                 startPosition: 0.5,
@@ -10660,7 +10693,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testLegacyPreviewCodecCanOpenPreview() async throws {
+    func testKnownBlackPreviewCodecStaysEncodableWithoutOpeningPreview() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -10680,28 +10713,80 @@ final class CodecRoutePlannerTests: XCTestCase {
         try await waitForReadyToStartState(in: viewModel)
 
         XCTAssertNil(viewModel.activePreview)
-        XCTAssertEqual(viewModel.fileCardSnapshots.first?.isPreviewable, true)
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.isEnabled, true)
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.isPreviewable, false)
 
         viewModel.openPreviewForFileCard(id: "lossless.avi")
-        try await waitForCondition(timeout: 2) {
-            viewModel.activePreview?.sourceURL == sourceURL
-        }
-        XCTAssertEqual(viewModel.activePreview?.displayName, "lossless.avi")
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertNil(viewModel.activePreview)
     }
 
     @MainActor
-    func testLegacyAndProResPreviewCodecsStayPlayableInQueue() async throws {
+    func testKnownBlackPreviewCodecsStayEncodableButNotPreviewableInQueue() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let previewBlockedInputs: [(filename: String, codec: TaptionVideoCodec)] = [
+            ("Snow.avi", .snow),
+            ("R210.avi", .r210),
+            ("R10K.mov", .r10k),
+            ("Microsoft RLE.avi", .microsoftRLE),
+            ("Lossless JPEG.avi", .losslessJPEG)
+        ]
+        let fileURLs = try previewBlockedInputs.map { input in
+            let url = directoryURL.appendingPathComponent(input.filename)
+            try Data("source".utf8).write(to: url)
+            return url
+        }
+        let assetsByName = Dictionary(
+            uniqueKeysWithValues: previewBlockedInputs.map { input in
+                (input.filename, makeAsset(sourceCodec: input.codec))
+            }
+        )
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: URLMappedMediaInspector(
+                    assetsByLastPathComponent: assetsByName,
+                    fallbackAsset: makeAsset(sourceCodec: .h264)
+                )
+            )
+        )
+
+        viewModel.startFilesFlow(urls: fileURLs)
+        try await waitForReadyToStartState(in: viewModel)
+        try await waitForCondition(timeout: 2) {
+            viewModel.fileCardSnapshots.count == previewBlockedInputs.count
+        }
+
+        for input in previewBlockedInputs {
+            let snapshot = try XCTUnwrap(
+                viewModel.fileCardSnapshots.first { $0.fileName == input.filename }
+            )
+            XCTAssertTrue(snapshot.isEnabled, "\(input.filename) should remain encodable.")
+            XCTAssertFalse(snapshot.isPreviewable, "\(input.filename) should not open a black preview.")
+            XCTAssertEqual(snapshot.thumbnailSourceURL?.lastPathComponent, input.filename)
+        }
+
+        let firstURL = try XCTUnwrap(fileURLs.first)
+        viewModel.openPreviewForFileCard(id: firstURL.absoluteString)
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertNil(viewModel.activePreview)
+    }
+
+    @MainActor
+    func testRenderableLegacyAndProResPreviewCodecsStayPlayableInQueue() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
         }
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         let previewInputs: [(filename: String, codec: TaptionVideoCodec)] = [
-            ("Snow.avi", .snow),
-            ("R210.avi", .r210),
-            ("R10K.mov", .r10k),
-            ("Microsoft RLE.avi", .microsoftRLE),
-            ("Lossless JPEG.avi", .losslessJPEG),
+            ("RoQ Video.roq", .roqVideo),
+            ("V210.avi", .v210),
             ("Apple ProRes.mov", .proRes)
         ]
         let fileURLs = try previewInputs.map { input in
