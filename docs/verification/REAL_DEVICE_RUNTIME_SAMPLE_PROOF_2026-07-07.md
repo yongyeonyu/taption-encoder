@@ -16,6 +16,7 @@ This is real-device Debug XCTest runtime evidence for focused bundled samples. I
 - Added `testRealDeviceBundledTheoraOpusSampleEncodesHEVCWithAACAudio` as a focused physical-device test. The test skips on simulator builds and exercises only the bundled `Theora.ogv` sample.
 - Added `testRealDeviceBundledAMRWBH263SampleEncodesHEVCWithAACAudio` as a focused physical-device test. The test skips on simulator builds and exercises only the bundled `AMR-WB H.263.3gp` sample.
 - Added follow-up bundled AMR-WB non-AAC output tests for PCM/MOV and ALAC/MOV. Those tests are not physical-device-only, but the real-device command below executed them on the paired iPad and keeps their proof separate from simulator regression evidence.
+- Added follow-up bundled Flash Video/MP3 non-AAC output tests for PCM/MOV and ALAC/MOV. These tests use the Apple-native MP3 audio transcode route while the video path remains the bundled software VLC decoder route.
 
 ## Sample
 
@@ -24,6 +25,7 @@ This is real-device Debug XCTest runtime evidence for focused bundled samples. I
 | `Theora.ogv` | Theora video plus Opus audio, 320x240, 30 fps, 48 kHz stereo audio | Software VLC decode to H.265 MP4 with AAC stereo audio at 48 kHz. |
 | `AMR-WB H.263.3gp` | H.263 video plus AMR-WB (`sawb`) audio, 176x144, 15 fps, 16 kHz mono audio, 5.000s bundled duration | Software VLC decode to H.265 MP4 with AAC mono audio at 48 kHz. |
 | `AMR-WB H.263.3gp` | H.263 video plus AMR-WB (`sawb`) audio, 176x144, 15 fps, 16 kHz mono audio, 5.000s bundled duration | Software VLC decode to H.265 MOV with PCM mono audio at 48 kHz and H.265 MOV with ALAC mono audio at 48 kHz. |
+| `Flash Video.flv` | Flash Video plus MP3 audio, 160x120, 10 fps, 44.1 kHz stereo audio, 5.000s bundled duration | Software VLC video decode to H.265 MOV with Apple-native MP3-to-PCM stereo audio at 44.1 kHz and H.265 MOV with Apple-native MP3-to-ALAC stereo audio at 44.1 kHz. |
 
 ## Theora Command
 
@@ -85,6 +87,36 @@ Runtime log evidence:
 - `Source-preserving output verification passed` reported `actualAudioTracks=1`, `actualAudioSampleRate=48000`, `actualAudioChannels=1`, `actualDuration=5.000`, `actualFrameRate=15000/1000`, and `actualResolution=176x144`.
 - `Codec transcode completed` reported `backend=softwareVLCDecoder` and `mode=software`.
 
+## Flash Video MP3 Non-AAC MOV Command
+
+```sh
+xcodebuild test \
+  -project TaptionEncoder.xcodeproj \
+  -scheme TaptionEncoder \
+  -destination 'platform=iOS,id=00008112-000964980E45401E' \
+  -derivedDataPath /tmp/taption_encoder_mp3_nonaac_ipad_dd \
+  -parallel-testing-enabled NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledFlashVideoMP3SampleEncodesHEVCMOVWithPCMAudio \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledFlashVideoMP3SampleEncodesHEVCMOVWithALACAudio
+```
+
+## Flash Video MP3 Non-AAC MOV Result
+
+- Result: passed.
+- Selected tests: 2.
+- Failures: 0.
+- Test duration: 11.537 seconds.
+- Temporary result path during the run: `/tmp/taption_encoder_mp3_nonaac_ipad_dd/Logs/Test/Test-TaptionEncoder-2026.07.07_03-57-51-+0900.xcresult`.
+
+Runtime log evidence:
+
+- `Codec transcode started` reported `audioRoute=MP3 to PCM`, `audioPath=HW`, `output=H.265 / HEVC / MOV`, `route=Flash Video to H.265 / HEVC`, `preserveResolution=160x120`, and `preserveFrameRate=10000/1000`.
+- `Codec transcode started` also reported `audioRoute=MP3 to Apple Lossless` for the ALAC/MOV route.
+- `Software Flash Video transcode pipeline completed` reported `frames=50`, `audioSampleBuffers=135` on the PCM route, and `audioSampleBuffers=139` on the ALAC route.
+- `Source-preserving output verification passed` reported `actualAudioTracks=1`, `actualAudioSampleRate=44100`, `actualAudioChannels=2`, `actualDuration=5.000`, `actualFrameRate=10000/1000`, and `actualResolution=160x120`.
+- `Codec transcode completed` reported `backend=softwareVLCDecoder` and `mode=software`.
+
 ## AMR-WB Non-AAC MOV Command
 
 ```sh
@@ -122,6 +154,7 @@ Non-fatal runtime noise observed:
 - SKAdNetwork missing-identifier warning from the Google test ad stack.
 - `DVTDevice: Error locating DeviceSupport directory` warning before launch.
 - `UIRequiresFullScreen` future-compatibility warning.
+- `Option --avcodec-hw no longer exists` warning from the bundled VLC path on the Flash Video/MP3 proof run.
 - Source visual sample warnings in output verification. Output visual decodability was still verified; this pass is runtime encode proof, not bit-for-bit perceptual quality proof.
 
 ## Discarded Attempts

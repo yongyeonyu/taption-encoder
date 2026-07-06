@@ -5244,6 +5244,92 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(outputAsset.audioTracks.isEmpty)
     }
 
+    func testBundledFlashVideoMP3SampleEncodesHEVCMOVWithPCMAudio() async throws {
+        try await assertBundledFlashVideoMP3SampleEncodesHEVCMOV(
+            outputAudioCodec: .pcm,
+            outputFileName: "flash-video-mp3-hevc-pcm.mov"
+        )
+    }
+
+    func testBundledFlashVideoMP3SampleEncodesHEVCMOVWithALACAudio() async throws {
+        try await assertBundledFlashVideoMP3SampleEncodesHEVCMOV(
+            outputAudioCodec: .alac,
+            outputFileName: "flash-video-mp3-hevc-alac.mov"
+        )
+    }
+
+    private func assertBundledFlashVideoMP3SampleEncodesHEVCMOV(
+        outputAudioCodec: TaptionAudioCodec,
+        outputFileName: String
+    ) async throws {
+        let sampleURL = bundledTestVideosURL().appendingPathComponent("Flash Video.flv")
+        guard FileManager.default.fileExists(atPath: sampleURL.path) else {
+            XCTFail("Missing bundled MP3 proof sample at \(sampleURL.path)")
+            return
+        }
+
+        let outputURL = temporaryTestURL(fileName: outputFileName)
+        try? FileManager.default.removeItem(at: outputURL)
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+
+        let core = TaptionVideoCore(
+            services: TaptionVideoCoreServices(
+                inspector: AVFoundationMediaInspector(),
+                encoder: AVFoundationHEVCEncoderService(),
+                storageChecker: FakeStorageChecker(),
+                pendingSaveStore: FakePendingSaveStore(),
+                saveGateAuthorizer: FakeAdGate()
+            )
+        )
+        let outputPolicy = TaptionVideoOutputPolicy(
+            videoCodec: .hevc,
+            audioCodec: outputAudioCodec,
+            container: .mov
+        )
+        let job = try await core.prepareSingleAssetJob(
+            sourceURL: sampleURL,
+            temporaryOutputURL: outputURL,
+            outputPolicy: outputPolicy,
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+        )
+        let sourceAudioCodec = try XCTUnwrap(job.asset.audioTracks.first?.codec)
+
+        XCTAssertEqual(job.asset.container, .flv)
+        XCTAssertEqual(job.asset.videoTrack?.codec, .flashVideo)
+        XCTAssertEqual(sourceAudioCodec, .mp3)
+        XCTAssertEqual(job.asset.audioTracks.first?.sampleRate ?? 0, 44_100, accuracy: 1)
+        XCTAssertEqual(job.asset.audioTracks.first?.channelCount, 2)
+        XCTAssertEqual(job.plan.outputPolicy.videoCodec, .hevc)
+        XCTAssertEqual(job.plan.outputPolicy.audioCodec, outputAudioCodec)
+        XCTAssertEqual(job.plan.outputPolicy.container, .mov)
+        XCTAssertEqual(job.routeSelection.route, TaptionCodecRoute(sourceCodec: .flashVideo, outputCodec: .hevc))
+        XCTAssertTrue(job.routeSelection.isEncodableNow)
+        XCTAssertEqual(job.routeSelection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(job.plan.audioPlan?.route, TaptionAudioCodecRoute(sourceCodec: .mp3, outputCodec: outputAudioCodec))
+        XCTAssertEqual(job.plan.audioPlan?.routeSelection.support, .nativeTranscode)
+        XCTAssertEqual(job.plan.audioPlan?.routeSelection.decodeBackend, .appleAVAssetExport)
+        XCTAssertEqual(job.plan.audioPlan?.routeSelection.encodeBackend, .appleAVAssetExport)
+        XCTAssertEqual(job.plan.audioPlan?.readiness.readiness, .nativeTranscodeInCurrentBuild)
+        XCTAssertNil(job.plan.audioPlan?.readiness.commandBackend)
+        XCTAssertTrue(job.plan.audioPlan?.isRunnableInCurrentBuild ?? false)
+        XCTAssertNil(job.plan.audioPlan?.commandPlan)
+        XCTAssertEqual(job.plan.audioPlan?.options.sampleRate, 44_100)
+        XCTAssertEqual(job.plan.audioPlan?.options.channelCount, 2)
+
+        let result = try await core.encodePreparedJob(job, progress: { _ in })
+        let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: result.temporaryOutputURL)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.temporaryOutputURL.path))
+        XCTAssertEqual(result.usedBackend, .softwareVLCDecoder)
+        XCTAssertEqual(result.usedMode, .software)
+        XCTAssertEqual(outputAsset.container, .mov)
+        XCTAssertEqual(outputAsset.videoTrack?.codec, .hevc)
+        XCTAssertEqual(outputAsset.audioTracks.first?.codec, outputAudioCodec)
+        XCTAssertEqual(outputAsset.audioTracks.first?.sampleRate ?? 0, 44_100, accuracy: 1)
+        XCTAssertEqual(outputAsset.audioTracks.first?.channelCount, 2)
+        XCTAssertFalse(outputAsset.audioTracks.isEmpty)
+    }
+
     func testBundledAMRWBH263SampleEncodesHEVCMOVWithPCMAudio() async throws {
         try await assertBundledAMRWBH263SampleEncodesHEVCMOV(
             outputAudioCodec: .pcm,
