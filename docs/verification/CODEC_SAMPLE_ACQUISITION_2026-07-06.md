@@ -74,4 +74,5 @@ These are host FFmpeg probes only. Audio-only samples used a generated test patt
 - Promoted to next app-side implementation candidates: Theora, AMR-NB, VC-1 raw, and Fraunhofer xHE-AAC.
 - Still blocked: AMR-WB/AMR-WB+ execution needs a decodable App Store-safe path; the located AMR-WB+ sample is useful as a negative fixture but not a passing decode proof.
 - Still blocked: ProRes RAW sample execution needs storage headroom, license/use approval, and then separate app/real-device proof.
+- Follow-up simulator runtime status is tracked separately in `docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-06.md`; do not treat these host-side FFmpeg/Apple-tool results as app-side execution proof.
 - The next engineering proof should remain separate: app-side execution, simulator benchmark, real-device install/run, and TestFlight/App Store Connect state should not be inferred from this host-side pass.

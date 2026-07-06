@@ -4891,6 +4891,197 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(outputAsset.audioTracks.isEmpty)
     }
 
+    func testLocalRealVC1RawSampleDocumentsCurrentSwiftVLCNoFrameBlock() async throws {
+        try requireLocalRealSampleProofs()
+
+        let samplePath = ProcessInfo.processInfo.environment["TAPTION_VC1_SAMPLE_PATH"]
+            ?? "/Users/u_mo_c/Documents/taption_encoder/Samples/Downloaded/internet_supported_missing_2026-07-06/sample_videos/vc1_advanced_profile_2.vc1"
+        let sampleURL = URL(fileURLWithPath: samplePath)
+        guard FileManager.default.fileExists(atPath: sampleURL.path) else {
+            throw XCTSkip("Local VC-1 real-sample proof requires \(sampleURL.path).")
+        }
+
+        let outputURL = temporaryTestURL(fileName: "vc1-raw-actual-app-hevc.mp4")
+        try? FileManager.default.removeItem(at: outputURL)
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+
+        let core = TaptionVideoCore(
+            services: TaptionVideoCoreServices(
+                inspector: AVFoundationMediaInspector(),
+                encoder: AVFoundationHEVCEncoderService(),
+                storageChecker: FakeStorageChecker(),
+                pendingSaveStore: FakePendingSaveStore(),
+                saveGateAuthorizer: FakeAdGate()
+            )
+        )
+        let job = try await core.prepareSingleAssetHEVCJob(
+            sourceURL: sampleURL,
+            temporaryOutputURL: outputURL,
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+        )
+
+        XCTAssertEqual(job.asset.container, .rawElementaryStream)
+        XCTAssertEqual(job.asset.videoTrack?.codec, .vc1)
+        XCTAssertEqual(job.routeSelection.route, TaptionCodecRoute(sourceCodec: .vc1, outputCodec: .hevc))
+        XCTAssertTrue(job.routeSelection.isEncodableNow)
+        XCTAssertEqual(job.routeSelection.decodeBackend, .softwareVLCDecoder)
+
+        do {
+            let result = try await core.encodePreparedJob(job, progress: { _ in })
+            XCTFail("VC-1 raw unexpectedly encoded to \(result.temporaryOutputURL.path); promote this sample to passing runtime proof.")
+        } catch {
+            let description = error.localizedDescription.lowercased()
+            XCTAssertTrue(
+                description.contains("frame")
+                    || description.contains("decode")
+                    || description.contains("remove"),
+                description
+            )
+            XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
+        }
+    }
+
+    func testLocalRealQuickTimeRPZASampleDocumentsCurrentDurationVerificationBlock() async throws {
+        try requireLocalRealSampleProofs()
+
+        let samplePath = ProcessInfo.processInfo.environment["TAPTION_RPZA_SAMPLE_PATH"]
+            ?? "/Users/u_mo_c/Documents/taption_encoder/Samples/Downloaded/internet_supported_missing_2026-07-06/sample_videos/rpza_1701-D.mov"
+        let sampleURL = URL(fileURLWithPath: samplePath)
+        guard FileManager.default.fileExists(atPath: sampleURL.path) else {
+            throw XCTSkip("Local QuickTime RPZA real-sample proof requires \(sampleURL.path).")
+        }
+
+        let outputURL = temporaryTestURL(fileName: "rpza-actual-app-hevc.mp4")
+        try? FileManager.default.removeItem(at: outputURL)
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+
+        let core = TaptionVideoCore(
+            services: TaptionVideoCoreServices(
+                inspector: AVFoundationMediaInspector(),
+                encoder: AVFoundationHEVCEncoderService(),
+                storageChecker: FakeStorageChecker(),
+                pendingSaveStore: FakePendingSaveStore(),
+                saveGateAuthorizer: FakeAdGate()
+            )
+        )
+        let job = try await core.prepareSingleAssetHEVCJob(
+            sourceURL: sampleURL,
+            temporaryOutputURL: outputURL,
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+        )
+        XCTAssertEqual(job.asset.container, .mov)
+        XCTAssertEqual(job.asset.videoTrack?.codec, .quickTimeVideo)
+        XCTAssertEqual(job.routeSelection.route, TaptionCodecRoute(sourceCodec: .quickTimeVideo, outputCodec: .hevc))
+        XCTAssertTrue(job.routeSelection.isEncodableNow)
+        XCTAssertEqual(job.routeSelection.decodeBackend, .softwareVLCDecoder)
+
+        do {
+            let result = try await core.encodePreparedJob(job, progress: { _ in })
+            XCTFail("QuickTime RPZA unexpectedly encoded to \(result.temporaryOutputURL.path); promote this sample to passing runtime proof.")
+        } catch {
+            let description = error.localizedDescription.lowercased()
+            XCTAssertTrue(
+                description.contains("duration")
+                    || description.contains("verification")
+                    || description.contains("remove"),
+                description
+            )
+            XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
+        }
+    }
+
+    func testLocalRealY41PSampleDocumentsCurrentSwiftVLCUnsupportedBlock() async throws {
+        try requireLocalRealSampleProofs()
+
+        let samplePath = ProcessInfo.processInfo.environment["TAPTION_Y41P_SAMPLE_PATH"]
+            ?? "/Users/u_mo_c/Documents/taption_encoder/Samples/Downloaded/internet_supported_missing_2026-07-06/sample_videos/y41p_from_internet_image.avi"
+        let sampleURL = URL(fileURLWithPath: samplePath)
+        guard FileManager.default.fileExists(atPath: sampleURL.path) else {
+            throw XCTSkip("Local Y41P real-sample proof requires \(sampleURL.path).")
+        }
+
+        let outputURL = temporaryTestURL(fileName: "y41p-actual-app-hevc.mp4")
+        try? FileManager.default.removeItem(at: outputURL)
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+
+        let core = TaptionVideoCore(
+            services: TaptionVideoCoreServices(
+                inspector: AVFoundationMediaInspector(),
+                encoder: AVFoundationHEVCEncoderService(),
+                storageChecker: FakeStorageChecker(),
+                pendingSaveStore: FakePendingSaveStore(),
+                saveGateAuthorizer: FakeAdGate()
+            )
+        )
+        let job = try await core.prepareSingleAssetHEVCJob(
+            sourceURL: sampleURL,
+            temporaryOutputURL: outputURL,
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+        )
+        XCTAssertEqual(job.asset.container, .avi)
+        XCTAssertEqual(job.asset.videoTrack?.codec, .y41p)
+        XCTAssertEqual(job.asset.audioTracks.first?.codec, .pcm)
+        XCTAssertEqual(job.routeSelection.route, TaptionCodecRoute(sourceCodec: .y41p, outputCodec: .hevc))
+        XCTAssertTrue(job.routeSelection.isEncodableNow)
+        XCTAssertEqual(job.routeSelection.decodeBackend, .softwareVLCDecoder)
+
+        do {
+            let result = try await core.encodePreparedJob(job, progress: { _ in })
+            XCTFail("Y41P unexpectedly encoded to \(result.temporaryOutputURL.path); promote this sample to passing runtime proof.")
+        } catch {
+            let description = error.localizedDescription.lowercased()
+            XCTAssertTrue(
+                description.contains("frame")
+                    || description.contains("decode")
+                    || description.contains("remove"),
+                description
+            )
+            XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
+        }
+    }
+
+    func testLocalRealAMRNBH263SampleDocumentsCurrentAudioExecutionBlock() async throws {
+        try requireLocalRealSampleProofs()
+
+        let samplePath = ProcessInfo.processInfo.environment["TAPTION_AMR_NB_SAMPLE_PATH"]
+            ?? "/Users/u_mo_c/Documents/taption_encoder/Samples/Downloaded/internet_supported_missing_2026-07-06/sample_videos/amr_nb_h263_video.3gp"
+        let sampleURL = URL(fileURLWithPath: samplePath)
+        guard FileManager.default.fileExists(atPath: sampleURL.path) else {
+            throw XCTSkip("Local AMR-NB real-sample proof requires \(sampleURL.path).")
+        }
+
+        let outputURL = temporaryTestURL(fileName: "amr-nb-h263-actual-app-hevc.mp4")
+        try? FileManager.default.removeItem(at: outputURL)
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+
+        let core = TaptionVideoCore(
+            services: TaptionVideoCoreServices(
+                inspector: AVFoundationMediaInspector(),
+                encoder: AVFoundationHEVCEncoderService(),
+                storageChecker: FakeStorageChecker(),
+                pendingSaveStore: FakePendingSaveStore(),
+                saveGateAuthorizer: FakeAdGate()
+            )
+        )
+        let job = try await core.prepareSingleAssetHEVCJob(
+            sourceURL: sampleURL,
+            temporaryOutputURL: outputURL,
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+        )
+        XCTAssertEqual(job.asset.container, .threeGP)
+        XCTAssertEqual(job.asset.videoTrack?.codec, .h263)
+        XCTAssertEqual(job.asset.audioTracks.first?.codec, .amr)
+        XCTAssertEqual(job.routeSelection.route, TaptionCodecRoute(sourceCodec: .h263, outputCodec: .hevc))
+        XCTAssertTrue(job.routeSelection.isEncodableNow)
+        XCTAssertEqual(job.routeSelection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(job.plan.audioPlan?.route, TaptionAudioCodecRoute(sourceCodec: .amr, outputCodec: .aac))
+        XCTAssertEqual(job.plan.audioPlan?.routeSelection.decodeBackend, .ffmpegFamily)
+        XCTAssertEqual(job.plan.audioPlan?.readiness.readiness, .commandPlanOnly)
+        XCTAssertEqual(job.plan.audioPlan?.readiness.commandBackend, .ffmpegFamily)
+        XCTAssertFalse(job.plan.audioPlan?.isRunnableInCurrentBuild ?? true)
+        XCTAssertNotNil(job.plan.audioPlan?.commandPlan)
+    }
+
     func testEncodePreparedJobCreatesPendingSaveStateWithoutSaveAdWhenSaveGateIsNone() async throws {
         let outputURL = temporaryTestURL(fileName: "encoded.mp4")
         let core = TaptionVideoCore(
@@ -10726,8 +10917,10 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     private func requireLocalRealSampleProofs() throws {
-        guard ProcessInfo.processInfo.environment["TAPTION_RUN_LOCAL_REAL_SAMPLE_TESTS"] == "1" else {
-            throw XCTSkip("Local downloaded real-sample proofs are opt-in. Set TAPTION_RUN_LOCAL_REAL_SAMPLE_TESTS=1 to run them.")
+        let flagURL = URL(fileURLWithPath: "/tmp/taption_run_local_real_sample_tests")
+        guard ProcessInfo.processInfo.environment["TAPTION_RUN_LOCAL_REAL_SAMPLE_TESTS"] == "1"
+            || FileManager.default.fileExists(atPath: flagURL.path) else {
+            throw XCTSkip("Local downloaded real-sample proofs are opt-in. Set TAPTION_RUN_LOCAL_REAL_SAMPLE_TESTS=1 or create \(flagURL.path) to run them.")
         }
     }
 

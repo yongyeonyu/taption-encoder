@@ -2067,6 +2067,9 @@ enum QueuePreviewPlayerFactory {
         if sourceURL.pathExtension.lowercased() == "h261" {
             options.append(":avformat-format=h261")
         }
+        if sourceURL.pathExtension.lowercased() == "vc1" {
+            options.append(":avformat-format=vc1")
+        }
         return options
     }
 

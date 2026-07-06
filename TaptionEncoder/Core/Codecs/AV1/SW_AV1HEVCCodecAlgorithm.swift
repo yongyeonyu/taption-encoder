@@ -2088,9 +2088,15 @@ extension SW_AV1HEVCTranscoder {
         if !allowsAudio {
             libvlc_media_add_option(media, ":no-audio")
         }
-        if sourceURL.pathExtension.lowercased() == "h261" {
+        switch sourceURL.pathExtension.lowercased() {
+        case "h261":
             libvlc_media_add_option(media, ":demux=avformat")
             libvlc_media_add_option(media, ":avformat-format=h261")
+        case "vc1":
+            libvlc_media_add_option(media, ":demux=avformat")
+            libvlc_media_add_option(media, ":avformat-format=vc1")
+        default:
+            break
         }
         libvlc_media_add_option(media, ":no-sub-autodetect-file")
         libvlc_media_add_option(media, ":no-snapshot-preview")

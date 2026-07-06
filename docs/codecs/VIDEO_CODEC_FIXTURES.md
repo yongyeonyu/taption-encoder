@@ -103,7 +103,7 @@ The required smoke manifest currently covers 90 generated video fixtures before 
 - Raw AV1 OBU, H.263, rawvideo `.y4m`, MPEG-1 `.m1v`, and MPEG-2 `.m2v`
 - DV
 - Theora when the local FFmpeg build supports generation; the 2026-07-06 real-sample acquisition pass separately proved a downloaded Theora/Vorbis sample can be transcoded to H.265 MP4/MOV on the host
-- VC-1 raw elementary streams; the 2026-07-06 real-sample acquisition pass proved a downloaded VC-1 Advanced Profile elementary stream can be transcoded to H.265 MP4/MOV on the host, and a follow-up app-core change registered VC-1 as a current-build software VLC decode route to H.265. Generated smoke evidence should still keep the skipped `vc1_raw_elementary` row until the sample is promoted into a durable fixture policy.
+- VC-1 raw elementary streams; the 2026-07-06 real-sample acquisition pass proved a downloaded VC-1 Advanced Profile elementary stream can be transcoded to H.265 MP4/MOV on the host, and a follow-up app-core change registered VC-1 as a current-build software VLC decode route to H.265. The same day's simulator runtime proof still blocks this raw sample because libVLC produced no frames before timeout, so generated smoke evidence should keep the skipped `vc1_raw_elementary` row until the sample is promoted into a durable fixture policy.
 
 ## Tracked Pending Video Fixture Targets
 
@@ -112,7 +112,7 @@ These codecs are part of the universal source/output contract but do not yet hav
 - Planned generator work: H.265 with Alpha, JPEG frame-sequence import, JPEG XL frame-sequence import, DVCPro, and DVCPro HD
 - Conditional local FFmpeg work: Theora
 - Real-world or alternate-generator samples required: Dolby Vision HEVC, ProRes RAW, Sorenson Video 3, and DJI `.lrf` camera proxy samples
-- Host-side sample proof exists but still needs app-side/bundled-backend proof: Theora and VC-1 raw elementary stream. VC-1 raw now has app-core route registration, but it still needs simulator or real-device sample execution proof with the ignored downloaded sample.
+- Host-side sample proof exists but still needs passing app-side/bundled-backend proof: Theora and VC-1 raw elementary stream. VC-1 raw now has app-core route registration plus a simulator runtime block record for the ignored downloaded sample, not passing sample execution proof.
 
 ## Why Generated Fixtures
 
