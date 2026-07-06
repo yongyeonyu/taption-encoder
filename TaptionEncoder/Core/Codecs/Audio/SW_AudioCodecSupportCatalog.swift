@@ -83,7 +83,7 @@ enum SW_AudioCodecSupportCatalog {
         outputContainer: TaptionVideoContainer
     ) -> Bool {
         switch (outputCodec, outputContainer) {
-        case (.aac, .mp4), (.aac, .mov), (.pcm, .mov):
+        case (.aac, .mp4), (.aac, .mov), (.pcm, .mov), (.alac, .mov):
             return true
         default:
             return false

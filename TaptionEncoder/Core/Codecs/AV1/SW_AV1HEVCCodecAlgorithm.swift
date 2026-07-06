@@ -124,6 +124,13 @@ struct SW_AV1NativeAudioEncodingConfiguration {
                 AVLinearPCMIsFloatKey: false,
                 AVLinearPCMIsNonInterleaved: false
             ]
+        case .alac:
+            return [
+                AVFormatIDKey: kAudioFormatAppleLossless,
+                AVSampleRateKey: sampleRate,
+                AVNumberOfChannelsKey: channelCount,
+                AVEncoderBitDepthHintKey: 16
+            ]
         default:
             return [
                 AVFormatIDKey: kAudioFormatMPEG4AAC,

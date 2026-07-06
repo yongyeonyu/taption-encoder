@@ -3281,8 +3281,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(TaptionOutputSelection(videoCodec: .hevc, container: .mp4).isImplementedNow)
         XCTAssertTrue(TaptionOutputSelection(videoCodec: .hevc, container: .mov).isImplementedNow)
         XCTAssertTrue(TaptionOutputSelection(videoCodec: .hevc, audioCodec: .pcm, container: .mov).isImplementedNow)
+        XCTAssertTrue(TaptionOutputSelection(videoCodec: .hevc, audioCodec: .alac, container: .mov).isImplementedNow)
         XCTAssertFalse(TaptionOutputSelection(videoCodec: .h264, container: .mp4).isImplementedNow)
         XCTAssertFalse(TaptionOutputSelection(videoCodec: .hevc, audioCodec: .pcm, container: .mp4).isImplementedNow)
+        XCTAssertFalse(TaptionOutputSelection(videoCodec: .hevc, audioCodec: .alac, container: .mp4).isImplementedNow)
         XCTAssertFalse(TaptionOutputSelection(videoCodec: .hevc, audioCodec: .opus, container: .mp4).isImplementedNow)
     }
 
@@ -4173,7 +4175,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(report.defaultOutputCodec, .aac)
         XCTAssertEqual(report.defaultOutputContainer, .mp4)
         XCTAssertEqual(report.defaultOutputState, .implemented)
-        XCTAssertEqual(report.implementedOutputSelectionCount, 3)
+        XCTAssertEqual(report.implementedOutputSelectionCount, 4)
         XCTAssertGreaterThan(report.commandPlanReadyOutputSelectionCount, 0)
         XCTAssertGreaterThan(report.plannedOutputSelectionCount, 0)
         XCTAssertEqual(report.unsupportedOutputSelectionCount, 0)
@@ -4190,6 +4192,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         let pcmMovBuildItem = report.items.first {
             $0.audioCodec == .pcm && $0.container == .mov
         }
+        let alacMovBuildItem = report.items.first {
+            $0.audioCodec == .alac && $0.container == .mov
+        }
         let plannedItem = report.items.first {
             $0.audioCodec == .xheAAC && $0.container == .mp4
         }
@@ -4200,6 +4205,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertNil(movBuildItem?.note)
         XCTAssertEqual(pcmMovBuildItem?.state, .implemented)
         XCTAssertNil(pcmMovBuildItem?.note)
+        XCTAssertEqual(alacMovBuildItem?.state, .implemented)
+        XCTAssertNil(alacMovBuildItem?.note)
         XCTAssertEqual(commandPlanItem?.state, .commandPlanReady)
         XCTAssertTrue(commandPlanItem?.note?.contains("software command plan") == true)
         XCTAssertEqual(plannedItem?.state, .planned)
@@ -4952,10 +4959,25 @@ final class CodecRoutePlannerTests: XCTestCase {
             ),
             .softwareVLCDecoder
         )
+        XCTAssertEqual(
+            SW_AudioCodecSupportCatalog.currentBuildBundledDecodeBackend(
+                for: .opus,
+                outputCodec: .alac,
+                outputContainer: .mov
+            ),
+            .softwareVLCDecoder
+        )
         XCTAssertNil(
             SW_AudioCodecSupportCatalog.currentBuildBundledDecodeBackend(
                 for: .opus,
                 outputCodec: .pcm,
+                outputContainer: .mp4
+            )
+        )
+        XCTAssertNil(
+            SW_AudioCodecSupportCatalog.currentBuildBundledDecodeBackend(
+                for: .opus,
+                outputCodec: .alac,
                 outputContainer: .mp4
             )
         )
@@ -5009,6 +5031,30 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(pcmReadiness.hasCommandPlan)
         XCTAssertEqual(pcmReadiness.commandBackend, .softwareVLCDecoder)
         XCTAssertEqual(pcmPreferredDescriptor?.backend, .softwareVLCDecoder)
+
+        let alacRoute = TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .alac)
+        let alacSelection = TaptionAudioCodecRoutePlanner.selectRoute(
+            sourceCodec: .opus,
+            outputCodec: .alac,
+            outputContainer: .mov,
+            preserveWhenPossible: false
+        )
+        let alacReadiness = TaptionAudioCodecExecutionReadinessReporter.item(
+            for: alacRoute,
+            outputContainer: .mov
+        )
+        let alacPreferredDescriptor = TaptionAudioCodecDescriptorRegistry(
+            outputContainer: .mov
+        ).preferredDescriptor(for: alacRoute)
+
+        XCTAssertEqual(alacSelection.support, .softwareTranscode)
+        XCTAssertEqual(alacSelection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(alacSelection.encodeBackend, .appleAVAssetExport)
+        XCTAssertEqual(alacReadiness.readiness, .softwareBackendExecutable)
+        XCTAssertTrue(alacReadiness.isRunnableInCurrentBuild)
+        XCTAssertFalse(alacReadiness.hasCommandPlan)
+        XCTAssertEqual(alacReadiness.commandBackend, .softwareVLCDecoder)
+        XCTAssertEqual(alacPreferredDescriptor?.backend, .softwareVLCDecoder)
     }
 
     func testBundledTheoraOpusSampleEncodesHEVCMOVWithPCMAudio() async throws {
@@ -5069,6 +5115,69 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(outputAsset.container, .mov)
         XCTAssertEqual(outputAsset.videoTrack?.codec, .hevc)
         XCTAssertEqual(outputAsset.audioTracks.first?.codec, .pcm)
+        XCTAssertEqual(outputAsset.audioTracks.first?.sampleRate ?? 0, 48_000, accuracy: 1)
+        XCTAssertEqual(outputAsset.audioTracks.first?.channelCount, 2)
+        XCTAssertFalse(outputAsset.audioTracks.isEmpty)
+    }
+
+    func testBundledTheoraOpusSampleEncodesHEVCMOVWithALACAudio() async throws {
+        let sampleURL = bundledTestVideosURL().appendingPathComponent("Theora.ogv")
+        guard FileManager.default.fileExists(atPath: sampleURL.path) else {
+            XCTFail("Missing bundled Theora proof sample at \(sampleURL.path)")
+            return
+        }
+
+        let outputURL = temporaryTestURL(fileName: "theora-opus-hevc-alac.mov")
+        try? FileManager.default.removeItem(at: outputURL)
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+
+        let core = TaptionVideoCore(
+            services: TaptionVideoCoreServices(
+                inspector: AVFoundationMediaInspector(),
+                encoder: AVFoundationHEVCEncoderService(),
+                storageChecker: FakeStorageChecker(),
+                pendingSaveStore: FakePendingSaveStore(),
+                saveGateAuthorizer: FakeAdGate()
+            )
+        )
+        let outputPolicy = TaptionVideoOutputPolicy(
+            videoCodec: .hevc,
+            audioCodec: .alac,
+            container: .mov
+        )
+        let job = try await core.prepareSingleAssetJob(
+            sourceURL: sampleURL,
+            temporaryOutputURL: outputURL,
+            outputPolicy: outputPolicy,
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+        )
+        let sourceAudioCodec = try XCTUnwrap(job.asset.audioTracks.first?.codec)
+
+        XCTAssertEqual(job.asset.container, .ogg)
+        XCTAssertEqual(job.asset.videoTrack?.codec, .theora)
+        XCTAssertEqual(sourceAudioCodec, .opus)
+        XCTAssertEqual(job.plan.outputPolicy.videoCodec, .hevc)
+        XCTAssertEqual(job.plan.outputPolicy.audioCodec, .alac)
+        XCTAssertEqual(job.plan.outputPolicy.container, .mov)
+        XCTAssertEqual(job.routeSelection.route, TaptionCodecRoute(sourceCodec: .theora, outputCodec: .hevc))
+        XCTAssertTrue(job.routeSelection.isEncodableNow)
+        XCTAssertEqual(job.routeSelection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(job.plan.audioPlan?.route, TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .alac))
+        XCTAssertEqual(job.plan.audioPlan?.routeSelection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(job.plan.audioPlan?.readiness.readiness, .softwareBackendExecutable)
+        XCTAssertEqual(job.plan.audioPlan?.readiness.commandBackend, .softwareVLCDecoder)
+        XCTAssertTrue(job.plan.audioPlan?.isRunnableInCurrentBuild ?? false)
+        XCTAssertNil(job.plan.audioPlan?.commandPlan)
+
+        let result = try await core.encodePreparedJob(job, progress: { _ in })
+        let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: result.temporaryOutputURL)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.temporaryOutputURL.path))
+        XCTAssertEqual(result.usedBackend, .softwareVLCDecoder)
+        XCTAssertEqual(result.usedMode, .software)
+        XCTAssertEqual(outputAsset.container, .mov)
+        XCTAssertEqual(outputAsset.videoTrack?.codec, .hevc)
+        XCTAssertEqual(outputAsset.audioTracks.first?.codec, .alac)
         XCTAssertEqual(outputAsset.audioTracks.first?.sampleRate ?? 0, 48_000, accuracy: 1)
         XCTAssertEqual(outputAsset.audioTracks.first?.channelCount, 2)
         XCTAssertFalse(outputAsset.audioTracks.isEmpty)
