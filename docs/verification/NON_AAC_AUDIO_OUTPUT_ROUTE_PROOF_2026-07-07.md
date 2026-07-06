@@ -39,7 +39,13 @@
 - Executed audio route: `Dolby Digital to PCM`
 - Output: H.265 / HEVC video in MOV with Apple Lossless / ALAC audio
 - Executed audio route: `Dolby Digital to Apple Lossless`
-- Execution backend: bundled software VLC video decode feeding the Apple-native output writer. Opus, AMR-family, and AC3 audio use bundled software VLC audio decode for the proved software-video path; MP3 and AAC use the current Apple-native audio transcode route while the video path still runs through the software writer.
+- Source sample: bundled `TaptionEncoder/TestVideos/H.264 EAC3.mp4`
+- Source media: H.264 video plus E-AC-3 / Dolby Digital Plus audio
+- Output: H.265 / HEVC video in MOV with Linear PCM audio
+- Executed audio route: `Dolby Digital Plus to PCM`
+- Output: H.265 / HEVC video in MOV with Apple Lossless / ALAC audio
+- Executed audio route: `Dolby Digital Plus to Apple Lossless`
+- Execution backend: bundled software VLC video decode feeding the Apple-native output writer. Opus, AMR-family, AC3, and EAC3 audio use bundled software VLC audio decode for the proved software-video path; MP3 and AAC use the current Apple-native audio transcode route while the video path still runs through the software writer.
 
 ## Code Changes Covered
 
@@ -56,8 +62,8 @@
 - `CodecRoutePlannerTests` now verifies AMR-to-PCM and AMR-to-ALAC current-build readiness, plus bundled `AMR-WB H.263.3gp` execution to H.265 MOV with PCM and ALAC audio.
 - `CodecRoutePlannerTests` also verifies bundled `Flash Video.flv` execution to H.265 MOV with MP3-to-PCM and MP3-to-ALAC output through the Apple-native audio transcode route while the video route stays on the bundled software VLC decoder.
 - `CodecRoutePlannerTests` now also verifies bundled `QuickTime Video.mov` execution to H.265 MOV with AAC-to-PCM and AAC-to-ALAC output through the Apple-native audio transcode route while the video route stays on the bundled software VLC decoder.
-- `SW_AudioCodecSupportCatalog` and `AudioCodecRoutePlanner` now allow AC3-to-PCM and AC3-to-ALAC MOV output through the current bundled VLC audio decode path when the software video writer path is selected.
-- `CodecRoutePlannerTests` now verifies bundled `H.264 AC3.mp4` execution to H.265 MOV with AC3-to-PCM and AC3-to-ALAC output on the requested software path.
+- `SW_AudioCodecSupportCatalog` and `AudioCodecRoutePlanner` now allow AC3/EAC3-to-PCM and AC3/EAC3-to-ALAC MOV output through the current bundled VLC audio decode path when the software video writer path is selected.
+- `CodecRoutePlannerTests` now verifies bundled `H.264 AC3.mp4` and `H.264 EAC3.mp4` execution to H.265 MOV with Dolby-to-PCM and Dolby-to-ALAC output on the requested software path.
 
 ## Simulator Regression Proof - H.264 AC3 PCM/ALAC
 
@@ -120,6 +126,67 @@ Test assertions also verified:
 
 This is focused simulator regression evidence only. It is not real-device proof, TestFlight/App Store Connect proof, App Review proof, or public-release proof.
 
+## Simulator Regression Proof - H.264 EAC3 PCM/ALAC
+
+Command:
+
+```sh
+rm -rf /tmp/taption_encoder_eac3_nonaac_sim_dd /tmp/taption_encoder_eac3_nonaac_sim_result.xcresult && xcodebuild test \
+  -project TaptionEncoder.xcodeproj \
+  -scheme TaptionEncoder \
+  -destination 'platform=iOS Simulator,id=A5C810F9-20A8-46B7-B4BF-8AF3399D00C1' \
+  -derivedDataPath /tmp/taption_encoder_eac3_nonaac_sim_dd \
+  -resultBundlePath /tmp/taption_encoder_eac3_nonaac_sim_result.xcresult \
+  -parallel-testing-enabled NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledVLCAudioDecodeFeedsAppleWriterForRepresentativeCurrentBuildCodecs \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledH264EAC3SampleEncodesHEVCMOVWithPCMAudioOnSoftwarePath \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledH264EAC3SampleEncodesHEVCMOVWithALACAudioOnSoftwarePath
+```
+
+Result:
+
+- Passed: 3.
+- Failed: 0.
+- Skipped: 0.
+- Test duration: 16.376 seconds.
+- Simulator ID: `A5C810F9-20A8-46B7-B4BF-8AF3399D00C1`.
+- Result bundle: `/tmp/taption_encoder_eac3_nonaac_sim_result.xcresult`.
+
+Key runtime evidence from the passing test log:
+
+- `audioRoute=Dolby Digital Plus to PCM`
+- `audioPath=SW`
+- `backend=softwareVLCDecoder`
+- `output=H.265 / HEVC / MOV`
+- `route=H.264 / AVC to H.265 / HEVC`
+- `Software H.264 transcode pipeline completed`
+- `frames=120`
+- `audioSampleBuffers=144`
+- `audioSamples=221184`
+- Source-preserving output verification passed with:
+  - `actualAudioTracks=1`
+  - `actualAudioSampleRate=44100`
+  - `actualAudioChannels=2`
+  - `actualDuration=5.016`
+  - `actualFrameRate=24000/1000`
+  - `actualResolution=320x180`
+
+Test assertions also verified:
+
+- source container: MP4
+- source video codec: H.264 / AVC
+- source audio codec: E-AC-3 / Dolby Digital Plus
+- source audio sample rate: 44.1 kHz
+- source audio channel count: 2
+- output container: MOV
+- output video codec: H.265 / HEVC
+- output audio codecs: PCM and ALAC
+- output audio sample rate: 44.1 kHz
+- output audio channel count: 2
+
+This is focused simulator regression evidence only. It is not real-device proof, TestFlight/App Store Connect proof, App Review proof, or public-release proof.
+
 ## Device XCTest Proof - H.264 AC3 PCM/ALAC
 
 Command:
@@ -152,6 +219,45 @@ Runtime log evidence:
 
 - `Codec transcode started` reported `audioPath=SW`, `audioRoute=Dolby Digital to Apple Lossless`, `output=H.265 / HEVC / MOV`, `route=H.264 / AVC to H.265 / HEVC`, `preserveResolution=320x180`, and `preserveFrameRate=24000/1000`.
 - `Codec transcode started` also reported `audioRoute=Dolby Digital to PCM` for the PCM/MOV route.
+- `Software H.264 transcode pipeline completed` reported `frames=120` and `audioSampleBuffers=144` for both routes.
+- `Performance trace finished` reported `audioSamples=221184`, `frames=120`, and `phase=completed`.
+- `Source-preserving output verification passed` reported `actualAudioTracks=1`, `actualAudioSampleRate=44100`, `actualAudioChannels=2`, `actualDuration=5.016`, `actualFrameRate=24000/1000`, and `actualResolution=320x180`.
+- `Codec transcode completed` reported `backend=softwareVLCDecoder` and `mode=software`.
+
+This is focused real-device Debug XCTest route-execution evidence. It is not simulator proof, host FFmpeg proof, TestFlight/App Store Connect proof, App Review proof, or public-release proof.
+
+## Device XCTest Proof - H.264 EAC3 PCM/ALAC
+
+Command:
+
+```sh
+rm -rf /tmp/taption_encoder_eac3_ipad_dd /tmp/taption_encoder_eac3_ipad_result.xcresult && xcodebuild test \
+  -project TaptionEncoder.xcodeproj \
+  -scheme TaptionEncoder \
+  -destination 'platform=iOS,id=00008112-000964980E45401E' \
+  -derivedDataPath /tmp/taption_encoder_eac3_ipad_dd \
+  -resultBundlePath /tmp/taption_encoder_eac3_ipad_result.xcresult \
+  -parallel-testing-enabled NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledH264EAC3SampleEncodesHEVCMOVWithPCMAudioOnSoftwarePath \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledH264EAC3SampleEncodesHEVCMOVWithALACAudioOnSoftwarePath
+```
+
+Result:
+
+- Result: passed.
+- Selected tests: 2.
+- Failures: 0.
+- Test duration: 15.942 seconds.
+- Device: iPad Pro 12.9-inch 6th generation.
+- Device ID: `00008112-000964980E45401E`.
+- OS: iOS/iPadOS 26.5.
+- Result bundle: `/tmp/taption_encoder_eac3_ipad_result.xcresult`.
+
+Runtime log evidence:
+
+- `Codec transcode started` reported `audioRoute=Dolby Digital Plus to PCM`, `audioPath=SW`, `output=H.265 / HEVC / MOV`, `route=H.264 / AVC to H.265 / HEVC`, `preserveResolution=320x180`, and `preserveFrameRate=24000/1000`.
+- `Codec transcode started` also reported `audioRoute=Dolby Digital Plus to Apple Lossless` for the ALAC/MOV route.
 - `Software H.264 transcode pipeline completed` reported `frames=120` and `audioSampleBuffers=144` for both routes.
 - `Performance trace finished` reported `audioSamples=221184`, `frames=120`, and `phase=completed`.
 - `Source-preserving output verification passed` reported `actualAudioTracks=1`, `actualAudioSampleRate=44100`, `actualAudioChannels=2`, `actualDuration=5.016`, `actualFrameRate=24000/1000`, and `actualResolution=320x180`.
@@ -586,6 +692,7 @@ Result:
 - MP3 now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through the Flash Video/MP3 sample. This is an Apple-native audio route, separate from the bundled software VLC audio-decode proof for Opus and AMR-family samples.
 - AAC now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through the QuickTime Video/AAC sample.
 - AC3 now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through bundled `H.264 AC3.mp4` on the requested software path.
+- EAC3 now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through bundled `H.264 EAC3.mp4` on the requested software path.
 - AMR-WB+ still needs a decodable positive sample.
 - Broader non-AAC output routes beyond current sample-proven `PCM / MOV` and `ALAC / MOV` still need implementation and proof.
 - FFmpeg-family or equivalent broad backend execution remains gated on bundled backend integration and license/App Store review.

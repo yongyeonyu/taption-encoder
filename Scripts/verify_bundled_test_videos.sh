@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_VIDEO_DIR="${1:-"$ROOT_DIR/TaptionEncoder/TestVideos"}"
-EXPECTED_VIDEO_COUNT=58
+EXPECTED_VIDEO_COUNT=59
 MIN_SECONDS=4.85
 MAX_SECONDS=5.15
 SIZE_LIMIT_BYTES=1000000

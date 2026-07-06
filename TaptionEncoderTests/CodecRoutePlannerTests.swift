@@ -5063,6 +5063,22 @@ final class CodecRoutePlannerTests: XCTestCase {
             ),
             .softwareVLCDecoder
         )
+        XCTAssertEqual(
+            SW_AudioCodecSupportCatalog.currentBuildBundledDecodeBackend(
+                for: .eac3,
+                outputCodec: .pcm,
+                outputContainer: .mov
+            ),
+            .softwareVLCDecoder
+        )
+        XCTAssertEqual(
+            SW_AudioCodecSupportCatalog.currentBuildBundledDecodeBackend(
+                for: .eac3,
+                outputCodec: .alac,
+                outputContainer: .mov
+            ),
+            .softwareVLCDecoder
+        )
         XCTAssertNil(
             SW_AudioCodecSupportCatalog.currentBuildBundledDecodeBackend(
                 for: .opus,
@@ -5104,7 +5120,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             XCTAssertEqual(preferredDescriptor?.backend, .softwareVLCDecoder, sourceCodec.displayName)
         }
 
-        for sourceCodec in [TaptionAudioCodec.opus, .amr, .ac3] {
+        for sourceCodec in [TaptionAudioCodec.opus, .amr, .ac3, .eac3] {
             for outputCodec in [TaptionAudioCodec.pcm, .alac] {
                 let route = TaptionAudioCodecRoute(sourceCodec: sourceCodec, outputCodec: outputCodec)
                 let selection = TaptionAudioCodecRoutePlanner.selectRoute(
@@ -5135,26 +5151,50 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     func testBundledH264AC3SampleEncodesHEVCMOVWithPCMAudioOnSoftwarePath() async throws {
-        try await assertBundledH264AC3SampleEncodesHEVCMOVOnSoftwarePath(
+        try await assertBundledH264DolbySampleEncodesHEVCMOVOnSoftwarePath(
+            sampleFileName: "H.264 AC3.mp4",
+            expectedSourceAudioCodec: .ac3,
             outputAudioCodec: .pcm,
             outputFileName: "h264-ac3-hevc-pcm.mov"
         )
     }
 
     func testBundledH264AC3SampleEncodesHEVCMOVWithALACAudioOnSoftwarePath() async throws {
-        try await assertBundledH264AC3SampleEncodesHEVCMOVOnSoftwarePath(
+        try await assertBundledH264DolbySampleEncodesHEVCMOVOnSoftwarePath(
+            sampleFileName: "H.264 AC3.mp4",
+            expectedSourceAudioCodec: .ac3,
             outputAudioCodec: .alac,
             outputFileName: "h264-ac3-hevc-alac.mov"
         )
     }
 
-    private func assertBundledH264AC3SampleEncodesHEVCMOVOnSoftwarePath(
+    func testBundledH264EAC3SampleEncodesHEVCMOVWithPCMAudioOnSoftwarePath() async throws {
+        try await assertBundledH264DolbySampleEncodesHEVCMOVOnSoftwarePath(
+            sampleFileName: "H.264 EAC3.mp4",
+            expectedSourceAudioCodec: .eac3,
+            outputAudioCodec: .pcm,
+            outputFileName: "h264-eac3-hevc-pcm.mov"
+        )
+    }
+
+    func testBundledH264EAC3SampleEncodesHEVCMOVWithALACAudioOnSoftwarePath() async throws {
+        try await assertBundledH264DolbySampleEncodesHEVCMOVOnSoftwarePath(
+            sampleFileName: "H.264 EAC3.mp4",
+            expectedSourceAudioCodec: .eac3,
+            outputAudioCodec: .alac,
+            outputFileName: "h264-eac3-hevc-alac.mov"
+        )
+    }
+
+    private func assertBundledH264DolbySampleEncodesHEVCMOVOnSoftwarePath(
+        sampleFileName: String,
+        expectedSourceAudioCodec: TaptionAudioCodec,
         outputAudioCodec: TaptionAudioCodec,
         outputFileName: String
     ) async throws {
-        let sampleURL = bundledTestVideosURL().appendingPathComponent("H.264 AC3.mp4")
+        let sampleURL = bundledTestVideosURL().appendingPathComponent(sampleFileName)
         guard FileManager.default.fileExists(atPath: sampleURL.path) else {
-            XCTFail("Missing bundled AC3 proof sample at \(sampleURL.path)")
+            XCTFail("Missing bundled Dolby proof sample at \(sampleURL.path)")
             return
         }
 
@@ -5183,11 +5223,11 @@ final class CodecRoutePlannerTests: XCTestCase {
             preferredMode: .software,
             savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
         )
-        let sourceAudioCodec = try XCTUnwrap(job.asset.audioTracks.first?.codec)
+        let actualSourceAudioCodec = try XCTUnwrap(job.asset.audioTracks.first?.codec)
 
         XCTAssertEqual(job.asset.container, .mp4)
         XCTAssertEqual(job.asset.videoTrack?.codec, .h264)
-        XCTAssertEqual(sourceAudioCodec, .ac3)
+        XCTAssertEqual(actualSourceAudioCodec, expectedSourceAudioCodec)
         XCTAssertEqual(job.asset.audioTracks.first?.sampleRate ?? 0, 44_100, accuracy: 1)
         XCTAssertEqual(job.asset.audioTracks.first?.channelCount, 2)
         XCTAssertEqual(job.plan.outputPolicy.videoCodec, .hevc)
@@ -5196,7 +5236,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(job.routeSelection.route, TaptionCodecRoute(sourceCodec: .h264, outputCodec: .hevc))
         XCTAssertTrue(job.routeSelection.isEncodableNow)
         XCTAssertEqual(job.routeSelection.decodeBackend, .softwareVLCDecoder)
-        XCTAssertEqual(job.plan.audioPlan?.route, TaptionAudioCodecRoute(sourceCodec: .ac3, outputCodec: outputAudioCodec))
+        XCTAssertEqual(job.plan.audioPlan?.route, TaptionAudioCodecRoute(sourceCodec: expectedSourceAudioCodec, outputCodec: outputAudioCodec))
         XCTAssertEqual(job.plan.audioPlan?.routeSelection.support, .softwareTranscode)
         XCTAssertEqual(job.plan.audioPlan?.routeSelection.decodeBackend, .softwareVLCDecoder)
         XCTAssertEqual(job.plan.audioPlan?.routeSelection.encodeBackend, .appleAVAssetExport)
@@ -5204,7 +5244,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(job.plan.audioPlan?.readiness.commandBackend, .softwareVLCDecoder)
         XCTAssertEqual(
             SW_AudioCodecSupportCatalog.currentBuildBundledDecodeBackend(
-                for: .ac3,
+                for: expectedSourceAudioCodec,
                 outputCodec: outputAudioCodec,
                 outputContainer: .mov
             ),
@@ -12026,6 +12066,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             ("Raw Video.avi", .rawVideo),
             ("H.264 AVC.mp4", .h264),
             ("H.264 AC3.mp4", .h264),
+            ("H.264 EAC3.mp4", .h264),
             ("H.265 HEVC.mp4", .hevc)
         ]
     }

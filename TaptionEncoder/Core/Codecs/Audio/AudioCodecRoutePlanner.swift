@@ -204,7 +204,7 @@ enum TaptionAudioCodecRoutePlanner {
         outputCodec: TaptionAudioCodec,
         outputContainer: TaptionVideoContainer
     ) -> Bool {
-        sourceCodec == .ac3
+        [.ac3, .eac3].contains(sourceCodec)
             && [.pcm, .alac].contains(outputCodec)
             && outputContainer == .mov
     }

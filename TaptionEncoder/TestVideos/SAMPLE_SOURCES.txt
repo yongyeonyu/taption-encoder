@@ -45,6 +45,12 @@ Official Blender Open Movie downloads:
   source audio re-encoded to 44.1 kHz AC-3 for bundled AC3-to-PCM/ALAC
   software-audio execution proof.
   https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4
+- H.264 EAC3.mp4
+  Audio-route proof sample derived from the same Big Buck Bunny 320x180
+  02:00-02:05 H.264 AVC sample; video stream copied and the original public
+  source audio re-encoded to 44.1 kHz E-AC-3 for bundled EAC3-to-PCM/ALAC
+  software-audio execution proof.
+  https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4
 - DVCPro.mov
   Derived from Big Buck Bunny 320x180 02:00-02:05; video re-encoded to
   DVCPro and the original AAC source audio re-encoded to PCM.
