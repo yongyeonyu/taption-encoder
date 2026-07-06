@@ -332,7 +332,6 @@ enum TaptionCodecRegistry {
         TaptionCodecRoute(sourceCodec: .r210, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .v408, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .v410, outputCodec: .hevc),
-        TaptionCodecRoute(sourceCodec: .y41p, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .microsoftRLE, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .quickTimeGraphics, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .yuv4, outputCodec: .hevc),
@@ -745,13 +744,6 @@ enum TaptionCodecRegistry {
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "V410 to H.265 Software"
-        ),
-        TaptionCodecAlgorithmDescriptor(
-            sourceCodec: .y41p,
-            outputCodec: .hevc,
-            mode: .software,
-            backend: .softwareVLCDecoder,
-            displayName: "Y41P to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
             sourceCodec: .microsoftRLE,

@@ -55,5 +55,5 @@ The simulator `A57EE4F1-DE7A-4745-859F-96DC18B110F1` was a temporary device name
 
 - Fix raw VC-1 runtime decode before reporting VC-1 sample execution as passing app-side proof.
 - QuickTime RPZA partial-duration decode was fixed in the 2026-07-07 follow-up by holding legacy decoded frames through the source duration; see `docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-07.md`.
-- Do not advertise Y41P as sample-executable through current libVLC until a backend with Y41P decode support is bundled.
+- Y41P route status was corrected in the 2026-07-07 follow-up: the app still detects the sample as Y41P, but no longer advertises it as current-build executable through SwiftVLC. It now remains planned for an FFmpeg-family or equivalent backend until that backend is bundled and license-reviewed.
 - AMR-NB audio execution was fixed in the 2026-07-07 follow-up by decoding through bundled VLC and resampling to 48 kHz AAC; see `docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-07.md`.

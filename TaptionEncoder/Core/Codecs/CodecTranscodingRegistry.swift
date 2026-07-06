@@ -88,7 +88,6 @@ struct TaptionCodecTranscodingRegistry: @unchecked Sendable {
             TaptionCodecTranscodingAlgorithmEntry(SW_R210HEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_V408HEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_V410HEVCTranscoder.self),
-            TaptionCodecTranscodingAlgorithmEntry(SW_Y41PHEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_MicrosoftRLEHEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_QuickTimeGraphicsHEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_YUV4HEVCTranscoder.self),

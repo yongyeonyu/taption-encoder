@@ -588,7 +588,6 @@ final class CodecRoutePlannerTests: XCTestCase {
             .pngVideo,
             .r10k,
             .r210,
-            .y41p,
             .microsoftRLE,
             .quickTimeGraphics,
             .rawVideo
@@ -608,6 +607,17 @@ final class CodecRoutePlannerTests: XCTestCase {
             XCTAssertEqual(selection.decodeBackend, .softwareVLCDecoder, codec.displayName)
             XCTAssertEqual(selection.encodeBackend, .customSoftware, codec.displayName)
         }
+
+        let y41pSelection = selectRoute(
+            sourceCodec: .y41p,
+            outputCodec: .hevc,
+            profile: .softwareOnly
+        )
+        XCTAssertEqual(y41pSelection.support, .planned)
+        XCTAssertFalse(y41pSelection.isEncodableNow)
+        XCTAssertEqual(y41pSelection.executionKind, .planned)
+        XCTAssertEqual(y41pSelection.decodeBackend, .ffmpegFamily)
+        XCTAssertEqual(y41pSelection.encodeBackend, .ffmpegFamily)
     }
 
     func testRealVideoAndRoQCodecsToHEVCReflectCurrentBackendReadiness() {
@@ -1308,13 +1318,19 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(h261Descriptors.count, 1)
         XCTAssertEqual(h261Descriptors.first?.mode, .software)
         XCTAssertEqual(h261Descriptors.first?.backend, .softwareVLCDecoder)
-        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .roqVideo, .vc1, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV, .utVideo, .magicYUV, .dvcPro, .dvcProHD, .dv, .cineForm, .dnxhd, .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .y41p, .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo] {
+        for codec in [TaptionVideoCodec.flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .roqVideo, .vc1, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV, .utVideo, .magicYUV, .dvcPro, .dvcProHD, .dv, .cineForm, .dnxhd, .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo] {
             let route = TaptionCodecRoute(sourceCodec: codec, outputCodec: .hevc)
             let codecDescriptors = TaptionCodecTranscodingRegistry.live.descriptors(for: route)
             XCTAssertEqual(codecDescriptors.count, 1, codec.displayName)
             XCTAssertEqual(codecDescriptors.first?.mode, .software, codec.displayName)
             XCTAssertEqual(codecDescriptors.first?.backend, .softwareVLCDecoder, codec.displayName)
         }
+        let y41pRoute = TaptionCodecRoute(sourceCodec: .y41p, outputCodec: .hevc)
+        XCTAssertTrue(TaptionCodecTranscodingRegistry.live.descriptors(for: y41pRoute).isEmpty)
+        XCTAssertEqual(
+            TaptionCodecTranscodingRegistry.live.plannedDescriptors(for: y41pRoute).first?.backend,
+            .ffmpegFamily
+        )
         XCTAssertEqual(motionJPEGDescriptors.count, 1)
         XCTAssertEqual(motionJPEGDescriptors.first?.mode, .software)
         XCTAssertEqual(motionJPEGDescriptors.first?.backend, .softwareVLCDecoder)
@@ -2342,7 +2358,8 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         let sampledCodecs = Set(expectations.map(\.1))
         XCTAssertTrue(Set(TaptionLaunchSupportCatalog.executableNowInputVideoCodecs).isSuperset(of: sampledCodecs))
-        XCTAssertTrue(TaptionLaunchSupportCatalog.executableNowInputVideoCodecs.contains(.y41p))
+        XCTAssertFalse(TaptionLaunchSupportCatalog.executableNowInputVideoCodecs.contains(.y41p))
+        XCTAssertTrue(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(.y41p))
         XCTAssertFalse(expectations.contains { $0.0 == "Y41P.avi" })
 
         for (filename, expectedCodec) in expectations {
@@ -4122,7 +4139,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo,
             .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV,
             .utVideo, .magicYUV, .dvcPro, .dvcProHD, .dv, .cineForm, .dnxhd,
-            .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .y41p,
+            .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410,
             .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo, .h264, .hevc
         ]
         let expectedSupportedInputVideoCodecs = expectedExecutableNowVideoCodecs.map {
@@ -4151,6 +4168,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             TaptionLaunchSupportCatalog.executableNowInputVideoCodecs,
             expectedExecutableNowVideoCodecs
         )
+        XCTAssertTrue(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.contains(.y41p))
         XCTAssertEqual(
             TaptionLaunchSupportCatalog.hardwareGatedInputVideoCodecs,
             [.proRes]
@@ -5011,7 +5029,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(outputAsset.duration ?? 0, job.asset.duration ?? 0, accuracy: 0.55)
     }
 
-    func testLocalRealY41PSampleDocumentsCurrentSwiftVLCUnsupportedBlock() async throws {
+    func testLocalRealY41PSampleDocumentsPlannedFFmpegBackendAfterVLCUnsupportedBlock() async throws {
         try requireLocalRealSampleProofs()
 
         let samplePath = ProcessInfo.processInfo.environment["TAPTION_Y41P_SAMPLE_PATH"]
@@ -5034,31 +5052,28 @@ final class CodecRoutePlannerTests: XCTestCase {
                 saveGateAuthorizer: FakeAdGate()
             )
         )
-        let job = try await core.prepareSingleAssetHEVCJob(
+        let job = try await core.prepareSingleAssetJob(
             sourceURL: sampleURL,
             temporaryOutputURL: outputURL,
+            outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4),
             savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
         )
         XCTAssertEqual(job.asset.container, .avi)
         XCTAssertEqual(job.asset.videoTrack?.codec, .y41p)
         XCTAssertEqual(job.asset.audioTracks.first?.codec, .pcm)
         XCTAssertEqual(job.routeSelection.route, TaptionCodecRoute(sourceCodec: .y41p, outputCodec: .hevc))
-        XCTAssertTrue(job.routeSelection.isEncodableNow)
-        XCTAssertEqual(job.routeSelection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(job.routeSelection.support, .planned)
+        XCTAssertFalse(job.routeSelection.isEncodableNow)
+        XCTAssertEqual(job.routeSelection.executionKind, .planned)
+        XCTAssertEqual(job.routeSelection.decodeBackend, .ffmpegFamily)
+        XCTAssertEqual(job.routeSelection.encodeBackend, .appleVideoToolbox)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path) == false)
 
-        do {
-            let result = try await core.encodePreparedJob(job, progress: { _ in })
-            XCTFail("Y41P unexpectedly encoded to \(result.temporaryOutputURL.path); promote this sample to passing runtime proof.")
-        } catch {
-            let description = error.localizedDescription.lowercased()
-            XCTAssertTrue(
-                description.contains("frame")
-                    || description.contains("decode")
-                    || description.contains("remove"),
-                description
-            )
-            XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
-        }
+        let plannedDescriptor = TaptionCodecTranscodingRegistry.live
+            .plannedDescriptors(for: job.routeSelection.route)
+            .first
+        XCTAssertEqual(plannedDescriptor?.backend, .ffmpegFamily)
+        XCTAssertTrue(TaptionCodecTranscodingRegistry.live.descriptors(for: job.routeSelection.route).isEmpty)
     }
 
     func testLocalRealAMRNBH263SampleEncodesHEVCWithAACAudio() async throws {
@@ -6190,10 +6205,12 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(decoded.launchInputReadinessCatalog?.outputContainers, [.mp4, .mov])
         XCTAssertTrue(decoded.launchInputReadinessCatalog?.executableNowVideoCodecs.contains(.h261) == true)
         XCTAssertFalse(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(.h261) == true)
-        for codec in [TaptionVideoCodec.realVideo1, .realVideo, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .roqVideo, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV, .utVideo, .magicYUV, .dvcPro, .dvcProHD, .dv, .cineForm, .dnxhd, .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .y41p, .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo] {
+        for codec in [TaptionVideoCodec.realVideo1, .realVideo, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .roqVideo, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV, .utVideo, .magicYUV, .dvcPro, .dvcProHD, .dv, .cineForm, .dnxhd, .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo] {
             XCTAssertTrue(decoded.launchInputReadinessCatalog?.executableNowVideoCodecs.contains(codec) == true, codec.displayName)
             XCTAssertFalse(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(codec) == true, codec.displayName)
         }
+        XCTAssertFalse(decoded.launchInputReadinessCatalog?.executableNowVideoCodecs.contains(.y41p) == true)
+        XCTAssertTrue(decoded.launchInputReadinessCatalog?.plannedVideoCodecs.contains(.y41p) == true)
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"routeSimulationSummary\"") == true)
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"staticMatrixReconciliation\"") == true)
         XCTAssertTrue(String(data: data, encoding: .utf8)?.contains("\"universalCodecCompletionAudit\"") == true)
@@ -6306,6 +6323,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(
             SW_SoftwareCodecBackendRegistry.currentExecutableVideoDecodeBackend(for: .vc1),
             .softwareVLCDecoder
+        )
+        XCTAssertEqual(
+            SW_SoftwareCodecBackendRegistry.preferredVideoDecodeBackend(for: .y41p),
+            .ffmpegFamily
+        )
+        XCTAssertNil(
+            SW_SoftwareCodecBackendRegistry.currentExecutableVideoDecodeBackend(for: .y41p)
         )
 
         for codec in TaptionCodecRegistry.universalOutputCodecs {

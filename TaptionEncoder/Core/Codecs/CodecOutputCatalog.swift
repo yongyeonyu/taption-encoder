@@ -301,7 +301,6 @@ enum TaptionLaunchSupportCatalog {
         TaptionLaunchInputVideoSupportItem(codec: .r210, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .v408, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .v410, availability: .availableNow),
-        TaptionLaunchInputVideoSupportItem(codec: .y41p, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .microsoftRLE, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .quickTimeGraphics, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .yuv4, availability: .availableNow),
