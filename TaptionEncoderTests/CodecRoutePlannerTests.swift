@@ -5147,6 +5147,62 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(outputAsset.audioTracks.isEmpty)
     }
 
+    func testLocalRealXHEAACSampleEncodesHEVCWithNativeAACAudio() async throws {
+        try requireLocalRealSampleProofs()
+
+        let samplePath = ProcessInfo.processInfo.environment["TAPTION_XHE_AAC_SAMPLE_PATH"]
+            ?? "/Users/u_mo_c/Documents/taption_encoder/Samples/Downloaded/internet_supported_missing_2026-07-06/sample_videos/xhe_aac_hevc_video.mp4"
+        let sampleURL = URL(fileURLWithPath: samplePath)
+        guard FileManager.default.fileExists(atPath: sampleURL.path) else {
+            throw XCTSkip("Local xHE-AAC real-sample proof requires \(sampleURL.path).")
+        }
+
+        let outputURL = temporaryTestURL(fileName: "xhe-aac-hevc-actual-app-hevc.mp4")
+        try? FileManager.default.removeItem(at: outputURL)
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+
+        let core = TaptionVideoCore(
+            services: TaptionVideoCoreServices(
+                inspector: AVFoundationMediaInspector(),
+                encoder: AVFoundationHEVCEncoderService(),
+                storageChecker: FakeStorageChecker(),
+                pendingSaveStore: FakePendingSaveStore(),
+                saveGateAuthorizer: FakeAdGate()
+            )
+        )
+        let job = try await core.prepareSingleAssetHEVCJob(
+            sourceURL: sampleURL,
+            temporaryOutputURL: outputURL,
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+        )
+        XCTAssertEqual(job.asset.container, .mp4)
+        XCTAssertEqual(job.asset.videoTrack?.codec, .hevc)
+        XCTAssertEqual(job.asset.audioTracks.first?.codec, .xheAAC)
+        XCTAssertEqual(job.asset.audioTracks.first?.sampleRate ?? 0, 48_000, accuracy: 1)
+        XCTAssertEqual(job.asset.audioTracks.first?.channelCount, 2)
+        XCTAssertEqual(job.routeSelection.route, TaptionCodecRoute(sourceCodec: .hevc, outputCodec: .hevc))
+        XCTAssertTrue(job.routeSelection.isEncodableNow)
+        XCTAssertEqual(job.plan.audioPlan?.route, TaptionAudioCodecRoute(sourceCodec: .xheAAC, outputCodec: .aac))
+        XCTAssertEqual(job.plan.audioPlan?.routeSelection.support, .nativeTranscode)
+        XCTAssertEqual(job.plan.audioPlan?.readiness.readiness, .nativeTranscodeInCurrentBuild)
+        XCTAssertTrue(job.plan.audioPlan?.isRunnableInCurrentBuild ?? false)
+        XCTAssertNil(job.plan.audioPlan?.commandPlan)
+        XCTAssertEqual(job.plan.audioPlan?.options.sampleRate, 44_100)
+        XCTAssertEqual(job.plan.sourcePreservationRequirements?.audioSampleRate, 44_100)
+
+        let result = try await core.encodePreparedJob(job, progress: { _ in })
+        let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: result.temporaryOutputURL)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.temporaryOutputURL.path))
+        XCTAssertEqual(result.usedBackend, .appleVideoToolbox)
+        XCTAssertEqual(result.usedMode, .hardware)
+        XCTAssertEqual(outputAsset.container, .mp4)
+        XCTAssertEqual(outputAsset.videoTrack?.codec, .hevc)
+        XCTAssertEqual(outputAsset.audioTracks.first?.codec, .aac)
+        XCTAssertEqual(outputAsset.audioTracks.first?.sampleRate ?? 0, 44_100, accuracy: 1)
+        XCTAssertEqual(outputAsset.audioTracks.first?.channelCount, 2)
+    }
+
     func testEncodePreparedJobCreatesPendingSaveStateWithoutSaveAdWhenSaveGateIsNone() async throws {
         let outputURL = temporaryTestURL(fileName: "encoded.mp4")
         let core = TaptionVideoCore(
@@ -5500,6 +5556,23 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(options.targetBitrate, 12_200)
     }
 
+    func testSourcePreservingAudioOptionsResolverUsesAppleXHEAACWriterRateForAAC() {
+        let sourceTrack = TaptionAudioTrackInfo(
+            codec: .xheAAC,
+            channelCount: 2,
+            sampleRate: 48_000,
+            estimatedBitrate: 24_000
+        )
+        let options = TaptionSourcePreservingAudioOptionsResolver.resolvedOptions(
+            for: sourceTrack,
+            requestedOptions: .preservingSource(outputCodec: .aac, outputContainer: .mp4)
+        )
+
+        XCTAssertEqual(options.sampleRate, 44_100)
+        XCTAssertEqual(options.channelCount, 2)
+        XCTAssertEqual(options.targetBitrate, 24_000)
+    }
+
     func testSourcePreservingAudioOptionsResolverKeepsExplicitOverrides() {
         let sourceTrack = TaptionAudioTrackInfo(
             codec: .opus,
@@ -5542,6 +5615,25 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(info.sampleRate, 48_000)
         XCTAssertEqual(info.channelCount, 6)
         XCTAssertEqual(info.estimatedBitrate, 512_000)
+    }
+
+    func testAudioFormatDescriptionParserRecognizesUSACAsXHEAAC() throws {
+        let description = try makeAudioDescription(
+            formatID: kAudioFormatMPEGD_USAC,
+            sampleRate: 48_000,
+            channelCount: 2,
+            framesPerPacket: 2048
+        )
+
+        let info = TaptionAudioFormatDescriptionParser.trackInfo(
+            from: [description],
+            estimatedBitrate: 24_000
+        )
+
+        XCTAssertEqual(info.codec, .xheAAC)
+        XCTAssertEqual(info.sampleRate, 48_000)
+        XCTAssertEqual(info.channelCount, 2)
+        XCTAssertEqual(info.estimatedBitrate, 24_000)
     }
 
     func testAudioFormatDescriptionParserHandlesLinearPCM() throws {

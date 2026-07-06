@@ -823,7 +823,7 @@ private struct SW_VLCMediaInspector: MediaInspecting {
             switch fourCC {
             case "aac", "mp4a", "aach", "aacl":
                 return .aac
-            case "aace":
+            case "aace", "usac", "mha1", "mhm1":
                 return .xheAAC
             case "alac":
                 return .alac
@@ -1064,7 +1064,7 @@ enum TaptionAudioFormatDescriptionParser {
         switch fourCharacterCode(CMFormatDescriptionGetMediaSubType(description)) {
         case "aac", "aach", "aacl":
             return .aac
-        case "aace":
+        case "aace", "usac", "mha1", "mhm1":
             return .xheAAC
         case "alac":
             return .alac

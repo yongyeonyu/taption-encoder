@@ -2,7 +2,7 @@
 
 ## Scope
 
-- Purpose: verify the next local ignored codec sample after the 2026-07-06 runtime-gap pass, then correct the Y41P and VC-1 route statuses after the current libVLC backend proved unsupported or unable to produce frames.
+- Purpose: verify the next local ignored codec samples after the 2026-07-06 runtime-gap pass, then correct the Y41P and VC-1 route statuses after the current libVLC backend proved unsupported or unable to produce frames.
 - Repository: `/Users/u_mo_c/Documents/taption_encoder`.
 - Runtime: local Debug XCTest on a temporary iPhone 17 Pro iOS 26.5 simulator.
 - Output policy remains unchanged: Taption Encoder still outputs H.265 / HEVC video only, and implemented output containers remain MP4/MOV only.
@@ -15,6 +15,8 @@
 - The fix keeps ordinary software-decoded routes on the existing one decoded frame to one output frame behavior.
 - AMR-NB audio is now promoted to the current-build bundled VLC audio decode path for AAC output in MP4.
 - AMR-NB audio is resampled to 48 kHz for the AAC writer, and the source-preserving verification expectation follows the audio plan's resolved output sample rate.
+- USAC/xHE-AAC audio descriptions are now recognized as xHE-AAC during Apple-native media inspection.
+- xHE-AAC-to-AAC source-preserving expectations follow the Apple-native AAC writer's observed 44.1 kHz output rate for this route.
 - Y41P remains detectable as a source codec, but it is no longer advertised as current-build executable through SwiftVLC. The route now stays planned with an FFmpeg-family decode backend until a bundled, license-reviewed backend can actually decode the sample.
 - VC-1 raw elementary streams remain detectable as source media, but they are no longer advertised as current-build executable through SwiftVLC after the local raw sample reached the route and produced no decoded frames. The route now stays planned with an FFmpeg-family or equivalent decode backend until a bundled, license-reviewed backend can actually decode the sample.
 
@@ -25,6 +27,7 @@ The tested samples remain ignored under:
 ```text
 /Users/u_mo_c/Documents/taption_encoder/Samples/Downloaded/internet_supported_missing_2026-07-06/sample_videos/rpza_1701-D.mov
 /Users/u_mo_c/Documents/taption_encoder/Samples/Downloaded/internet_supported_missing_2026-07-06/sample_videos/amr_nb_h263_video.3gp
+/Users/u_mo_c/Documents/taption_encoder/Samples/Downloaded/internet_supported_missing_2026-07-06/sample_videos/xhe_aac_hevc_video.mp4
 /Users/u_mo_c/Documents/taption_encoder/Samples/Downloaded/internet_supported_missing_2026-07-06/sample_videos/y41p_from_internet_image.avi
 /Users/u_mo_c/Documents/taption_encoder/Samples/Downloaded/internet_supported_missing_2026-07-06/sample_videos/vc1_advanced_profile_2.vc1
 ```
@@ -33,6 +36,7 @@ The tested samples remain ignored under:
 | --- | --- | --- |
 | `rpza_1701-D.mov` | QuickTime RPZA video, 160x120, 28 frames, 2.667s source duration | Passed focused simulator XCTest. Output is H.265 MP4, 160x120, 28 software frames, 2.660s inspected output duration. |
 | `amr_nb_h263_video.3gp` | H.263 video plus AMR-NB audio, 176x144, 10 frames, 1.000s source duration | Passed focused simulator XCTest after AMR-NB was decoded through bundled VLC and resampled to 48 kHz AAC. Output is H.265 MP4 with 1 AAC mono audio track. |
+| `xhe_aac_hevc_video.mp4` | H.265/HEVC video plus xHE-AAC/USAC audio, 160x120, 15 fps, 1.000s source duration | Passed focused simulator XCTest after USAC was inspected as xHE-AAC and Apple-native export produced H.265 MP4 with 1 AAC stereo audio track at 44.1 kHz. |
 | `y41p_from_internet_image.avi` | Y41P video plus PCM audio, 160x120, 1.000s source duration | Passed focused route-correction XCTest as a planned route, not an executable encode route. Inspection still detects Y41P, launch readiness no longer lists it as available now, and the route remains planned for an FFmpeg-family decode backend. |
 | `vc1_advanced_profile_2.vc1` | Raw VC-1 Advanced Profile elementary stream, 720x480 | Passed focused route-correction XCTest as a planned route, not an executable encode route. Inspection still detects VC-1, launch readiness no longer lists it as available now, and the route remains planned for an FFmpeg-family or equivalent decode backend. |
 
@@ -142,6 +146,30 @@ rm -f /tmp/taption_run_local_real_sample_tests
 
 The simulator `D46A2F29-A09B-4A67-8E6B-A99150F074B0` was a temporary device named `TaptionEncoder-VC1-Implementation-iPhone-17-Pro`.
 
+xHE-AAC follow-up runtime coverage:
+
+```sh
+touch /tmp/taption_run_local_real_sample_tests
+xcodebuild test \
+  -project TaptionEncoder.xcodeproj \
+  -scheme TaptionEncoder \
+  -destination "platform=iOS Simulator,id=2327959D-2E59-42CA-B1E9-ABBE04A8977E" \
+  -derivedDataPath /tmp/taption_encoder_xhe_aac_dd \
+  -resultBundlePath /tmp/taption_encoder_audio_regression_result.xcresult \
+  -parallel-testing-enabled NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testLocalRealXHEAACSampleEncodesHEVCWithNativeAACAudio \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testLocalRealAMRNBH263SampleEncodesHEVCWithAACAudio \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledVLCAudioDecodeFeedsAACForRepresentativeCurrentBuildCodecs \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testSourcePreservingAudioOptionsResolverRaisesAMRNBSampleRateForAACWriter \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testSourcePreservingAudioOptionsResolverUsesAppleXHEAACWriterRateForAAC \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testAudioCodecRoutesCoverEveryPlannedSourceToAAC \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testAudioFormatDescriptionParserRecognizesUSACAsXHEAAC
+rm -f /tmp/taption_run_local_real_sample_tests
+```
+
+The simulator `2327959D-2E59-42CA-B1E9-ABBE04A8977E` was a temporary device named `TaptionEncoder-XHEAAC-Proof-iPhone-17-Pro`.
+
 ## Result
 
 - `testQuickTimeVideoSoftwareHEVCConfigurationAllowsLegacyFrameHold`: passed.
@@ -157,10 +185,14 @@ The simulator `D46A2F29-A09B-4A67-8E6B-A99150F074B0` was a temporary device name
 - `testLocalRealY41PSampleDocumentsPlannedFFmpegBackendAfterVLCUnsupportedBlock`: passed. It confirmed Y41P sample inspection, planned support, non-executable current-build status, FFmpeg-family planned decode, and no live SwiftVLC algorithm descriptor for the route.
 - VC-1/Y41P/AMR follow-up focused XCTest passed 9 selected tests with 0 failures.
 - `testLocalRealVC1RawSampleDocumentsPlannedFFmpegBackendAfterVLCNoFrameBlock`: passed. It confirmed VC-1 sample inspection, planned support, non-executable current-build status, FFmpeg-family planned decode, and no live SwiftVLC algorithm descriptor for the route.
+- xHE-AAC follow-up focused XCTest passed 7 selected tests with 0 failures.
+- `testAudioFormatDescriptionParserRecognizesUSACAsXHEAAC`: passed. It confirmed USAC format descriptions map to the xHE-AAC audio codec model while preserving 48 kHz stereo source metadata.
+- `testSourcePreservingAudioOptionsResolverUsesAppleXHEAACWriterRateForAAC`: passed. It confirmed xHE-AAC-to-AAC source-preserving expectations use 44.1 kHz for the Apple-native AAC writer.
+- `testLocalRealXHEAACSampleEncodesHEVCWithNativeAACAudio`: passed. It confirmed the local xHE-AAC sample inspects as H.265 video plus xHE-AAC audio, routes audio through native xHE-AAC-to-AAC transcode, produces H.265 MP4 through Apple VideoToolbox, and outputs 1 AAC stereo track at 44.1 kHz.
+- Runtime log showed `audioPath=HW`, `audioRoute=xHE-AAC to AAC`, `expectedAudioSampleRate=44100`, and `actualAudioSampleRate=44100`.
 - Result bundles were written under `/tmp` during the runs, then removed during cleanup after the passes were recorded here.
 
 ## Remaining Sample Runtime Gaps
 
 - VC-1 raw no longer advertises a current SwiftVLC executable path; it still needs a bundled, license-reviewed FFmpeg-family or equivalent backend before sample execution can be promoted.
 - Y41P no longer advertises a current SwiftVLC executable path; it still needs a bundled, license-reviewed FFmpeg-family or equivalent backend before sample execution can be promoted.
-- xHE-AAC still needs app-side execution proof.

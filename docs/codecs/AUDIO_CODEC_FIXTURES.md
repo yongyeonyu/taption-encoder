@@ -117,7 +117,7 @@ Transcode:
 | Taption audio model | Fixture coverage |
 | --- | --- |
 | `aac` | AAC in MP4 |
-| `xheAAC` | Generated fixture skipped locally; 2026-07-06 real-sample acquisition found Chromium and Fraunhofer xHE-AAC MP4 samples, with the Fraunhofer sample passing Apple `afconvert` decode-to-AAC proof while FFmpeg decode remains unavailable |
+| `xheAAC` | Generated fixture skipped locally; 2026-07-06 real-sample acquisition found Chromium and Fraunhofer xHE-AAC MP4 samples, with the Fraunhofer sample passing Apple `afconvert` decode-to-AAC proof while FFmpeg decode remains unavailable; 2026-07-07 focused simulator XCTest proved the Fraunhofer-derived local xHE-AAC/USAC sample executes app-side through Apple-native decode/export to AAC at 44.1 kHz |
 | `pcm` | PCM S16LE, S24LE, F32LE in MOV |
 | `aLaw` | PCM A-law in AVI |
 | `muLaw` | PCM mu-law in AVI |
@@ -155,7 +155,6 @@ Transcode:
 - App-core tests now build FFmpeg-family command plans from every generated audio fixture to currently plannable compatible output audio codecs while preserving source sample rate, channel count, and bitrate options. `verifyAudioFixturePlannableCommandPlanCoverage()` covers that command-plan surface.
 - AAC/MP4 audio fixture execution jobs now rebuild a function-style `TaptionAudioCodecTranscodeRequest` and run through `SW_FFmpegAudioCodecTranscodeExecutor` with a fake runner when the broad software backend gates are satisfied.
 - Broader app-side audio execution still needs to cover compatible audio outputs for H.265 video containers after the FFmpeg-family backend is bundled and license-reviewed.
-- Promote the 2026-07-06 xHE-AAC acquired sample into app-side execution proof without treating host-side evidence as simulator or device proof.
 - Find a decodable pure AMR-WB or AMR-WB+ sample through an App Store-safe path, or document the codec as unsupported until the selected broad backend proves it.
 - Add real-world multichannel, surround, high sample-rate, odd channel-layout, and silent/damaged audio samples.
 - Keep objective audio signal verification in app-scheme evidence tests and expand executor coverage beyond the current AAC/MP4 audio route test surface.

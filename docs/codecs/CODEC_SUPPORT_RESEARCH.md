@@ -87,7 +87,7 @@ Audio should be copied when compatible with the output container and quality pol
 | AMR / iLBC / G.722 / G.723.1 / G.726 / ADPCM / WMA | `amr`, `ilbc`, `g722`, `g723`, `g726`, `adpcm`, `wma` | SW/imported decoder target |
 | MLP / TTA / Nellymoser / RealAudio / RoQ DPCM | `mlp`, `tta`, `nellymoser`, `realAudio`, `roqDPCM` | Legacy and archive SW/imported decoder target |
 
-Current audio fixture coverage is tracked in `docs/codecs/AUDIO_CODEC_FIXTURES.md`. The local smoke set generated AAC, PCM, A-law, mu-law, ALAC, Opus, MP3, MP2, AC3, EAC3, DTS, TrueHD, FLAC, Vorbis, iLBC, G.722, G.723.1, G.726, MLP, TTA, Nellymoser, RealAudio 1.0, RoQ DPCM, WavPack, WMA, and ADPCM samples with audio signal verification after SW/HW H.265 conversion. The 2026-07-06 host-side acquisition pass found xHE-AAC, AMR-NB, and AMR-WB+ samples; Fraunhofer xHE-AAC passed Apple-stack AAC conversion, AMR-NB passed FFmpeg H.265 MP4/MOV output proof, and a 2026-07-07 focused simulator XCTest proved app-side AMR-NB decode/resample/AAC execution through bundled VLC for the H.263/3GP sample. AMR-WB+ remains a negative decode sample.
+Current audio fixture coverage is tracked in `docs/codecs/AUDIO_CODEC_FIXTURES.md`. The local smoke set generated AAC, PCM, A-law, mu-law, ALAC, Opus, MP3, MP2, AC3, EAC3, DTS, TrueHD, FLAC, Vorbis, iLBC, G.722, G.723.1, G.726, MLP, TTA, Nellymoser, RealAudio 1.0, RoQ DPCM, WavPack, WMA, and ADPCM samples with audio signal verification after SW/HW H.265 conversion. The 2026-07-06 host-side acquisition pass found xHE-AAC, AMR-NB, and AMR-WB+ samples; Fraunhofer xHE-AAC passed Apple-stack AAC conversion, AMR-NB passed FFmpeg H.265 MP4/MOV output proof, and 2026-07-07 focused simulator XCTests proved app-side AMR-NB decode/resample/AAC execution through bundled VLC for the H.263/3GP sample plus xHE-AAC/USAC Apple-native decode/export-to-AAC execution for the Fraunhofer-derived local sample. AMR-WB+ remains a negative decode sample.
 
 The app core now includes an audio route planner:
 
@@ -95,7 +95,7 @@ The app core now includes an audio route planner:
 - `SW_AudioCodecSupportCatalog.swift`: software decode and generated-fixture coverage status.
 - `AudioCodecRoutePlanner.swift`: source audio codec to output audio codec route selection, defaulting to AAC for MP4/H.265 output.
 
-App-scheme evidence tests now parse objective audio signal proof and build AAC/MP4 app-core audio route plans from the generated audio fixtures. Actual app-side audio transcode execution has started migrating from host-side scripts into route tests: Opus, Vorbis, and AMR-NB can now feed bundled VLC decode into Apple-native AAC output in current-build MP4 routes, while broader planned audio routes still need backend execution proof.
+App-scheme evidence tests now parse objective audio signal proof and build AAC/MP4 app-core audio route plans from the generated audio fixtures. Actual app-side audio transcode execution has started migrating from host-side scripts into route tests: Opus, Vorbis, and AMR-NB can now feed bundled VLC decode into Apple-native AAC output in current-build MP4 routes, and xHE-AAC can feed Apple-native decode/export to AAC for the local USAC sample, while broader planned audio routes still need backend execution proof.
 
 ## Container Targets
 

@@ -115,12 +115,17 @@ enum TaptionSourcePreservingAudioOptionsResolver {
         sourceCodec: TaptionAudioCodec,
         outputCodec: TaptionAudioCodec
     ) -> Double {
-        guard outputCodec == .aac,
-              sourceCodec == .amr,
-              sourceSampleRate < 48_000 else {
+        guard outputCodec == .aac else {
             return sourceSampleRate
         }
-        return 48_000
+        if sourceCodec == .xheAAC {
+            return 44_100
+        }
+        if sourceCodec == .amr,
+           sourceSampleRate < 48_000 {
+            return 48_000
+        }
+        return sourceSampleRate
     }
 }
 
