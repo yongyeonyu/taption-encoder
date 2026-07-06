@@ -4470,6 +4470,31 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(configuration.outputFileType, .mov)
     }
 
+    func testQuickTimeVideoSoftwareHEVCConfigurationAllowsLegacyFrameHold() throws {
+        let rpzaAsset = makeAsset(
+            sourceCodec: .quickTimeVideo,
+            displaySize: TaptionPixelSize(width: 160, height: 120),
+            frameRate: TaptionRationalFrameRate(numerator: 21, denominator: 2),
+            duration: 2.666667
+        )
+        let av1Asset = makeAsset(sourceCodec: .av1)
+
+        let rpzaConfiguration = try SW_AV1HEVCTranscodeConfiguration.make(
+            asset: rpzaAsset,
+            outputURL: URL(fileURLWithPath: "/tmp/rpza.mp4"),
+            options: .preservingSource(outputCodec: .hevc, container: .mp4)
+        )
+        let av1Configuration = try SW_AV1HEVCTranscodeConfiguration.make(
+            asset: av1Asset,
+            outputURL: URL(fileURLWithPath: "/tmp/av1.mp4"),
+            options: .preservingSource(outputCodec: .hevc, container: .mp4)
+        )
+
+        XCTAssertTrue(rpzaConfiguration.allowsLegacyFrameHoldToPreserveDuration)
+        XCTAssertEqual(rpzaConfiguration.expectedFrameCount, 28)
+        XCTAssertFalse(av1Configuration.allowsLegacyFrameHoldToPreserveDuration)
+    }
+
     func testSoftwareHEVCConfigurationDoesNotFrameLimitUnknownDurationSources() throws {
         let asset = makeAsset(
             sourceCodec: .h261,
@@ -4941,7 +4966,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         }
     }
 
-    func testLocalRealQuickTimeRPZASampleDocumentsCurrentDurationVerificationBlock() async throws {
+    func testLocalRealQuickTimeRPZASampleEncodesWithLegacyFrameHoldDuration() async throws {
         try requireLocalRealSampleProofs()
 
         let samplePath = ProcessInfo.processInfo.environment["TAPTION_RPZA_SAMPLE_PATH"]
@@ -4975,19 +5000,15 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(job.routeSelection.isEncodableNow)
         XCTAssertEqual(job.routeSelection.decodeBackend, .softwareVLCDecoder)
 
-        do {
-            let result = try await core.encodePreparedJob(job, progress: { _ in })
-            XCTFail("QuickTime RPZA unexpectedly encoded to \(result.temporaryOutputURL.path); promote this sample to passing runtime proof.")
-        } catch {
-            let description = error.localizedDescription.lowercased()
-            XCTAssertTrue(
-                description.contains("duration")
-                    || description.contains("verification")
-                    || description.contains("remove"),
-                description
-            )
-            XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
-        }
+        let result = try await core.encodePreparedJob(job, progress: { _ in })
+        let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: result.temporaryOutputURL)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.temporaryOutputURL.path))
+        XCTAssertEqual(result.usedBackend, .softwareVLCDecoder)
+        XCTAssertEqual(result.usedMode, .software)
+        XCTAssertEqual(outputAsset.container, .mp4)
+        XCTAssertEqual(outputAsset.videoTrack?.codec, .hevc)
+        XCTAssertEqual(outputAsset.duration ?? 0, job.asset.duration ?? 0, accuracy: 0.55)
     }
 
     func testLocalRealY41PSampleDocumentsCurrentSwiftVLCUnsupportedBlock() async throws {

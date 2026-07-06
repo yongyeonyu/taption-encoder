@@ -28,7 +28,7 @@ Product path: **AV1 to H.265 first, broad inputs to H.265 next, H.265-only outpu
 - Latest local performance proof: Battery Options encoding profiles and the 2026-07-04 bundled-codec simulator benchmark are recorded in `docs/verification/CODEC_BENCHMARK_2026-07-04.md`. This is local Debug simulator evidence, not TestFlight/App Store Connect proof.
 - Latest real-device hardware codec proof: iPhone 14 Pro and iPad Pro 12.9-inch 6th generation `HW_CodecCapabilityProbe` snapshots are recorded in `docs/verification/REAL_DEVICE_CODEC_REPORTS_2026-07-06.md`. This is hardware capability evidence only, not sample encode/playback, TestFlight/App Store Connect, App Review, or manual UI proof.
 - Latest host-side sample acquisition proof: Theora, AMR-NB, xHE-AAC, VC-1 raw, AMR-WB+, and ProRes RAW source discovery plus local tool probes are recorded in `docs/verification/CODEC_SAMPLE_ACQUISITION_2026-07-06.md`. This is local host-side evidence only, not app-side execution, simulator benchmark, real-device proof, TestFlight/App Store Connect, App Review, or public release proof.
-- Latest local sample runtime proof: ignored AMR-NB/H.263, QuickTime RPZA, VC-1 raw, and Y41P sample status is recorded in `docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-06.md`. This is focused simulator XCTest evidence only, not host FFmpeg proof, real-device proof, TestFlight/App Store Connect, App Review, or public release proof.
+- Latest local sample runtime proof: ignored AMR-NB/H.263, VC-1 raw, and Y41P sample block status is recorded in `docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-06.md`; the follow-up QuickTime RPZA passing runtime proof is recorded in `docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-07.md`. These are focused simulator XCTest evidence only, not host FFmpeg proof, real-device proof, TestFlight/App Store Connect, App Review, or public release proof.
 
 ## Source Core To Port
 
@@ -57,7 +57,7 @@ Next implementation pass should isolate the media conversion core before importi
 - Real-device hardware codec reports: [`docs/verification/REAL_DEVICE_CODEC_REPORTS_2026-07-06.md`](../verification/REAL_DEVICE_CODEC_REPORTS_2026-07-06.md)
 - Host-side codec sample acquisition: [`docs/verification/CODEC_SAMPLE_ACQUISITION_2026-07-06.md`](../verification/CODEC_SAMPLE_ACQUISITION_2026-07-06.md)
 - Internet-supported missing sample refresh: [`docs/verification/INTERNET_SUPPORTED_SAMPLE_REFRESH_2026-07-06.md`](../verification/INTERNET_SUPPORTED_SAMPLE_REFRESH_2026-07-06.md)
-- Local sample runtime status: [`docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-06.md`](../verification/SAMPLE_RUNTIME_STATUS_2026-07-06.md)
+- Local sample runtime status: [`docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-06.md`](../verification/SAMPLE_RUNTIME_STATUS_2026-07-06.md), [`docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-07.md`](../verification/SAMPLE_RUNTIME_STATUS_2026-07-07.md)
 - Remaining release action items and launch blockers: [`docs/planning/ACTION_ITEMS.md`](../planning/ACTION_ITEMS.md)
 - Completed release action items: [`docs/planning/COMPLETED_ACTION_ITEMS.md`](../planning/COMPLETED_ACTION_ITEMS.md)
 - Release closeout for `01.00.01`: [`docs/archive/releases/RELEASE_01.00.01.md`](../archive/releases/RELEASE_01.00.01.md)

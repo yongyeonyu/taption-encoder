@@ -325,11 +325,13 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
     private let frameDuration: CMTime
     private let expectedFrameCount: Int
     private let limitsToExpectedFrameCount: Bool
+    private let allowsLegacyFrameHoldToPreserveDuration: Bool
     nonisolated(unsafe) private let progressHandler: (Double) -> Void
     private let stateLock = NSLock()
     private let writerQueue = DispatchQueue(label: "com.taption.encoder.av1-software.writer")
 
     nonisolated(unsafe) private var decodePool: CVPixelBufferPool?
+    nonisolated(unsafe) private var lastPixelBufferStorage: CVPixelBuffer?
     nonisolated(unsafe) private var currentFrameCountStorage = 0
     nonisolated(unsafe) private var backpressureWaitCountStorage = 0
     nonisolated(unsafe) private var backpressureWaitMicrosecondsStorage: Int64 = 0
@@ -345,6 +347,7 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
         frameDuration: CMTime,
         expectedFrameCount: Int,
         limitsToExpectedFrameCount: Bool,
+        allowsLegacyFrameHoldToPreserveDuration: Bool,
         progressHandler: @escaping (Double) -> Void
     ) {
         self.writer = writer
@@ -354,6 +357,7 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
         self.frameDuration = frameDuration
         self.expectedFrameCount = expectedFrameCount
         self.limitsToExpectedFrameCount = limitsToExpectedFrameCount
+        self.allowsLegacyFrameHoldToPreserveDuration = allowsLegacyFrameHoldToPreserveDuration
         self.progressHandler = progressHandler
     }
 
@@ -396,6 +400,7 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
     nonisolated func clearDecodePool() {
         stateLock.lock()
         decodePool = nil
+        lastPixelBufferStorage = nil
         stateLock.unlock()
     }
 
@@ -499,6 +504,7 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
             stateLock.lock()
             currentFrameCountStorage += 1
             didWriteAnyFrame = true
+            lastPixelBufferStorage = pixelBuffer
             let progress = Double(currentFrameCountStorage) / Double(max(expectedFrameCount, 1))
             stateLock.unlock()
             progressHandler(min(max(progress, 0), 1))
@@ -522,12 +528,93 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
                     userInfo: [NSLocalizedDescriptionKey: "Software AV1 decoding did not produce frames."]
                 )
             }
+            if let holdError = appendHeldFramesToExpectedDurationIfNeeded() {
+                return holdError
+            }
             videoInput.markAsFinished()
             return nil
         }
 
         if let finishError {
             throw finishError
+        }
+    }
+
+    private func appendHeldFramesToExpectedDurationIfNeeded() -> Error? {
+        stateLock.lock()
+        let shouldHoldFrames = allowsLegacyFrameHoldToPreserveDuration
+            && limitsToExpectedFrameCount
+            && didWriteAnyFrame
+            && currentFrameCountStorage < expectedFrameCount
+            && pendingError == nil
+            && !cancellationRequested
+        let pixelBuffer = lastPixelBufferStorage
+        stateLock.unlock()
+
+        guard shouldHoldFrames,
+              let pixelBuffer else {
+            return nil
+        }
+
+        let holdStartedAt = ProcessInfo.processInfo.systemUptime
+        let frameHoldTimeout = max(
+            20.0,
+            frameDuration.seconds * Double(max(expectedFrameCount - currentFrameCountStorage, 1)) * 4
+        )
+        while true {
+            stateLock.lock()
+            let shouldStop = cancellationRequested
+                || pendingError != nil
+                || currentFrameCountStorage >= expectedFrameCount
+            stateLock.unlock()
+
+            if shouldStop {
+                stateLock.lock()
+                let pending = pendingError
+                stateLock.unlock()
+                return pending
+            }
+
+            while !videoInput.isReadyForMoreMediaData {
+                stateLock.lock()
+                let cancelled = cancellationRequested || pendingError != nil
+                backpressureWaitCountStorage += 1
+                backpressureWaitMicrosecondsStorage += 2_000
+                stateLock.unlock()
+                if cancelled {
+                    stateLock.lock()
+                    let pending = pendingError
+                    stateLock.unlock()
+                    return pending
+                }
+                if ProcessInfo.processInfo.systemUptime - holdStartedAt > frameHoldTimeout {
+                    return nil
+                }
+                usleep(2_000)
+            }
+
+            stateLock.lock()
+            let frameIndex = currentFrameCountStorage
+            stateLock.unlock()
+
+            let presentationTime = CMTimeMultiply(frameDuration, multiplier: Int32(frameIndex))
+            guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
+                let error = writer.error ?? NSError(
+                    domain: "TaptionEncoder",
+                    code: -119,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to append a held legacy software-decoded frame."]
+                )
+                stateLock.lock()
+                pendingError = error
+                stateLock.unlock()
+                return error
+            }
+
+            stateLock.lock()
+            currentFrameCountStorage += 1
+            let progress = Double(currentFrameCountStorage) / Double(max(expectedFrameCount, 1))
+            stateLock.unlock()
+            progressHandler(min(max(progress, 0), 1))
         }
     }
 }

@@ -1,6 +1,6 @@
 # Taption Encoder Release Action Items
 
-Status date: 2026-07-06
+Status date: 2026-07-07
 
 ## Current State
 
@@ -23,6 +23,7 @@ Status date: 2026-07-06
 - Latest internet-supported missing sample refresh on 2026-07-06: skipped bundled `TaptionEncoder/TestVideos` codecs and created local ignored samples under `Samples/Downloaded/internet_supported_missing_2026-07-06/` for HEVC-with-alpha candidates, VC-1 raw, QuickTime RPZA, AMR-NB video, xHE-AAC video, Y41P video, and an AMR-WB+ negative sample. Proof is recorded in `docs/verification/INTERNET_SUPPORTED_SAMPLE_REFRESH_2026-07-06.md`. This is local sample/probe evidence only, not app-side execution, simulator benchmark, real-device proof, TestFlight/App Store Connect, App Review, or public release proof.
 - Latest sample-backed codec implementation on 2026-07-06: VC-1 raw is now registered as a current-build software VLC decode route to H.265, including live transcoding registry and route-simulator coverage. This is app-core route proof only.
 - Latest local sample runtime status on 2026-07-06: focused opt-in simulator XCTest passed while documenting current app-side blocks for local ignored samples. AMR-NB/H.263 stays command-plan-only for AMR-to-AAC audio, QuickTime RPZA reaches software decode but fails source-preserving duration verification, VC-1 raw reaches software VLC but produces no frames, and Y41P reaches software VLC but libVLC reports the codec is unsupported. Proof is recorded in `docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-06.md`. This is simulator XCTest runtime evidence only, not host FFmpeg proof, real-device proof, TestFlight/App Store Connect proof, App Review proof, or public release proof.
+- Latest QuickTime RPZA sample-backed runtime pass on 2026-07-07: software VLC decode now keeps legacy held frames through the source duration for QuickTime Video/RPZA, and focused opt-in simulator XCTest encoded `rpza_1701-D.mov` to H.265 MP4 with source-preserving output verification passing at 2.660s output duration against 2.667s source duration. Proof is recorded in `docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-07.md`. This is simulator XCTest runtime evidence only, not host FFmpeg proof, real-device proof, TestFlight/App Store Connect proof, App Review proof, or public release proof.
 - Latest handoff anchor: commit `72d5df0` (`Add encoding optimization profiles`) contains the Battery Options profile implementation, Max Performance/Battery Saver encode-policy changes, benchmark script, benchmark proof, and release-preparation docs. Keep this separate from any later TestFlight/App Store upload claim.
 - Release `01.01.00` is the active release train and maps to Apple marketing version `1.1.0`, build `30`.
 - Release `01.00.02` remains the previous uploaded release train; `01.01.00` build `30` App Store Connect upload has succeeded and the uploaded package is processing. The App Store Connect `1.1.0` version page exists in `PREPARE_FOR_SUBMISSION` with `MANUAL` release type and localized English/Korean What's New text. App Review submission, TestFlight availability, processing completion, and public availability remain owner-decided follow-up states and are not part of release preparation unless explicitly requested.
@@ -58,7 +59,7 @@ Status date: 2026-07-06
 
 ## P1 Final Product Architecture
 
-- [ ] Implement the bundled software codec backend for broad input decode and fallback H.265 encode, including the 2026-07-06 sample-backed runtime gaps for VC-1 raw no-frame decode, QuickTime RPZA duration truncation, and Y41P unsupported decode.
+- [ ] Implement the bundled software codec backend for broad input decode and fallback H.265 encode, including the remaining 2026-07-06 sample-backed runtime gaps for VC-1 raw no-frame decode and Y41P unsupported decode; QuickTime RPZA duration truncation was fixed with simulator XCTest proof on 2026-07-07.
 - [ ] Complete license review for any bundled software codec stack.
 - [ ] Evaluate FFmpeg-family software codec options for App Store, licensing, binary-size, and performance constraints.
 - [ ] Replace Apple device-family profiles with a complete per-model identifier matrix.

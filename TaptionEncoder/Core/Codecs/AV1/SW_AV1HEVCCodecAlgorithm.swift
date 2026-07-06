@@ -12,6 +12,7 @@ struct SW_AV1HEVCTranscodeConfiguration {
     let frameDuration: CMTime
     let expectedFrameCount: Int
     let limitsToExpectedFrameCount: Bool
+    let allowsLegacyFrameHoldToPreserveDuration: Bool
     let duration: CMTime
     let outputURL: URL
     let outputFileType: AVFileType
@@ -48,6 +49,7 @@ struct SW_AV1HEVCTranscodeConfiguration {
         let duration = CMTime(seconds: durationSeconds, preferredTimescale: 600)
         let progressDurationSeconds = hasKnownDuration ? durationSeconds : 1
         let expectedFrameCount = max(1, Int((progressDurationSeconds * fps).rounded()))
+        let allowsLegacyFrameHoldToPreserveDuration = videoTrack.codec == .quickTimeVideo
 
         return SW_AV1HEVCTranscodeConfiguration(
             targetSize: targetSize,
@@ -55,6 +57,7 @@ struct SW_AV1HEVCTranscodeConfiguration {
             frameDuration: CMTime(seconds: 1.0 / fps, preferredTimescale: 600),
             expectedFrameCount: expectedFrameCount,
             limitsToExpectedFrameCount: hasKnownDuration,
+            allowsLegacyFrameHoldToPreserveDuration: allowsLegacyFrameHoldToPreserveDuration,
             duration: duration,
             outputURL: outputURL,
             outputFileType: avFileType(for: options.outputPolicy.container),
@@ -1719,6 +1722,7 @@ extension SW_AV1HEVCTranscoder {
             frameDuration: configuration.frameDuration,
             expectedFrameCount: configuration.expectedFrameCount,
             limitsToExpectedFrameCount: configuration.limitsToExpectedFrameCount,
+            allowsLegacyFrameHoldToPreserveDuration: configuration.allowsLegacyFrameHoldToPreserveDuration,
             progressHandler: progressHandler
         )
         let videoOpaque = Unmanaged.passRetained(context).toOpaque()
