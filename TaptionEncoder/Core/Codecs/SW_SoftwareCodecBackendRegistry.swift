@@ -105,6 +105,148 @@ struct TaptionSoftwareCodecBackendReadinessReport: Codable, Equatable {
     }
 }
 
+enum TaptionSoftwareCodecBackendReviewStatus: String, Codable, Equatable {
+    case open
+    case satisfied
+    case blocked
+}
+
+struct TaptionSoftwareCodecBackendReviewFinding: Codable, Equatable, Identifiable {
+    var id: String { gate.rawValue }
+    var gate: TaptionSoftwareCodecBackendReadinessGate
+    var status: TaptionSoftwareCodecBackendReviewStatus
+    var summary: String
+    var requiredEvidence: [String]
+}
+
+struct TaptionSoftwareCodecBackendReviewReport: Codable, Equatable {
+    var backend: TaptionEncodingBackend
+    var displayName: String
+    var statusDate: String
+    var reviewedSourceURLs: [String]
+    var conclusion: String
+    var findings: [TaptionSoftwareCodecBackendReviewFinding]
+
+    var satisfiedGates: [TaptionSoftwareCodecBackendReadinessGate] {
+        findings
+            .filter { $0.status == .satisfied }
+            .map(\.gate)
+            .sorted()
+    }
+
+    var openGates: [TaptionSoftwareCodecBackendReadinessGate] {
+        findings
+            .filter { $0.status != .satisfied }
+            .map(\.gate)
+            .sorted()
+    }
+
+    var approvedForExecution: Bool {
+        Set(satisfiedGates) == Set(TaptionSoftwareCodecBackendReadinessGate.allCases)
+    }
+}
+
+enum TaptionSoftwareCodecBackendReviewCatalog {
+    static var currentFFmpegFamilyReview: TaptionSoftwareCodecBackendReviewReport {
+        let profile = SW_SoftwareCodecBackendRegistry.ffmpegFamilyCandidate
+        return TaptionSoftwareCodecBackendReviewReport(
+            backend: profile.backend,
+            displayName: profile.displayName,
+            statusDate: "2026-07-07",
+            reviewedSourceURLs: [
+                "https://www.ffmpeg.org/legal.html",
+                "https://www.ffmpeg.org/general.html",
+                "https://developer.apple.com/app-store/review/guidelines/",
+                "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html",
+                "https://www.x265.org/"
+            ],
+            conclusion: "Engineering review only: keep the FFmpeg-family backend planning-only. Do not execute VC-1 raw, Y41P, or other broad-backend routes until the implementation is bundled, App Store-policy reviewed, license-reviewed, notice-complete, fixture-proven, audio-proven, binary-size-approved, and older-device-proven.",
+            findings: [
+                TaptionSoftwareCodecBackendReviewFinding(
+                    gate: .licenseReview,
+                    status: .open,
+                    summary: "FFmpeg can stay on the LGPL path only with a reviewed configuration that avoids GPL and nonfree parts. Current command plans mention GPL-sensitive encoders such as libx265/libx264, so proprietary App Store execution requires either a different encoder path, commercial licenses, or a formal source-release decision.",
+                    requiredEvidence: [
+                        "Final configure line without --enable-gpl and without --enable-nonfree, or a signed commercial/source-release decision for every GPL-sensitive encoder.",
+                        "Exact source archive, local changes diff, third-party library license map, and counsel-approved notice/EULA language.",
+                        "HEVC/H.265 patent and distribution review kept separate from FFmpeg's open-source license review."
+                    ]
+                ),
+                TaptionSoftwareCodecBackendReviewFinding(
+                    gate: .appStorePolicyReview,
+                    status: .open,
+                    summary: "Apple review guidelines require the app to stay self-contained and prohibit downloading or executing code that changes app functionality. Broad codec support must ship inside the reviewed bundle and must not fetch an ffmpeg binary, plugin, or codec module later.",
+                    requiredEvidence: [
+                        "App Review note explaining that codec execution is bundled, offline, user-file-scoped, and does not download executable code.",
+                        "No runtime code download, plugin install, side-loaded binary, or remote codec module path.",
+                        "Third-party SDK and media-conversion behavior checked against current App Review guidelines before submission."
+                    ]
+                ),
+                TaptionSoftwareCodecBackendReviewFinding(
+                    gate: .binarySizeBudget,
+                    status: .open,
+                    summary: "Broad demux/decode support can materially increase app size. A release build must prove the final framework slice size and App Store package impact before enabling execution.",
+                    requiredEvidence: [
+                        "Archive/export size report for iPhone and iPad slices.",
+                        "Codec-module inclusion list with each disabled component justified.",
+                        "Cold launch and import latency comparison against the current build."
+                    ]
+                ),
+                TaptionSoftwareCodecBackendReviewFinding(
+                    gate: .iosPackagingIntegration,
+                    status: .open,
+                    summary: "The current command-plan model is a planning boundary. iOS execution needs an in-process, bundle-contained runner or equivalent library bridge rather than a downloaded or external ffmpeg command-line binary.",
+                    requiredEvidence: [
+                        "Signed Xcode framework/package integration with no external executable dependency.",
+                        "Sandboxed file-access test for Files, folder, and Photos-derived temporary sources.",
+                        "Runtime proof that runner injection executes inside the app bundle on simulator and real devices."
+                    ]
+                ),
+                TaptionSoftwareCodecBackendReviewFinding(
+                    gate: .codecNoticeGeneration,
+                    status: .open,
+                    summary: "If the broad backend ships, Open Source Notices must include final license texts, source availability, exact build configuration, and any EULA reverse-engineering carve-out required by the selected licenses.",
+                    requiredEvidence: [
+                        "Bundled notice resources for FFmpeg and every enabled external library.",
+                        "Public source download URL matching the shipped binaries.",
+                        "Release-notice tests proving no bundled backend entry is missing final license text."
+                    ]
+                ),
+                TaptionSoftwareCodecBackendReviewFinding(
+                    gate: .fixtureTranscodeRegressionProof,
+                    status: .open,
+                    summary: "VC-1 raw, Y41P, and other planned routes need app-side fixture/sample transcode proof after the real backend is installed, not just host FFmpeg proof or command-plan proof.",
+                    requiredEvidence: [
+                        "Focused app-side simulator proof for VC-1 raw and Y41P to H.265 MP4/MOV.",
+                        "Regression pass for the existing bundled fixture matrix.",
+                        "Output verification for H.265 video, MP4/MOV container, duration, dimensions, and visual decodability."
+                    ]
+                ),
+                TaptionSoftwareCodecBackendReviewFinding(
+                    gate: .audioSignalRegressionProof,
+                    status: .open,
+                    summary: "Non-AAC and AMR-WB/AMR-WB+ paths need audible-signal regression proof after app-side execution is wired, with AAC output into MP4/MOV unless a supported copy route is selected.",
+                    requiredEvidence: [
+                        "App-side AMR-WB or AMR-WB+ decodable sample execution proof.",
+                        "Audio signal verification for AAC output tracks and any supported non-AAC output route.",
+                        "Negative-sample handling with clear English fallback copy."
+                    ]
+                ),
+                TaptionSoftwareCodecBackendReviewFinding(
+                    gate: .oldDevicePerformanceProof,
+                    status: .open,
+                    summary: "Broad software decode can stress thermal, memory, battery, and runtime limits on older devices. Execution promotion requires older-device runtime proof separate from simulator results.",
+                    requiredEvidence: [
+                        "Real-device runtime sample encoding proof on older supported hardware.",
+                        "Thermal, battery, memory, and ETA warning behavior captured during long software routes.",
+                        "Battery Saver and Max Performance comparisons kept separate from App Store/TestFlight proof."
+                    ]
+                )
+            ]
+        )
+    }
+}
+
 enum TaptionOpenSourceNoticeCategory: String, Codable, CaseIterable, Comparable {
     case shippedComponent
     case localDevelopmentTooling

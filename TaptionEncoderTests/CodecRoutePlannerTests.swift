@@ -6498,6 +6498,57 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(displayNames.contains("Old-device performance proof"))
     }
 
+    func testFFmpegFamilyBackendEngineeringReviewKeepsExecutionBlocked() throws {
+        let review = TaptionSoftwareCodecBackendReviewCatalog.currentFFmpegFamilyReview
+
+        XCTAssertEqual(review.backend, .ffmpegFamily)
+        XCTAssertEqual(review.statusDate, "2026-07-07")
+        XCTAssertFalse(review.approvedForExecution)
+        XCTAssertTrue(review.satisfiedGates.isEmpty)
+        XCTAssertEqual(
+            Set(review.openGates),
+            Set(TaptionSoftwareCodecBackendReadinessGate.allCases)
+        )
+        XCTAssertTrue(review.reviewedSourceURLs.contains("https://www.ffmpeg.org/legal.html"))
+        XCTAssertTrue(review.reviewedSourceURLs.contains("https://developer.apple.com/app-store/review/guidelines/"))
+        XCTAssertTrue(review.conclusion.contains("planning-only"))
+
+        let licenseFinding = try XCTUnwrap(
+            review.findings.first { $0.gate == .licenseReview }
+        )
+        XCTAssertEqual(licenseFinding.status, .open)
+        XCTAssertTrue(licenseFinding.summary.contains("libx265"))
+        XCTAssertTrue(licenseFinding.summary.contains("libx264"))
+        XCTAssertTrue(licenseFinding.requiredEvidence.contains {
+            $0.contains("--enable-gpl") && $0.contains("--enable-nonfree")
+        })
+
+        let appStoreFinding = try XCTUnwrap(
+            review.findings.first { $0.gate == .appStorePolicyReview }
+        )
+        XCTAssertEqual(appStoreFinding.status, .open)
+        XCTAssertTrue(appStoreFinding.summary.contains("self-contained"))
+        XCTAssertTrue(appStoreFinding.requiredEvidence.contains {
+            $0.contains("No runtime code download")
+        })
+    }
+
+    func testFFmpegFamilyBackendReviewDoesNotCloseReadinessGates() {
+        let review = TaptionSoftwareCodecBackendReviewCatalog.currentFFmpegFamilyReview
+        let report = SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport(
+            isBundledInCurrentBuild: true,
+            satisfiedGates: Set(review.satisfiedGates)
+        )
+
+        XCTAssertFalse(report.isExecutableInCurrentBuild)
+        XCTAssertFalse(report.canPromoteToExecutableBackend)
+        XCTAssertTrue(report.mustRemainPlanningOnly)
+        XCTAssertEqual(
+            Set(report.openGates),
+            Set(TaptionSoftwareCodecBackendReadinessGate.allCases)
+        )
+    }
+
     func testOpenSourceNoticeCatalogSeparatesShippedToolingAndPlanningOnlyCandidates() {
         let readinessReport = SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport()
         let shipped = TaptionOpenSourceNoticeCatalog.shippedComponents
