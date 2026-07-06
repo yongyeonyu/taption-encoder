@@ -4850,7 +4850,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             .softwareVLCDecoder
         )
 
-        for sourceCodec in [TaptionAudioCodec.opus, .vorbis] {
+        for sourceCodec in [TaptionAudioCodec.opus, .vorbis, .amr] {
             let route = TaptionAudioCodecRoute(sourceCodec: sourceCodec, outputCodec: .aac)
             let selection = TaptionAudioCodecRoutePlanner.selectRoute(
                 sourceCodec: sourceCodec,
@@ -5061,7 +5061,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         }
     }
 
-    func testLocalRealAMRNBH263SampleDocumentsCurrentAudioExecutionBlock() async throws {
+    func testLocalRealAMRNBH263SampleEncodesHEVCWithAACAudio() async throws {
         try requireLocalRealSampleProofs()
 
         let samplePath = ProcessInfo.processInfo.environment["TAPTION_AMR_NB_SAMPLE_PATH"]
@@ -5096,11 +5096,25 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(job.routeSelection.isEncodableNow)
         XCTAssertEqual(job.routeSelection.decodeBackend, .softwareVLCDecoder)
         XCTAssertEqual(job.plan.audioPlan?.route, TaptionAudioCodecRoute(sourceCodec: .amr, outputCodec: .aac))
-        XCTAssertEqual(job.plan.audioPlan?.routeSelection.decodeBackend, .ffmpegFamily)
-        XCTAssertEqual(job.plan.audioPlan?.readiness.readiness, .commandPlanOnly)
-        XCTAssertEqual(job.plan.audioPlan?.readiness.commandBackend, .ffmpegFamily)
-        XCTAssertFalse(job.plan.audioPlan?.isRunnableInCurrentBuild ?? true)
-        XCTAssertNotNil(job.plan.audioPlan?.commandPlan)
+        XCTAssertEqual(job.plan.audioPlan?.routeSelection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(job.plan.audioPlan?.readiness.readiness, .softwareBackendExecutable)
+        XCTAssertEqual(job.plan.audioPlan?.readiness.commandBackend, .softwareVLCDecoder)
+        XCTAssertTrue(job.plan.audioPlan?.isRunnableInCurrentBuild ?? false)
+        XCTAssertNil(job.plan.audioPlan?.commandPlan)
+        XCTAssertEqual(job.plan.audioPlan?.options.sampleRate, 48_000)
+        XCTAssertEqual(job.plan.sourcePreservationRequirements?.audioSampleRate, 48_000)
+
+        let result = try await core.encodePreparedJob(job, progress: { _ in })
+        let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: result.temporaryOutputURL)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.temporaryOutputURL.path))
+        XCTAssertEqual(result.usedBackend, .softwareVLCDecoder)
+        XCTAssertEqual(result.usedMode, .software)
+        XCTAssertEqual(outputAsset.container, .mp4)
+        XCTAssertEqual(outputAsset.videoTrack?.codec, .hevc)
+        XCTAssertEqual(outputAsset.audioTracks.first?.codec, .aac)
+        XCTAssertEqual(outputAsset.audioTracks.first?.sampleRate ?? 0, 48_000, accuracy: 1)
+        XCTAssertFalse(outputAsset.audioTracks.isEmpty)
     }
 
     func testEncodePreparedJobCreatesPendingSaveStateWithoutSaveAdWhenSaveGateIsNone() async throws {
@@ -5437,6 +5451,23 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(options.sampleRate, 48_000)
         XCTAssertEqual(options.channelCount, 6)
         XCTAssertEqual(options.targetBitrate, 512_000)
+    }
+
+    func testSourcePreservingAudioOptionsResolverRaisesAMRNBSampleRateForAACWriter() {
+        let sourceTrack = TaptionAudioTrackInfo(
+            codec: .amr,
+            channelCount: 1,
+            sampleRate: 8_000,
+            estimatedBitrate: 12_200
+        )
+        let options = TaptionSourcePreservingAudioOptionsResolver.resolvedOptions(
+            for: sourceTrack,
+            requestedOptions: .preservingSource(outputCodec: .aac, outputContainer: .mp4)
+        )
+
+        XCTAssertEqual(options.sampleRate, 48_000)
+        XCTAssertEqual(options.channelCount, 1)
+        XCTAssertEqual(options.targetBitrate, 12_200)
     }
 
     func testSourcePreservingAudioOptionsResolverKeepsExplicitOverrides() {

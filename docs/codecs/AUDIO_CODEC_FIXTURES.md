@@ -131,7 +131,7 @@ Transcode:
 | `trueHD` | TrueHD in MKV |
 | `flac` | FLAC in MKV |
 | `vorbis` | Vorbis in MKV |
-| `amr` | Generated fixture skipped locally; 2026-07-06 real-sample acquisition proved AMR-NB host FFmpeg decode into H.265 MP4/MOV, while AMR-WB+ stayed a negative sample because local FFmpeg and Apple audio tools could not decode it |
+| `amr` | Generated fixture skipped locally; 2026-07-06 real-sample acquisition proved AMR-NB host FFmpeg decode into H.265 MP4/MOV, and 2026-07-07 focused simulator XCTest proved app-side AMR-NB decode/resample/AAC execution through bundled VLC for the H.263/3GP sample. AMR-WB+ stayed a negative sample because local FFmpeg and Apple audio tools could not decode it |
 | `ilbc` | iLBC in MOV via AudioToolbox encoder |
 | `g722` | G.722 in MKV |
 | `g723` | G.723.1 in MKV |
@@ -155,7 +155,7 @@ Transcode:
 - App-core tests now build FFmpeg-family command plans from every generated audio fixture to currently plannable compatible output audio codecs while preserving source sample rate, channel count, and bitrate options. `verifyAudioFixturePlannableCommandPlanCoverage()` covers that command-plan surface.
 - AAC/MP4 audio fixture execution jobs now rebuild a function-style `TaptionAudioCodecTranscodeRequest` and run through `SW_FFmpegAudioCodecTranscodeExecutor` with a fake runner when the broad software backend gates are satisfied.
 - Broader app-side audio execution still needs to cover compatible audio outputs for H.265 video containers after the FFmpeg-family backend is bundled and license-reviewed.
-- Promote the 2026-07-06 xHE-AAC and AMR-NB acquired samples into app-side execution proof without treating host-side evidence as simulator or device proof.
+- Promote the 2026-07-06 xHE-AAC acquired sample into app-side execution proof without treating host-side evidence as simulator or device proof.
 - Find a decodable pure AMR-WB or AMR-WB+ sample through an App Store-safe path, or document the codec as unsupported until the selected broad backend proves it.
 - Add real-world multichannel, surround, high sample-rate, odd channel-layout, and silent/damaged audio samples.
 - Keep objective audio signal verification in app-scheme evidence tests and expand executor coverage beyond the current AAC/MP4 audio route test surface.

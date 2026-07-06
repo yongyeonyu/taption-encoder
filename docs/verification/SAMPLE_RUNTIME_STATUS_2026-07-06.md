@@ -56,4 +56,4 @@ The simulator `A57EE4F1-DE7A-4745-859F-96DC18B110F1` was a temporary device name
 - Fix raw VC-1 runtime decode before reporting VC-1 sample execution as passing app-side proof.
 - QuickTime RPZA partial-duration decode was fixed in the 2026-07-07 follow-up by holding legacy decoded frames through the source duration; see `docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-07.md`.
 - Do not advertise Y41P as sample-executable through current libVLC until a backend with Y41P decode support is bundled.
-- AMR-NB audio execution needs an App Store-safe decode/resample/AAC path; route planning alone is not enough.
+- AMR-NB audio execution was fixed in the 2026-07-07 follow-up by decoding through bundled VLC and resampling to 48 kHz AAC; see `docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-07.md`.

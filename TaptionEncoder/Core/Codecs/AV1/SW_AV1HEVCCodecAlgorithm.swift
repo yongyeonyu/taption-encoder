@@ -144,7 +144,8 @@ struct SW_AV1NativeAudioEncodingConfiguration {
             )
         )
         let sampleRate = normalizedSampleRate(
-            resolvedOptions.sampleRate ?? sourceTrack.sampleRate ?? 48_000
+            resolvedOptions.sampleRate ?? sourceTrack.sampleRate ?? 48_000,
+            sourceCodec: sourceTrack.codec
         )
         let channelCount = normalizedChannelCount(
             resolvedOptions.channelCount ?? sourceTrack.channelCount ?? 2
@@ -163,11 +164,15 @@ struct SW_AV1NativeAudioEncodingConfiguration {
         )
     }
 
-    private static func normalizedSampleRate(_ value: Double) -> Double {
+    private static func normalizedSampleRate(
+        _ value: Double,
+        sourceCodec: TaptionAudioCodec
+    ) -> Double {
         guard value.isFinite, value > 0 else {
             return 48_000
         }
-        return min(max(value.rounded(), 8_000), 96_000)
+        let minimumSampleRate: Double = sourceCodec == .amr ? 48_000 : 8_000
+        return min(max(value.rounded(), minimumSampleRate), 96_000)
     }
 
     private static func normalizedChannelCount(_ value: Int) -> Int {

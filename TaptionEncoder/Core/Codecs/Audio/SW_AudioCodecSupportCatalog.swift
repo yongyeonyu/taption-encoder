@@ -34,6 +34,7 @@ enum SW_AudioCodecSupportCatalog {
 
     static let currentBuildVLCAACDecodeCodecs: Set<TaptionAudioCodec> = [
         .aac,
+        .amr,
         .opus,
         .mp3,
         .vorbis

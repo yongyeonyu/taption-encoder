@@ -234,7 +234,7 @@ struct TaptionSourcePreservationRequirements: Codable, Equatable {
         )
     }
 
-    init(asset: TaptionVideoAsset) {
+    init(asset: TaptionVideoAsset, audioPlan: TaptionAudioTranscodePlan? = nil) {
         self.init(
             displaySize: asset.videoTrack?.displaySize,
             frameRate: asset.videoTrack?.nominalFrameRate,
@@ -243,8 +243,8 @@ struct TaptionSourcePreservationRequirements: Codable, Equatable {
             rotationDegrees: asset.videoTrack?.rotationDegrees,
             duration: asset.duration,
             expectsAudio: !asset.audioTracks.isEmpty,
-            audioSampleRate: asset.audioTracks.first?.sampleRate,
-            audioChannelCount: asset.audioTracks.first?.channelCount
+            audioSampleRate: audioPlan?.options.sampleRate ?? asset.audioTracks.first?.sampleRate,
+            audioChannelCount: audioPlan?.options.channelCount ?? asset.audioTracks.first?.channelCount
         )
     }
 
@@ -1073,7 +1073,7 @@ enum TaptionEncodingPlanner {
         )
         let sourcePreservationRequirements = asset.videoTrack == nil
             ? nil
-            : TaptionSourcePreservationRequirements(asset: asset)
+            : TaptionSourcePreservationRequirements(asset: asset, audioPlan: audioPlan)
         return TaptionEncodingPlan(
             input: TaptionEncodingInput(kind: .singleAsset, assetID: asset.id),
             outputPolicy: resolvedOutputPolicy,
