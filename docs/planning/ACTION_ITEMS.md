@@ -63,6 +63,7 @@ Status date: 2026-07-06
 - [ ] Add thermal, battery, memory, and estimated runtime warnings for older devices.
 - [ ] Implement app-side audio transcode execution for every planned audio route, not only route selection.
 - [ ] Finish audio sample and execution coverage after the 2026-07-06 host-side pass: xHE-AAC has Chromium/Fraunhofer samples and Fraunhofer Apple-stack AAC conversion proof; AMR-NB has host FFmpeg H.265 MP4/MOV proof; AMR-WB+ has a negative sample; pure AMR-WB still needs a decodable App Store-safe sample and execution path.
+- [ ] Download or acquire the deferred missing sample candidates after storage and use review: Dolby Vision HEVC, ProRes RAW, JPEG XL frame-sequence material, a decodable pure AMR-WB or AMR-WB+ sample, and a confirmed HEVC-with-alpha sample if Apple-side inspection rejects the current candidates.
 - [ ] Add fallback behavior for unsupported inputs with clear English copy.
 
 ## P1 Merge And Lightweight Editing
