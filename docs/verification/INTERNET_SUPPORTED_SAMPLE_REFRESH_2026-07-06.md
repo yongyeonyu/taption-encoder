@@ -44,8 +44,9 @@ The following samples were also checked with short host-side H.265 MP4 and MOV t
 
 ## Follow-Up App-Core Routing
 
-- 2026-07-06 follow-up implementation: the VC-1 raw elementary route is now registered in the current-build software VLC decoder path and live H.265 transcoding registry.
-- This follow-up is app-core routing evidence only. It is not simulator sample execution, real-device sample execution, TestFlight/App Store Connect proof, App Review proof, or public release proof.
+- 2026-07-06 follow-up implementation initially registered the VC-1 raw elementary route in the current-build software VLC decoder path and live H.265 transcoding registry.
+- 2026-07-07 route correction removed VC-1 raw from current SwiftVLC executable status after simulator runtime proof reached the local sample but produced no frames before timeout. VC-1 raw now remains planned for an FFmpeg-family or equivalent decode backend.
+- These follow-ups are app-core routing and simulator route-correction evidence only. They are not passing app-side sample execution, real-device sample execution, TestFlight/App Store Connect proof, App Review proof, or public release proof.
 - 2026-07-06 simulator runtime follow-up: focused opt-in XCTest recorded current app-side blocks for the ignored VC-1 raw, QuickTime RPZA, AMR-NB/H.263, and Y41P samples. See `docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-06.md`.
 - The generated fixture policy remains unchanged: `vc1_raw_elementary` stays a skipped real-world-sample-required generated row until the local sample is promoted into a durable fixture policy.
 
