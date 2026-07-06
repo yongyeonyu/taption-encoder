@@ -37,6 +37,7 @@ enum SW_AudioCodecSupportCatalog {
         .amr,
         .opus,
         .mp3,
+        .ac3,
         .vorbis
     ]
 

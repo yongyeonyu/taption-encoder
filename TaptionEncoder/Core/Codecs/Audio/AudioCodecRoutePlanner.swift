@@ -134,6 +134,27 @@ enum TaptionAudioCodecRoutePlanner {
             )
         }
 
+        if shouldPreferCurrentBuildBundledDecode(
+            sourceCodec: sourceCodec,
+            outputCodec: outputCodec,
+            outputContainer: outputContainer
+        ),
+           let decodeBackend = SW_AudioCodecSupportCatalog.currentBuildBundledDecodeBackend(
+            for: sourceCodec,
+            outputCodec: outputCodec,
+            outputContainer: outputContainer
+           ) {
+            return TaptionAudioCodecRouteSelection(
+                route: route,
+                support: .softwareTranscode,
+                decodeBackend: decodeBackend,
+                encodeBackend: .appleAVAssetExport,
+                shouldCopy: false,
+                fixtureStatus: fixtureStatus,
+                reason: "Bundled software audio decode will feed the Apple-native output writer in the current build."
+            )
+        }
+
         if HW_AudioCodecCapabilityCatalog.canNativeDecode(sourceCodec),
            HW_AudioCodecCapabilityCatalog.canNativeEncode(outputCodec) {
             return TaptionAudioCodecRouteSelection(
@@ -176,5 +197,15 @@ enum TaptionAudioCodecRoutePlanner {
             fixtureStatus: fixtureStatus,
             reason: "This audio route is represented but still needs an implementation decision."
         )
+    }
+
+    private static func shouldPreferCurrentBuildBundledDecode(
+        sourceCodec: TaptionAudioCodec,
+        outputCodec: TaptionAudioCodec,
+        outputContainer: TaptionVideoContainer
+    ) -> Bool {
+        sourceCodec == .ac3
+            && [.pcm, .alac].contains(outputCodec)
+            && outputContainer == .mov
     }
 }
