@@ -2620,6 +2620,58 @@ final class CodecRoutePlannerTests: XCTestCase {
         try await assertBundledSamplesEncodeToHEVCMP4(sampleFilenames)
     }
 
+    func testRealDeviceBundledTheoraOpusSampleEncodesHEVCWithAACAudio() async throws {
+        #if targetEnvironment(simulator)
+        throw XCTSkip("Real-device runtime proof requires a physical iPhone or iPad.")
+        #endif
+
+        let sampleURL = bundledTestVideosURL().appendingPathComponent("Theora.ogv")
+        guard FileManager.default.fileExists(atPath: sampleURL.path) else {
+            XCTFail("Missing bundled Theora proof sample at \(sampleURL.path)")
+            return
+        }
+
+        let outputURL = temporaryTestURL(fileName: "real-device-theora-opus-hevc.mp4")
+        try? FileManager.default.removeItem(at: outputURL)
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+
+        let core = TaptionVideoCore(
+            services: TaptionVideoCoreServices(
+                inspector: AVFoundationMediaInspector(),
+                encoder: AVFoundationHEVCEncoderService(),
+                storageChecker: FakeStorageChecker(),
+                pendingSaveStore: FakePendingSaveStore(),
+                saveGateAuthorizer: FakeAdGate()
+            )
+        )
+        let job = try await core.prepareSingleAssetHEVCJob(
+            sourceURL: sampleURL,
+            temporaryOutputURL: outputURL,
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+        )
+        let sourceAudioCodec = try XCTUnwrap(job.asset.audioTracks.first?.codec)
+        XCTAssertEqual(job.asset.container, .ogg)
+        XCTAssertEqual(job.asset.videoTrack?.codec, .theora)
+        XCTAssertEqual(sourceAudioCodec, .opus)
+        XCTAssertEqual(job.routeSelection.route, TaptionCodecRoute(sourceCodec: .theora, outputCodec: .hevc))
+        XCTAssertTrue(job.routeSelection.isEncodableNow)
+        XCTAssertEqual(job.routeSelection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(job.plan.audioPlan?.route, TaptionAudioCodecRoute(sourceCodec: .opus, outputCodec: .aac))
+        XCTAssertTrue(job.plan.audioPlan?.isRunnableInCurrentBuild ?? false)
+
+        let result = try await core.encodePreparedJob(job, progress: { _ in })
+        let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: result.temporaryOutputURL)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.temporaryOutputURL.path))
+        XCTAssertEqual(result.usedBackend, .softwareVLCDecoder)
+        XCTAssertEqual(result.usedMode, .software)
+        XCTAssertEqual(outputAsset.container, .mp4)
+        XCTAssertEqual(outputAsset.videoTrack?.codec, .hevc)
+        XCTAssertEqual(outputAsset.audioTracks.first?.codec, .aac)
+        XCTAssertEqual(outputAsset.audioTracks.first?.sampleRate ?? 0, 48_000, accuracy: 1)
+        XCTAssertEqual(outputAsset.audioTracks.first?.channelCount, 2)
+    }
+
     func testNextLegacyBundledSamplesEncodeToHEVCMP4() async throws {
         let sampleFilenames = [
             "Microsoft Video 1.avi",
@@ -11088,10 +11140,40 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     private func bundledTestVideosURL() -> URL {
-        URL(fileURLWithPath: #filePath)
+        let sourceTreeURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("TaptionEncoder/TestVideos", isDirectory: true)
+        #if targetEnvironment(simulator)
+        if FileManager.default.fileExists(atPath: sourceTreeURL.path) {
+            return sourceTreeURL
+        }
+        #endif
+
+        if let appBundleURL = Bundle.main.url(forResource: "TestVideos", withExtension: nil) {
+            return appBundleURL
+        }
+
+        if let appResourceURL = Bundle.main.resourceURL {
+            let fallbackURL = appResourceURL.appendingPathComponent("TestVideos", isDirectory: true)
+            if FileManager.default.fileExists(atPath: fallbackURL.path) {
+                return fallbackURL
+            }
+        }
+
+        let testBundle = Bundle(for: CodecRoutePlannerTests.self)
+        if let bundledURL = testBundle.url(forResource: "TestVideos", withExtension: nil) {
+            return bundledURL
+        }
+
+        if let resourceURL = testBundle.resourceURL {
+            let fallbackURL = resourceURL.appendingPathComponent("TestVideos", isDirectory: true)
+            if FileManager.default.fileExists(atPath: fallbackURL.path) {
+                return fallbackURL
+            }
+        }
+
+        return sourceTreeURL
     }
 
     private func projectObjectBlock(id: String, label: String, in projectText: String) -> String? {
