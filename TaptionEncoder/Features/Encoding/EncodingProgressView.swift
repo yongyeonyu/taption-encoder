@@ -275,6 +275,34 @@ private struct EncodingResourceUsageWidget: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
             }
+
+            if !resourceUsage.runtimeWarnings.isEmpty {
+                VStack(alignment: .leading, spacing: 6 * contentScale) {
+                    Text("Runtime Warnings")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(TaptionTheme.mutedText)
+                    ForEach(resourceUsage.runtimeWarnings) { warning in
+                        HStack(alignment: .top, spacing: 6 * contentScale) {
+                            Image(systemName: iconName(for: warning))
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(color(for: warning.severity))
+                                .frame(width: max(14, 16 * contentScale), alignment: .center)
+                            VStack(alignment: .leading, spacing: 2 * contentScale) {
+                                Text(warning.title)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(Color.white.opacity(0.86))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.82)
+                                Text(warning.message)
+                                    .font(.caption2)
+                                    .foregroundStyle(TaptionTheme.mutedText)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+                .padding(.top, 2 * contentScale)
+            }
         }
         .padding(.horizontal, 10 * contentScale)
         .padding(.vertical, 8 * contentScale)
@@ -284,6 +312,30 @@ private struct EncodingResourceUsageWidget: View {
                 .stroke(TaptionTheme.accent.opacity(0.18), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func iconName(for warning: EncodingRuntimeWarning) -> String {
+        switch warning.kind {
+        case .thermal:
+            return "thermometer.medium"
+        case .memory:
+            return "memorychip"
+        case .battery:
+            return "battery.25percent"
+        case .runtime:
+            return "hourglass"
+        }
+    }
+
+    private func color(for severity: EncodingRuntimeWarningSeverity) -> Color {
+        switch severity {
+        case .notice:
+            return TaptionTheme.accent
+        case .warning:
+            return .orange
+        case .critical:
+            return .red
+        }
     }
 }
 

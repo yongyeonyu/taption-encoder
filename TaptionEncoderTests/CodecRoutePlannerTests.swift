@@ -10683,6 +10683,79 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(snapshot.memoryUsageText.contains("512"))
     }
 
+    func testEncodingRuntimeWarningEvaluatorCombinesThermalBatteryMemoryAndRuntimeWarnings() {
+        let snapshot = EncodingResourceUsageSnapshot(
+            timestamp: Date(timeIntervalSince1970: 0),
+            cpuCores: [],
+            appMemoryBytes: 920 * 1_024 * 1_024,
+            totalPhysicalMemoryBytes: 1_024 * 1_024 * 1_024,
+            thermalState: .serious
+        )
+
+        let warnings = EncodingRuntimeWarningEvaluator.warnings(
+            resourceUsage: snapshot,
+            powerSnapshot: EncodingRuntimePowerSnapshot(
+                batteryPercent: 34,
+                isPowerConnected: false,
+                isPowerStateKnown: true
+            ),
+            batteryLimitPercent: 30,
+            estimatedRemainingTime: 40 * 60,
+            optimizationProfile: .performance
+        )
+        let kinds = warnings.map(\.kind)
+
+        XCTAssertTrue(kinds.contains(.thermal))
+        XCTAssertTrue(kinds.contains(.memory))
+        XCTAssertTrue(kinds.contains(.battery))
+        XCTAssertTrue(kinds.contains(.runtime))
+        XCTAssertTrue(warnings.contains { $0.title == "Device Getting Hot" })
+        XCTAssertTrue(warnings.contains { $0.title == "App Memory High" })
+        XCTAssertTrue(warnings.contains { $0.title == "Battery Near Limit" })
+        XCTAssertTrue(warnings.contains { $0.title == "Long Runtime Estimate" })
+    }
+
+    func testEncodingRuntimeWarningEvaluatorTreatsCriticalThermalAndMemoryAsCritical() {
+        let snapshot = EncodingResourceUsageSnapshot(
+            timestamp: Date(timeIntervalSince1970: 0),
+            cpuCores: [],
+            appMemoryBytes: 950 * 1_024 * 1_024,
+            totalPhysicalMemoryBytes: 1_024 * 1_024 * 1_024,
+            thermalState: .critical
+        )
+
+        let warnings = EncodingRuntimeWarningEvaluator.warnings(resourceUsage: snapshot)
+
+        XCTAssertTrue(warnings.contains {
+            $0.kind == .thermal && $0.severity == .critical
+        })
+        XCTAssertTrue(warnings.contains {
+            $0.kind == .memory && $0.severity == .critical
+        })
+    }
+
+    func testEncodingRuntimeWarningEvaluatorSkipsBatteryWarningWhenPowerStateIsUnknown() {
+        let snapshot = EncodingResourceUsageSnapshot(
+            timestamp: Date(timeIntervalSince1970: 0),
+            cpuCores: [],
+            appMemoryBytes: nil,
+            totalPhysicalMemoryBytes: 1_024 * 1_024 * 1_024
+        )
+
+        let warnings = EncodingRuntimeWarningEvaluator.warnings(
+            resourceUsage: snapshot,
+            powerSnapshot: EncodingRuntimePowerSnapshot(
+                batteryPercent: 12,
+                isPowerConnected: false,
+                isPowerStateKnown: false
+            ),
+            batteryLimitPercent: 30,
+            estimatedRemainingTime: 40 * 60
+        )
+
+        XCTAssertFalse(warnings.contains { $0.kind == .battery })
+    }
+
     func testEncodingProgressViewDisplaysResourceUsageWidgetDuringEncodingOnly() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -10695,6 +10768,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(source.contains("state.canCancel"))
         XCTAssertTrue(source.contains("Device CPU"))
         XCTAssertTrue(source.contains("App Memory"))
+        XCTAssertTrue(source.contains("Runtime Warnings"))
+        XCTAssertTrue(source.contains("resourceUsage.runtimeWarnings"))
     }
 
     func testHomeViewModelStartsAndStopsResourceMonitoringAroundEncoding() throws {
@@ -10710,6 +10785,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(source.contains("private func stopResourceMonitoring()"))
         XCTAssertTrue(source.contains("latestResourceUsage"))
         XCTAssertTrue(source.contains("resourceUsage: latestResourceUsage"))
+        XCTAssertTrue(source.contains("runtimeWarningResourceUsage"))
+        XCTAssertTrue(source.contains("EncodingRuntimeWarningEvaluator.warnings"))
         XCTAssertTrue(source.contains("stopResourceMonitoring()"))
     }
 

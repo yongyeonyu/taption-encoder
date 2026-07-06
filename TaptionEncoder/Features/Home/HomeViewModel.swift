@@ -4476,8 +4476,12 @@ final class HomeViewModel: ObservableObject {
     private func startResourceMonitoring(sampleIntervalNanoseconds: UInt64) {
         stopResourceMonitoring()
         let initialSample = resourceMonitor.sample()
-        latestResourceUsage = initialSample
-        updateCurrentEncodingProgressResourceUsage(initialSample)
+        let decoratedInitialSample = runtimeWarningResourceUsage(
+            initialSample,
+            estimatedRemainingTime: currentEncodingEstimatedRemainingTime
+        )
+        latestResourceUsage = decoratedInitialSample
+        updateCurrentEncodingProgressResourceUsage(decoratedInitialSample)
         let interval = max(sampleIntervalNanoseconds, 250_000_000)
 
         resourceMonitorTask = Task { @MainActor [weak self] in
@@ -4488,8 +4492,12 @@ final class HomeViewModel: ObservableObject {
                     return
                 }
                 let sample = self.resourceMonitor.sample()
-                self.latestResourceUsage = sample
-                self.updateCurrentEncodingProgressResourceUsage(sample)
+                let decoratedSample = self.runtimeWarningResourceUsage(
+                    sample,
+                    estimatedRemainingTime: self.currentEncodingEstimatedRemainingTime
+                )
+                self.latestResourceUsage = decoratedSample
+                self.updateCurrentEncodingProgressResourceUsage(decoratedSample)
             }
         }
     }
@@ -4556,8 +4564,45 @@ final class HomeViewModel: ObservableObject {
         guard case .encoding(var progress) = state else {
             return
         }
-        progress.resourceUsage = snapshot
+        let decoratedSnapshot = runtimeWarningResourceUsage(
+            snapshot,
+            estimatedRemainingTime: progress.estimatedRemainingTime
+        )
+        latestResourceUsage = decoratedSnapshot
+        progress.resourceUsage = decoratedSnapshot
         state = .encoding(progress)
+    }
+
+    private var currentEncodingEstimatedRemainingTime: TimeInterval? {
+        guard case .encoding(let progress) = state else {
+            return nil
+        }
+        return progress.estimatedRemainingTime
+    }
+
+    private func runtimeWarningResourceUsage(
+        _ snapshot: EncodingResourceUsageSnapshot,
+        estimatedRemainingTime: TimeInterval?
+    ) -> EncodingResourceUsageSnapshot {
+        let settings = batterySettingsProvider()
+        var updatedSnapshot = snapshot
+        updatedSnapshot.runtimeWarnings = EncodingRuntimeWarningEvaluator.warnings(
+            resourceUsage: snapshot,
+            powerSnapshot: runtimePowerSnapshot,
+            batteryLimitPercent: settings.batteryLimitPercent,
+            estimatedRemainingTime: estimatedRemainingTime,
+            optimizationProfile: settings.optimizationProfile
+        )
+        return updatedSnapshot
+    }
+
+    private var runtimePowerSnapshot: EncodingRuntimePowerSnapshot {
+        let snapshot = batteryPowerMonitor.currentSnapshot
+        return EncodingRuntimePowerSnapshot(
+            batteryPercent: snapshot.batteryPercent,
+            isPowerConnected: snapshot.isPowerConnected,
+            isPowerStateKnown: snapshot.isPowerStateKnown
+        )
     }
 
     private func startEncodingActivity(
@@ -4703,7 +4748,9 @@ final class HomeViewModel: ObservableObject {
             estimatedRemainingTime: nil,
             backendLabel: review.folderQueue?.statusText ?? "Starting Codec Path",
             outputSummary: review.videoInfo.outputSummary,
-            resourceUsage: latestResourceUsage
+            resourceUsage: latestResourceUsage.map {
+                runtimeWarningResourceUsage($0, estimatedRemainingTime: nil)
+            }
         )
     }
 
@@ -4722,7 +4769,9 @@ final class HomeViewModel: ObservableObject {
                 estimatedRemainingTime: progress.estimatedRemainingTime,
                 backendLabel: batch.snapshot(currentFileName: sourceName).statusText,
                 outputSummary: currentReview?.videoInfo.outputSummary,
-                resourceUsage: latestResourceUsage
+                resourceUsage: latestResourceUsage.map {
+                    runtimeWarningResourceUsage($0, estimatedRemainingTime: progress.estimatedRemainingTime)
+                }
             )
         }
 
@@ -4733,7 +4782,9 @@ final class HomeViewModel: ObservableObject {
             estimatedRemainingTime: progress.estimatedRemainingTime,
             backendLabel: currentReview?.videoInfo.codecPathTitle ?? "Automatic Codec Path",
             outputSummary: currentReview?.videoInfo.outputSummary,
-            resourceUsage: latestResourceUsage
+            resourceUsage: latestResourceUsage.map {
+                runtimeWarningResourceUsage($0, estimatedRemainingTime: progress.estimatedRemainingTime)
+            }
         )
     }
 
