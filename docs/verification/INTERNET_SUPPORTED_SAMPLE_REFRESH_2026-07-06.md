@@ -42,6 +42,12 @@ The following samples were also checked with short host-side H.265 MP4 and MOV t
 
 `xhe_aac_hevc_video.mp4` was not counted as a host FFmpeg transcode pass because FFmpeg can probe the xHE-AAC stream but local decode remains limited. macOS `afinfo` identifies the audio as `usac`, 48 kHz stereo.
 
+## Follow-Up App-Core Routing
+
+- 2026-07-06 follow-up implementation: the VC-1 raw elementary route is now registered in the current-build software VLC decoder path and live H.265 transcoding registry.
+- This follow-up is app-core routing evidence only. It is not simulator sample execution, real-device sample execution, TestFlight/App Store Connect proof, App Review proof, or public release proof.
+- The generated fixture policy remains unchanged: `vc1_raw_elementary` stays a skipped real-world-sample-required generated row until the local sample is promoted into a durable fixture policy.
+
 ## Blocked Or Deferred
 
 | Target | Status | Reason |

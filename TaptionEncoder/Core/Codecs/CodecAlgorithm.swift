@@ -306,6 +306,7 @@ enum TaptionCodecRegistry {
         TaptionCodecRoute(sourceCodec: .realVideo1, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .realVideo, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .roqVideo, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .vc1, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .wmv, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .microsoftVideo1, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .asusV1, outputCodec: .hevc),
@@ -562,6 +563,13 @@ enum TaptionCodecRegistry {
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "RoQ Video to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .vc1,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "VC-1 to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
             sourceCodec: .wmv,
