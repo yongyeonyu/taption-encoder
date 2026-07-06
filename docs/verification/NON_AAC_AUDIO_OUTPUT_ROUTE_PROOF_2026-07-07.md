@@ -5,7 +5,7 @@
 - Repository: `/Users/u_mo_c/Documents/taption_encoder`
 - Feature surface: current-build bundled software audio decode feeding Apple `AVAssetWriter` with non-AAC audio output.
 - Output contract: video output remains H.265 / HEVC only; writable output containers remain MP4/MOV only.
-- Proof surface: real-device Debug XCTest on a paired iPad. This is not simulator proof, host FFmpeg proof, TestFlight/App Store Connect proof, App Review proof, or public-release proof.
+- Proof surface: focused simulator XCTest plus real-device Debug XCTest on a paired iPad. Simulator and real-device results are recorded separately below. This is not host FFmpeg proof, TestFlight/App Store Connect proof, App Review proof, or public-release proof.
 
 ## Implemented Routes
 
@@ -15,6 +15,12 @@
 - Executed audio route: `Opus to PCM`
 - Output: H.265 / HEVC video in MOV with Apple Lossless / ALAC audio
 - Executed audio route: `Opus to Apple Lossless`
+- Source sample: bundled `TaptionEncoder/TestVideos/AMR-WB H.263.3gp`
+- Source media: H.263 video plus AMR-WB (`sawb`) audio, surfaced as the app AMR-family route
+- Output: H.265 / HEVC video in MOV with Linear PCM audio
+- Executed audio route: `AMR to PCM`
+- Output: H.265 / HEVC video in MOV with Apple Lossless / ALAC audio
+- Executed audio route: `AMR to Apple Lossless`
 - Execution backend: bundled software VLC decode feeding the Apple-native output writer
 
 ## Code Changes Covered
@@ -28,6 +34,8 @@
   - PCM uses `kAudioFormatLinearPCM` with 16-bit packed interleaved samples
   - ALAC uses `kAudioFormatAppleLossless` with a 16-bit encoder depth hint
 - `TaptionAudioCodecOutputCatalog` now marks `PCM / MOV` and `ALAC / MOV` as implemented.
+- `TaptionSourcePreservingAudioOptionsResolver` now normalizes low-rate AMR-family sources to 48 kHz for AAC, PCM, and ALAC writer outputs so source-preserving verification matches the Apple writer path.
+- `CodecRoutePlannerTests` now verifies AMR-to-PCM and AMR-to-ALAC current-build readiness, plus bundled `AMR-WB H.263.3gp` execution to H.265 MOV with PCM and ALAC audio.
 
 ## Device XCTest Proof - PCM
 
@@ -80,6 +88,101 @@ Test assertions also verified:
 - output audio codec: PCM
 - output audio sample rate: 48 kHz
 - output audio channel count: 2
+
+## Simulator Regression Proof - AMR-WB PCM/ALAC
+
+Command:
+
+```sh
+xcodebuild test \
+  -project TaptionEncoder.xcodeproj \
+  -scheme TaptionEncoder \
+  -destination 'platform=iOS Simulator,id=A5C810F9-20A8-46B7-B4BF-8AF3399D00C1' \
+  -derivedDataPath /tmp/taption_encoder_amrwb_nonaac_sim_dd \
+  -resultBundlePath /tmp/taption_encoder_amrwb_nonaac_sim_result.xcresult \
+  -parallel-testing-enabled NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledVLCAudioDecodeFeedsAppleWriterForRepresentativeCurrentBuildCodecs \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testSourcePreservingAudioOptionsResolverRaisesAMRSampleRateForCurrentAppleWriters \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledAMRWBH263SampleEncodesHEVCMOVWithPCMAudio \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledAMRWBH263SampleEncodesHEVCMOVWithALACAudio
+```
+
+Result:
+
+- Passed: 4.
+- Failed: 0.
+- Skipped: 0.
+- Simulator: iPhone 17 Pro, iOS 26.5, build `23F77`.
+- Simulator ID: `A5C810F9-20A8-46B7-B4BF-8AF3399D00C1`.
+- Result bundle: `/tmp/taption_encoder_amrwb_nonaac_sim_result.xcresult`.
+
+This is simulator regression evidence only. It is not real-device proof, TestFlight/App Store Connect proof, App Review proof, or public-release proof.
+
+The assertions verified:
+
+- AMR-to-PCM and AMR-to-ALAC route selection use bundled software VLC decode and Apple-native output writing.
+- The AMR-family source-preserving writer options raise the source 16 kHz mono track to 48 kHz mono for AAC, PCM, and ALAC writer outputs.
+- Bundled `AMR-WB H.263.3gp` encodes to H.265 MOV with PCM audio at 48 kHz mono.
+- Bundled `AMR-WB H.263.3gp` encodes to H.265 MOV with ALAC audio at 48 kHz mono.
+
+## Device XCTest Proof - AMR-WB PCM/ALAC
+
+Command:
+
+```sh
+xcodebuild test \
+  -project TaptionEncoder.xcodeproj \
+  -scheme TaptionEncoder \
+  -destination 'platform=iOS,id=00008112-000964980E45401E' \
+  -derivedDataPath /tmp/taption_encoder_amrwb_nonaac_ipad_dd \
+  -resultBundlePath /tmp/taption_encoder_amrwb_nonaac_ipad_result.xcresult \
+  -parallel-testing-enabled NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledAMRWBH263SampleEncodesHEVCMOVWithPCMAudio \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledAMRWBH263SampleEncodesHEVCMOVWithALACAudio
+```
+
+Result:
+
+- Passed: 2.
+- Failed: 0.
+- Skipped: 0.
+- Device: iPad Pro 12.9-inch 6th generation, runtime model `iPad14,6`.
+- Device ID: `00008112-000964980E45401E`.
+- OS: iOS/iPadOS 26.5, build `23F77`.
+- Result bundle: `/tmp/taption_encoder_amrwb_nonaac_ipad_result.xcresult`.
+
+Key runtime evidence from the passing test log:
+
+- `audioRoute=AMR to PCM`
+- `audioRoute=AMR to Apple Lossless`
+- `audioPath=SW`
+- `output=H.265 / HEVC / MOV`
+- `route=H.263 to H.265 / HEVC`
+- `Software H.263 transcode pipeline completed`
+- `frames=75`
+- `audioSampleBuffers=250`
+- `Source-preserving output verification passed` with:
+  - `actualAudioTracks=1`
+  - `actualAudioSampleRate=48000`
+  - `actualAudioChannels=1`
+  - `actualDuration=5.000`
+  - `actualFrameRate=15000/1000`
+  - `actualResolution=176x144`
+
+Test assertions also verified:
+
+- source container: 3GP
+- source video codec: H.263
+- source audio codec: AMR family, representing the host-visible `sawb` AMR-WB track
+- source audio sample rate: 16 kHz
+- source audio channel count: 1
+- output container: MOV
+- output video codec: H.265 / HEVC
+- output audio codecs: PCM and ALAC
+- output audio sample rate: 48 kHz
+- output audio channel count: 1
 
 ## Device XCTest Proof - ALAC
 
@@ -152,7 +255,7 @@ Result:
 
 ## Remaining Audio Work
 
-- AMR-WB now has separate focused simulator and bundled real-device iPad Debug XCTest AAC/MP4 execution proof through the H.263/AMR-WB 3GP sample.
+- AMR-WB now has focused simulator and bundled real-device iPad Debug XCTest execution proof for AAC/MP4, PCM/MOV, and ALAC/MOV through the H.263/AMR-WB 3GP sample.
 - AMR-WB+ still needs a decodable positive sample.
-- Broader non-AAC output routes beyond current `PCM / MOV` and `ALAC / MOV` still need implementation and proof.
+- Broader non-AAC output routes beyond current sample-proven `PCM / MOV` and `ALAC / MOV` still need implementation and proof.
 - FFmpeg-family or equivalent broad backend execution remains gated on bundled backend integration and license/App Store review.

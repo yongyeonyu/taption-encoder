@@ -89,7 +89,7 @@ enum TaptionSourcePreservingAudioOptionsResolver {
            let sampleRate = sourceTrack.sampleRate,
            sampleRate.isFinite,
            sampleRate > 0 {
-            resolvedOptions.sampleRate = aacCompatibleSampleRate(
+            resolvedOptions.sampleRate = writerCompatibleSampleRate(
                 sourceSampleRate: sampleRate,
                 sourceCodec: sourceTrack.codec,
                 outputCodec: requestedOptions.outputCodec
@@ -110,18 +110,17 @@ enum TaptionSourcePreservingAudioOptionsResolver {
         return resolvedOptions
     }
 
-    private static func aacCompatibleSampleRate(
+    private static func writerCompatibleSampleRate(
         sourceSampleRate: Double,
         sourceCodec: TaptionAudioCodec,
         outputCodec: TaptionAudioCodec
     ) -> Double {
-        guard outputCodec == .aac else {
-            return sourceSampleRate
-        }
-        if sourceCodec == .xheAAC {
+        if sourceCodec == .xheAAC,
+           outputCodec == .aac {
             return 44_100
         }
         if sourceCodec == .amr,
+           [.aac, .pcm, .alac].contains(outputCodec),
            sourceSampleRate < 48_000 {
             return 48_000
         }

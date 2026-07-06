@@ -7,7 +7,7 @@
 - Local sample folder: `/Users/u_mo_c/Documents/taption_encoder/Samples/Downloaded/internet_supported_missing_2026-07-07/`.
 - Evidence folder: `docs/verification/amr_wb_sample_acquisition_2026-07-07/`.
 - Output policy remains unchanged: Taption Encoder still outputs H.265 / HEVC video only, and implemented output containers remain MP4/MOV only.
-- This is local sample acquisition, host decode, focused simulator app-side execution, bundled sample-resource, and focused real-device app-side execution evidence. It is not TestFlight/App Store Connect proof, App Review proof, or public release proof.
+- This is local sample acquisition, host decode, focused simulator app-side execution, bundled sample-resource, focused real-device app-side execution, and focused non-AAC output-route evidence. It is not TestFlight/App Store Connect proof, App Review proof, or public release proof.
 
 `Samples/Downloaded/` is intentionally ignored by git, so the original generated sample files stay local. A copy of the H.263/AMR-WB 3GP sample is now checked in under `TaptionEncoder/TestVideos/AMR-WB H.263.3gp` only for bundled sample and physical-device XCTest proof. The checked-in TSV files preserve the source URL, source hash, generated sample hashes, bundled sample hash, host probe results, the initial app-side block, the follow-up simulator execution proof, and the real-device execution proof.
 
@@ -248,10 +248,63 @@ Test assertions also verified:
 - output audio sample rate: 48 kHz
 - output audio channel count: 1
 
+## Follow-Up Non-AAC Output Route Proof
+
+AMR-WB was also exercised through the current non-AAC MOV output routes after the AAC/MP4 proof. This is recorded separately from the original sample acquisition and AAC runtime proof because it validates output audio route breadth rather than sample availability.
+
+Simulator command:
+
+```sh
+xcodebuild test \
+  -project TaptionEncoder.xcodeproj \
+  -scheme TaptionEncoder \
+  -destination 'platform=iOS Simulator,id=A5C810F9-20A8-46B7-B4BF-8AF3399D00C1' \
+  -derivedDataPath /tmp/taption_encoder_amrwb_nonaac_sim_dd \
+  -resultBundlePath /tmp/taption_encoder_amrwb_nonaac_sim_result.xcresult \
+  -parallel-testing-enabled NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledVLCAudioDecodeFeedsAppleWriterForRepresentativeCurrentBuildCodecs \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testSourcePreservingAudioOptionsResolverRaisesAMRSampleRateForCurrentAppleWriters \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledAMRWBH263SampleEncodesHEVCMOVWithPCMAudio \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledAMRWBH263SampleEncodesHEVCMOVWithALACAudio
+```
+
+Simulator result:
+
+- Passed: 4.
+- Failed: 0.
+- Skipped: 0.
+- Result bundle: `/tmp/taption_encoder_amrwb_nonaac_sim_result.xcresult`.
+
+Real-device command:
+
+```sh
+xcodebuild test \
+  -project TaptionEncoder.xcodeproj \
+  -scheme TaptionEncoder \
+  -destination 'platform=iOS,id=00008112-000964980E45401E' \
+  -derivedDataPath /tmp/taption_encoder_amrwb_nonaac_ipad_dd \
+  -resultBundlePath /tmp/taption_encoder_amrwb_nonaac_ipad_result.xcresult \
+  -parallel-testing-enabled NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledAMRWBH263SampleEncodesHEVCMOVWithPCMAudio \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledAMRWBH263SampleEncodesHEVCMOVWithALACAudio
+```
+
+Real-device result:
+
+- Passed: 2.
+- Failed: 0.
+- Skipped: 0.
+- Device: iPad Pro 12.9-inch (6th generation), runtime model `iPad14,6`, iPadOS 26.5, build `23F77`.
+- Result bundle: `/tmp/taption_encoder_amrwb_nonaac_ipad_result.xcresult`.
+
+The follow-up proof verified bundled `AMR-WB H.263.3gp` to H.265 MOV with PCM 48 kHz mono output and H.265 MOV with ALAC 48 kHz mono output through bundled software VLC decode feeding the Apple-native writer.
+
 ## Outcome
 
 - Decodable AMR-WB sample acquisition is no longer blocked at the host/sample level.
 - AMR-WB app-side execution now has focused simulator proof through the current bundled VLC decode path feeding AAC output in MP4.
-- AMR-WB now has a bundled sample and focused real-device iPad Debug XCTest proof for H.263/AMR-WB 3GP to H.265 MP4 with AAC 48 kHz mono output.
+- AMR-WB now has a bundled sample and focused real-device iPad Debug XCTest proof for H.263/AMR-WB 3GP to H.265 MP4 with AAC 48 kHz mono output, plus H.265 MOV with PCM and ALAC 48 kHz mono output.
 - The previous AMR-WB+ sample remains a negative sample.
 - AMR-WB+ still needs a decodable positive sample or a clear unsupported decision from the selected broad backend.
