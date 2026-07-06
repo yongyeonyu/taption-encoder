@@ -657,6 +657,13 @@ enum TaptionAudioCodecOutputCatalog {
             return .implemented
         }
 
+        if SW_AudioCodecSupportCatalog.canWriteWithCurrentBuildAppleWriter(
+            outputCodec: audioCodec,
+            outputContainer: container
+        ) {
+            return .implemented
+        }
+
         if SW_FFmpegCodecCommandPlanner.audioEncoderName(for: audioCodec) != nil,
            SW_SoftwareCodecBackendRegistry.ffmpegFamilyCandidate.canWriteContainer(container) {
             return .commandPlanReady

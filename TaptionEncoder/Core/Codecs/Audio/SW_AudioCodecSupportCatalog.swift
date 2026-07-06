@@ -32,7 +32,7 @@ enum SW_AudioCodecSupportCatalog {
         .muLaw
     ]
 
-    static let currentBuildVLCAACDecodeCodecs: Set<TaptionAudioCodec> = [
+    static let currentBuildVLCAudioDecodeCodecs: Set<TaptionAudioCodec> = [
         .aac,
         .amr,
         .opus,
@@ -78,14 +78,28 @@ enum SW_AudioCodecSupportCatalog {
         softwareDecodeCodecs.contains(codec)
     }
 
+    static func canWriteWithCurrentBuildAppleWriter(
+        outputCodec: TaptionAudioCodec,
+        outputContainer: TaptionVideoContainer
+    ) -> Bool {
+        switch (outputCodec, outputContainer) {
+        case (.aac, .mp4), (.aac, .mov), (.pcm, .mov):
+            return true
+        default:
+            return false
+        }
+    }
+
     static func currentBuildBundledDecodeBackend(
         for sourceCodec: TaptionAudioCodec,
         outputCodec: TaptionAudioCodec,
         outputContainer: TaptionVideoContainer
     ) -> TaptionEncodingBackend? {
-        guard outputCodec == .aac,
-              outputContainer == .mp4,
-              currentBuildVLCAACDecodeCodecs.contains(sourceCodec) else {
+        guard currentBuildVLCAudioDecodeCodecs.contains(sourceCodec),
+              canWriteWithCurrentBuildAppleWriter(
+                outputCodec: outputCodec,
+                outputContainer: outputContainer
+              ) else {
             return nil
         }
         return .softwareVLCDecoder

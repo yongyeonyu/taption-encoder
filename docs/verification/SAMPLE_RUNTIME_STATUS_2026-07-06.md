@@ -35,7 +35,7 @@ xcodebuild test \
   -resultBundlePath /tmp/taption_sample_state_result.xcresult \
   -parallel-testing-enabled NO \
   COMPILER_INDEX_STORE_ENABLE=NO \
-  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledVLCAudioDecodeFeedsAACForRepresentativeCurrentBuildCodecs \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledVLCAudioDecodeFeedsAppleWriterForRepresentativeCurrentBuildCodecs \
   -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testLocalRealAMRNBH263SampleDocumentsCurrentAudioExecutionBlock \
   -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testLocalRealVC1RawSampleDocumentsCurrentSwiftVLCNoFrameBlock \
   -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testLocalRealQuickTimeRPZASampleDocumentsCurrentDurationVerificationBlock \

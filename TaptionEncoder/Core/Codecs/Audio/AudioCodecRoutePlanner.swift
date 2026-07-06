@@ -162,7 +162,7 @@ enum TaptionAudioCodecRoutePlanner {
                 shouldCopy: false,
                 fixtureStatus: fixtureStatus,
                 reason: decodeBackend == .softwareVLCDecoder
-                    ? "Bundled software audio decode will feed the Apple-native AAC encoder in the current build."
+                    ? "Bundled software audio decode will feed the Apple-native output writer in the current build."
                     : "Software audio decode should feed an Apple-native output encoder."
             )
         }

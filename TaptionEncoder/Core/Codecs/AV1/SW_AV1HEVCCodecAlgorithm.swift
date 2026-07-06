@@ -107,17 +107,31 @@ struct SW_AV1HEVCTranscodeConfiguration {
 }
 struct SW_AV1NativeAudioEncodingConfiguration {
     let sourceTrack: TaptionAudioTrackInfo
+    let outputCodec: TaptionAudioCodec
     let sampleRate: Double
     let channelCount: Int
     let targetBitrate: Int
 
     var writerOutputSettings: [String: Any] {
-        [
-            AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: sampleRate,
-            AVNumberOfChannelsKey: channelCount,
-            AVEncoderBitRateKey: targetBitrate
-        ]
+        switch outputCodec {
+        case .pcm:
+            return [
+                AVFormatIDKey: kAudioFormatLinearPCM,
+                AVSampleRateKey: sampleRate,
+                AVNumberOfChannelsKey: channelCount,
+                AVLinearPCMBitDepthKey: 16,
+                AVLinearPCMIsBigEndianKey: false,
+                AVLinearPCMIsFloatKey: false,
+                AVLinearPCMIsNonInterleaved: false
+            ]
+        default:
+            return [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: sampleRate,
+                AVNumberOfChannelsKey: channelCount,
+                AVEncoderBitRateKey: targetBitrate
+            ]
+        }
     }
 
     static func make(
@@ -125,8 +139,6 @@ struct SW_AV1NativeAudioEncodingConfiguration {
         request: TaptionCodecTranscodeRequest
     ) -> SW_AV1NativeAudioEncodingConfiguration? {
         guard request.options.preserveAudioWhenPossible,
-              request.options.outputPolicy.audioCodec == .aac,
-              [.mp4, .mov].contains(request.options.outputPolicy.container),
               let sourceTrack = asset.audioTracks.first,
               SW_AudioCodecSupportCatalog.currentBuildBundledDecodeBackend(
                 for: sourceTrack.codec,
@@ -158,6 +170,7 @@ struct SW_AV1NativeAudioEncodingConfiguration {
 
         return SW_AV1NativeAudioEncodingConfiguration(
             sourceTrack: sourceTrack,
+            outputCodec: request.options.outputPolicy.audioCodec,
             sampleRate: sampleRate,
             channelCount: channelCount,
             targetBitrate: targetBitrate

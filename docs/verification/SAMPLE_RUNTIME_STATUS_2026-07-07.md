@@ -89,7 +89,7 @@ xcodebuild test \
   -resultBundlePath /tmp/taption_encoder_amr_result_48k.xcresult \
   -parallel-testing-enabled NO \
   COMPILER_INDEX_STORE_ENABLE=NO \
-  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledVLCAudioDecodeFeedsAACForRepresentativeCurrentBuildCodecs \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledVLCAudioDecodeFeedsAppleWriterForRepresentativeCurrentBuildCodecs \
   -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testSourcePreservingAudioOptionsResolverRaisesAMRNBSampleRateForAACWriter \
   -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testLocalRealAMRNBH263SampleEncodesHEVCWithAACAudio
 rm -f /tmp/taption_run_local_real_sample_tests
@@ -138,7 +138,7 @@ xcodebuild test \
   -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testSoftwareBackendRegistryCoversUniversalVideoDecodeAndEncodeTargets \
   -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testLocalRealVC1RawSampleDocumentsPlannedFFmpegBackendAfterVLCNoFrameBlock \
   -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testLocalRealY41PSampleDocumentsPlannedFFmpegBackendAfterVLCUnsupportedBlock \
-  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledVLCAudioDecodeFeedsAACForRepresentativeCurrentBuildCodecs \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledVLCAudioDecodeFeedsAppleWriterForRepresentativeCurrentBuildCodecs \
   -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testSourcePreservingAudioOptionsResolverRaisesAMRNBSampleRateForAACWriter \
   -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testLocalRealAMRNBH263SampleEncodesHEVCWithAACAudio
 rm -f /tmp/taption_run_local_real_sample_tests
@@ -160,7 +160,7 @@ xcodebuild test \
   COMPILER_INDEX_STORE_ENABLE=NO \
   -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testLocalRealXHEAACSampleEncodesHEVCWithNativeAACAudio \
   -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testLocalRealAMRNBH263SampleEncodesHEVCWithAACAudio \
-  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledVLCAudioDecodeFeedsAACForRepresentativeCurrentBuildCodecs \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledVLCAudioDecodeFeedsAppleWriterForRepresentativeCurrentBuildCodecs \
   -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testSourcePreservingAudioOptionsResolverRaisesAMRNBSampleRateForAACWriter \
   -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testSourcePreservingAudioOptionsResolverUsesAppleXHEAACWriterRateForAAC \
   -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testAudioCodecRoutesCoverEveryPlannedSourceToAAC \
@@ -176,7 +176,7 @@ The simulator `2327959D-2E59-42CA-B1E9-ABBE04A8977E` was a temporary device name
 - `testLocalRealQuickTimeRPZASampleEncodesWithLegacyFrameHoldDuration`: passed.
 - Runtime log showed `Software QuickTime Video transcode pipeline completed` with `frames=28`.
 - Source-preserving output verification passed with `expectedDuration=2.667`, `actualDuration=2.660`, `expectedResolution=160x120`, `actualResolution=160x120`, `expectedFrameRate=10500/1000`, and `actualFrameRate=10526/1000`.
-- `testBundledVLCAudioDecodeFeedsAACForRepresentativeCurrentBuildCodecs`: passed with AMR included in the representative current-build VLC audio decode set.
+- `testBundledVLCAudioDecodeFeedsAppleWriterForRepresentativeCurrentBuildCodecs`: passed with AMR included in the representative current-build VLC audio decode set.
 - `testSourcePreservingAudioOptionsResolverRaisesAMRNBSampleRateForAACWriter`: passed.
 - `testLocalRealAMRNBH263SampleEncodesHEVCWithAACAudio`: passed.
 - Runtime log showed `Software H.263 transcode pipeline completed` with `frames=10`, `audioSampleBuffers=45`, and `audioSamples=45687`.
