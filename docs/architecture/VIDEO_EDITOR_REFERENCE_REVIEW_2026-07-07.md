@@ -5,7 +5,7 @@
 - Purpose: review the OpenCut and CapCut/JianYing automation candidates as architecture references for Taption Encoder's future merge/lightweight-editing work.
 - Repository: `/Users/u_mo_c/Documents/taption_encoder`.
 - Evidence surface: GitHub repository metadata, README files, and LICENSE files checked through GitHub search/API. No source tree was cloned, no package was installed, and no media/proof artifact was downloaded.
-- 2026-07-07 follow-up: the user-supplied shortlist was executed as a reference review refresh through GitHub API metadata checks only. The latest no-clone refresh on the same date found no adoption-guidance changes; only OpenCut's live metadata drifted to 61647 stars and 6632 forks.
+- 2026-07-07 follow-up: the user-supplied shortlist was executed as a reference review refresh through GitHub API metadata checks only. The latest no-clone refresh on the same date found no adoption-guidance changes; only OpenCut's live metadata drifted to 61648 stars and 6632 forks.
 - Product boundary: Taption Encoder still outputs H.265 / HEVC video only, and implemented writable containers remain MP4/MOV only.
 - This is architecture/reference evidence only. It is not codec execution proof, simulator proof, real-device proof, TestFlight/App Store Connect proof, App Review proof, or public release proof.
 
@@ -15,7 +15,7 @@ Checked through the GitHub API on 2026-07-07. Repositories were not cloned or in
 
 | Priority | Candidate | Stars | Forks | Primary language | License signal | Latest pushed/updated signal | Read |
 | --- | --- | ---: | ---: | --- | --- | --- | --- |
-| 1 | OpenCut | 61647 | 6632 | TypeScript | MIT | pushed 2026-06-21, updated 2026-07-06 | First-pass architecture reference for shared core/API/plugin/headless direction. |
+| 1 | OpenCut | 61648 | 6632 | TypeScript | MIT | pushed 2026-06-21, updated 2026-07-06 | First-pass architecture reference for shared core/API/plugin/headless direction. |
 | 2 | pyJianYingDraft | 3856 | 615 | Python | Apache-2.0 | pushed 2026-07-05, updated 2026-07-06 | Mature draft-generation/project-model reference. |
 | 3 | capcut-mate | 1307 | 223 | Python | Apache-2.0 | pushed 2026-07-05, updated 2026-07-06 | API/workflow automation shape reference. |
 | 4 | pyCapCut | 580 | 81 | Python | No root license in API response | pushed 2025-09-12, updated 2026-07-06 | CapCut-specific draft generation reference, but license/maturity need caution. |
