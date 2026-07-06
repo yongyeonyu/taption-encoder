@@ -26,6 +26,7 @@ Product path: **AV1 to H.265 first, broad inputs to H.265 next, H.265-only outpu
 - Device install proof: verify real-device install separately from TestFlight/App Store Connect state.
 - Verification proof: current `01.01.00` proof is recorded in `docs/verification/RELEASE_01.01.00.md`.
 - Latest local performance proof: Battery Options encoding profiles and the 2026-07-04 bundled-codec simulator benchmark are recorded in `docs/verification/CODEC_BENCHMARK_2026-07-04.md`. This is local Debug simulator evidence, not TestFlight/App Store Connect proof.
+- Latest real-device hardware codec proof: iPhone 14 Pro and iPad Pro 12.9-inch 6th generation `HW_CodecCapabilityProbe` snapshots are recorded in `docs/verification/REAL_DEVICE_CODEC_REPORTS_2026-07-06.md`. This is hardware capability evidence only, not sample encode/playback, TestFlight/App Store Connect, App Review, or manual UI proof.
 
 ## Source Core To Port
 
@@ -51,6 +52,7 @@ Next implementation pass should isolate the media conversion core before importi
 - Device codec route simulation: [`docs/codecs/DEVICE_CODEC_ROUTE_SIMULATION.md`](../codecs/DEVICE_CODEC_ROUTE_SIMULATION.md)
 - Local H.265 transcode fixture results: [`docs/verification/HEVC_TRANSCODE_TEST_RESULTS.md`](../verification/HEVC_TRANSCODE_TEST_RESULTS.md)
 - Local bundled-codec simulator benchmark: [`docs/verification/CODEC_BENCHMARK_2026-07-04.md`](../verification/CODEC_BENCHMARK_2026-07-04.md)
+- Real-device hardware codec reports: [`docs/verification/REAL_DEVICE_CODEC_REPORTS_2026-07-06.md`](../verification/REAL_DEVICE_CODEC_REPORTS_2026-07-06.md)
 - Remaining release action items and launch blockers: [`docs/planning/ACTION_ITEMS.md`](../planning/ACTION_ITEMS.md)
 - Completed release action items: [`docs/planning/COMPLETED_ACTION_ITEMS.md`](../planning/COMPLETED_ACTION_ITEMS.md)
 - Release closeout for `01.00.01`: [`docs/archive/releases/RELEASE_01.00.01.md`](../archive/releases/RELEASE_01.00.01.md)

@@ -1,11 +1,11 @@
 # Taption Encoder Completed Action Items
 
-Status date: 2026-07-04
+Status date: 2026-07-06
 
 This file stores completed checklist items moved out of `ACTION_ITEMS.md` so the active action list only shows remaining work.
 
-- Completed checklist item count: 243
-- Active remaining checklist item count at split time: 104
+- Completed checklist item count: 244
+- Active remaining checklist item count: 103
 - Source file: `docs/planning/ACTION_ITEMS.md`
 
 ## Release 01.00.02 Closeout
@@ -202,6 +202,7 @@ This file stores completed checklist items moved out of `ACTION_ITEMS.md` so the
 - [x] Add static-matrix reconciliation to saved device codec reports so real-device probe snapshots expose missing and unexpected HW codec assumptions.
 - [x] Add device codec report archive summarizer so multiple real-device probe snapshots can be audited for unknown and divergent HW codec assumptions.
 - [x] Refresh the static Apple model matrix for current iPhone 17, iPhone Air, and iPhone 17e rows and expose a model coverage report.
+- [x] Capture real-device hardware codec reports from paired iPhone 14 Pro and iPad Pro 12.9-inch 6th generation, with JSON proof recorded under `docs/verification/device_codec_reports/`.
 - [x] Add mixed decode/encode path reporting.
 - [x] Add broad input model/inspection mapping for H.264, H.265, AV1, VP9, VP8, MPEG-1/2/4, H.263, ProRes, DV, and legacy QuickTime families.
 - [x] Add broad container inspection for MP4, MOV, M4V, WebM, MKV, AVI/DivX, TS/MTS/M2TS/TP/TRP/TOD, MPEG-PS/VOB/MOD, MXF, LRF, DV, Ogg/Ogv/OGM, FLV/F4V, NUT, RealMedia, RoQ, 3GP/3G2, ASF/WMV/DVR-MS, and raw elementary streams.

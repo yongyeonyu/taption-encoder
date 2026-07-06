@@ -1,6 +1,6 @@
 # Apple Device Codec Matrix
 
-Date: 2026-06-16
+Date: 2026-07-06
 
 ## Purpose
 
@@ -25,6 +25,23 @@ The Device Info sheet can save a JSON snapshot containing the current device pro
 The reconciliation summary compares the runtime model identifier against `HW_AppleDeviceCodecModelMatrix`, then lists expected HW decode/encode codecs, probed HW decode/encode codecs, missing expected codecs, and unexpected codecs. Runtime probing remains the authority when it differs from static assumptions.
 
 The archive analyzer can summarize multiple saved snapshots into known models, unknown model identifiers, static-matrix matches, and divergent reports. That lets real-device captures from several iPhone and iPad generations drive targeted matrix updates instead of treating every codec route failure as an isolated bug.
+
+## Latest Real-Device Snapshots
+
+The first paired-device runtime capture pass is recorded in:
+
+- `docs/verification/REAL_DEVICE_CODEC_REPORTS_2026-07-06.md`
+- `docs/verification/device_codec_reports/hw-codec-report-iPhone15-2-2026-07-06.json`
+- `docs/verification/device_codec_reports/hw-codec-report-iPad14-6-2026-07-06.json`
+
+Captured devices:
+
+| Runtime model | Device | OS | Matched static profile | Matrix result |
+| --- | --- | --- | --- | --- |
+| `iPhone15,2` | iPhone 14 Pro | iOS 26.5 | `apple_iphone_pro_a15_a16_prores` | Runtime probe has no missing expected codecs, but reports extra JPEG, Motion JPEG, ProRes RAW decode and H.263, HEVC-with-alpha, JPEG, Motion JPEG encode support. |
+| `iPad14,6` | iPad Pro 12.9-inch (6th generation) | iPadOS 26.5 | `apple_ipad_pro_m1_m2_prores` | Runtime probe has no missing expected codecs, but reports extra JPEG, Motion JPEG decode and H.263, HEVC-with-alpha, JPEG, Motion JPEG encode support. |
+
+These reports are hardware capability evidence, not user-facing route execution proof. The static profiles remain conservative simulation inputs until additional real devices confirm whether the unexpected capabilities are stable enough to model broadly.
 
 ## Sources Used
 

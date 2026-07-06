@@ -5746,6 +5746,29 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(audioCapabilities[.opus]?.mp4CopySupported, false)
     }
 
+    func testCaptureRuntimeDeviceCodecReportWhenRequested() throws {
+        let snapshot = HW_DeviceCodecReportStore.makeSnapshot()
+        let data = try HW_DeviceCodecReportStore.encode(snapshot)
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        let attachment = XCTAttachment(data: data, uniformTypeIdentifier: "public.json")
+        attachment.name = HW_DeviceCodecReportStore.fileName(for: snapshot)
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        if snapshot.report.modelIdentifier != "arm64" {
+            print("TAPTION_DEVICE_CODEC_REPORT_JSON_BEGIN")
+            print(json)
+            print("TAPTION_DEVICE_CODEC_REPORT_JSON_END")
+        }
+
+        XCTAssertFalse(snapshot.report.modelIdentifier.isEmpty)
+        XCTAssertFalse(snapshot.report.videoCapabilities.isEmpty)
+        XCTAssertFalse(snapshot.report.audioCapabilities.isEmpty)
+        XCTAssertEqual(snapshot.report.probeResolution, HW_CodecCapabilityProbe.defaultProbeSize)
+        XCTAssertEqual(snapshot.launchInputReadinessCatalog?.outputVideoCodec, .hevc)
+        XCTAssertEqual(snapshot.launchInputReadinessCatalog?.outputContainers, [.mp4, .mov])
+    }
+
     func testDeviceCodecReportReconcilesKnownModelWithStaticMatrix() {
         let expectedDecode: Set<TaptionVideoCodec> = [
             .h264,

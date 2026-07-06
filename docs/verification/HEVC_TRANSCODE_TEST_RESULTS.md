@@ -130,7 +130,7 @@ This is not yet proof that the iOS app has migrated every route. It is a repeata
 ## Remaining Proof Needed
 
 - Run the same kind of route tests on real iPhone/iPad hardware after the app-side generic codec router is integrated.
-- Capture `HW_CodecCapabilityProbe` reports from representative Apple devices.
+- Expand `HW_CodecCapabilityProbe` reports beyond the first paired iPhone 14 Pro and iPad Pro 12.9-inch 6th generation captures.
 - Add app-side objective audio signal checks after route tests move into the app/test target.
 - Add real-world samples for DJI `.lrf`, GoPro/Insta360/DJI originals, iPhone HDR/Dolby Vision, Cinematic, slow motion, and damaged/nonstandard metadata.
 - Expand from the current implemented H.265 routes to broader input-to-H.265 execution. Do not add non-H.265 video output routes unless the product policy changes.
