@@ -55,6 +55,7 @@ Next implementation pass should isolate the media conversion core before importi
 - Local bundled-codec simulator benchmark: [`docs/verification/CODEC_BENCHMARK_2026-07-04.md`](../verification/CODEC_BENCHMARK_2026-07-04.md)
 - Real-device hardware codec reports: [`docs/verification/REAL_DEVICE_CODEC_REPORTS_2026-07-06.md`](../verification/REAL_DEVICE_CODEC_REPORTS_2026-07-06.md)
 - Host-side codec sample acquisition: [`docs/verification/CODEC_SAMPLE_ACQUISITION_2026-07-06.md`](../verification/CODEC_SAMPLE_ACQUISITION_2026-07-06.md)
+- Internet-supported missing sample refresh: [`docs/verification/INTERNET_SUPPORTED_SAMPLE_REFRESH_2026-07-06.md`](../verification/INTERNET_SUPPORTED_SAMPLE_REFRESH_2026-07-06.md)
 - Remaining release action items and launch blockers: [`docs/planning/ACTION_ITEMS.md`](../planning/ACTION_ITEMS.md)
 - Completed release action items: [`docs/planning/COMPLETED_ACTION_ITEMS.md`](../planning/COMPLETED_ACTION_ITEMS.md)
 - Release closeout for `01.00.01`: [`docs/archive/releases/RELEASE_01.00.01.md`](../archive/releases/RELEASE_01.00.01.md)

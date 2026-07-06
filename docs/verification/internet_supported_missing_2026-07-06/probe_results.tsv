@@ -1,0 +1,9 @@
+target	status	format	streams	duration	size_bytes	note
+amr_nb_h263_video	pass	mov,mp4,m4a,3gp,3g2,mj2	video:h263:176x144:yuv420p,audio:amr_nb:8000Hz	1.000000	20245	probed
+amr_wbplus_negative	pass	mov,mp4,m4a,3gp,3g2,mj2	audio::6464Hz	2.400000	6432	probed
+hevc_with_alpha_layer_2	pass	mov,mp4,m4a,3gp,3g2,mj2	video:hevc/Main:496x438:yuv420p	1.733984	873822	probed
+rpza_1701-D	pass	mov,mp4,m4a,3gp,3g2,mj2	video:rpza:160x120:rgb555le	2.666667	27340	probed
+vc1_advanced_profile_2	pass	vc1	video:vc1/Advanced:720x480:yuv420p		700252	probed
+xhe_aac_hevc_video	pass	mov,mp4,m4a,3gp,3g2,mj2	video:hevc/Rext:160x120:gbrp,audio:aac/xHE-AAC:48000Hz	1.000000	16017	probed
+y41p_from_internet_image	pass	avi	video:y41p:160x120:yuv411p,audio:pcm_s16le:44100Hz	1.000000	819846	probed
+hevc_with_alpha_layer	pass	mov,mp4,m4a,3gp,3g2,mj2	video:hevc/Main:1280x720:yuv420p	9.016667	4569025	probed
