@@ -1,0 +1,7 @@
+sample	probe	status	result
+amr_wbplus_reference_mono_3gp	ffprobe	pass	sawp sample entry, 6464 Hz metadata, 2 channels metadata, 4.880000s, 61 frames, 9984 bytes.
+amr_wbplus_reference_stereo_3gp	ffprobe	pass	sawp sample entry, 6464 Hz metadata, 2 channels metadata, 4.880000s, 61 frames, 10472 bytes.
+amr_wbplus_reference_mono_3gp	reference_decoder	pass	61 frames processed; decoded to 48 kHz stereo PCM WAV, 4.880000s.
+amr_wbplus_reference_stereo_3gp	reference_decoder	pass	61 frames processed; decoded to 48 kHz stereo PCM WAV, 4.880000s.
+amr_wbplus_reference_stereo_3gp	ffmpeg_decode	fail	exit 234; local FFmpeg reports no decoder for codec none.
+amr_wbplus_reference_stereo_3gp	ffmpeg_video_wrapper_mux	fail	local FFmpeg refused to mux sawp as audio copy because codec was treated as none.

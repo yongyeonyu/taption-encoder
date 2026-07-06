@@ -81,10 +81,16 @@ Sources rechecked:
 
 Outcome: no decodable positive AMR-WB+ sample was found in the FFmpeg sample archive during this pass. Keep the existing AMR-WB+ file as a negative sample and do not promote AMR-WB+ to executable app-side proof.
 
+## Follow-Up AMR-WB+ Reference-Code Positive Sample - 2026-07-07
+
+A later local host-side pass used patched AMR-WB+ reference-code tooling to generate audio-only `sawp` 3GP samples and decode them back to 48 kHz PCM WAV with the same reference decoder. That proof is recorded separately in `docs/verification/AMR_WB_PLUS_REFERENCE_SAMPLE_PROOF_2026-07-07.md`.
+
+This does not change the FFmpeg archive sample result above: the archive candidate remains a negative sample, and local FFmpeg still cannot decode or mux `sawp`. No AMR-WB+ sample was bundled, and AMR-WB+ app-side execution is still blocked on a bundled, license-reviewed backend or explicit unsupported decision.
+
 ## Outcome
 
 - Promoted to next app-side implementation candidates: Theora, AMR-NB, VC-1 raw, and Fraunhofer xHE-AAC.
-- Still blocked: AMR-WB+ execution needs a decodable App Store-safe path; the located AMR-WB+ sample is useful as a negative fixture but not a passing decode proof. AMR-WB advanced separately on 2026-07-07 through a decodable `sawb`/AMR-WB bundled H.263 sample and is tracked in `docs/verification/AMR_WB_SAMPLE_ACQUISITION_2026-07-07.md`.
+- Still blocked: AMR-WB+ app-side execution needs a decodable App Store-safe path; the FFmpeg archive AMR-WB+ sample is useful as a negative fixture, and the later reference-code positive sample is host/reference-tool proof only. AMR-WB advanced separately on 2026-07-07 through a decodable `sawb`/AMR-WB bundled H.263 sample and is tracked in `docs/verification/AMR_WB_SAMPLE_ACQUISITION_2026-07-07.md`.
 - Still blocked: ProRes RAW sample execution needs storage headroom, license/use approval, and then separate app/real-device proof.
 - Follow-up simulator runtime status is tracked separately in `docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-06.md`; do not treat these host-side FFmpeg/Apple-tool results as app-side execution proof.
 - The next engineering proof should remain separate: app-side execution, simulator benchmark, real-device install/run, and TestFlight/App Store Connect state should not be inferred from this host-side pass.
