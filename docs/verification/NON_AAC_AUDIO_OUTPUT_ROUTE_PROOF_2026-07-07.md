@@ -27,7 +27,13 @@
 - Executed audio route: `MP3 to PCM`
 - Output: H.265 / HEVC video in MOV with Apple Lossless / ALAC audio
 - Executed audio route: `MP3 to Apple Lossless`
-- Execution backend: bundled software VLC video decode feeding the Apple-native output writer. Opus and AMR-family audio use bundled software VLC audio decode; MP3 uses the current Apple-native audio transcode route.
+- Source sample: bundled `TaptionEncoder/TestVideos/QuickTime Video.mov`
+- Source media: QuickTime Video / RPZA plus AAC audio
+- Output: H.265 / HEVC video in MOV with Linear PCM audio
+- Executed audio route: `AAC to PCM`
+- Output: H.265 / HEVC video in MOV with Apple Lossless / ALAC audio
+- Executed audio route: `AAC to Apple Lossless`
+- Execution backend: bundled software VLC video decode feeding the Apple-native output writer. Opus and AMR-family audio use bundled software VLC audio decode; MP3 and AAC use the current Apple-native audio transcode route.
 
 ## Code Changes Covered
 
@@ -43,6 +49,7 @@
 - `TaptionSourcePreservingAudioOptionsResolver` now normalizes low-rate AMR-family sources to 48 kHz for AAC, PCM, and ALAC writer outputs so source-preserving verification matches the Apple writer path.
 - `CodecRoutePlannerTests` now verifies AMR-to-PCM and AMR-to-ALAC current-build readiness, plus bundled `AMR-WB H.263.3gp` execution to H.265 MOV with PCM and ALAC audio.
 - `CodecRoutePlannerTests` also verifies bundled `Flash Video.flv` execution to H.265 MOV with MP3-to-PCM and MP3-to-ALAC output through the Apple-native audio transcode route while the video route stays on the bundled software VLC decoder.
+- `CodecRoutePlannerTests` now also verifies bundled `QuickTime Video.mov` execution to H.265 MOV with AAC-to-PCM and AAC-to-ALAC output through the Apple-native audio transcode route while the video route stays on the bundled software VLC decoder.
 
 ## Device XCTest Proof - PCM
 
@@ -294,6 +301,108 @@ Test assertions also verified:
 - output audio sample rate: 44.1 kHz
 - output audio channel count: 2
 
+## Simulator Regression Proof - QuickTime AAC PCM/ALAC
+
+Command:
+
+```sh
+rm -rf /tmp/taption_encoder_aac_nonaac_sim_dd && xcodebuild test \
+  -project TaptionEncoder.xcodeproj \
+  -scheme TaptionEncoder \
+  -destination 'platform=iOS Simulator,id=A5C810F9-20A8-46B7-B4BF-8AF3399D00C1' \
+  -derivedDataPath /tmp/taption_encoder_aac_nonaac_sim_dd \
+  -parallel-testing-enabled NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledQuickTimeVideoAACSampleEncodesHEVCMOVWithPCMAudio \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledQuickTimeVideoAACSampleEncodesHEVCMOVWithALACAudio
+```
+
+Result:
+
+- Passed: 2.
+- Failed: 0.
+- Skipped: 0.
+- Simulator: iPhone 17 Pro, iOS 26.5, build `23F77`.
+- Simulator ID: `A5C810F9-20A8-46B7-B4BF-8AF3399D00C1`.
+- Temporary result path during the run: `/tmp/taption_encoder_aac_nonaac_sim_dd/Logs/Test/Test-TaptionEncoder-2026.07.07_04-05-22-+0900.xcresult`.
+
+Key runtime evidence from the passing test log:
+
+- `audioRoute=AAC to PCM`
+- `audioRoute=AAC to Apple Lossless`
+- `audioPath=HW`
+- `output=H.265 / HEVC / MOV`
+- `route=QuickTime Video to H.265 / HEVC`
+- `Software QuickTime Video transcode pipeline completed`
+- `frames=25`
+- `audioSampleBuffers=129`
+- Source-preserving output verification passed with:
+  - `actualAudioTracks=1`
+  - `actualAudioSampleRate=48000`
+  - `actualAudioChannels=2`
+  - `actualDuration=5.000`
+  - `actualFrameRate=5000/1000`
+  - `actualResolution=160x120`
+
+This is simulator regression evidence only. It is not real-device proof, TestFlight/App Store Connect proof, App Review proof, or public-release proof.
+
+## Device XCTest Proof - QuickTime AAC PCM/ALAC
+
+Command:
+
+```sh
+rm -rf /tmp/taption_encoder_aac_nonaac_ipad_dd && xcodebuild test \
+  -project TaptionEncoder.xcodeproj \
+  -scheme TaptionEncoder \
+  -destination 'platform=iOS,id=00008112-000964980E45401E' \
+  -derivedDataPath /tmp/taption_encoder_aac_nonaac_ipad_dd \
+  -parallel-testing-enabled NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledQuickTimeVideoAACSampleEncodesHEVCMOVWithPCMAudio \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledQuickTimeVideoAACSampleEncodesHEVCMOVWithALACAudio
+```
+
+Result:
+
+- Passed: 2.
+- Failed: 0.
+- Skipped: 0.
+- Device: iPad Pro 12.9-inch 6th generation, runtime model `iPad14,6`.
+- Device ID: `00008112-000964980E45401E`.
+- OS: iOS/iPadOS 26.5, build `23F77`.
+- Temporary result path during the run: `/tmp/taption_encoder_aac_nonaac_ipad_dd/Logs/Test/Test-TaptionEncoder-2026.07.07_04-06-40-+0900.xcresult`.
+
+Key runtime evidence from the passing test log:
+
+- `audioRoute=AAC to PCM`
+- `audioRoute=AAC to Apple Lossless`
+- `audioPath=HW`
+- `output=H.265 / HEVC / MOV`
+- `route=QuickTime Video to H.265 / HEVC`
+- `Software QuickTime Video transcode pipeline completed`
+- `frames=25`
+- `audioSampleBuffers=129`
+- Source-preserving output verification passed with:
+  - `actualAudioTracks=1`
+  - `actualAudioSampleRate=48000`
+  - `actualAudioChannels=2`
+  - `actualDuration=5.000`
+  - `actualFrameRate=5000/1000`
+  - `actualResolution=160x120`
+
+Test assertions also verified:
+
+- source container: MOV
+- source video codec: QuickTime Video
+- source audio codec: AAC
+- source audio sample rate: 48 kHz
+- source audio channel count: 2
+- output container: MOV
+- output video codec: H.265 / HEVC
+- output audio codecs: PCM and ALAC
+- output audio sample rate: 48 kHz
+- output audio channel count: 2
+
 ## Device XCTest Proof - ALAC
 
 Command:
@@ -367,6 +476,7 @@ Result:
 
 - AMR-WB now has focused simulator and bundled real-device iPad Debug XCTest execution proof for AAC/MP4, PCM/MOV, and ALAC/MOV through the H.263/AMR-WB 3GP sample.
 - MP3 now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through the Flash Video/MP3 sample. This is an Apple-native audio route, separate from the bundled software VLC audio-decode proof for Opus and AMR-family samples.
+- AAC now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through the QuickTime Video/AAC sample.
 - AMR-WB+ still needs a decodable positive sample.
 - Broader non-AAC output routes beyond current sample-proven `PCM / MOV` and `ALAC / MOV` still need implementation and proof.
 - FFmpeg-family or equivalent broad backend execution remains gated on bundled backend integration and license/App Store review.
