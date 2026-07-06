@@ -193,6 +193,8 @@ protocol StarWalletSecureStoring: Sendable {
     func loadIntegrityMetadata() throws -> StarWalletIntegrityMetadata?
     func saveIntegrityMetadata(_ metadata: StarWalletIntegrityMetadata) throws
     func clearIntegrityMetadata() throws
+    func loadLastWalletSnapshot() throws -> StarWalletSnapshot?
+    func saveLastWalletSnapshot(_ snapshot: StarWalletSnapshot) throws
     func loadInitialBonusGranted() throws -> Bool
     func saveInitialBonusGranted() throws
 }
@@ -206,6 +208,7 @@ struct KeychainStarWalletSecureStore: StarWalletSecureStoring {
     private let service: String
     private let encryptionKeyAccount = "wallet-encryption-key"
     private let integrityAccount = "wallet-integrity-metadata"
+    private let lastWalletSnapshotAccount = "last-wallet-snapshot"
     private let initialBonusGrantedAccount = "initial-bonus-granted"
 
     init(service: String = "\(Bundle.main.bundleIdentifier ?? "com.taption.encoder").stars") {
@@ -236,6 +239,18 @@ struct KeychainStarWalletSecureStore: StarWalletSecureStoring {
 
     func clearIntegrityMetadata() throws {
         try delete(account: integrityAccount)
+    }
+
+    func loadLastWalletSnapshot() throws -> StarWalletSnapshot? {
+        guard let data = try load(account: lastWalletSnapshotAccount) else {
+            return nil
+        }
+        return try JSONDecoder.starWalletDecoder.decode(StarWalletSnapshot.self, from: data)
+    }
+
+    func saveLastWalletSnapshot(_ snapshot: StarWalletSnapshot) throws {
+        let data = try JSONEncoder.starWalletEncoder.encode(snapshot)
+        try saveOrUpdate(data: data, account: lastWalletSnapshotAccount)
     }
 
     func loadInitialBonusGranted() throws -> Bool {
@@ -398,6 +413,9 @@ actor StarWalletStore: StarWalletManaging {
 
     private func loadSnapshot() throws -> StarWalletSnapshot {
         guard fileManager.fileExists(atPath: fileURL.path) else {
+            if let snapshot = try restoreSnapshotFromSecureStoreIfAvailable() {
+                return snapshot
+            }
             return try createInitialInstallBonusSnapshotIfNeeded()
         }
 
@@ -409,6 +427,24 @@ actor StarWalletStore: StarWalletManaging {
         try validateIntegrity(snapshot: snapshot, encryptedData: encryptedData)
         try syncIntegrityMetadataIfNeeded(snapshot: snapshot, encryptedData: encryptedData)
         try markInitialBonusGrantedIfNeeded()
+        try secureStore.saveLastWalletSnapshot(snapshot)
+        return snapshot
+    }
+
+    private func restoreSnapshotFromSecureStoreIfAvailable() throws -> StarWalletSnapshot? {
+        guard let snapshot = try secureStore.loadLastWalletSnapshot() else {
+            return nil
+        }
+        try persist(snapshot)
+        try markInitialBonusGrantedIfNeeded()
+        AppLogger.info(
+            "Stars wallet restored from Keychain snapshot",
+            category: .app,
+            metadata: [
+                "stars": "\(snapshot.balance)",
+                "sequence": "\(snapshot.sequence)"
+            ]
+        )
         return snapshot
     }
 
@@ -468,6 +504,7 @@ actor StarWalletStore: StarWalletManaging {
         }
         try encryptedData.write(to: fileURL, options: [.atomic])
         try syncIntegrityMetadataIfNeeded(snapshot: snapshot, encryptedData: encryptedData, force: true)
+        try secureStore.saveLastWalletSnapshot(snapshot)
     }
 
     private func validateIntegrity(
