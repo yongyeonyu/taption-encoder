@@ -13,6 +13,7 @@ enum SampleThumbnailCatalog {
         "ASUS V1.avi": Entry(bytes: 305498, resourceName: "sample-thumbnail-asus_v1_avi"),
         "ASUS V2.avi": Entry(bytes: 167114, resourceName: "sample-thumbnail-asus_v2_avi"),
         "AV1.mp4": Entry(bytes: 64444, resourceName: "sample-thumbnail-av1_mp4"),
+        "AMR-WB H.263.3gp": Entry(bytes: 258024, resourceName: "sample-thumbnail-amr_wb_h_263_3gp"),
         "Apple Animation.mov": Entry(bytes: 377122, resourceName: "sample-thumbnail-apple_animation_mov"),
         "Apple ProRes.mov": Entry(bytes: 41288, resourceName: "sample-thumbnail-apple_prores_mov"),
         "CLJR.avi": Entry(bytes: 996046, resourceName: "sample-thumbnail-cljr_avi"),

@@ -36,7 +36,7 @@ The safest App Store candidate is an embedded, bundle-contained, license-reviewe
 | Binary size budget | Open | Broad demux/decode support can significantly increase app size. | Archive/export size diff, enabled component list, launch/import latency comparison. |
 | Open-source notice generation | Open | Shipping the backend requires final notice resources for FFmpeg and each enabled external library. | Bundled notice files, source download URL, exact build/config text, release-notice tests. |
 | Fixture transcode proof | Open | Host FFmpeg proof and command-plan proof are not enough for VC-1 raw or Y41P execution. | App-side simulator fixture/sample transcodes to H.265 MP4/MOV with output verification. |
-| Audio signal proof | Open | AMR-WB/AMR-WB+ and non-AAC audio routes need audible-signal proof after app-side execution is wired. | Decodable AMR-WB or AMR-WB+ sample, AAC output proof for MP4/MOV, non-AAC route proof where explicitly supported. |
+| Audio signal proof | Open | AMR-WB now has bundled real-device AAC/MP4 proof, and Opus has AAC/PCM/ALAC proof through bundled Theora. AMR-WB+ and broader planned audio routes still need audible-signal proof after app-side execution is wired. | Decodable AMR-WB+ sample or explicit unsupported decision, AAC output proof for MP4/MOV, non-AAC route proof where explicitly supported. |
 | Old-device performance proof | Open | Broad software routes may stress heat, memory, battery, and runtime on older devices. | Real-device runtime encode proof with thermal/battery/memory/ETA warning observations. |
 
 ## App-Store-Safe Candidate Shape

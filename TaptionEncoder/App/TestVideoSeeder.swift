@@ -19,6 +19,7 @@ enum TaptionTestVideoSeeder {
         "MPEG-2.mpg",
         "MPEG-4 Visual.mov",
         "H.263.3gp",
+        "AMR-WB H.263.3gp",
         "H.261.h261",
         "Flash Video.flv",
         "Microsoft MPEG-4 V2.avi",

@@ -2672,6 +2672,70 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(outputAsset.audioTracks.first?.channelCount, 2)
     }
 
+    func testRealDeviceBundledAMRWBH263SampleEncodesHEVCWithAACAudio() async throws {
+        #if targetEnvironment(simulator)
+        throw XCTSkip("Real-device runtime proof requires a physical iPhone or iPad.")
+        #endif
+
+        let sampleURL = bundledTestVideosURL().appendingPathComponent("AMR-WB H.263.3gp")
+        guard FileManager.default.fileExists(atPath: sampleURL.path) else {
+            XCTFail("Missing bundled AMR-WB proof sample at \(sampleURL.path)")
+            return
+        }
+
+        let outputURL = temporaryTestURL(fileName: "real-device-amr-wb-h263-hevc.mp4")
+        try? FileManager.default.removeItem(at: outputURL)
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+
+        let core = TaptionVideoCore(
+            services: TaptionVideoCoreServices(
+                inspector: AVFoundationMediaInspector(),
+                encoder: AVFoundationHEVCEncoderService(),
+                storageChecker: FakeStorageChecker(),
+                pendingSaveStore: FakePendingSaveStore(),
+                saveGateAuthorizer: FakeAdGate()
+            )
+        )
+        let job = try await core.prepareSingleAssetHEVCJob(
+            sourceURL: sampleURL,
+            temporaryOutputURL: outputURL,
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+        )
+        let sourceAudioCodec = try XCTUnwrap(job.asset.audioTracks.first?.codec)
+
+        XCTAssertEqual(job.asset.container, .threeGP)
+        XCTAssertEqual(job.asset.videoTrack?.codec, .h263)
+        XCTAssertEqual(sourceAudioCodec, .amr)
+        XCTAssertEqual(job.asset.audioTracks.first?.sampleRate ?? 0, 16_000, accuracy: 1)
+        XCTAssertEqual(job.asset.audioTracks.first?.channelCount, 1)
+        XCTAssertEqual(job.routeSelection.route, TaptionCodecRoute(sourceCodec: .h263, outputCodec: .hevc))
+        XCTAssertTrue(job.routeSelection.isEncodableNow)
+        XCTAssertEqual(job.routeSelection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(job.plan.audioPlan?.route, TaptionAudioCodecRoute(sourceCodec: .amr, outputCodec: .aac))
+        XCTAssertEqual(job.plan.audioPlan?.routeSelection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(job.plan.audioPlan?.readiness.readiness, .softwareBackendExecutable)
+        XCTAssertEqual(job.plan.audioPlan?.readiness.commandBackend, .softwareVLCDecoder)
+        XCTAssertTrue(job.plan.audioPlan?.isRunnableInCurrentBuild ?? false)
+        XCTAssertNil(job.plan.audioPlan?.commandPlan)
+        XCTAssertEqual(job.plan.audioPlan?.options.sampleRate, 48_000)
+        XCTAssertEqual(job.plan.audioPlan?.options.channelCount, 1)
+        XCTAssertEqual(job.plan.sourcePreservationRequirements?.audioSampleRate, 48_000)
+        XCTAssertEqual(job.plan.sourcePreservationRequirements?.audioChannelCount, 1)
+
+        let result = try await core.encodePreparedJob(job, progress: { _ in })
+        let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: result.temporaryOutputURL)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.temporaryOutputURL.path))
+        XCTAssertEqual(result.usedBackend, .softwareVLCDecoder)
+        XCTAssertEqual(result.usedMode, .software)
+        XCTAssertEqual(outputAsset.container, .mp4)
+        XCTAssertEqual(outputAsset.videoTrack?.codec, .hevc)
+        XCTAssertEqual(outputAsset.audioTracks.first?.codec, .aac)
+        XCTAssertEqual(outputAsset.audioTracks.first?.sampleRate ?? 0, 48_000, accuracy: 1)
+        XCTAssertEqual(outputAsset.audioTracks.first?.channelCount, 1)
+        XCTAssertFalse(outputAsset.audioTracks.isEmpty)
+    }
+
     func testNextLegacyBundledSamplesEncodeToHEVCMP4() async throws {
         let sampleFilenames = [
             "Microsoft Video 1.avi",
@@ -11540,6 +11604,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             ("MPEG-2.mpg", .mpeg2),
             ("MPEG-4 Visual.mov", .mpeg4Visual),
             ("H.263.3gp", .h263),
+            ("AMR-WB H.263.3gp", .h263),
             ("H.261.h261", .h261),
             ("Flash Video.flv", .flashVideo),
             ("Microsoft MPEG-4 V2.avi", .microsoftMPEG4V2),

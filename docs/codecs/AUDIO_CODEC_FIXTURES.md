@@ -76,7 +76,7 @@ The report is intentionally stricter than route selection: every route can stay 
 
 `TaptionCodecFixtureEvidence.verifyAudioFixtureCatalogCoverage()` now checks the audio fixture catalog against `TaptionAudioCodecRoutePlanner.universalAudioCodecs`. Every universal audio codec must be tracked as either generated or explicitly pending, so broad audio support cannot add a source/output family without also updating the sample plan.
 
-`TaptionCodecFixtureEvidence.verifyAudioFixtureGeneration()` also checks `audio_fixture_generation.tsv` directly. Pending generator codecs such as `xHE-AAC`, `AMR-NB`, and `AMR-WB` must keep a concrete generator attempt row, attempted encoder name, no output file, and a useful blocking reason such as a missing local FFmpeg encoder. The generator now also tries an Apple `afconvert` alternate for those pending codecs before recording the skip, so the evidence distinguishes "not attempted" from "tried FFmpeg and Apple system encoding on this machine." Local sample-backed app execution can still advance separately from generated fixture status: xHE-AAC, AMR-NB, and AMR-WB now have focused simulator execution proof through acquired samples even while generated audio fixture rows remain pending.
+`TaptionCodecFixtureEvidence.verifyAudioFixtureGeneration()` also checks `audio_fixture_generation.tsv` directly. Pending generator codecs such as `xHE-AAC`, `AMR-NB`, and `AMR-WB` must keep a concrete generator attempt row, attempted encoder name, no output file, and a useful blocking reason such as a missing local FFmpeg encoder. The generator now also tries an Apple `afconvert` alternate for those pending codecs before recording the skip, so the evidence distinguishes "not attempted" from "tried FFmpeg and Apple system encoding on this machine." Local sample-backed app execution can still advance separately from generated fixture status: xHE-AAC and AMR-NB have focused simulator execution proof through acquired samples, and AMR-WB now has bundled real-device Debug XCTest proof even while generated audio fixture rows remain pending.
 
 ## Latest Local Smoke Result
 
@@ -131,7 +131,7 @@ Transcode:
 | `trueHD` | TrueHD in MKV |
 | `flac` | FLAC in MKV |
 | `vorbis` | Vorbis in MKV |
-| `amr` | Generated fixture skipped locally; 2026-07-06 real-sample acquisition proved AMR-NB host FFmpeg decode into H.265 MP4/MOV, and 2026-07-07 focused simulator XCTest proved app-side AMR-NB decode/resample/AAC execution through bundled VLC for the H.263/3GP sample. A separate 2026-07-07 ETSI TS 126 174-derived AMR-WB sample now host-decodes as `amr_wb`/`sawb`, and follow-up focused simulator XCTest surfaces that audio through the bundled VLC metadata path and encodes H.263/AMR-WB 3GP to H.265 MP4 with AAC 48 kHz mono output. AMR-WB+ stayed a negative sample because local FFmpeg and Apple audio tools could not decode it |
+| `amr` | Generated fixture skipped locally; 2026-07-06 real-sample acquisition proved AMR-NB host FFmpeg decode into H.265 MP4/MOV, and 2026-07-07 focused simulator XCTest proved app-side AMR-NB decode/resample/AAC execution through bundled VLC for the H.263/3GP sample. A separate 2026-07-07 ETSI TS 126 174-derived AMR-WB sample now host-decodes as `amr_wb`/`sawb`; follow-up simulator XCTest surfaced that audio through the bundled VLC metadata path, and focused real-device iPad Debug XCTest encoded bundled `AMR-WB H.263.3gp` to H.265 MP4 with AAC 48 kHz mono output. AMR-WB+ stayed a negative sample because local FFmpeg and Apple audio tools could not decode it |
 | `ilbc` | iLBC in MOV via AudioToolbox encoder |
 | `g722` | G.722 in MKV |
 | `g723` | G.723.1 in MKV |
@@ -155,7 +155,7 @@ Transcode:
 - App-core tests now build FFmpeg-family command plans from every generated audio fixture to currently plannable compatible output audio codecs while preserving source sample rate, channel count, and bitrate options. `verifyAudioFixturePlannableCommandPlanCoverage()` covers that command-plan surface.
 - AAC/MP4 audio fixture execution jobs now rebuild a function-style `TaptionAudioCodecTranscodeRequest` and run through `SW_FFmpegAudioCodecTranscodeExecutor` with a fake runner when the broad software backend gates are satisfied.
 - Broader app-side audio execution still needs to cover compatible audio outputs for H.265 video containers after the FFmpeg-family backend is bundled and license-reviewed.
-- Collect real-device AMR-WB runtime proof after the local sample is bundled or otherwise made available to the device test target; AMR-WB+ still needs a decodable sample or a clear unsupported decision from the selected broad backend.
+- Acquire a decodable AMR-WB+ sample or make a clear unsupported decision from the selected broad backend; AMR-WB now has bundled real-device Debug XCTest proof for AAC/MP4 output.
 - Add real-world multichannel, surround, high sample-rate, odd channel-layout, and silent/damaged audio samples.
 - Keep objective audio signal verification in app-scheme evidence tests and expand executor coverage beyond the current AAC/MP4 audio route test surface.
 - Decide when audio can be copied versus transcoded to AAC or another selected output audio codec.

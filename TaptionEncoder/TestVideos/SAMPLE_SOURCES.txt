@@ -14,6 +14,9 @@ Policy for this folder:
 - Generated-only test-pattern fixtures are not bundled. If no official/public
   source file is found for an executable codec, the codec remains unsupported
   by the default sample bundle until a real source is available.
+- Audio-route proof samples may use a small synthetic video wrapper when the
+  audio under test comes from an official/public codec vector and the wrapper
+  video codec/container is already covered by separate public video samples.
 - When source media includes readable audio, bundled derivatives preserve that
   source audio content through codec/container-appropriate re-encoding. Samples
   without readable source audio may carry generated preview audio; current
@@ -60,6 +63,15 @@ Official Blender Open Movie downloads:
   Derived from Big Buck Bunny 320x180 01:15-01:20; video re-encoded to Snow and the
   original AAC source audio re-encoded to MP3.
   https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_320x180.mp4
+
+Official ETSI / 3GPP audio test-vector sources:
+- AMR-WB H.263.3gp
+  Audio derived from ETSI TS 126 174 V19.0.0 companion archive
+  `T.zip -> T/T_1265/T02_1265.cod`. The first 150 20 ms AMR-WB frames
+  were packed into AMR-WB storage audio and muxed with a small H.263
+  wrapper video in 3GP, then stream-looped to 5 seconds for the bundled
+  sample set and real-device AMR-WB-to-AAC runtime proof.
+  https://www.etsi.org/deliver/etsi_ts/126100_126199/126174/19.00.00_60/ts_126174v190000p0.zip
 
 Official FFmpeg samples archive:
 - MPEG-2.mpg

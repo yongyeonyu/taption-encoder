@@ -196,4 +196,4 @@ The simulator `2327959D-2E59-42CA-B1E9-ABBE04A8977E` was a temporary device name
 
 - VC-1 raw no longer advertises a current SwiftVLC executable path; it still needs a bundled, license-reviewed FFmpeg-family or equivalent backend before sample execution can be promoted.
 - Y41P no longer advertises a current SwiftVLC executable path; it still needs a bundled, license-reviewed FFmpeg-family or equivalent backend before sample execution can be promoted.
-- AMR-WB now has a decodable host-side sample and follow-up focused simulator AAC execution proof recorded separately in `docs/verification/AMR_WB_SAMPLE_ACQUISITION_2026-07-07.md`. AMR-WB still needs separate real-device runtime proof before it can be treated as device-proven.
+- AMR-WB now has a decodable host-side sample, focused simulator AAC execution proof, and bundled real-device iPad Debug XCTest proof recorded separately in `docs/verification/AMR_WB_SAMPLE_ACQUISITION_2026-07-07.md`.

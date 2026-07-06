@@ -152,7 +152,7 @@ Result:
 
 ## Remaining Audio Work
 
-- AMR-WB now has separate focused simulator app-side AAC execution proof through the local H.263/AMR-WB 3GP sample; it still lacks real-device runtime proof.
+- AMR-WB now has separate focused simulator and bundled real-device iPad Debug XCTest AAC/MP4 execution proof through the H.263/AMR-WB 3GP sample.
 - AMR-WB+ still needs a decodable positive sample.
 - Broader non-AAC output routes beyond current `PCM / MOV` and `ALAC / MOV` still need implementation and proof.
 - FFmpeg-family or equivalent broad backend execution remains gated on bundled backend integration and license/App Store review.
