@@ -5,7 +5,7 @@
 - Repository: `/Users/u_mo_c/Documents/taption_encoder`
 - Feature surface: current-build bundled software audio decode feeding Apple `AVAssetWriter` with non-AAC audio output.
 - Output contract: video output remains H.265 / HEVC only; writable output containers remain MP4/MOV only.
-- Proof surface: focused simulator XCTest plus real-device Debug XCTest on a paired iPad. Simulator and real-device results are recorded separately below. The AC3 expansion in this document is focused simulator proof only until a separate real-device run is collected. This is not host FFmpeg proof, TestFlight/App Store Connect proof, App Review proof, or public-release proof.
+- Proof surface: focused simulator XCTest plus real-device Debug XCTest on a paired iPad. Simulator and real-device results are recorded separately below. This is not host FFmpeg proof, TestFlight/App Store Connect proof, App Review proof, or public-release proof.
 
 ## Implemented Routes
 
@@ -119,6 +119,45 @@ Test assertions also verified:
 - output audio channel count: 2
 
 This is focused simulator regression evidence only. It is not real-device proof, TestFlight/App Store Connect proof, App Review proof, or public-release proof.
+
+## Device XCTest Proof - H.264 AC3 PCM/ALAC
+
+Command:
+
+```sh
+rm -rf /tmp/taption_encoder_ac3_realdevice_dd /tmp/taption_encoder_ac3_realdevice_result.xcresult && xcodebuild test \
+  -project TaptionEncoder.xcodeproj \
+  -scheme TaptionEncoder \
+  -destination 'platform=iOS,id=00008112-000964980E45401E' \
+  -derivedDataPath /tmp/taption_encoder_ac3_realdevice_dd \
+  -resultBundlePath /tmp/taption_encoder_ac3_realdevice_result.xcresult \
+  -parallel-testing-enabled NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledH264AC3SampleEncodesHEVCMOVWithPCMAudioOnSoftwarePath \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledH264AC3SampleEncodesHEVCMOVWithALACAudioOnSoftwarePath
+```
+
+Result:
+
+- Result: passed.
+- Selected tests: 2.
+- Failures: 0.
+- Test duration: 16.262 seconds.
+- Device: iPad Pro 12.9-inch 6th generation.
+- Device ID: `00008112-000964980E45401E`.
+- OS: iOS/iPadOS 26.5.
+- Result bundle: `/tmp/taption_encoder_ac3_realdevice_result.xcresult`.
+
+Runtime log evidence:
+
+- `Codec transcode started` reported `audioPath=SW`, `audioRoute=Dolby Digital to Apple Lossless`, `output=H.265 / HEVC / MOV`, `route=H.264 / AVC to H.265 / HEVC`, `preserveResolution=320x180`, and `preserveFrameRate=24000/1000`.
+- `Codec transcode started` also reported `audioRoute=Dolby Digital to PCM` for the PCM/MOV route.
+- `Software H.264 transcode pipeline completed` reported `frames=120` and `audioSampleBuffers=144` for both routes.
+- `Performance trace finished` reported `audioSamples=221184`, `frames=120`, and `phase=completed`.
+- `Source-preserving output verification passed` reported `actualAudioTracks=1`, `actualAudioSampleRate=44100`, `actualAudioChannels=2`, `actualDuration=5.016`, `actualFrameRate=24000/1000`, and `actualResolution=320x180`.
+- `Codec transcode completed` reported `backend=softwareVLCDecoder` and `mode=software`.
+
+This is focused real-device Debug XCTest route-execution evidence. It is not simulator proof, host FFmpeg proof, TestFlight/App Store Connect proof, App Review proof, or public-release proof.
 
 ## Device XCTest Proof - PCM
 
@@ -546,7 +585,7 @@ Result:
 - AMR-WB now has focused simulator and bundled real-device iPad Debug XCTest execution proof for AAC/MP4, PCM/MOV, and ALAC/MOV through the H.263/AMR-WB 3GP sample.
 - MP3 now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through the Flash Video/MP3 sample. This is an Apple-native audio route, separate from the bundled software VLC audio-decode proof for Opus and AMR-family samples.
 - AAC now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through the QuickTime Video/AAC sample.
-- AC3 now has focused simulator XCTest execution proof for PCM/MOV and ALAC/MOV through bundled `H.264 AC3.mp4` on the requested software path; real-device proof remains pending.
+- AC3 now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through bundled `H.264 AC3.mp4` on the requested software path.
 - AMR-WB+ still needs a decodable positive sample.
 - Broader non-AAC output routes beyond current sample-proven `PCM / MOV` and `ALAC / MOV` still need implementation and proof.
 - FFmpeg-family or equivalent broad backend execution remains gated on bundled backend integration and license/App Store review.

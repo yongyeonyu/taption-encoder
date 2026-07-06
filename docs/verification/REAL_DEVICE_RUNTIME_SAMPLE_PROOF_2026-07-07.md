@@ -18,6 +18,7 @@ This is real-device Debug XCTest runtime evidence for focused bundled samples. I
 - Added follow-up bundled AMR-WB non-AAC output tests for PCM/MOV and ALAC/MOV. Those tests are not physical-device-only, but the real-device command below executed them on the paired iPad and keeps their proof separate from simulator regression evidence.
 - Added follow-up bundled Flash Video/MP3 non-AAC output tests for PCM/MOV and ALAC/MOV. These tests use the Apple-native MP3 audio transcode route while the video path remains the bundled software VLC decoder route.
 - Added follow-up bundled QuickTime Video/AAC non-AAC output tests for PCM/MOV and ALAC/MOV. These tests use the Apple-native AAC audio transcode route while the video path remains the bundled software VLC decoder route.
+- Added follow-up bundled H.264/AC3 non-AAC output tests for PCM/MOV and ALAC/MOV. These tests use the bundled software VLC audio decode route on the requested software path.
 
 ## Sample
 
@@ -28,6 +29,7 @@ This is real-device Debug XCTest runtime evidence for focused bundled samples. I
 | `AMR-WB H.263.3gp` | H.263 video plus AMR-WB (`sawb`) audio, 176x144, 15 fps, 16 kHz mono audio, 5.000s bundled duration | Software VLC decode to H.265 MOV with PCM mono audio at 48 kHz and H.265 MOV with ALAC mono audio at 48 kHz. |
 | `Flash Video.flv` | Flash Video plus MP3 audio, 160x120, 10 fps, 44.1 kHz stereo audio, 5.000s bundled duration | Software VLC video decode to H.265 MOV with Apple-native MP3-to-PCM stereo audio at 44.1 kHz and H.265 MOV with Apple-native MP3-to-ALAC stereo audio at 44.1 kHz. |
 | `QuickTime Video.mov` | QuickTime Video / RPZA plus AAC audio, 160x120, 5 fps, 48 kHz stereo audio, 5.000s bundled duration | Software VLC video decode to H.265 MOV with Apple-native AAC-to-PCM stereo audio at 48 kHz and H.265 MOV with Apple-native AAC-to-ALAC stereo audio at 48 kHz. |
+| `H.264 AC3.mp4` | H.264 video plus AC3 / Dolby Digital audio, 320x180, 24 fps, 44.1 kHz stereo audio, 5.000s bundled duration | Software VLC video/audio decode to H.265 MOV with AC3-to-PCM stereo audio at 44.1 kHz and H.265 MOV with AC3-to-ALAC stereo audio at 44.1 kHz. |
 
 ## Theora Command
 
@@ -179,6 +181,38 @@ Runtime log evidence:
 - `Software H.263 transcode pipeline completed` reported `frames=75` and `audioSampleBuffers=250` for both routes.
 - `Performance trace finished` reported `audioSamples=239589`, `frames=75`, and `phase=completed`.
 - `Source-preserving output verification passed` reported `actualAudioTracks=1`, `actualAudioSampleRate=48000`, `actualAudioChannels=1`, `actualDuration=5.000`, `actualFrameRate=15000/1000`, and `actualResolution=176x144`.
+- `Codec transcode completed` reported `backend=softwareVLCDecoder` and `mode=software`.
+
+## H.264 AC3 Non-AAC MOV Command
+
+```sh
+rm -rf /tmp/taption_encoder_ac3_realdevice_dd /tmp/taption_encoder_ac3_realdevice_result.xcresult && xcodebuild test \
+  -project TaptionEncoder.xcodeproj \
+  -scheme TaptionEncoder \
+  -destination 'platform=iOS,id=00008112-000964980E45401E' \
+  -derivedDataPath /tmp/taption_encoder_ac3_realdevice_dd \
+  -resultBundlePath /tmp/taption_encoder_ac3_realdevice_result.xcresult \
+  -parallel-testing-enabled NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledH264AC3SampleEncodesHEVCMOVWithPCMAudioOnSoftwarePath \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledH264AC3SampleEncodesHEVCMOVWithALACAudioOnSoftwarePath
+```
+
+## H.264 AC3 Non-AAC MOV Result
+
+- Result: passed.
+- Selected tests: 2.
+- Failures: 0.
+- Test duration: 16.262 seconds.
+- Result bundle: `/tmp/taption_encoder_ac3_realdevice_result.xcresult`.
+
+Runtime log evidence:
+
+- `Codec transcode started` reported `audioRoute=Dolby Digital to PCM`, `audioPath=SW`, `output=H.265 / HEVC / MOV`, `route=H.264 / AVC to H.265 / HEVC`, `preserveResolution=320x180`, and `preserveFrameRate=24000/1000`.
+- `Codec transcode started` also reported `audioRoute=Dolby Digital to Apple Lossless` for the ALAC/MOV route.
+- `Software H.264 transcode pipeline completed` reported `frames=120` and `audioSampleBuffers=144` for both routes.
+- `Performance trace finished` reported `audioSamples=221184`, `frames=120`, and `phase=completed`.
+- `Source-preserving output verification passed` reported `actualAudioTracks=1`, `actualAudioSampleRate=44100`, `actualAudioChannels=2`, `actualDuration=5.016`, `actualFrameRate=24000/1000`, and `actualResolution=320x180`.
 - `Codec transcode completed` reported `backend=softwareVLCDecoder` and `mode=software`.
 
 Non-fatal runtime noise observed:
