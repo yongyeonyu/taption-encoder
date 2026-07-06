@@ -1,0 +1,4 @@
+target	status	source_url	source_bytes	source_sha256	local_source_retained	note
+amr_wb_ts26174_rel19_zip	downloaded_for_conversion	https://www.etsi.org/deliver/etsi_ts/126100_126199/126174/19.00.00_60/ts_126174v190000p0.zip	63096655	a959f7b48024cf2c0ffd896f23a436c8a4993b16af765b75ad53e1cb8262e85c	no	Official ETSI TS 126 174 V19.0.0 companion ZIP; contains readme.txt, S.zip, and T.zip. Large ZIP was not committed and can be removed after sample creation.
+amr_wb_cod_vector	selected_from_zip	T.zip::T/T_1265/T02_1265.cod	205824	n/a	no	12.65 kbit/s AMR-WB serial COD vector; first 150 frames were packed into AMR-WB storage format.
+

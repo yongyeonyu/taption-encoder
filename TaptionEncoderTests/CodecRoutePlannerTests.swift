@@ -5147,6 +5147,45 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(outputAsset.audioTracks.isEmpty)
     }
 
+    func testLocalRealAMRWBH263SampleDocumentsCurrentAppAudioInspectionBlock() async throws {
+        try requireLocalRealSampleProofs()
+
+        let samplePath = ProcessInfo.processInfo.environment["TAPTION_AMR_WB_SAMPLE_PATH"]
+            ?? "/Users/u_mo_c/Documents/taption_encoder/Samples/Downloaded/internet_supported_missing_2026-07-07/sample_videos/amr_wb_h263_video.3gp"
+        let sampleURL = URL(fileURLWithPath: samplePath)
+        guard FileManager.default.fileExists(atPath: sampleURL.path) else {
+            throw XCTSkip("Local AMR-WB real-sample proof requires \(sampleURL.path).")
+        }
+
+        let outputURL = temporaryTestURL(fileName: "amr-wb-h263-current-app-block.mp4")
+        try? FileManager.default.removeItem(at: outputURL)
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+
+        let core = TaptionVideoCore(
+            services: TaptionVideoCoreServices(
+                inspector: AVFoundationMediaInspector(),
+                encoder: AVFoundationHEVCEncoderService(),
+                storageChecker: FakeStorageChecker(),
+                pendingSaveStore: FakePendingSaveStore(),
+                saveGateAuthorizer: FakeAdGate()
+            )
+        )
+        let job = try await core.prepareSingleAssetHEVCJob(
+            sourceURL: sampleURL,
+            temporaryOutputURL: outputURL,
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+        )
+        XCTAssertEqual(job.asset.container, .threeGP)
+        XCTAssertEqual(job.asset.videoTrack?.codec, .h263)
+        XCTAssertEqual(job.routeSelection.route, TaptionCodecRoute(sourceCodec: .h263, outputCodec: .hevc))
+        XCTAssertTrue(job.routeSelection.isEncodableNow)
+        XCTAssertEqual(job.routeSelection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertTrue(job.asset.audioTracks.isEmpty)
+        XCTAssertNil(job.plan.audioPlan)
+        XCTAssertNil(job.plan.sourcePreservationRequirements?.audioSampleRate)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
+    }
+
     func testLocalRealXHEAACSampleEncodesHEVCWithNativeAACAudio() async throws {
         try requireLocalRealSampleProofs()
 

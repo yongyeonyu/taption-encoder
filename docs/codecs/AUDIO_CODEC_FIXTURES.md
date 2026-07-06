@@ -131,7 +131,7 @@ Transcode:
 | `trueHD` | TrueHD in MKV |
 | `flac` | FLAC in MKV |
 | `vorbis` | Vorbis in MKV |
-| `amr` | Generated fixture skipped locally; 2026-07-06 real-sample acquisition proved AMR-NB host FFmpeg decode into H.265 MP4/MOV, and 2026-07-07 focused simulator XCTest proved app-side AMR-NB decode/resample/AAC execution through bundled VLC for the H.263/3GP sample. AMR-WB+ stayed a negative sample because local FFmpeg and Apple audio tools could not decode it |
+| `amr` | Generated fixture skipped locally; 2026-07-06 real-sample acquisition proved AMR-NB host FFmpeg decode into H.265 MP4/MOV, and 2026-07-07 focused simulator XCTest proved app-side AMR-NB decode/resample/AAC execution through bundled VLC for the H.263/3GP sample. A separate 2026-07-07 ETSI TS 126 174-derived AMR-WB sample now host-decodes as `amr_wb`/`sawb`, but focused simulator XCTest documents that the current app path does not surface that AMR-WB audio track yet. AMR-WB+ stayed a negative sample because local FFmpeg and Apple audio tools could not decode it |
 | `ilbc` | iLBC in MOV via AudioToolbox encoder |
 | `g722` | G.722 in MKV |
 | `g723` | G.723.1 in MKV |
@@ -155,7 +155,7 @@ Transcode:
 - App-core tests now build FFmpeg-family command plans from every generated audio fixture to currently plannable compatible output audio codecs while preserving source sample rate, channel count, and bitrate options. `verifyAudioFixturePlannableCommandPlanCoverage()` covers that command-plan surface.
 - AAC/MP4 audio fixture execution jobs now rebuild a function-style `TaptionAudioCodecTranscodeRequest` and run through `SW_FFmpegAudioCodecTranscodeExecutor` with a fake runner when the broad software backend gates are satisfied.
 - Broader app-side audio execution still needs to cover compatible audio outputs for H.265 video containers after the FFmpeg-family backend is bundled and license-reviewed.
-- Find a decodable pure AMR-WB or AMR-WB+ sample through an App Store-safe path, or document the codec as unsupported until the selected broad backend proves it.
+- Promote the decodable AMR-WB sample only after the app can inspect and decode the host-visible `sawb` audio track into AAC output; AMR-WB+ still needs a decodable sample or a clear unsupported decision from the selected broad backend.
 - Add real-world multichannel, surround, high sample-rate, odd channel-layout, and silent/damaged audio samples.
 - Keep objective audio signal verification in app-scheme evidence tests and expand executor coverage beyond the current AAC/MP4 audio route test surface.
 - Decide when audio can be copied versus transcoded to AAC or another selected output audio codec.

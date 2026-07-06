@@ -1,0 +1,4 @@
+sample	status	local_path	size_bytes	sha256	source	note
+amr_wb_t02_1265_awb	created	/Users/u_mo_c/Documents/taption_encoder/Samples/Downloaded/internet_supported_missing_2026-07-07/sample_audio/amr_wb_t02_1265.awb	4959	050ddecc011ce2566b9012a7ff79c19dd153c4738b2ba3713cfb605a2fd26c98	ETSI TS 126 174 V19.0.0 T/T_1265/T02_1265.cod	First 150 20 ms frames packed from serial COD bits into #!AMR-WB storage format.
+amr_wb_h263_video_3gp	created	/Users/u_mo_c/Documents/taption_encoder/Samples/Downloaded/internet_supported_missing_2026-07-07/sample_videos/amr_wb_h263_video.3gp	148699	af9398db3c70b2bc32d8ade87f11fee79b6b2a7344b58cb96d7ea901791c0fc1	Generated H.263 test pattern plus AMR-WB audio copy	3GP sample for app-side video-source probing; host FFprobe sees H.263 video plus sawb AMR-WB audio.
+
