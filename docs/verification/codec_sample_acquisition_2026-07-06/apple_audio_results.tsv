@@ -1,0 +1,9 @@
+sample_id	tool	status	output_bytes	seconds	note
+amr_nb_sample2	afinfo	pass	0	0	Data format: 1 ch, 8000 Hz, samr (0x00000000) 0 bits/channel, 0 bytes/packet, 2400 frames/packet, 0 bytes/frame;estimated duration: 4.360000 sec;bit rate: 5038 bits per second;
+amr_nb_sample2	afconvert-aac	fail	0	0	Error: Couldn't set audio converter property ('!dat') 
+amr_wbplus_3gp	afinfo	fail	0	0	Fail: AudioFileOpenURL failed 
+amr_wbplus_3gp	afconvert-aac	fail	0	0	Error: Couldn't open input file ('wht?') 
+xhe_aac_chromium_mono	afinfo	pass	0	0	Data format: 1 ch, 29400 Hz, usac (0x00000000) 0 bits/channel, 0 bytes/packet, 1024 frames/packet, 0 bytes/frame;estimated duration: 0.801088 sec;bit rate: 104417 bits per second;
+xhe_aac_chromium_mono	afconvert-aac	fail	0	0	Error: ExtAudioFileRead failed ('bada') 
+xhe_aac_fraunhofer_sintel_24k	afinfo	pass	0	0	Data format: 2 ch, 48000 Hz, usac (0x00000000) 0 bits/channel, 0 bytes/packet, 2048 frames/packet, 0 bytes/frame;estimated duration: 888.000000 sec;bit rate: 24458 bits per second;
+xhe_aac_fraunhofer_sintel_24k	afconvert-aac	pass	7163395	4	AudioToolbox decode and AAC encode succeeded

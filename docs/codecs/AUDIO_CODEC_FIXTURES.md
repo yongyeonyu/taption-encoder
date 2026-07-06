@@ -117,7 +117,7 @@ Transcode:
 | Taption audio model | Fixture coverage |
 | --- | --- |
 | `aac` | AAC in MP4 |
-| `xheAAC` | Skipped locally; FFmpeg encoder unavailable and Apple `afconvert` USAC alternate failed with `fmt?` |
+| `xheAAC` | Generated fixture skipped locally; 2026-07-06 real-sample acquisition found Chromium and Fraunhofer xHE-AAC MP4 samples, with the Fraunhofer sample passing Apple `afconvert` decode-to-AAC proof while FFmpeg decode remains unavailable |
 | `pcm` | PCM S16LE, S24LE, F32LE in MOV |
 | `aLaw` | PCM A-law in AVI |
 | `muLaw` | PCM mu-law in AVI |
@@ -131,7 +131,7 @@ Transcode:
 | `trueHD` | TrueHD in MKV |
 | `flac` | FLAC in MKV |
 | `vorbis` | Vorbis in MKV |
-| `amr` | Skipped locally; AMR-NB and AMR-WB FFmpeg encoders unavailable and Apple `afconvert` AMR alternates failed with `fmt?` |
+| `amr` | Generated fixture skipped locally; 2026-07-06 real-sample acquisition proved AMR-NB host FFmpeg decode into H.265 MP4/MOV, while AMR-WB+ stayed a negative sample because local FFmpeg and Apple audio tools could not decode it |
 | `ilbc` | iLBC in MOV via AudioToolbox encoder |
 | `g722` | G.722 in MKV |
 | `g723` | G.723.1 in MKV |
@@ -155,8 +155,8 @@ Transcode:
 - App-core tests now build FFmpeg-family command plans from every generated audio fixture to currently plannable compatible output audio codecs while preserving source sample rate, channel count, and bitrate options. `verifyAudioFixturePlannableCommandPlanCoverage()` covers that command-plan surface.
 - AAC/MP4 audio fixture execution jobs now rebuild a function-style `TaptionAudioCodecTranscodeRequest` and run through `SW_FFmpegAudioCodecTranscodeExecutor` with a fake runner when the broad software backend gates are satisfied.
 - Broader app-side audio execution still needs to cover compatible audio outputs for H.265 video containers after the FFmpeg-family backend is bundled and license-reviewed.
-- Collect or generate xHE-AAC samples through an App Store-safe path.
-- Collect or generate AMR-NB and AMR-WB samples through an App Store-safe path.
+- Promote the 2026-07-06 xHE-AAC and AMR-NB acquired samples into app-side execution proof without treating host-side evidence as simulator or device proof.
+- Find a decodable pure AMR-WB or AMR-WB+ sample through an App Store-safe path, or document the codec as unsupported until the selected broad backend proves it.
 - Add real-world multichannel, surround, high sample-rate, odd channel-layout, and silent/damaged audio samples.
 - Keep objective audio signal verification in app-scheme evidence tests and expand executor coverage beyond the current AAC/MP4 audio route test surface.
 - Decide when audio can be copied versus transcoded to AAC or another selected output audio codec.

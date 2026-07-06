@@ -1,0 +1,7 @@
+sample_id	status	bytes	sha256	path	note
+theora_roundup_746	pass	324256	356c656ab58c5844a1b3370a8c17bf56c2b7372ff385f8c6bb671cfe5cedb392	/Users/u_mo_c/Documents/taption_encoder/build/codec-sample-acquisition-2026-07-06/inputs/theora_roundup_746.ogg	downloaded
+amr_nb_sample2	pass	2840	04988cb21a65d42857747e3d3c770da57d3319e9da34e3e2d57db015014ad4e9	/Users/u_mo_c/Documents/taption_encoder/build/codec-sample-acquisition-2026-07-06/inputs/amr_nb_sample2.amr	downloaded
+amr_wbplus_3gp	pass	6432	033ba5fadf9014c839c51db3baae7d16d2eeca11338e3f6ef03efb618e037e02	/Users/u_mo_c/Documents/taption_encoder/build/codec-sample-acquisition-2026-07-06/inputs/amr_wbplus_3gp.3gp	downloaded
+xhe_aac_chromium_mono	pass	11592	3e4cc2e71ddb6b60950e236c820383a0be6773951ce6c2b88e4e715cd61aa449	/Users/u_mo_c/Documents/taption_encoder/build/codec-sample-acquisition-2026-07-06/inputs/xhe_aac_chromium_mono.mp4	downloaded and base64-decoded from Chromium source
+vc1_advanced_profile_2	pass	700252	2484afca1a8e63237e07a9a4960b704dd1199eb808eb10ffa5f44d673d69ff40	/Users/u_mo_c/Documents/taption_encoder/build/codec-sample-acquisition-2026-07-06/inputs/vc1_advanced_profile_2.vc1	downloaded
+xhe_aac_fraunhofer_sintel_24k	pass	2808426	a2542a0cd1520b9c5a1e0dbf83f81b7dadbc9228361b3fd84cb9137f3576485b	/Users/u_mo_c/Documents/taption_encoder/build/codec-sample-acquisition-2026-07-06/inputs/xhe_aac_fraunhofer_sintel_24k.mp4	downloaded

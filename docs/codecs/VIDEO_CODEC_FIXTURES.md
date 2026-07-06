@@ -102,8 +102,8 @@ The required smoke manifest currently covers 90 generated video fixtures before 
 - RoQ game-cinematic video
 - Raw AV1 OBU, H.263, rawvideo `.y4m`, MPEG-1 `.m1v`, and MPEG-2 `.m2v`
 - DV
-- Theora when the local FFmpeg build supports it
-- VC-1 raw elementary streams when a real-world sample or alternate generator is available; the local smoke generation evidence must keep the skipped `vc1_raw_elementary` row and explain the missing encoder path until that happens
+- Theora when the local FFmpeg build supports generation; the 2026-07-06 real-sample acquisition pass separately proved a downloaded Theora/Vorbis sample can be transcoded to H.265 MP4/MOV on the host
+- VC-1 raw elementary streams; the 2026-07-06 real-sample acquisition pass proved a downloaded VC-1 Advanced Profile elementary stream can be transcoded to H.265 MP4/MOV on the host, while generated smoke evidence should keep the skipped `vc1_raw_elementary` row until the sample is promoted into a durable fixture policy
 
 ## Tracked Pending Video Fixture Targets
 
@@ -111,7 +111,8 @@ These codecs are part of the universal source/output contract but do not yet hav
 
 - Planned generator work: H.265 with Alpha, JPEG frame-sequence import, JPEG XL frame-sequence import, DVCPro, and DVCPro HD
 - Conditional local FFmpeg work: Theora
-- Real-world or alternate-generator samples required: Dolby Vision HEVC, ProRes RAW, Sorenson Video 3, VC-1, DJI `.lrf` camera proxy samples
+- Real-world or alternate-generator samples required: Dolby Vision HEVC, ProRes RAW, Sorenson Video 3, and DJI `.lrf` camera proxy samples
+- Host-side sample proof exists but still needs app-side/bundled-backend proof: Theora and VC-1 raw elementary stream
 
 ## Why Generated Fixtures
 

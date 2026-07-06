@@ -1,0 +1,9 @@
+codec_group	sample_id	url	source	download_policy	status	note
+Theora	theora_roundup_746	https://samples.ffmpeg.org/ffmpeg-bugs/roundup/issue746/746-theora-vorbis-sample.ogg	FFmpeg samples archive	download <=5MB	selected	small Theora/Vorbis Ogg sample
+AMR-NB	amr_nb_sample2	https://samples.ffmpeg.org/A-codecs/amr/sample2.amr	FFmpeg samples archive	download <=1MB	selected	small AMR-NB sample
+AMR-WB+	amr_wbplus_3gp	https://samples.ffmpeg.org/A-codecs/amr/amr-wb%2B_encoded/amr-wb%2B_encoded.3gp	FFmpeg samples archive	download <=1MB	selected	small AMR-WB+ 3GP sample
+xHE-AAC	xhe_aac_chromium_mono	https://chromium.googlesource.com/chromium/src/media/+/refs/heads/main/test/data/noise-xhe-aac-mono.mp4?format=TEXT	Chromium media test data	download <=200KB and base64 decode	selected	small xHE-AAC MP4 test vector
+VC-1 raw	vc1_advanced_profile_2	https://samples.ffmpeg.org/ffmpeg-bugs/trac/ticket5274/advanced_profile_2.vc1	FFmpeg samples archive	download <=5MB	selected	small VC-1 elementary stream sample
+ProRes RAW	prores_raw_daejeon_mediafire	https://daejeonchronicles.com/2020/03/14/canon-c500-mkii-prores-raw-samples/	Daejeon Chronicles / MediaFire	metadata only	blocked	public candidate located, but smallest observed file is 622.65MB; skipped on 1.8GiB-free disk until storage is cleared and license/use is approved
+ProRes RAW	prores_raw_filmplusgear	https://filmplusgear.com/prores-raw-samples-download/	FilmplusGear	metadata only	blocked	public candidates located, but observed files are about 1.4GB to 2GB; skipped on 1.8GiB-free disk until storage is cleared and license/use is approved
+xHE-AAC	xhe_aac_fraunhofer_sintel_24k	https://www2.iis.fraunhofer.de/AAC/xHE-AAC_demo_content_for_adaptive_bitrate/Sintel_24kbps_rap5s.mp4	Fraunhofer IIS xHE-AAC demo content	download <=5MB	selected	small flat xHE-AAC example from Sintel CC BY 3.0 source

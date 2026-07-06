@@ -1,0 +1,7 @@
+sample_id	status	format	streams	duration	size_bytes	note
+theora_roundup_746	pass	ogg	data:,video:theora:304x304,audio:vorbis:22050Hz	12.666667	324256	probed
+amr_nb_sample2	pass	amr	audio:amr_nb:8000Hz	4.360000	2840	probed
+amr_wbplus_3gp	pass	mov,mp4,m4a,3gp,3g2,mj2	audio::6464Hz	2.400000	6432	probed
+xhe_aac_chromium_mono	fail				11592	[aac @ 0x98ec44380] invalid sampling rate index 15 Last message repeated 2 times [aac @ 0x98ec44700] invalid sampling rate index 15 
+vc1_advanced_profile_2	pass	vc1	video:vc1/Advanced:720x480		700252	probed
+xhe_aac_fraunhofer_sintel_24k	pass	mov,mp4,m4a,3gp,3g2,mj2	audio:aac/xHE-AAC:48000Hz	888.000000	2808426	probed
