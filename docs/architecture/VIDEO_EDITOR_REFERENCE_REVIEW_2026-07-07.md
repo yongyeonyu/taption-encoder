@@ -14,7 +14,7 @@ Checked through the GitHub API on 2026-07-07. Repositories were not cloned or in
 
 | Priority | Candidate | Stars | Forks | Primary language | License signal | Latest pushed/updated signal | Read |
 | --- | --- | ---: | ---: | --- | --- | --- | --- |
-| 1 | OpenCut | 61641 | 6633 | TypeScript | MIT | pushed 2026-06-21, updated 2026-07-06 | First-pass architecture reference for shared core/API/plugin/headless direction. |
+| 1 | OpenCut | 61643 | 6633 | TypeScript | MIT | pushed 2026-06-21, updated 2026-07-06 | First-pass architecture reference for shared core/API/plugin/headless direction. |
 | 2 | pyJianYingDraft | 3856 | 615 | Python | Apache-2.0 | pushed 2026-07-05, updated 2026-07-06 | Mature draft-generation/project-model reference. |
 | 3 | capcut-mate | 1307 | 223 | Python | Apache-2.0 | pushed 2026-07-05, updated 2026-07-06 | API/workflow automation shape reference. |
 | 4 | pyCapCut | 580 | 81 | Python | No root license in API response | pushed 2025-09-12, updated 2026-07-06 | CapCut-specific draft generation reference, but license/maturity need caution. |
