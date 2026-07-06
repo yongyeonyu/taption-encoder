@@ -398,8 +398,22 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return false
         }
 
+        if inspectedAsset.audioTracks.isEmpty,
+           shouldFallbackForMissingAudio(container: container) {
+            return true
+        }
+
         return inspectedAsset.videoTrack == nil
             || inspectedAsset.videoTrack?.codec == .unknown
+    }
+
+    private func shouldFallbackForMissingAudio(container: TaptionVideoContainer) -> Bool {
+        switch container {
+        case .threeGP, .threeGPP2:
+            return true
+        default:
+            return false
+        }
     }
 }
 

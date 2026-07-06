@@ -5417,7 +5417,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(outputAsset.audioTracks.isEmpty)
     }
 
-    func testLocalRealAMRWBH263SampleDocumentsCurrentAppAudioInspectionBlock() async throws {
+    func testLocalRealAMRWBH263SampleEncodesHEVCWithAACAudio() async throws {
         try requireLocalRealSampleProofs()
 
         let samplePath = ProcessInfo.processInfo.environment["TAPTION_AMR_WB_SAMPLE_PATH"]
@@ -5445,15 +5445,39 @@ final class CodecRoutePlannerTests: XCTestCase {
             temporaryOutputURL: outputURL,
             savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
         )
+        let sourceAudioCodec = try XCTUnwrap(job.asset.audioTracks.first?.codec)
+
         XCTAssertEqual(job.asset.container, .threeGP)
         XCTAssertEqual(job.asset.videoTrack?.codec, .h263)
+        XCTAssertEqual(sourceAudioCodec, .amr)
+        XCTAssertEqual(job.asset.audioTracks.first?.sampleRate ?? 0, 16_000, accuracy: 1)
+        XCTAssertEqual(job.asset.audioTracks.first?.channelCount, 1)
         XCTAssertEqual(job.routeSelection.route, TaptionCodecRoute(sourceCodec: .h263, outputCodec: .hevc))
         XCTAssertTrue(job.routeSelection.isEncodableNow)
         XCTAssertEqual(job.routeSelection.decodeBackend, .softwareVLCDecoder)
-        XCTAssertTrue(job.asset.audioTracks.isEmpty)
-        XCTAssertNil(job.plan.audioPlan)
-        XCTAssertNil(job.plan.sourcePreservationRequirements?.audioSampleRate)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: outputURL.path))
+        XCTAssertEqual(job.plan.audioPlan?.route, TaptionAudioCodecRoute(sourceCodec: .amr, outputCodec: .aac))
+        XCTAssertEqual(job.plan.audioPlan?.routeSelection.decodeBackend, .softwareVLCDecoder)
+        XCTAssertEqual(job.plan.audioPlan?.readiness.readiness, .softwareBackendExecutable)
+        XCTAssertEqual(job.plan.audioPlan?.readiness.commandBackend, .softwareVLCDecoder)
+        XCTAssertTrue(job.plan.audioPlan?.isRunnableInCurrentBuild ?? false)
+        XCTAssertNil(job.plan.audioPlan?.commandPlan)
+        XCTAssertEqual(job.plan.audioPlan?.options.sampleRate, 48_000)
+        XCTAssertEqual(job.plan.audioPlan?.options.channelCount, 1)
+        XCTAssertEqual(job.plan.sourcePreservationRequirements?.audioSampleRate, 48_000)
+        XCTAssertEqual(job.plan.sourcePreservationRequirements?.audioChannelCount, 1)
+
+        let result = try await core.encodePreparedJob(job, progress: { _ in })
+        let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: result.temporaryOutputURL)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: result.temporaryOutputURL.path))
+        XCTAssertEqual(result.usedBackend, .softwareVLCDecoder)
+        XCTAssertEqual(result.usedMode, .software)
+        XCTAssertEqual(outputAsset.container, .mp4)
+        XCTAssertEqual(outputAsset.videoTrack?.codec, .hevc)
+        XCTAssertEqual(outputAsset.audioTracks.first?.codec, .aac)
+        XCTAssertEqual(outputAsset.audioTracks.first?.sampleRate ?? 0, 48_000, accuracy: 1)
+        XCTAssertEqual(outputAsset.audioTracks.first?.channelCount, 1)
+        XCTAssertFalse(outputAsset.audioTracks.isEmpty)
     }
 
     func testLocalRealXHEAACSampleEncodesHEVCWithNativeAACAudio() async throws {
