@@ -45,6 +45,7 @@ Next implementation pass should isolate the media conversion core before importi
 ## Planning
 
 - App architecture, product plan, UI design, and roadmap: [`docs/architecture/APP_ARCHITECTURE.md`](../architecture/APP_ARCHITECTURE.md)
+- External video-editor architecture references: [`docs/architecture/VIDEO_EDITOR_REFERENCE_REVIEW_2026-07-07.md`](../architecture/VIDEO_EDITOR_REFERENCE_REVIEW_2026-07-07.md)
 - Detailed execution plan from launch to completed product: [`docs/planning/DEVELOPMENT_PLAN.md`](../planning/DEVELOPMENT_PLAN.md)
 - Phase-by-phase implementation guide for app development: [`docs/planning/DETAILED_DEVELOPMENT_PLAN.md`](../planning/DETAILED_DEVELOPMENT_PLAN.md)
 - Codec/container/audio support research: [`docs/codecs/CODEC_SUPPORT_RESEARCH.md`](../codecs/CODEC_SUPPORT_RESEARCH.md)

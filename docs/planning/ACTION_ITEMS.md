@@ -27,6 +27,7 @@ Status date: 2026-07-07
 - Latest AMR-NB/H.263 sample-backed runtime pass on 2026-07-07: bundled VLC audio decode now feeds the AAC writer after resampling AMR-NB to 48 kHz, and focused opt-in simulator XCTest encoded `amr_nb_h263_video.3gp` to H.265 MP4 with 1 AAC mono output track. Proof is recorded in `docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-07.md`. This is simulator XCTest runtime evidence only, not host FFmpeg proof, real-device proof, TestFlight/App Store Connect proof, App Review proof, or public release proof.
 - Latest Y41P route correction on 2026-07-07: after libVLC reported Y41P unsupported, Y41P was removed from current SwiftVLC executable/launch-available-now status and left as a planned FFmpeg-family decode route. Focused opt-in simulator XCTest confirmed sample inspection and planned-route status. Proof is recorded in `docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-07.md`. This is simulator XCTest route-catalog evidence only, not app-side sample execution, host FFmpeg proof, real-device proof, TestFlight/App Store Connect proof, App Review proof, or public release proof.
 - Latest xHE-AAC sample-backed runtime pass on 2026-07-07: Apple-native inspection now recognizes USAC/xHE-AAC sample descriptions, xHE-AAC-to-AAC output expectations follow the native 44.1 kHz AAC writer rate, and focused opt-in simulator XCTest encoded `xhe_aac_hevc_video.mp4` to H.265 MP4 with 1 AAC stereo output track. Proof is recorded in `docs/verification/SAMPLE_RUNTIME_STATUS_2026-07-07.md`. This is simulator XCTest runtime evidence only, not host FFmpeg proof, real-device proof, TestFlight/App Store Connect proof, App Review proof, or public release proof.
+- Latest external editor reference review on 2026-07-07: OpenCut, capcut-cli, pyCapCut, pyJianYingDraft, capcut-mate, capsrt, capcut-export, SmartCut/capcut-ai-editor, and the CapCut/JianYing draft schema cheat sheet were reviewed as architecture references for future merge/lightweight-editing work. Proof is recorded in `docs/architecture/VIDEO_EDITOR_REFERENCE_REVIEW_2026-07-07.md`. This is architecture/reference evidence only, not code import, dependency approval, codec execution proof, simulator proof, real-device proof, TestFlight/App Store Connect proof, App Review proof, or public release proof.
 - Latest handoff anchor: commit `72d5df0` (`Add encoding optimization profiles`) contains the Battery Options profile implementation, Max Performance/Battery Saver encode-policy changes, benchmark script, benchmark proof, and release-preparation docs. Keep this separate from any later TestFlight/App Store upload claim.
 - Release `01.01.00` is the active release train and maps to Apple marketing version `1.1.0`, build `30`.
 - Release `01.00.02` remains the previous uploaded release train; `01.01.00` build `30` App Store Connect upload has succeeded and the uploaded package is processing. The App Store Connect `1.1.0` version page exists in `PREPARE_FOR_SUBMISSION` with `MANUAL` release type and localized English/Korean What's New text. App Review submission, TestFlight availability, processing completion, and public availability remain owner-decided follow-up states and are not part of release preparation unless explicitly requested.
@@ -75,7 +76,7 @@ Status date: 2026-07-07
 ## P1 Merge And Lightweight Editing
 
 - [ ] Add multi-file selection flow.
-- [ ] Add project save/open flow.
+- [ ] Add project save/open flow using first-party typed project operations, validation, and backup-before-mutation rules from the external editor reference review.
 - [ ] Add future `.fcpxmld` bundle plan for thumbnails, proxies, and richer metadata.
 - [ ] Add managed `.fcpxmld` project mode plan that can copy original media when the user chooses it.
 - [ ] Add merge compatibility inspection.
@@ -83,7 +84,7 @@ Status date: 2026-07-07
 - [ ] Add merge normalization menu for output canvas/resolution, frame rate, color handling, audio layout, and orientation handling.
 - [ ] Add close-enough auto-selection rules for similar frame rates, similar color metadata, and compatible audio layouts.
 - [ ] Add `VideoSegment` and `VideoSegmentTimeline` models that replace Taption subtitle segments with video segments.
-- [ ] Add Taption-inspired touch widget interaction model for video segment editing.
+- [ ] Add Taption-inspired touch widget interaction model for video segment editing, keeping OpenCut-style shared core boundaries in mind without importing external editor code.
 - [ ] Add trim start/end editing.
 - [ ] Add cut-range editing.
 - [ ] Add slice/split operation that creates two video segments from one source asset.
