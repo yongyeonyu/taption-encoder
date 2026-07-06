@@ -15,6 +15,12 @@
 - Executed audio route: `Opus to PCM`
 - Output: H.265 / HEVC video in MOV with Apple Lossless / ALAC audio
 - Executed audio route: `Opus to Apple Lossless`
+- Source sample: bundled `TaptionEncoder/TestVideos/Theora Vorbis.ogv`
+- Source media: Theora video plus Vorbis audio
+- Output: H.265 / HEVC video in MOV with Linear PCM audio
+- Executed audio route: `Vorbis to PCM`
+- Output: H.265 / HEVC video in MOV with Apple Lossless / ALAC audio
+- Executed audio route: `Vorbis to Apple Lossless`
 - Source sample: bundled `TaptionEncoder/TestVideos/AMR-WB H.263.3gp`
 - Source media: H.263 video plus AMR-WB (`sawb`) audio, surfaced as the app AMR-family route
 - Output: H.265 / HEVC video in MOV with Linear PCM audio
@@ -45,7 +51,7 @@
 - Executed audio route: `Dolby Digital Plus to PCM`
 - Output: H.265 / HEVC video in MOV with Apple Lossless / ALAC audio
 - Executed audio route: `Dolby Digital Plus to Apple Lossless`
-- Execution backend: bundled software VLC video decode feeding the Apple-native output writer. Opus, AMR-family, AC3, and EAC3 audio use bundled software VLC audio decode for the proved software-video path; MP3 and AAC use the current Apple-native audio transcode route while the video path still runs through the software writer.
+- Execution backend: bundled software VLC video decode feeding the Apple-native output writer. Opus, Vorbis, AMR-family, AC3, and EAC3 audio use bundled software VLC audio decode for the proved software-video path; MP3 and AAC use the current Apple-native audio transcode route while the video path still runs through the software writer.
 
 ## Code Changes Covered
 
@@ -60,6 +66,7 @@
 - `TaptionAudioCodecOutputCatalog` now marks `PCM / MOV` and `ALAC / MOV` as implemented.
 - `TaptionSourcePreservingAudioOptionsResolver` now normalizes low-rate AMR-family sources to 48 kHz for AAC, PCM, and ALAC writer outputs so source-preserving verification matches the Apple writer path.
 - `CodecRoutePlannerTests` now verifies AMR-to-PCM and AMR-to-ALAC current-build readiness, plus bundled `AMR-WB H.263.3gp` execution to H.265 MOV with PCM and ALAC audio.
+- `CodecRoutePlannerTests` now verifies bundled `Theora Vorbis.ogv` execution to H.265 MOV with Vorbis-to-PCM and Vorbis-to-ALAC output through the current bundled VLC audio decode path.
 - `CodecRoutePlannerTests` also verifies bundled `Flash Video.flv` execution to H.265 MOV with MP3-to-PCM and MP3-to-ALAC output through the Apple-native audio transcode route while the video route stays on the bundled software VLC decoder.
 - `CodecRoutePlannerTests` now also verifies bundled `QuickTime Video.mov` execution to H.265 MOV with AAC-to-PCM and AAC-to-ALAC output through the Apple-native audio transcode route while the video route stays on the bundled software VLC decoder.
 - `SW_AudioCodecSupportCatalog` and `AudioCodecRoutePlanner` now allow AC3/EAC3-to-PCM and AC3/EAC3-to-ALAC MOV output through the current bundled VLC audio decode path when the software video writer path is selected.
@@ -187,6 +194,68 @@ Test assertions also verified:
 
 This is focused simulator regression evidence only. It is not real-device proof, TestFlight/App Store Connect proof, App Review proof, or public-release proof.
 
+## Simulator Regression Proof - Theora Vorbis PCM/ALAC
+
+Command:
+
+```sh
+rm -rf /tmp/taption_encoder_vorbis_nonaac_sim_dd /tmp/taption_encoder_vorbis_nonaac_sim_result.xcresult && xcodebuild test \
+  -project TaptionEncoder.xcodeproj \
+  -scheme TaptionEncoder \
+  -destination 'platform=iOS Simulator,id=A5C810F9-20A8-46B7-B4BF-8AF3399D00C1' \
+  -derivedDataPath /tmp/taption_encoder_vorbis_nonaac_sim_dd \
+  -resultBundlePath /tmp/taption_encoder_vorbis_nonaac_sim_result.xcresult \
+  -parallel-testing-enabled NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledVLCAudioDecodeFeedsAppleWriterForRepresentativeCurrentBuildCodecs \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledTheoraVorbisSampleEncodesHEVCMOVWithPCMAudio \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledTheoraVorbisSampleEncodesHEVCMOVWithALACAudio
+```
+
+Result:
+
+- Passed: 3.
+- Failed: 0.
+- Skipped: 0.
+- Test duration: 16.515 seconds.
+- Simulator ID: `A5C810F9-20A8-46B7-B4BF-8AF3399D00C1`.
+- Result bundle: `/tmp/taption_encoder_vorbis_nonaac_sim_result.xcresult`.
+
+Key runtime evidence from the passing test log:
+
+- `audioRoute=Vorbis to PCM`
+- `audioRoute=Vorbis to Apple Lossless`
+- `audioPath=SW`
+- `backend=softwareVLCDecoder`
+- `output=H.265 / HEVC / MOV`
+- `route=Theora to H.265 / HEVC`
+- `Software Theora transcode pipeline completed`
+- `frames=150`
+- `audioSampleBuffers=188`
+- `audioSamples=192512`
+- Source-preserving output verification passed with:
+  - `actualAudioTracks=1`
+  - `actualAudioSampleRate=48000`
+  - `actualAudioChannels=2`
+  - `actualDuration=5.000`
+  - `actualFrameRate=30000/1000`
+  - `actualResolution=320x240`
+
+Test assertions also verified:
+
+- source container: OGG/OGV
+- source video codec: Theora
+- source audio codec: Vorbis
+- source audio sample rate: 48 kHz
+- source audio channel count: 2
+- output container: MOV
+- output video codec: H.265 / HEVC
+- output audio codecs: PCM and ALAC
+- output audio sample rate: 48 kHz
+- output audio channel count: 2
+
+This is focused simulator regression evidence only. It is not real-device proof, TestFlight/App Store Connect proof, App Review proof, or public-release proof.
+
 ## Device XCTest Proof - H.264 AC3 PCM/ALAC
 
 Command:
@@ -261,6 +330,45 @@ Runtime log evidence:
 - `Software H.264 transcode pipeline completed` reported `frames=120` and `audioSampleBuffers=144` for both routes.
 - `Performance trace finished` reported `audioSamples=221184`, `frames=120`, and `phase=completed`.
 - `Source-preserving output verification passed` reported `actualAudioTracks=1`, `actualAudioSampleRate=44100`, `actualAudioChannels=2`, `actualDuration=5.016`, `actualFrameRate=24000/1000`, and `actualResolution=320x180`.
+- `Codec transcode completed` reported `backend=softwareVLCDecoder` and `mode=software`.
+
+This is focused real-device Debug XCTest route-execution evidence. It is not simulator proof, host FFmpeg proof, TestFlight/App Store Connect proof, App Review proof, or public-release proof.
+
+## Device XCTest Proof - Theora Vorbis PCM/ALAC
+
+Command:
+
+```sh
+rm -rf /tmp/taption_encoder_vorbis_ipad_dd /tmp/taption_encoder_vorbis_ipad_result.xcresult && xcodebuild test \
+  -project TaptionEncoder.xcodeproj \
+  -scheme TaptionEncoder \
+  -destination 'platform=iOS,id=00008112-000964980E45401E' \
+  -derivedDataPath /tmp/taption_encoder_vorbis_ipad_dd \
+  -resultBundlePath /tmp/taption_encoder_vorbis_ipad_result.xcresult \
+  -parallel-testing-enabled NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledTheoraVorbisSampleEncodesHEVCMOVWithPCMAudio \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledTheoraVorbisSampleEncodesHEVCMOVWithALACAudio
+```
+
+Result:
+
+- Result: passed.
+- Selected tests: 2.
+- Failures: 0.
+- Test duration: 16.464 seconds.
+- Device: iPad Pro 12.9-inch 6th generation.
+- Device ID: `00008112-000964980E45401E`.
+- OS: iOS/iPadOS 26.5.
+- Result bundle: `/tmp/taption_encoder_vorbis_ipad_result.xcresult`.
+
+Runtime log evidence:
+
+- `Codec transcode started` reported `audioRoute=Vorbis to PCM`, `audioPath=SW`, `output=H.265 / HEVC / MOV`, `route=Theora to H.265 / HEVC`, `preserveResolution=320x240`, and `preserveFrameRate=30/1`.
+- `Codec transcode started` also reported `audioRoute=Vorbis to Apple Lossless` for the ALAC/MOV route.
+- `Software Theora transcode pipeline completed` reported `frames=150` and `audioSampleBuffers=188` for both routes.
+- `Performance trace finished` reported `audioSamples=192512`, `frames=150`, and `phase=completed`.
+- `Source-preserving output verification passed` reported `actualAudioTracks=1`, `actualAudioSampleRate=48000`, `actualAudioChannels=2`, `actualDuration=5.000`, `actualFrameRate=30000/1000`, and `actualResolution=320x240`.
 - `Codec transcode completed` reported `backend=softwareVLCDecoder` and `mode=software`.
 
 This is focused real-device Debug XCTest route-execution evidence. It is not simulator proof, host FFmpeg proof, TestFlight/App Store Connect proof, App Review proof, or public-release proof.
@@ -689,6 +797,7 @@ Result:
 ## Remaining Audio Work
 
 - AMR-WB now has focused simulator and bundled real-device iPad Debug XCTest execution proof for AAC/MP4, PCM/MOV, and ALAC/MOV through the H.263/AMR-WB 3GP sample.
+- Vorbis now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through bundled `Theora Vorbis.ogv`.
 - MP3 now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through the Flash Video/MP3 sample. This is an Apple-native audio route, separate from the bundled software VLC audio-decode proof for Opus and AMR-family samples.
 - AAC now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through the QuickTime Video/AAC sample.
 - AC3 now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through bundled `H.264 AC3.mp4` on the requested software path.

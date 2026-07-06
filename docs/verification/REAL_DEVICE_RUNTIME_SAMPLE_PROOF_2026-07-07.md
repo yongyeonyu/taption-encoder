@@ -15,6 +15,7 @@ This is real-device Debug XCTest runtime evidence for focused bundled samples. I
 - `CodecRoutePlannerTests.bundledTestVideosURL()` now resolves bundled sample videos from the host app bundle before falling back to the test bundle or source-tree path. This keeps physical-device XCTest from passing Mac source paths to the app runtime.
 - Added `testRealDeviceBundledTheoraOpusSampleEncodesHEVCWithAACAudio` as a focused physical-device test. The test skips on simulator builds and exercises only the bundled `Theora.ogv` sample.
 - Added `testRealDeviceBundledAMRWBH263SampleEncodesHEVCWithAACAudio` as a focused physical-device test. The test skips on simulator builds and exercises only the bundled `AMR-WB H.263.3gp` sample.
+- Added follow-up bundled Theora/Vorbis non-AAC output tests for PCM/MOV and ALAC/MOV. Those tests are not physical-device-only, but the real-device command below executed them on the paired iPad and keeps their proof separate from simulator regression evidence.
 - Added follow-up bundled AMR-WB non-AAC output tests for PCM/MOV and ALAC/MOV. Those tests are not physical-device-only, but the real-device command below executed them on the paired iPad and keeps their proof separate from simulator regression evidence.
 - Added follow-up bundled Flash Video/MP3 non-AAC output tests for PCM/MOV and ALAC/MOV. These tests use the Apple-native MP3 audio transcode route while the video path remains the bundled software VLC decoder route.
 - Added follow-up bundled QuickTime Video/AAC non-AAC output tests for PCM/MOV and ALAC/MOV. These tests use the Apple-native AAC audio transcode route while the video path remains the bundled software VLC decoder route.
@@ -26,6 +27,7 @@ This is real-device Debug XCTest runtime evidence for focused bundled samples. I
 | Sample | Source shape | Runtime expectation |
 | --- | --- | --- |
 | `Theora.ogv` | Theora video plus Opus audio, 320x240, 30 fps, 48 kHz stereo audio | Software VLC decode to H.265 MP4 with AAC stereo audio at 48 kHz. |
+| `Theora Vorbis.ogv` | Theora video plus Vorbis audio, 320x240, 30 fps, 48 kHz stereo audio, 5.000s bundled duration | Software VLC video/audio decode to H.265 MOV with Vorbis-to-PCM stereo audio at 48 kHz and H.265 MOV with Vorbis-to-ALAC stereo audio at 48 kHz. |
 | `AMR-WB H.263.3gp` | H.263 video plus AMR-WB (`sawb`) audio, 176x144, 15 fps, 16 kHz mono audio, 5.000s bundled duration | Software VLC decode to H.265 MP4 with AAC mono audio at 48 kHz. |
 | `AMR-WB H.263.3gp` | H.263 video plus AMR-WB (`sawb`) audio, 176x144, 15 fps, 16 kHz mono audio, 5.000s bundled duration | Software VLC decode to H.265 MOV with PCM mono audio at 48 kHz and H.265 MOV with ALAC mono audio at 48 kHz. |
 | `Flash Video.flv` | Flash Video plus MP3 audio, 160x120, 10 fps, 44.1 kHz stereo audio, 5.000s bundled duration | Software VLC video decode to H.265 MOV with Apple-native MP3-to-PCM stereo audio at 44.1 kHz and H.265 MOV with Apple-native MP3-to-ALAC stereo audio at 44.1 kHz. |
@@ -60,6 +62,38 @@ Runtime log evidence:
 - `Codec transcode started` reported `audioPath=SW`, `audioRoute=Opus to AAC`, `output=H.265 / HEVC / MP4`, `route=Theora to H.265 / HEVC`, `preserveResolution=320x240`, and `preserveFrameRate=30/1`.
 - `Software Theora transcode pipeline completed` reported `frames=150` and `audioSampleBuffers=201`.
 - `Performance trace finished` reported `audioSamples=192312`, `frames=150`, `totalMs=5631.5`, and `phase=completed`.
+- `Source-preserving output verification passed` reported `actualAudioTracks=1`, `actualAudioSampleRate=48000`, `actualAudioChannels=2`, `actualDuration=5.000`, `actualFrameRate=30000/1000`, and `actualResolution=320x240`.
+- `Codec transcode completed` reported `backend=softwareVLCDecoder` and `mode=software`.
+
+## Theora Vorbis Non-AAC MOV Command
+
+```sh
+rm -rf /tmp/taption_encoder_vorbis_ipad_dd /tmp/taption_encoder_vorbis_ipad_result.xcresult && xcodebuild test \
+  -project TaptionEncoder.xcodeproj \
+  -scheme TaptionEncoder \
+  -destination 'platform=iOS,id=00008112-000964980E45401E' \
+  -derivedDataPath /tmp/taption_encoder_vorbis_ipad_dd \
+  -resultBundlePath /tmp/taption_encoder_vorbis_ipad_result.xcresult \
+  -parallel-testing-enabled NO \
+  COMPILER_INDEX_STORE_ENABLE=NO \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledTheoraVorbisSampleEncodesHEVCMOVWithPCMAudio \
+  -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testBundledTheoraVorbisSampleEncodesHEVCMOVWithALACAudio
+```
+
+## Theora Vorbis Non-AAC MOV Result
+
+- Result: passed.
+- Selected tests: 2.
+- Failures: 0.
+- Test duration: 16.464 seconds.
+- Result bundle: `/tmp/taption_encoder_vorbis_ipad_result.xcresult`.
+
+Runtime log evidence:
+
+- `Codec transcode started` reported `audioRoute=Vorbis to PCM`, `audioPath=SW`, `output=H.265 / HEVC / MOV`, `route=Theora to H.265 / HEVC`, `preserveResolution=320x240`, and `preserveFrameRate=30/1`.
+- `Codec transcode started` also reported `audioRoute=Vorbis to Apple Lossless` for the ALAC/MOV route.
+- `Software Theora transcode pipeline completed` reported `frames=150` and `audioSampleBuffers=188` for both routes.
+- `Performance trace finished` reported `audioSamples=192512`, `frames=150`, and `phase=completed`.
 - `Source-preserving output verification passed` reported `actualAudioTracks=1`, `actualAudioSampleRate=48000`, `actualAudioChannels=2`, `actualDuration=5.000`, `actualFrameRate=30000/1000`, and `actualResolution=320x240`.
 - `Codec transcode completed` reported `backend=softwareVLCDecoder` and `mode=software`.
 

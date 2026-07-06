@@ -116,6 +116,11 @@ Official FFmpeg samples archive:
   https://samples.ffmpeg.org/V-codecs/RPZA/1701-D.mov
 - Theora.ogv
   https://samples.ffmpeg.org/V-codecs/Theora/theora_testsuite/320x240.ogv
+- Theora Vorbis.ogv
+  Audio-route proof sample derived from the same FFmpeg Theora 320x240
+  sample; video stream copied and source audio re-encoded to 48 kHz Vorbis
+  for bundled Vorbis-to-PCM/ALAC software-audio execution proof.
+  https://samples.ffmpeg.org/V-codecs/Theora/theora_testsuite/320x240.ogv
 - Windows Media Video.wmv
   https://samples.ffmpeg.org/archive/all/asf+wmv2+++wmv_green_squares_wmp_ffout.wmv
 - Microsoft Video 1.avi
