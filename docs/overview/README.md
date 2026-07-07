@@ -1,8 +1,8 @@
 # Taption Encoder
 
-Taption Encoder is a free iOS video encoder app intended to make phone-based conversion simple. The current release train is `01.01.00`, mapped to Apple marketing version `1.1.0` and build `30`. The product direction remains practical all-input-to-H.265 conversion through hardware, software, or mixed codec paths, old-device compatibility where practical, background encoding where the OS allows it, and multi-video assembly into one H.265 output with lightweight editing.
+Taption Encoder is a free iOS video encoder app intended to make phone-based conversion simple. The current release train is `01.01.01`, mapped to Apple marketing version `1.1.1` and build `31`. The product direction remains practical all-input-to-H.265 conversion through hardware, software, or mixed codec paths, old-device compatibility where practical, background encoding where the OS allows it, and multi-video assembly into one H.265 output with lightweight editing.
 
-Release `01.01.00` keeps the focused standalone H.265 / HEVC encoder scope and carries forward preview playback, bundled samples, project documentation, queue editing, source-preserving validation, privacy/ad, and multi-file encoding-mode prompt stabilization. Later releases expand toward "almost any video in, H.265 out" plus simple multi-camera merge workflows. Output video codec is a product constraint: H.265 / HEVC is the only supported video output codec. Routes such as `H.264 -> AV1` or `AV1 -> H.264` are not product routes.
+Release `01.01.01` keeps the focused standalone H.265 / HEVC encoder scope and carries forward preview playback, bundled samples, project documentation, queue editing, source-preserving validation, privacy/ad, multi-file encoding-mode prompt, Battery Options, runtime-warning, non-AAC audio route, and VC-1/Y41P bundled bridge stabilization. Later releases expand toward "almost any video in, H.265 out" plus simple multi-camera merge workflows. Output video codec is a product constraint: H.265 / HEVC is the only supported video output codec. Routes such as `H.264 -> AV1` or `AV1 -> H.264` are not product routes.
 
 Product path: **AV1 to H.265 first, broad inputs to H.265 next, H.265-only output final.**
 
@@ -18,13 +18,13 @@ Product path: **AV1 to H.265 first, broad inputs to H.265 next, H.265-only outpu
 
 ## Release Status
 
-- Current release label: `01.01.00`
-- Apple version/build: `1.1.0 (30)`
-- Latest release preparation date: 2026-07-06
-- App Store Connect/TestFlight upload: export/upload succeeded for `build/TestFlight-01.01.00-30/TaptionEncoder.xcarchive`; App Store Connect reported `Uploaded package is processing` and `Upload succeeded`. App Review submission, TestFlight availability, processing completion, and public release were not performed or verified.
-- App Store Connect version metadata: version `1.1.0` exists in `PREPARE_FOR_SUBMISSION`, release type is `MANUAL`, and English/Korean What's New text has been filled in.
+- Current release label: `01.01.01`
+- Apple version/build: `1.1.1 (31)`
+- Latest release preparation date: 2026-07-07
+- App Store Connect/TestFlight upload: export/upload succeeded for `build/TestFlight-01.01.01-31/TaptionEncoder.xcarchive`; App Store Connect reported `Uploaded package is processing` and `Upload succeeded`. App Review submission, TestFlight availability, processing completion, and public release were not performed or verified.
+- App Store Connect version metadata: version `1.1.1` metadata was not created or edited in the 2026-07-07 build-up pass. A same-build `1.1.0 (31)` upload attempt was rejected because App Store Connect reported the `1.1.0` train is closed for new build submissions and requires a higher marketing version.
 - Device install proof: verify real-device install separately from TestFlight/App Store Connect state.
-- Verification proof: current `01.01.00` proof is recorded in `docs/verification/RELEASE_01.01.00.md`.
+- Verification proof: current `01.01.01` proof is recorded in `docs/verification/RELEASE_01.01.01.md`; the previous `01.01.00` proof remains recorded in `docs/verification/RELEASE_01.01.00.md`.
 - Latest local performance proof: Battery Options encoding profiles and the 2026-07-04 bundled-codec simulator benchmark are recorded in `docs/verification/CODEC_BENCHMARK_2026-07-04.md`. This is local Debug simulator evidence, not TestFlight/App Store Connect proof.
 - Latest preview playback blocklist proof: `R210.avi` non-playback and `Snow.avi` audio-only/black-screen user reports are handled by keeping `Lossless JPEG`, `Microsoft RLE`, `R10K`, `R210`, and `Snow` encodable but not previewable in the current SwiftVLC preview path; `RoQ Video.roq` keeps preview access, while missing-duration timelines no longer show an end-position scrubber. Proof is recorded in `docs/verification/PREVIEW_PLAYBACK_BLOCKLIST_2026-07-07.md`. This is focused simulator XCTest evidence only, not real-device playback proof, real-device encode proof, TestFlight/App Store Connect proof, App Review proof, or public release proof.
 - Latest runtime warning implementation: thermal, app-memory, battery, and long-runtime warnings are surfaced in the active encoding resource widget and tracked in `docs/planning/ACTION_ITEMS.md`. This is unit/source-level implementation evidence, not older-real-device threshold proof.
@@ -79,7 +79,8 @@ Next implementation pass should isolate the media conversion core before importi
 - Remaining release action items and launch blockers: [`docs/planning/ACTION_ITEMS.md`](../planning/ACTION_ITEMS.md)
 - Completed release action items: [`docs/planning/COMPLETED_ACTION_ITEMS.md`](../planning/COMPLETED_ACTION_ITEMS.md)
 - Release closeout for `01.00.01`: [`docs/archive/releases/RELEASE_01.00.01.md`](../archive/releases/RELEASE_01.00.01.md)
-- Current release proof for `01.01.00`: [`docs/verification/RELEASE_01.01.00.md`](../verification/RELEASE_01.01.00.md)
+- Current release proof for `01.01.01`: [`docs/verification/RELEASE_01.01.01.md`](../verification/RELEASE_01.01.01.md)
+- Previous release proof for `01.01.00`: [`docs/verification/RELEASE_01.01.00.md`](../verification/RELEASE_01.01.00.md)
 
 ## Release 01.00.01 Scope
 
