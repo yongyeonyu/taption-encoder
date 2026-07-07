@@ -24,7 +24,7 @@ Taption Encoder product constraints remain unchanged:
 
 ## Current Decision
 
-Keep the FFmpeg-family backend planning-only. Do not promote VC-1 raw, Y41P, or broad AMR routes to executable app-side paths until all backend readiness gates close with separate proof.
+Select a source-built LGPL FFmpeg-family decode bridge as the backend shape for VC-1 raw and Y41P, but keep the FFmpeg-family backend planning-only in the current app. Do not promote VC-1 raw, Y41P, or broad AMR routes to executable app-side paths until all backend readiness gates close with separate proof.
 
 The safest App Store candidate is an embedded, bundle-contained, license-reviewed FFmpeg-family library profile used primarily for broad demux/decode, feeding Taption Encoder's existing H.265 MP4/MOV writer path where possible. A downloaded ffmpeg binary, side-loaded codec module, plugin-style runtime expansion, or external executable dependency is not acceptable for the App Store path.
 
@@ -69,6 +69,8 @@ Next proof needed for those codecs:
 2. Execute the ignored local VC-1 raw and Y41P samples through the app path.
 3. Verify H.265 MP4/MOV output, duration, frame decode, and source handling.
 4. Keep simulator proof separate from real-device runtime proof.
+
+The focused 2026-07-07 follow-up decision is recorded in `docs/verification/VC1_Y41P_BACKEND_DECISION_2026-07-07.md`: source-built LGPL FFmpeg-family decode bridge was selected as the backend shape, archived/prebuilt FFmpegKit and downloaded codec/plugin paths were rejected, host FFmpeg sanity probes passed for both samples, and app-side fake-runner contract proof was added. This does not close real bundled decoder execution, legal, App Review, binary-size, notice, or old-device gates.
 
 ## AMR-WB+ Follow-Up
 

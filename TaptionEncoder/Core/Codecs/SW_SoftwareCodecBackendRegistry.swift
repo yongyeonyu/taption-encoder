@@ -146,6 +146,100 @@ struct TaptionSoftwareCodecBackendReviewReport: Codable, Equatable {
     }
 }
 
+enum TaptionFFmpegFamilyBackendCandidateStatus: String, Codable, Equatable {
+    case selected
+    case rejected
+    case deferred
+}
+
+struct TaptionFFmpegFamilyBackendCandidateDecision: Codable, Equatable, Identifiable {
+    var id: String
+    var name: String
+    var status: TaptionFFmpegFamilyBackendCandidateStatus
+    var runnerShape: String
+    var rationale: String
+    var requiredEvidence: [String]
+}
+
+struct TaptionFFmpegFamilyBackendDecisionReport: Codable, Equatable {
+    var statusDate: String
+    var selectedCandidateID: String
+    var selectedOutputPolicy: String
+    var sourceURLs: [String]
+    var candidates: [TaptionFFmpegFamilyBackendCandidateDecision]
+    var proofBoundary: String
+
+    var selectedCandidate: TaptionFFmpegFamilyBackendCandidateDecision? {
+        candidates.first { $0.id == selectedCandidateID }
+    }
+}
+
+enum TaptionFFmpegFamilyBackendDecisionCatalog {
+    static var currentVC1Y41PDecision: TaptionFFmpegFamilyBackendDecisionReport {
+        TaptionFFmpegFamilyBackendDecisionReport(
+            statusDate: "2026-07-07",
+            selectedCandidateID: "source-built-lgpl-ffmpeg-decode-bridge",
+            selectedOutputPolicy: "Decode VC-1 raw and Y41P with a bundled source-built LGPL FFmpeg-family library bridge, then feed Taption Encoder's existing H.265 / HEVC MP4/MOV writer. Do not add non-H.265 outputs or writable containers beyond MP4/MOV.",
+            sourceURLs: [
+                "https://www.ffmpeg.org/legal.html",
+                "https://www.ffmpeg.org/general.html",
+                "https://developer.apple.com/app-store/review/guidelines/",
+                "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html",
+                "https://github.com/arthenica/ffmpeg-kit",
+                "https://github.com/arthenica/ffmpeg-kit/wiki/License"
+            ],
+            candidates: [
+                TaptionFFmpegFamilyBackendCandidateDecision(
+                    id: "source-built-lgpl-ffmpeg-decode-bridge",
+                    name: "Source-built LGPL FFmpeg-family decode bridge",
+                    status: .selected,
+                    runnerShape: "Bundle-contained in-process library bridge; no downloaded binary, side-loaded plugin, or external executable.",
+                    rationale: "This is the narrowest App Store-safe candidate for VC-1 raw and Y41P because it can target demux/decode only while preserving the existing H.265-only MP4/MOV output writer. The app can keep GPL/nonfree code disabled, generate exact source/build notices, and avoid prebuilt binary provenance risk.",
+                    requiredEvidence: [
+                        "Final FFmpeg configure line with GPL and nonfree features disabled unless the company explicitly approves a different license path.",
+                        "Exact source archive, local changes diff, and bundled notice/source-availability resources.",
+                        "iOS framework or package integration proving the bridge executes in process from the reviewed app bundle.",
+                        "Focused app-side VC-1 raw and Y41P sample transcodes to H.265 MP4/MOV with output verification.",
+                        "Real-device thermal, memory, battery, and runtime proof before release promotion."
+                    ]
+                ),
+                TaptionFFmpegFamilyBackendCandidateDecision(
+                    id: "prebuilt-or-archived-ffmpegkit",
+                    name: "Prebuilt or archived FFmpegKit binary package",
+                    status: .rejected,
+                    runnerShape: "Prebuilt command-style wrapper package.",
+                    rationale: "FFmpegKit is retired with historical binaries/docs, and FFmpegKit package licensing changes to GPL when GPL builds are used. Prebuilt binary provenance and package availability are weaker than a reproducible source-built app-owned bridge.",
+                    requiredEvidence: [
+                        "Only reconsider if the company selects a maintained source-built successor and reviews its exact source, build flags, notices, and binary provenance.",
+                        "Do not consume random community prebuilt binaries for App Store release."
+                    ]
+                ),
+                TaptionFFmpegFamilyBackendCandidateDecision(
+                    id: "downloaded-ffmpeg-binary-or-plugin",
+                    name: "Downloaded ffmpeg binary or codec plugin",
+                    status: .rejected,
+                    runnerShape: "Runtime-downloaded executable or codec module.",
+                    rationale: "Apple requires apps to be self-contained and not download, install, or execute code that changes app functionality.",
+                    requiredEvidence: [
+                        "No App Store path. Keep this rejected unless Apple policy or company distribution model changes."
+                    ]
+                ),
+                TaptionFFmpegFamilyBackendCandidateDecision(
+                    id: "swiftvlc-current-bundle",
+                    name: "Current SwiftVLC/libVLC bundle",
+                    status: .deferred,
+                    runnerShape: "Existing software VLC decoder path.",
+                    rationale: "It remains useful for current executable software routes, but current VC-1 raw and Y41P local sample proof shows no-frame or unsupported behavior. It is not the selected path for promoting these two samples.",
+                    requiredEvidence: [
+                        "Only reconsider for VC-1 raw/Y41P if a bundled libVLC configuration proves app-side frame decode for both samples."
+                    ]
+                )
+            ],
+            proofBoundary: "This decision selects the backend shape and runner contract. It is not legal approval, App Review approval, app-side real-decoder execution proof, simulator sample transcode proof, real-device proof, TestFlight proof, or public-release proof."
+        )
+    }
+}
+
 enum TaptionSoftwareCodecBackendReviewCatalog {
     static var currentFFmpegFamilyReview: TaptionSoftwareCodecBackendReviewReport {
         let profile = SW_SoftwareCodecBackendRegistry.ffmpegFamilyCandidate
@@ -158,9 +252,11 @@ enum TaptionSoftwareCodecBackendReviewCatalog {
                 "https://www.ffmpeg.org/general.html",
                 "https://developer.apple.com/app-store/review/guidelines/",
                 "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html",
+                "https://github.com/arthenica/ffmpeg-kit",
+                "https://github.com/arthenica/ffmpeg-kit/wiki/License",
                 "https://www.x265.org/"
             ],
-            conclusion: "Engineering review only: keep the FFmpeg-family backend planning-only. Do not execute VC-1 raw, Y41P, or other broad-backend routes until the implementation is bundled, App Store-policy reviewed, license-reviewed, notice-complete, fixture-proven, audio-proven, binary-size-approved, and older-device-proven.",
+            conclusion: "Engineering review only: select a source-built LGPL FFmpeg-family decode bridge as the VC-1 raw/Y41P backend shape, but keep execution planning-only. Do not execute VC-1 raw, Y41P, or other broad-backend routes until the implementation is bundled, App Store-policy reviewed, license-reviewed, notice-complete, fixture-proven, audio-proven, binary-size-approved, and older-device-proven.",
             findings: [
                 TaptionSoftwareCodecBackendReviewFinding(
                     gate: .licenseReview,

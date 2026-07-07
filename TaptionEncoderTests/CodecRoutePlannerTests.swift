@@ -7368,6 +7368,29 @@ final class CodecRoutePlannerTests: XCTestCase {
         })
     }
 
+    func testVC1Y41PBackendDecisionSelectsSourceBuiltLGPLDecodeBridge() throws {
+        let decision = TaptionFFmpegFamilyBackendDecisionCatalog.currentVC1Y41PDecision
+        let selected = try XCTUnwrap(decision.selectedCandidate)
+
+        XCTAssertEqual(decision.statusDate, "2026-07-07")
+        XCTAssertEqual(selected.id, "source-built-lgpl-ffmpeg-decode-bridge")
+        XCTAssertEqual(selected.status, .selected)
+        XCTAssertTrue(selected.runnerShape.contains("in-process library bridge"))
+        XCTAssertTrue(decision.selectedOutputPolicy.contains("H.265 / HEVC MP4/MOV"))
+        XCTAssertTrue(decision.selectedOutputPolicy.contains("Do not add non-H.265 outputs"))
+        XCTAssertTrue(decision.sourceURLs.contains("https://www.ffmpeg.org/legal.html"))
+        XCTAssertTrue(decision.sourceURLs.contains("https://github.com/arthenica/ffmpeg-kit/wiki/License"))
+        XCTAssertTrue(decision.proofBoundary.contains("not legal approval"))
+
+        let rejectedIDs = Set(
+            decision.candidates
+                .filter { $0.status == .rejected }
+                .map(\.id)
+        )
+        XCTAssertTrue(rejectedIDs.contains("prebuilt-or-archived-ffmpegkit"))
+        XCTAssertTrue(rejectedIDs.contains("downloaded-ffmpeg-binary-or-plugin"))
+    }
+
     func testFFmpegFamilyBackendReviewDoesNotCloseReadinessGates() {
         let review = TaptionSoftwareCodecBackendReviewCatalog.currentFFmpegFamilyReview
         let report = SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport(
@@ -7589,6 +7612,108 @@ final class CodecRoutePlannerTests: XCTestCase {
         ])
 
         try? FileManager.default.removeItem(at: outputURL)
+    }
+
+    func testVC1RawAndY41PPreparedPlansRunThroughInjectedBroadBackendRunnerWhenReady() async throws {
+        struct RunnerCase: Sendable {
+            var sourceCodec: TaptionVideoCodec
+            var container: TaptionVideoContainer
+            var sourceURL: URL
+            var outputContainer: TaptionVideoContainer
+            var outputFileName: String
+            var expectedInputArguments: [String]
+        }
+
+        let cases = [
+            RunnerCase(
+                sourceCodec: .vc1,
+                container: .rawElementaryStream,
+                sourceURL: URL(fileURLWithPath: "/tmp/vc1_advanced_profile_2.vc1"),
+                outputContainer: .mp4,
+                outputFileName: "vc1-runner-proof.mp4",
+                expectedInputArguments: ["-i", "/tmp/vc1_advanced_profile_2.vc1"]
+            ),
+            RunnerCase(
+                sourceCodec: .y41p,
+                container: .avi,
+                sourceURL: URL(fileURLWithPath: "/tmp/y41p_from_internet_image.avi"),
+                outputContainer: .mov,
+                outputFileName: "y41p-runner-proof.mov",
+                expectedInputArguments: ["-i", "/tmp/y41p_from_internet_image.avi"]
+            )
+        ]
+
+        for runnerCase in cases {
+            let outputURL = temporaryTestURL(fileName: runnerCase.outputFileName)
+            try? FileManager.default.removeItem(at: outputURL)
+            defer { try? FileManager.default.removeItem(at: outputURL) }
+
+            let asset = TaptionVideoAsset(
+                displayName: runnerCase.sourceURL.lastPathComponent,
+                location: TaptionVideoAssetLocation(kind: .file),
+                container: runnerCase.container,
+                duration: 1,
+                videoTrack: TaptionVideoTrackInfo(
+                    codec: runnerCase.sourceCodec,
+                    naturalSize: TaptionPixelSize(width: 160, height: 120),
+                    displaySize: TaptionPixelSize(width: 160, height: 120),
+                    nominalFrameRate: TaptionRationalFrameRate(numerator: 25),
+                    estimatedBitrate: 1_000_000
+                ),
+                audioTracks: []
+            )
+            let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+                asset: asset,
+                sourceURL: runnerCase.sourceURL,
+                temporaryOutputURL: outputURL,
+                outputPolicy: TaptionVideoOutputPolicy(
+                    videoCodec: .hevc,
+                    audioCodec: .aac,
+                    container: runnerCase.outputContainer
+                ),
+                savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+            )
+            let commandPlan = try XCTUnwrap(plan.videoCommandPlan, runnerCase.sourceCodec.rawValue)
+            let executor = SW_FFmpegCommandExecutor(
+                readinessReport: readyBroadSoftwareBackendReport(),
+                runner: FakeFFmpegCommandRunner { injectedPlan in
+                    XCTAssertEqual(injectedPlan, commandPlan)
+                    XCTAssertEqual(injectedPlan.backend, .ffmpegFamily)
+                    XCTAssertEqual(injectedPlan.sourceURL, runnerCase.sourceURL)
+                    XCTAssertEqual(injectedPlan.outputURL, outputURL)
+                    XCTAssertEqual(Optional(injectedPlan.routeSummary), plan.codecRoute?.displayName)
+                    for argument in runnerCase.expectedInputArguments {
+                        XCTAssertTrue(injectedPlan.arguments.contains(argument), runnerCase.sourceCodec.rawValue)
+                    }
+                    XCTAssertTrue(injectedPlan.arguments.contains("-map"), runnerCase.sourceCodec.rawValue)
+                    XCTAssertTrue(injectedPlan.arguments.contains("0:v:0"), runnerCase.sourceCodec.rawValue)
+                    XCTAssertTrue(injectedPlan.arguments.contains("-an"), runnerCase.sourceCodec.rawValue)
+                    XCTAssertTrue(injectedPlan.arguments.contains("-c:v"), runnerCase.sourceCodec.rawValue)
+                    XCTAssertTrue(injectedPlan.arguments.contains("libx265"), runnerCase.sourceCodec.rawValue)
+                    XCTAssertEqual(injectedPlan.arguments.last, outputURL.path)
+                    try FileManager.default.createDirectory(
+                        at: outputURL.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                    try Data("runner proof \(runnerCase.sourceCodec.rawValue)".utf8).write(to: outputURL)
+                    return SW_FFmpegCommandRunResult(exitCode: 0, stderr: "frame=20")
+                }
+            )
+            let service = AVFoundationHEVCEncoderService(
+                softwareExecutor: executor,
+                outputVerifier: DisabledSourcePreservingOutputVerifier()
+            )
+
+            let result = try await service.encode(plan: plan, progress: { _ in })
+
+            XCTAssertEqual(plan.codecRoute, TaptionCodecRoute(sourceCodec: runnerCase.sourceCodec, outputCodec: .hevc))
+            XCTAssertEqual(plan.codecExecutionKind, .planned)
+            XCTAssertEqual(result.usedBackend, .ffmpegFamily)
+            XCTAssertEqual(result.usedMode, .software)
+            XCTAssertEqual(result.temporaryOutputURL, outputURL)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path), runnerCase.sourceCodec.rawValue)
+            XCTAssertTrue(outputURL.pathExtension == runnerCase.outputContainer.defaultFileExtension)
+        }
     }
 
     func testEncoderServiceFailsWhenSourcePreservingOutputVerificationFails() async throws {
