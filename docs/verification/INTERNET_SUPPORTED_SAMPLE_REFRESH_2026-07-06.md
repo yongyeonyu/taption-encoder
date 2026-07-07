@@ -57,7 +57,7 @@ The following samples were also checked with short host-side H.265 MP4 and MOV t
 | Dolby Vision HEVC | Deferred | Public candidates were found, but the checked MP4 candidate was about 479 MB and was not downloaded while disk space is constrained. |
 | ProRes RAW | Deferred | Public candidates were found, but the smallest observed candidate was about 622 MB and still needs storage headroom plus license/use approval. |
 | JPEG XL frame sequence | Deferred | This is an image/frame-sequence target rather than a video-file target; no bundled video sample was created in this pass. |
-| AMR-WB / AMR-WB+ passing video | Blocked | The available AMR-WB+ sample is useful as a negative sample, but local FFmpeg and Apple tools do not decode it as a passing route. |
+| AMR-WB / AMR-WB+ passing video | Partially followed up | The FFmpeg archive AMR-WB+ sample remains useful as a negative sample. A later 2026-07-07 reference-code pass generated positive AMR-WB+ `sawp` samples and a host-side H.263 video-wrapper path, but no bundled app-side decoder/backend proof exists. |
 
 ## Evidence Files
 

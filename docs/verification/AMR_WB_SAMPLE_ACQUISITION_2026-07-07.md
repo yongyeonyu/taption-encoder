@@ -306,5 +306,5 @@ The follow-up proof verified bundled `AMR-WB H.263.3gp` to H.265 MOV with PCM 48
 - Decodable AMR-WB sample acquisition is no longer blocked at the host/sample level.
 - AMR-WB app-side execution now has focused simulator proof through the current bundled VLC decode path feeding AAC output in MP4.
 - AMR-WB now has a bundled sample and focused real-device iPad Debug XCTest proof for H.263/AMR-WB 3GP to H.265 MP4 with AAC 48 kHz mono output, plus H.265 MOV with PCM and ALAC 48 kHz mono output.
-- The previous AMR-WB+ sample remains a negative sample.
-- AMR-WB+ still needs a decodable positive sample or a clear unsupported decision from the selected broad backend.
+- The previous FFmpeg archive AMR-WB+ sample remains a negative sample.
+- A separate follow-up AMR-WB+ reference-code pass now has positive host/reference sample proof and a local H.263 video-wrapper path, but AMR-WB+ still needs bundled/license-reviewed app-side decoder execution or a clear unsupported decision from the selected broad backend.

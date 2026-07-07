@@ -802,6 +802,6 @@ Result:
 - AAC now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through the QuickTime Video/AAC sample.
 - AC3 now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through bundled `H.264 AC3.mp4` on the requested software path.
 - EAC3 now has focused simulator and bundled real-device iPad Debug XCTest execution proof for PCM/MOV and ALAC/MOV through bundled `H.264 EAC3.mp4` on the requested software path.
-- AMR-WB+ still needs a decodable positive sample.
+- AMR-WB+ now has host/reference-code positive sample proof plus a local H.263 video-wrapper path, but still needs bundled/license-reviewed app-side decoder execution or an explicit unsupported decision.
 - Broader non-AAC output routes beyond current sample-proven `PCM / MOV` and `ALAC / MOV` still need implementation and proof.
 - FFmpeg-family or equivalent broad backend execution remains gated on bundled backend integration and license/App Store review.

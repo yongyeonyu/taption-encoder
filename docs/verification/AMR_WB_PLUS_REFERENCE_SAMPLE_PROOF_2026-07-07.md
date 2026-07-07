@@ -19,6 +19,7 @@ Ignored local sample artifacts are stored under:
 
 ```text
 Samples/Downloaded/internet_supported_missing_2026-07-07/sample_audio/
+Samples/Downloaded/internet_supported_missing_2026-07-07/sample_videos/
 Samples/Downloaded/internet_supported_missing_2026-07-07/probe_reports/
 ```
 
@@ -51,8 +52,9 @@ These changes are not product code. They only document what was required to make
 | --- | --- | ---: | --- | --- |
 | AMR-WB+ reference mono-source 3GP | `Samples/Downloaded/internet_supported_missing_2026-07-07/sample_audio/amr_wbplus_reference_mono.3gp` | 9,984 bytes | `d48b0c027e83f795eacecee461f111950905c034799fe69215ef812304fa394f` | `sawp`, 4.880000s, 61 frames |
 | AMR-WB+ reference stereo 3GP | `Samples/Downloaded/internet_supported_missing_2026-07-07/sample_audio/amr_wbplus_reference_stereo.3gp` | 10,472 bytes | `92c7e6b800de1edd369c1519a2b7a133e7a720d5103e9d7956da7dc3f26dce5e` | `sawp`, 4.880000s, 61 frames |
+| AMR-WB+ reference H.263 video wrapper 3GP | `Samples/Downloaded/internet_supported_missing_2026-07-07/sample_videos/amr_wbplus_h263_video_reference.3gp` | 158,062 bytes | `dc3ea89e78213d2905f387ad99ebececfa7e4a6b00838e7ba654a66ac6f4ecfc` | H.263 `s263` video plus AMR-WB+ `sawp` audio, 4.880000s format duration |
 
-Both files are audio-only 3GP samples. FFmpeg can probe the container and `sawp` sample entry, but it still cannot decode AMR-WB+ audio in this local build.
+The first two files are audio-only 3GP samples. A follow-up pass created the ignored H.263 video-wrapper sample by atom-level 3GP merging because FFmpeg refused to mux `sawp` as an audio copy stream. FFmpeg can probe the container and `sawp` sample entry, but it still cannot decode AMR-WB+ audio in this local build.
 
 ## Decode Proof
 
@@ -70,12 +72,12 @@ exit code: 234
 Decoding requested, but no decoder found for: none
 ```
 
-FFmpeg also refused to mux the `sawp` stream into a synthetic video wrapper because it treats the audio codec as `none`, so no app-side video-source wrapper was created in this pass.
+The follow-up video-wrapper probe is recorded separately in `docs/verification/AMR_WB_PLUS_BACKEND_AND_WRAPPER_REVIEW_2026-07-07.md`. The wrapper's video-only decode path exits 0, while full decode still fails with the same missing AMR-WB+ decoder.
 
 ## Outcome
 
 - AMR-WB+ now has a decodable positive `sawp` reference sample at the host/reference-tool level.
-- AMR-WB+ is still not promoted to current app-side execution.
+- AMR-WB+ now has a host-side video-wrapper sample path, but it is still not promoted to current app-side execution.
 - The existing FFmpeg archive AMR-WB+ sample remains a useful negative sample.
 - App-side AMR-WB+ execution still requires a bundled, license-reviewed, App Store-safe decoder/backend or an explicit unsupported-product decision.
 - No AMR-WB+ sample was bundled into `TaptionEncoder/TestVideos` in this pass.

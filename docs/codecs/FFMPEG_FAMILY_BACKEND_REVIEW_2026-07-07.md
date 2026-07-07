@@ -18,6 +18,8 @@ Taption Encoder product constraints remain unchanged:
 - FFmpeg external-library documentation: https://www.ffmpeg.org/general.html
 - Apple App Review Guidelines: https://developer.apple.com/app-store/review/guidelines/
 - GNU LGPL 2.1 text: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+- VoiceAge AMR-WB+ licensing page: https://voiceage.com/AMR-WBplus.html
+- 3GPP 26-series specification index: https://www.3gpp.org/dynareport?code=26-series.htm
 - x265 licensing summary: https://www.x265.org/
 
 ## Current Decision
@@ -36,7 +38,7 @@ The safest App Store candidate is an embedded, bundle-contained, license-reviewe
 | Binary size budget | Open | Broad demux/decode support can significantly increase app size. | Archive/export size diff, enabled component list, launch/import latency comparison. |
 | Open-source notice generation | Open | Shipping the backend requires final notice resources for FFmpeg and each enabled external library. | Bundled notice files, source download URL, exact build/config text, release-notice tests. |
 | Fixture transcode proof | Open | Host FFmpeg proof and command-plan proof are not enough for VC-1 raw or Y41P execution. | App-side simulator fixture/sample transcodes to H.265 MP4/MOV with output verification. |
-| Audio signal proof | Open | AMR-WB now has bundled real-device AAC/MP4 plus PCM/MOV and ALAC/MOV proof, Opus has AAC/PCM/ALAC proof through bundled Theora, Vorbis has PCM/MOV plus ALAC/MOV proof through bundled Theora/Vorbis, MP3 has PCM/MOV plus ALAC/MOV proof through bundled Flash Video, AAC has PCM/MOV plus ALAC/MOV proof through bundled QuickTime Video, and AC3/EAC3 have PCM/MOV plus ALAC/MOV proof through bundled H.264 Dolby samples on the requested software path. AMR-WB+ and broader planned audio routes still need audible-signal proof after app-side execution is wired. | Decodable AMR-WB+ sample or explicit unsupported decision, AAC output proof for MP4/MOV, non-AAC route proof where explicitly supported. |
+| Audio signal proof | Open | AMR-WB now has bundled real-device AAC/MP4 plus PCM/MOV and ALAC/MOV proof, Opus has AAC/PCM/ALAC proof through bundled Theora, Vorbis has PCM/MOV plus ALAC/MOV proof through bundled Theora/Vorbis, MP3 has PCM/MOV plus ALAC/MOV proof through bundled Flash Video, AAC has PCM/MOV plus ALAC/MOV proof through bundled QuickTime Video, and AC3/EAC3 have PCM/MOV plus ALAC/MOV proof through bundled H.264 Dolby samples on the requested software path. AMR-WB+ now has host/reference-code positive sample proof plus a host-side H.263 video-wrapper path, but no bundled decoder/backend or app-side audible-signal proof. | Bundled/license-reviewed AMR-WB+ decoder proof or explicit unsupported decision, AAC output proof for MP4/MOV, non-AAC route proof where explicitly supported. |
 | Old-device performance proof | Open | Broad software routes may stress heat, memory, battery, and runtime on older devices. | Real-device runtime encode proof with thermal/battery/memory/ETA warning observations. |
 
 ## App-Store-Safe Candidate Shape
@@ -67,3 +69,19 @@ Next proof needed for those codecs:
 2. Execute the ignored local VC-1 raw and Y41P samples through the app path.
 3. Verify H.265 MP4/MOV output, duration, frame decode, and source handling.
 4. Keep simulator proof separate from real-device runtime proof.
+
+## AMR-WB+ Follow-Up
+
+AMR-WB+ has a different backend risk profile from VC-1 raw and Y41P:
+
+- The local reference-code pass generated positive `sawp` audio-only samples and a later host-side H.263 video-wrapper sample.
+- Local FFmpeg can probe `sawp` but still cannot decode it in the current build.
+- 3GPP publishes AMR-WB+ reference-code specifications in the 26-series, and VoiceAge lists AMR-WB+ licensing contact information. That makes AMR-WB+ a separate patent/IPR/source-license review item before any reference-code-derived app dependency can be considered.
+- Do not assume a future FFmpeg-family broad video backend covers AMR-WB+ unless the selected backend actually decodes `sawp` in the iOS app build.
+
+Next AMR-WB+ proof needed:
+
+1. Decide whether AMR-WB+ is in scope after legal/license review.
+2. If in scope, choose a bundled decoder/backend that is license-reviewed and App Store-safe.
+3. Run the ignored `amr_wbplus_h263_video_reference.3gp` wrapper through app-side inspection and H.265 MP4/MOV execution.
+4. Verify audible output separately from video decode, and keep host/reference-code proof separate from app runtime proof.
