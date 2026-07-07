@@ -7,6 +7,7 @@
 - Runtime: local Debug XCTest on a temporary iPhone 17 Pro iOS 26.5 simulator.
 - Output policy remains unchanged: Taption Encoder still outputs H.265 / HEVC video only, and implemented output containers remain MP4/MOV only.
 - This is simulator XCTest runtime evidence only. It is not host FFmpeg proof, real-device proof, TestFlight/App Store Connect proof, App Review proof, or public release proof.
+- Later same-day update: the VC-1 raw/Y41P planned-route entries here are superseded by focused vendored FFmpeg decode bridge simulator proof in `docs/verification/VC1_Y41P_BUNDLED_FFMPEG_DECODE_BRIDGE_2026-07-07.md`. This document remains the SwiftVLC route-correction proof.
 
 ## Implementation
 

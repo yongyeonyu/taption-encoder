@@ -1,4 +1,12 @@
+@preconcurrency import AVFoundation
+import CoreMedia
+import CoreVideo
+import Darwin
 import Foundation
+
+#if canImport(TaptionFFmpegDecodeBridge)
+import TaptionFFmpegDecodeBridge
+#endif
 
 struct SW_FFmpegCommandRunResult: Codable, Equatable {
     var exitCode: Int32
@@ -588,3 +596,356 @@ enum TaptionVideoCodecExecutionReadinessReporter {
         )
     }
 }
+
+#if canImport(TaptionFFmpegDecodeBridge)
+enum SW_FFmpegDecodeBridgeRunnerError: LocalizedError, Equatable {
+    case unsupportedOutput(URL)
+    case probeFailed(status: Int32, message: String)
+    case invalidProbeSize(width: Int32, height: Int32)
+    case writerStartFailed(String)
+    case decodeFailed(status: Int32, message: String)
+    case writerFinishFailed(String)
+    case outputMissing(URL)
+
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedOutput(let url):
+            return "FFmpeg decode bridge output must be MP4 or MOV: \(url.lastPathComponent)."
+        case .probeFailed(let status, let message):
+            return "FFmpeg decode bridge probe failed with status \(status). \(message)"
+        case .invalidProbeSize(let width, let height):
+            return "FFmpeg decode bridge reported an invalid video size: \(width)x\(height)."
+        case .writerStartFailed(let message):
+            return "FFmpeg decode bridge HEVC writer failed to start. \(message)"
+        case .decodeFailed(let status, let message):
+            return "FFmpeg decode bridge failed with status \(status). \(message)"
+        case .writerFinishFailed(let message):
+            return "FFmpeg decode bridge HEVC writer failed to finish. \(message)"
+        case .outputMissing(let url):
+            return "FFmpeg decode bridge completed but did not create output at \(url.path)."
+        }
+    }
+}
+
+struct SW_FFmpegDecodeBridgeRunReport: Codable, Equatable {
+    var frameCount: Int
+    var width: Int
+    var height: Int
+    var averageFrameRate: Double
+    var codecName: String
+    var pixelFormatName: String
+    var outputURL: URL
+}
+
+private final class SW_FFmpegDecodeBridgeAssetWriterBox: @unchecked Sendable {
+    private let writer: AVAssetWriter
+
+    init(_ writer: AVAssetWriter) {
+        self.writer = writer
+    }
+
+    func finish() async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            writer.finishWriting {
+                if self.writer.status == .completed {
+                    continuation.resume()
+                } else {
+                    continuation.resume(
+                        throwing: SW_FFmpegDecodeBridgeRunnerError.writerFinishFailed(
+                            self.writer.error?.localizedDescription
+                            ?? "Writer ended with status \(self.writer.status.rawValue)."
+                        )
+                    )
+                }
+            }
+        }
+    }
+}
+
+struct SW_FFmpegDecodeBridgeCommandRunner: SW_FFmpegCommandRunning {
+    var maximumFrameCount: Int32
+    var targetBitrate: Int?
+
+    init(
+        maximumFrameCount: Int32 = 0,
+        targetBitrate: Int? = nil
+    ) {
+        self.maximumFrameCount = maximumFrameCount
+        self.targetBitrate = targetBitrate
+    }
+
+    func run(commandPlan: SW_FFmpegCommandPlan) async throws -> SW_FFmpegCommandRunResult {
+        let report = try await SW_FFmpegDecodeBridgeHEVCTranscoder.transcode(
+            commandPlan: commandPlan,
+            maximumFrameCount: maximumFrameCount,
+            targetBitrate: targetBitrate
+        )
+        return SW_FFmpegCommandRunResult(
+            exitCode: 0,
+            stdout: [
+                "backend=TaptionFFmpegDecodeBridge",
+                "frames=\(report.frameCount)",
+                "size=\(report.width)x\(report.height)",
+                "fps=\(String(format: "%.3f", report.averageFrameRate))",
+                "codec=\(report.codecName)",
+                "pixelFormat=\(report.pixelFormatName)",
+                "output=\(report.outputURL.lastPathComponent)"
+            ].joined(separator: "\n")
+        )
+    }
+}
+
+private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
+    static func transcode(
+        commandPlan: SW_FFmpegCommandPlan,
+        maximumFrameCount: Int32,
+        targetBitrate: Int?
+    ) async throws -> SW_FFmpegDecodeBridgeRunReport {
+        guard [.mp4, .mov].contains(TaptionVideoContainer.inferred(from: commandPlan.outputURL)) else {
+            throw SW_FFmpegDecodeBridgeRunnerError.unsupportedOutput(commandPlan.outputURL)
+        }
+
+        let probe = try probe(sourceURL: commandPlan.sourceURL)
+        guard probe.width > 0,
+              probe.height > 0 else {
+            throw SW_FFmpegDecodeBridgeRunnerError.invalidProbeSize(
+                width: probe.width,
+                height: probe.height
+            )
+        }
+
+        try FileManager.default.createDirectory(
+            at: commandPlan.outputURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? FileManager.default.removeItem(at: commandPlan.outputURL)
+
+        let targetSize = CGSize(width: Int(probe.width), height: Int(probe.height))
+        let frameRate = normalizedFrameRate(probe.averageFrameRate)
+        let frameDuration = CMTime(seconds: 1.0 / frameRate, preferredTimescale: 600)
+        let writer = try AVAssetWriter(
+            outputURL: commandPlan.outputURL,
+            fileType: avFileType(for: commandPlan.outputURL)
+        )
+        let videoInput = AVAssetWriterInput(
+            mediaType: .video,
+            outputSettings: writerVideoOutputSettings(
+                targetSize: targetSize,
+                targetBitrate: targetBitrate,
+                frameRate: frameRate
+            )
+        )
+        videoInput.expectsMediaDataInRealTime = false
+        videoInput.performsMultiPassEncodingIfSupported = false
+
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: videoInput,
+            sourcePixelBufferAttributes: pixelBufferAttributes(size: targetSize)
+        )
+        guard writer.canAdd(videoInput) else {
+            throw SW_FFmpegDecodeBridgeRunnerError.writerStartFailed("The HEVC video input could not be added.")
+        }
+        writer.add(videoInput)
+        guard writer.startWriting() else {
+            throw SW_FFmpegDecodeBridgeRunnerError.writerStartFailed(
+                writer.error?.localizedDescription ?? "Unknown AVAssetWriter start failure."
+            )
+        }
+        writer.startSession(atSourceTime: .zero)
+
+        let context = SW_AV1FrameWriterContext(
+            writer: writer,
+            videoInput: videoInput,
+            adaptor: adaptor,
+            targetSize: targetSize,
+            frameDuration: frameDuration,
+            expectedFrameCount: max(Int(maximumFrameCount), 1),
+            limitsToExpectedFrameCount: maximumFrameCount > 0,
+            allowsLegacyFrameHoldToPreserveDuration: false,
+            progressHandler: { _ in }
+        )
+        guard context.prepareDecodePoolFormat() != nil else {
+            throw SW_FFmpegDecodeBridgeRunnerError.writerStartFailed("The decode pixel buffer pool could not be created.")
+        }
+        defer {
+            context.requestCancellation()
+            context.clearDecodePool()
+        }
+
+        let decodeResult = try decode(
+            sourceURL: commandPlan.sourceURL,
+            maximumFrameCount: maximumFrameCount,
+            context: context
+        )
+
+        try context.finishVideoInput()
+        try await finishWriter(writer)
+        guard FileManager.default.fileExists(atPath: commandPlan.outputURL.path) else {
+            throw SW_FFmpegDecodeBridgeRunnerError.outputMissing(commandPlan.outputURL)
+        }
+
+        return SW_FFmpegDecodeBridgeRunReport(
+            frameCount: max(Int(decodeResult.frameCount), context.currentFrameCount),
+            width: Int(decodeResult.width),
+            height: Int(decodeResult.height),
+            averageFrameRate: normalizedFrameRate(decodeResult.averageFrameRate),
+            codecName: stringFromCStringBuffer(decodeResult.codecName),
+            pixelFormatName: stringFromCStringBuffer(decodeResult.pixelFormatName),
+            outputURL: commandPlan.outputURL
+        )
+    }
+
+    private static func probe(sourceURL: URL) throws -> TaptionFFmpegDecodeBridgeProbeResult {
+        var result = TaptionFFmpegDecodeBridgeProbeResult()
+        var errorBuffer = [CChar](repeating: 0, count: 2_048)
+        let status = sourceURL.path.withCString { sourcePath in
+            taption_ffmpeg_decode_bridge_probe_video(
+                sourcePath,
+                &result,
+                &errorBuffer,
+                Int32(errorBuffer.count)
+            )
+        }
+        guard status == 0 else {
+            throw SW_FFmpegDecodeBridgeRunnerError.probeFailed(
+                status: status,
+                message: String(cString: errorBuffer)
+            )
+        }
+        return result
+    }
+
+    private static func decode(
+        sourceURL: URL,
+        maximumFrameCount: Int32,
+        context: SW_AV1FrameWriterContext
+    ) throws -> TaptionFFmpegDecodeBridgeProbeResult {
+        var result = TaptionFFmpegDecodeBridgeProbeResult()
+        var errorBuffer = [CChar](repeating: 0, count: 2_048)
+        let status = sourceURL.path.withCString { sourcePath in
+            taption_ffmpeg_decode_bridge_decode_video_to_bgra(
+                sourcePath,
+                maximumFrameCount,
+                ffmpegDecodeBridgeFrameCallback,
+                Unmanaged.passUnretained(context).toOpaque(),
+                &result,
+                &errorBuffer,
+                Int32(errorBuffer.count)
+            )
+        }
+        guard status == 0 else {
+            throw SW_FFmpegDecodeBridgeRunnerError.decodeFailed(
+                status: status,
+                message: String(cString: errorBuffer)
+            )
+        }
+        return result
+    }
+
+    private static func writerVideoOutputSettings(
+        targetSize: CGSize,
+        targetBitrate: Int?,
+        frameRate: Double
+    ) -> [String: Any] {
+        let width = max(2, Int(targetSize.width.rounded()))
+        let height = max(2, Int(targetSize.height.rounded()))
+        let estimatedBitrate = targetBitrate ?? max(
+            700_000,
+            min(10_000_000, Int(Double(width * height) * max(frameRate, 1) * 0.25))
+        )
+        return [
+            AVVideoCodecKey: AVVideoCodecType.hevc,
+            AVVideoWidthKey: width,
+            AVVideoHeightKey: height,
+            AVVideoCompressionPropertiesKey: [
+                AVVideoAverageBitRateKey: estimatedBitrate,
+                AVVideoExpectedSourceFrameRateKey: Int(max(frameRate.rounded(), 1)),
+                AVVideoAllowFrameReorderingKey: false
+            ]
+        ]
+    }
+
+    private static func pixelBufferAttributes(size: CGSize) -> [String: Any] {
+        [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: max(2, Int(size.width.rounded())),
+            kCVPixelBufferHeightKey as String: max(2, Int(size.height.rounded())),
+            kCVPixelBufferCGImageCompatibilityKey as String: true,
+            kCVPixelBufferCGBitmapContextCompatibilityKey as String: true,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any]
+        ]
+    }
+
+    private static func avFileType(for outputURL: URL) -> AVFileType {
+        outputURL.pathExtension.lowercased() == "mov" ? .mov : .mp4
+    }
+
+    private static func normalizedFrameRate(_ rawValue: Double) -> Double {
+        guard rawValue.isFinite,
+              rawValue >= 1,
+              rawValue <= 240 else {
+            return 30
+        }
+        return rawValue
+    }
+
+    private static func stringFromCStringBuffer<T>(_ buffer: T) -> String {
+        var mutableBuffer = buffer
+        let capacity = MemoryLayout<T>.size / MemoryLayout<CChar>.size
+        return withUnsafePointer(to: &mutableBuffer) { pointer in
+            pointer.withMemoryRebound(to: CChar.self, capacity: capacity) { cStringPointer in
+                String(cString: cStringPointer)
+            }
+        }
+    }
+
+    private static func finishWriter(_ writer: AVAssetWriter) async throws {
+        try await SW_FFmpegDecodeBridgeAssetWriterBox(writer).finish()
+    }
+}
+
+private nonisolated func ffmpegDecodeBridgeFrameWriterContext(
+    from opaque: UnsafeMutableRawPointer?
+) -> SW_AV1FrameWriterContext? {
+    guard let opaque else { return nil }
+    return Unmanaged<SW_AV1FrameWriterContext>.fromOpaque(opaque).takeUnretainedValue()
+}
+
+private nonisolated func ffmpegDecodeBridgeFrameCallback(
+    _ frame: UnsafePointer<TaptionFFmpegDecodeBridgeFrame>?,
+    _ opaque: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let frame,
+          let context = ffmpegDecodeBridgeFrameWriterContext(from: opaque),
+          let pixelBuffer = context.makeDecodePixelBuffer(),
+          frame.pointee.width > 0,
+          frame.pointee.height > 0,
+          frame.pointee.bytesPerRow > 0,
+          let sourceBaseAddress = frame.pointee.bgraBytes else {
+        return -1
+    }
+
+    CVPixelBufferLockBaseAddress(pixelBuffer, [])
+    defer {
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+    }
+    guard let destinationBaseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else {
+        return -2
+    }
+
+    let width = Int(frame.pointee.width)
+    let height = min(Int(frame.pointee.height), CVPixelBufferGetHeight(pixelBuffer))
+    let sourceBytesPerRow = Int(frame.pointee.bytesPerRow)
+    let destinationBytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
+    let bytesPerRowToCopy = min(width * 4, sourceBytesPerRow, destinationBytesPerRow)
+
+    for row in 0..<height {
+        let sourceRow = sourceBaseAddress.advanced(by: row * sourceBytesPerRow)
+        let destinationRow = destinationBaseAddress.advanced(by: row * destinationBytesPerRow)
+        memcpy(destinationRow, sourceRow, bytesPerRowToCopy)
+    }
+
+    context.appendDecodedPixelBuffer(pixelBuffer)
+    return 0
+}
+#endif

@@ -1,0 +1,46 @@
+FFmpeg version: 8.1.1
+FFmpeg source: https://ffmpeg.org/releases/ffmpeg-8.1.1.tar.xz
+FFmpeg SHA-256: b6863adde98898f42602017462871b5f6333e65aec803fdd7a6308639c52edf3
+Minimum iOS: 17.0
+
+Configure flags:
+  --disable-everything
+  --disable-programs
+  --disable-doc
+  --disable-debug
+  --disable-network
+  --disable-autodetect
+  --disable-asm
+  --disable-avdevice
+  --disable-avfilter
+  --disable-swresample
+  --disable-shared
+  --enable-pic
+  --enable-static
+  --enable-avcodec
+  --enable-avformat
+  --enable-avutil
+  --enable-swscale
+  --enable-protocol=file
+  --enable-demuxer=vc1,avi
+  --enable-parser=vc1
+  --enable-decoder=vc1,vc1image,y41p,rawvideo,pcm_s16le
+
+Enabled demuxers: vc1, avi
+Enabled decoders: vc1, vc1image, y41p, rawvideo, pcm_s16le
+Enabled parser: vc1
+Enabled protocol: file
+Enabled libraries linked into bridge: avformat, avcodec, avutil, swscale
+
+Policy:
+- No --enable-gpl
+- No --enable-nonfree
+- No external libraries
+- No FFmpeg executable or runtime-downloaded plugin
+- Decode-only bridge; H.265 / HEVC MP4/MOV output remains handled by Taption Encoder's AVAssetWriter path.
+
+Notice/source/EULA checklist:
+- Source availability is pinned to the official source URL and SHA-256 above.
+- Local bridge source is stored under Vendor/FFmpegLGPLDecodeBridge/Sources.
+- Open-source notice draft is stored at TaptionEncoder/OpenSourceNotices/FFmpeg-LGPL-Decode-Bridge.txt.
+- Formal counsel approval, final release EULA language, and any LGPL relinking/reverse-engineering obligations remain separate release gates.

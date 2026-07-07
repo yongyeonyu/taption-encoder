@@ -1,0 +1,37 @@
+FFmpeg LGPL Decode Bridge
+
+This build includes a source-built FFmpeg-family decode bridge for selected
+legacy input decoding. The bridge is built from FFmpeg 8.1.1 source code with
+GPL and nonfree components disabled.
+
+Project: FFmpeg
+Website: https://ffmpeg.org/
+Source release: https://ffmpeg.org/releases/ffmpeg-8.1.1.tar.xz
+Source SHA-256: b6863adde98898f42602017462871b5f6333e65aec803fdd7a6308639c52edf3
+License: GNU Lesser General Public License version 2.1 or later
+
+Enabled surface in this Taption Encoder bridge:
+- Libraries: avformat, avcodec, avutil, swscale
+- Demuxers: vc1, avi
+- Decoders: vc1, vc1image, y41p, rawvideo, pcm_s16le
+- Parser: vc1
+- Protocol: file
+
+Build policy:
+- No FFmpeg command-line executable is bundled.
+- No downloaded codec plugin or runtime-downloaded executable is used.
+- No --enable-gpl or --enable-nonfree configure flag is used.
+- H.265 / HEVC MP4/MOV output remains handled by Taption Encoder's AVAssetWriter path.
+
+Source/build reproduction details are recorded in
+Vendor/FFmpegLGPLDecodeBridge/FFMPEG_LGPL_DECODE_BRIDGE_BUILD.txt and
+Scripts/build_ffmpeg_lgpl_decode_bridge.sh.
+
+Release/EULA status:
+- This notice records the engineering source-availability and build surface.
+- Final App Store release still needs formal legal approval.
+- Final EULA review must preserve any LGPL-required reverse-engineering or
+  relinking rights needed for debugging modified LGPL components.
+
+The LGPL license text is available from:
+https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html

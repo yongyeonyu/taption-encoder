@@ -4,8 +4,8 @@ Status date: 2026-07-07
 
 This file stores completed checklist items moved out of `ACTION_ITEMS.md` so the active action list only shows remaining work.
 
-- Completed checklist item count: 244
-- Active remaining checklist item count: 104
+- Completed checklist item count: 245
+- Active remaining checklist item count: 103
 - Source file: `docs/planning/ACTION_ITEMS.md`
 
 ## Release 01.00.02 Closeout
@@ -152,6 +152,7 @@ This file stores completed checklist items moved out of `ACTION_ITEMS.md` so the
 - [x] Add single-asset FFmpeg-family A/V command planning so input-to-H.265 routes can carry audio copy/transcode decisions and source-preserving audio arguments.
 - [x] Add gated FFmpeg-family command executor boundary with fake-runner tests so broad SW codec execution cannot run until all readiness gates close.
 - [x] Connect prepared video command plans to the app encoder service through `SW_FFmpegVideoCodecTranscodeExecutor` so a ready broad SW backend can execute planned input-to-H.265 routes through the same function-style codec request contract.
+- [x] Build and vendor the selected source-built LGPL FFmpeg-family decode bridge for focused VC-1 raw/Y41P execution proof, including configure/component-map/source/notice documentation and iOS simulator H.265 MP4/MOV output verification through the real bundled bridge.
 - [x] Add app-core fixture execution jobs that convert generated video/audio fixture rows into gated FFmpeg-family executor inputs.
 - [x] Run generated AAC/MP4 audio fixture execution jobs through `SW_FFmpegAudioCodecTranscodeExecutor` from function-style audio requests when broad SW backend gates are satisfied.
 - [x] Add app-scheme tests that match app-core fixture execution jobs against the latest SW/HW H.265 output and audio-signal evidence rows.

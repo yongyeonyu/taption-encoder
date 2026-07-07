@@ -6,7 +6,7 @@
 - Repository: `/Users/u_mo_c/Documents/taption_encoder`.
 - Product constraints remain unchanged: Taption Encoder outputs H.265 / HEVC video only, and writable output containers remain MP4/MOV only.
 
-This is backend-decision, host sanity-probe, and app-side runner-contract proof. It is not legal approval, not App Review approval, not a bundled FFmpeg iOS library proof, not real decoder execution proof, not real-device proof, not TestFlight/App Store Connect proof, and not public-release proof.
+This started as backend-decision, host sanity-probe, and app-side runner-contract proof. A same-day follow-up now records source-built bundled bridge and focused iOS simulator real-decoder execution proof in `docs/verification/VC1_Y41P_BUNDLED_FFMPEG_DECODE_BRIDGE_2026-07-07.md`. Neither proof is legal approval, App Review approval, real-device proof, TestFlight/App Store Connect proof, or public-release proof.
 
 ## Sources Checked
 
@@ -116,14 +116,36 @@ What it proves:
 
 What it does not prove:
 
-- It does not decode VC-1 raw or Y41P with a real bundled FFmpeg iOS library.
+- It is superseded by the focused bundled bridge simulator proof for real VC-1 raw/Y41P decode.
 - It does not close legal, App Store, binary-size, notice, or old-device gates.
 - It does not promote VC-1 raw or Y41P to current executable status.
 
+## Bundled Bridge Follow-Up
+
+Follow-up proof file:
+
+```text
+docs/verification/VC1_Y41P_BUNDLED_FFMPEG_DECODE_BRIDGE_2026-07-07.md
+```
+
+Completed in that pass:
+
+- Built and vendored a source-pinned LGPL FFmpeg 8.1.1 decode bridge as an iOS static XCFramework.
+- Recorded the configure line, enabled component map, source URL/SHA-256, notice draft, and EULA/legal follow-up notes.
+- Added test-only VC-1 raw and Y41P fixtures.
+- Replaced the fake-runner-only proof with focused iOS simulator XCTest that calls the bundled bridge in process.
+- Verified VC-1 raw to H.265 MP4 and Y41P to H.265 MOV output.
+
+Remaining proof boundaries:
+
+- Formal legal/license/EULA approval remains open.
+- App Review and release packaging approval remain open.
+- Real-device, iPhone, and older-device thermal/battery/memory/runtime proof remain open.
+- AMR-WB+ remains separate.
+
 ## Remaining Gates
 
-- Build or vendor the selected source-built LGPL FFmpeg-family decode bridge.
-- Finalize configure line, enabled component map, source archive, local diff, notices, and EULA language.
-- Replace fake/injected runner proof with real app-side simulator execution for VC-1 raw and Y41P.
-- Verify H.265 MP4/MOV output duration, dimensions, frame decode, and visual sample decodability.
+- Complete formal legal/license review for the source-built LGPL bridge, source availability, relinking/reverse-engineering/EULA language, and HEVC distribution.
+- Run release archive/export size comparison with the vendored framework.
+- Extend proof from focused simulator fixtures to real-device runtime execution.
 - Collect real-device and older-device thermal/battery/memory/runtime proof separately.

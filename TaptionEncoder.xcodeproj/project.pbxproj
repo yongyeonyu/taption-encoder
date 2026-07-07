@@ -7,8 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		7A2B3C4D5E6F70100000000F /* SW_AV1HEVCTranscodePipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F70100000010F /* SW_AV1HEVCTranscodePipeline.swift */; };
-
 		1A2B3C4D5E6F701000000001 /* TaptionEncoderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F701000000101 /* TaptionEncoderApp.swift */; };
 		1A2B3C4D5E6F701000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F701000000102 /* ContentView.swift */; };
 		1A2B3C4D5E6F701000000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F701000000103 /* Assets.xcassets */; };
@@ -60,6 +58,7 @@
 		61307C1F20466F17394D6B86 /* TaptionEncoderLiveActivityExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ACC87F4CD4CF9E262B4F4A5D /* TaptionEncoderLiveActivityExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		6A2B3C4D5E6F701000000001 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = 6A2B3C4D5E6F701000000102 /* GoogleMobileAds */; };
 		6A2B3C4D5E6F701000000002 /* GoogleUserMessagingPlatform in Frameworks */ = {isa = PBXBuildFile; productRef = 6A2B3C4D5E6F701000000103 /* GoogleUserMessagingPlatform */; };
+		6E3CA325DB23DCB818FBC523 /* TaptionFFmpegDecodeBridge.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 652BF832F12A6006EB816516 /* TaptionFFmpegDecodeBridge.xcframework */; };
 		790301C6FECA6D4835BC1E70 /* EncodingLiveActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25F139C19A60E48CE49E88B2 /* EncodingLiveActivityAttributes.swift */; };
 		7A2B3C4D5E6F701000000001 /* CodecAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000101 /* CodecAlgorithm.swift */; };
 		7A2B3C4D5E6F701000000002 /* HW_AV1HEVCCodecAlgorithm.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000102 /* HW_AV1HEVCCodecAlgorithm.swift */; };
@@ -70,6 +69,7 @@
 		7A2B3C4D5E6F701000000007 /* HW_AppleDeviceCodecProfiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000107 /* HW_AppleDeviceCodecProfiles.swift */; };
 		7A2B3C4D5E6F701000000008 /* HW_AudioCodecCapabilityCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000108 /* HW_AudioCodecCapabilityCatalog.swift */; };
 		7A2B3C4D5E6F701000000009 /* SW_AudioCodecSupportCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000109 /* SW_AudioCodecSupportCatalog.swift */; };
+		7A2B3C4D5E6F70100000000F /* SW_AV1HEVCTranscodePipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F70100000010F /* SW_AV1HEVCTranscodePipeline.swift */; };
 		7A2B3C4D5E6F701000000010 /* AudioCodecRoutePlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000110 /* AudioCodecRoutePlanner.swift */; };
 		7A2B3C4D5E6F701000000011 /* CodecTranscodingRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000111 /* CodecTranscodingRegistry.swift */; };
 		7A2B3C4D5E6F701000000012 /* SW_SoftwareCodecBackendRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A2B3C4D5E6F701000000112 /* SW_SoftwareCodecBackendRegistry.swift */; };
@@ -95,6 +95,8 @@
 		B10000000000000000000003 /* SampleThumbnailCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000116 /* SampleThumbnailCatalog.swift */; };
 		B10000000000000000000004 /* SampleThumbnails in Resources */ = {isa = PBXBuildFile; fileRef = AA2B3C4D5E6F701000000103 /* SampleThumbnails */; };
 		D3D20F0469FF80AE57F5D7BA /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F82EE42DD1A26E2E406B25B9 /* Foundation.framework */; };
+		E20C10D1912A6156FE012F74 /* Y41P.avi in Resources */ = {isa = PBXBuildFile; fileRef = B8858C4E1F3ED23277456780 /* Y41P.avi */; };
+		E7A52CBD8BD1268A8A0B6461 /* VC-1 Raw.vc1 in Resources */ = {isa = PBXBuildFile; fileRef = 5451DA230C981A72D8E8E1BF /* VC-1 Raw.vc1 */; };
 		F302F927F6EAD26A3B0879EA /* EncodingLiveActivityCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61752A4CFD225BC9A187B244 /* EncodingLiveActivityCoordinator.swift */; };
 /* End PBXBuildFile section */
 
@@ -138,8 +140,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		7A2B3C4D5E6F70100000010F /* SW_AV1HEVCTranscodePipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SW_AV1HEVCTranscodePipeline.swift; sourceTree = "<group>"; };
-
 		1A2B3C4D5E6F701000000100 /* Taption Encoder.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Taption Encoder.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		1A2B3C4D5E6F701000000101 /* TaptionEncoderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionEncoderApp.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F701000000102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -191,7 +191,9 @@
 		4A2B3C4D5E6F701000000115 /* HomeMenuSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeMenuSheetView.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000116 /* SampleThumbnailCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleThumbnailCatalog.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000117 /* QueuePreviewViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueuePreviewViews.swift; sourceTree = "<group>"; };
+		5451DA230C981A72D8E8E1BF /* VC-1 Raw.vc1 */ = {isa = PBXFileReference; includeInIndex = 1; name = "VC-1 Raw.vc1"; path = "TaptionEncoderTests/Fixtures/VC-1 Raw.vc1"; sourceTree = "<group>"; };
 		61752A4CFD225BC9A187B244 /* EncodingLiveActivityCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EncodingLiveActivityCoordinator.swift; sourceTree = "<group>"; };
+		652BF832F12A6006EB816516 /* TaptionFFmpegDecodeBridge.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; name = TaptionFFmpegDecodeBridge.xcframework; path = Vendor/FFmpegLGPLDecodeBridge/TaptionFFmpegDecodeBridge.xcframework; sourceTree = "<group>"; };
 		6F29AE51B747E6175D860B6F /* EncodingLiveActivityWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EncodingLiveActivityWidget.swift; sourceTree = "<group>"; };
 		7A2B3C4D5E6F701000000101 /* CodecAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecAlgorithm.swift; sourceTree = "<group>"; };
 		7A2B3C4D5E6F701000000102 /* HW_AV1HEVCCodecAlgorithm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HW_AV1HEVCCodecAlgorithm.swift; sourceTree = "<group>"; };
@@ -202,6 +204,7 @@
 		7A2B3C4D5E6F701000000107 /* HW_AppleDeviceCodecProfiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HW_AppleDeviceCodecProfiles.swift; sourceTree = "<group>"; };
 		7A2B3C4D5E6F701000000108 /* HW_AudioCodecCapabilityCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HW_AudioCodecCapabilityCatalog.swift; sourceTree = "<group>"; };
 		7A2B3C4D5E6F701000000109 /* SW_AudioCodecSupportCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SW_AudioCodecSupportCatalog.swift; sourceTree = "<group>"; };
+		7A2B3C4D5E6F70100000010F /* SW_AV1HEVCTranscodePipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SW_AV1HEVCTranscodePipeline.swift; sourceTree = "<group>"; };
 		7A2B3C4D5E6F701000000110 /* AudioCodecRoutePlanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCodecRoutePlanner.swift; sourceTree = "<group>"; };
 		7A2B3C4D5E6F701000000111 /* CodecTranscodingRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecTranscodingRegistry.swift; sourceTree = "<group>"; };
 		7A2B3C4D5E6F701000000112 /* SW_SoftwareCodecBackendRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SW_SoftwareCodecBackendRegistry.swift; sourceTree = "<group>"; };
@@ -227,6 +230,7 @@
 		B10000000000000000000101 /* ThumbnailProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailProvider.swift; sourceTree = "<group>"; };
 		B10000000000000000000102 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B2312973914E63DB4C5881AD /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B8858C4E1F3ED23277456780 /* Y41P.avi */ = {isa = PBXFileReference; includeInIndex = 1; name = Y41P.avi; path = TaptionEncoderTests/Fixtures/Y41P.avi; sourceTree = "<group>"; };
 		F82EE42DD1A26E2E406B25B9 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
@@ -238,6 +242,7 @@
 				5A2B3C4D5E6F701000000001 /* SwiftVLC in Frameworks */,
 				6A2B3C4D5E6F701000000001 /* GoogleMobileAds in Frameworks */,
 				6A2B3C4D5E6F701000000002 /* GoogleUserMessagingPlatform in Frameworks */,
+				6E3CA325DB23DCB818FBC523 /* TaptionFFmpegDecodeBridge.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -285,6 +290,7 @@
 				1A2B3C4D5E6F701000000302 /* Products */,
 				4E7472FFB47CCB921B9BFCC2 /* TaptionEncoderLiveActivityExtension */,
 				822D7D0C4E2F68FFB02366B3 /* Frameworks */,
+				FE2A0EBF18D249AD953AD70A /* Vendor */,
 			);
 			sourceTree = "<group>";
 		};
@@ -394,14 +400,6 @@
 				3A2B3C4D5E6F701000000301 /* EncoderService.swift */,
 			);
 			path = Encoding;
-			sourceTree = "<group>";
-		};
-		4A2B3C4D5E6F701000000209 /* Preview */ = {
-			isa = PBXGroup;
-			children = (
-				4A2B3C4D5E6F701000000117 /* QueuePreviewViews.swift */,
-			);
-			path = Preview;
 			sourceTree = "<group>";
 		};
 		3A2B3C4D5E6F701000000404 /* MediaInspection */ = {
@@ -520,6 +518,14 @@
 			path = UI;
 			sourceTree = "<group>";
 		};
+		4A2B3C4D5E6F701000000209 /* Preview */ = {
+			isa = PBXGroup;
+			children = (
+				4A2B3C4D5E6F701000000117 /* QueuePreviewViews.swift */,
+			);
+			path = Preview;
+			sourceTree = "<group>";
+		};
 		4E7472FFB47CCB921B9BFCC2 /* TaptionEncoderLiveActivityExtension */ = {
 			isa = PBXGroup;
 			children = (
@@ -529,6 +535,23 @@
 			name = TaptionEncoderLiveActivityExtension;
 			path = TaptionEncoderLiveActivityExtension;
 			sourceTree = "<group>";
+		};
+		5F31DA34F2410418BCCCC3F7 /* Fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				5451DA230C981A72D8E8E1BF /* VC-1 Raw.vc1 */,
+				B8858C4E1F3ED23277456780 /* Y41P.avi */,
+			);
+			name = Fixtures;
+			sourceTree = SOURCE_ROOT;
+		};
+		72A0336A024DD87A1835C5E5 /* FFmpegLGPLDecodeBridge */ = {
+			isa = PBXGroup;
+			children = (
+				652BF832F12A6006EB816516 /* TaptionFFmpegDecodeBridge.xcframework */,
+			);
+			name = FFmpegLGPLDecodeBridge;
+			sourceTree = SOURCE_ROOT;
 		};
 		7A2B3C4D5E6F701000000300 /* Codecs */ = {
 			isa = PBXGroup;
@@ -589,6 +612,7 @@
 				8A2B3C4D5E6F701000000101 /* CodecRoutePlannerTests.swift */,
 				8A2B3C4D5E6F701000000102 /* CodecFixtureEvidenceTests.swift */,
 				8A2B3C4D5E6F701000000103 /* ProjectDocumentTests.swift */,
+				5F31DA34F2410418BCCCC3F7 /* Fixtures */,
 			);
 			path = TaptionEncoderTests;
 			sourceTree = "<group>";
@@ -609,6 +633,14 @@
 			);
 			name = LiveActivity;
 			path = LiveActivity;
+			sourceTree = "<group>";
+		};
+		FE2A0EBF18D249AD953AD70A /* Vendor */ = {
+			isa = PBXGroup;
+			children = (
+				72A0336A024DD87A1835C5E5 /* FFmpegLGPLDecodeBridge */,
+			);
+			name = Vendor;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -758,6 +790,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E7A52CBD8BD1268A8A0B6461 /* VC-1 Raw.vc1 in Resources */,
+				E20C10D1912A6156FE012F74 /* Y41P.avi in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

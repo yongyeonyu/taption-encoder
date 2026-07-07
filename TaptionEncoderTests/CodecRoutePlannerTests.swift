@@ -7380,7 +7380,10 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(decision.selectedOutputPolicy.contains("Do not add non-H.265 outputs"))
         XCTAssertTrue(decision.sourceURLs.contains("https://www.ffmpeg.org/legal.html"))
         XCTAssertTrue(decision.sourceURLs.contains("https://github.com/arthenica/ffmpeg-kit/wiki/License"))
-        XCTAssertTrue(decision.proofBoundary.contains("not legal approval"))
+        XCTAssertTrue(decision.proofBoundary.contains("focused iOS simulator real-decoder execution proof"))
+        XCTAssertTrue(decision.proofBoundary.contains("not formal legal approval"))
+        XCTAssertTrue(decision.proofBoundary.contains("not App Review approval"))
+        XCTAssertTrue(decision.proofBoundary.contains("not public-release proof"))
 
         let rejectedIDs = Set(
             decision.candidates
@@ -7714,6 +7717,108 @@ final class CodecRoutePlannerTests: XCTestCase {
             XCTAssertTrue(FileManager.default.fileExists(atPath: outputURL.path), runnerCase.sourceCodec.rawValue)
             XCTAssertTrue(outputURL.pathExtension == runnerCase.outputContainer.defaultFileExtension)
         }
+    }
+
+    func testBundledFFmpegDecodeBridgeEncodesVC1RawAndY41PToHEVCMP4MOVInSimulator() async throws {
+        #if targetEnvironment(simulator)
+        struct BridgeCase: Sendable {
+            var fixtureResourceName: String
+            var fixtureExtension: String
+            var sourceCodec: TaptionVideoCodec
+            var sourceContainer: TaptionVideoContainer
+            var outputContainer: TaptionVideoContainer
+            var outputFileName: String
+            var size: TaptionPixelSize
+            var frameRate: TaptionRationalFrameRate
+            var expectedDuration: TimeInterval
+        }
+
+        let cases = [
+            BridgeCase(
+                fixtureResourceName: "VC-1 Raw",
+                fixtureExtension: "vc1",
+                sourceCodec: .vc1,
+                sourceContainer: .rawElementaryStream,
+                outputContainer: .mp4,
+                outputFileName: "vc1-raw-ffmpeg-bridge-hevc.mp4",
+                size: TaptionPixelSize(width: 720, height: 480),
+                frameRate: TaptionRationalFrameRate(numerator: 30),
+                expectedDuration: 20.0 / 30.0
+            ),
+            BridgeCase(
+                fixtureResourceName: "Y41P",
+                fixtureExtension: "avi",
+                sourceCodec: .y41p,
+                sourceContainer: .avi,
+                outputContainer: .mov,
+                outputFileName: "y41p-ffmpeg-bridge-hevc.mov",
+                size: TaptionPixelSize(width: 160, height: 120),
+                frameRate: TaptionRationalFrameRate(numerator: 25),
+                expectedDuration: 20.0 / 25.0
+            )
+        ]
+
+        for bridgeCase in cases {
+            let sourceURL = try bundledTestFixtureURL(
+                resourceName: bridgeCase.fixtureResourceName,
+                extension: bridgeCase.fixtureExtension
+            )
+            let outputURL = temporaryTestURL(fileName: bridgeCase.outputFileName)
+            try? FileManager.default.removeItem(at: outputURL)
+            defer { try? FileManager.default.removeItem(at: outputURL) }
+
+            let asset = TaptionVideoAsset(
+                displayName: sourceURL.lastPathComponent,
+                location: TaptionVideoAssetLocation(kind: .file),
+                container: bridgeCase.sourceContainer,
+                duration: bridgeCase.expectedDuration,
+                videoTrack: TaptionVideoTrackInfo(
+                    codec: bridgeCase.sourceCodec,
+                    naturalSize: bridgeCase.size,
+                    displaySize: bridgeCase.size,
+                    nominalFrameRate: bridgeCase.frameRate,
+                    estimatedBitrate: 2_000_000
+                ),
+                audioTracks: []
+            )
+            let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+                asset: asset,
+                sourceURL: sourceURL,
+                temporaryOutputURL: outputURL,
+                outputPolicy: TaptionVideoOutputPolicy(
+                    videoCodec: .hevc,
+                    audioCodec: .aac,
+                    container: bridgeCase.outputContainer
+                ),
+                savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+            )
+            let commandPlan = try XCTUnwrap(plan.videoCommandPlan, bridgeCase.sourceCodec.rawValue)
+            XCTAssertEqual(commandPlan.backend, .ffmpegFamily)
+            XCTAssertEqual(plan.codecRoute, TaptionCodecRoute(sourceCodec: bridgeCase.sourceCodec, outputCodec: .hevc))
+            XCTAssertEqual(plan.codecExecutionKind, .planned)
+
+            let service = AVFoundationHEVCEncoderService(
+                softwareExecutor: SW_FFmpegCommandExecutor(
+                    readinessReport: readyBroadSoftwareBackendReport(),
+                    runner: SW_FFmpegDecodeBridgeCommandRunner(maximumFrameCount: 20)
+                ),
+                outputVerifier: DisabledSourcePreservingOutputVerifier()
+            )
+            let result = try await service.encode(plan: plan, progress: { _ in })
+            let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: result.temporaryOutputURL)
+
+            XCTAssertTrue(FileManager.default.fileExists(atPath: result.temporaryOutputURL.path), bridgeCase.sourceCodec.rawValue)
+            XCTAssertEqual(result.usedBackend, .ffmpegFamily)
+            XCTAssertEqual(result.usedMode, .software)
+            XCTAssertEqual(outputAsset.container, bridgeCase.outputContainer)
+            XCTAssertEqual(outputAsset.videoTrack?.codec, .hevc)
+            XCTAssertEqual(outputAsset.videoTrack?.displaySize, bridgeCase.size)
+            XCTAssertTrue(outputAsset.audioTracks.isEmpty)
+            XCTAssertEqual(outputAsset.duration ?? 0, bridgeCase.expectedDuration, accuracy: 0.35)
+        }
+        #else
+        throw XCTSkip("Bundled FFmpeg decode bridge proof is simulator-scoped in this pass.")
+        #endif
     }
 
     func testEncoderServiceFailsWhenSourcePreservingOutputVerificationFails() async throws {
@@ -12276,6 +12381,17 @@ final class CodecRoutePlannerTests: XCTestCase {
 
     private func bundledPlannedSampleCodecExpectations() -> [(String, TaptionVideoCodec)] {
         []
+    }
+
+    private func bundledTestFixtureURL(
+        resourceName: String,
+        extension resourceExtension: String
+    ) throws -> URL {
+        let bundle = Bundle(for: type(of: self))
+        guard let url = bundle.url(forResource: resourceName, withExtension: resourceExtension) else {
+            throw XCTSkip("Missing bundled test fixture \(resourceName).\(resourceExtension).")
+        }
+        return url
     }
 
     private func requireLocalRealSampleProofs() throws {
