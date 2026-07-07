@@ -195,7 +195,7 @@ No iPhone proof and no older-device thermal/battery/memory/runtime proof were co
 
 - Formal counsel approval for LGPL static-linking, source availability, relinking/reverse-engineering/EULA language, enabled component compatibility, and HEVC distribution.
 - App Review submission/approval and final release packaging/export review after the local engineering preflight in `docs/verification/FFMPEG_BRIDGE_LEGAL_RELEASE_PREFLIGHT_2026-07-07.md`.
-- App Store distribution export/IPA size review.
+- App Store distribution export/IPA size was measured separately in `docs/verification/FFMPEG_BRIDGE_LEGAL_RELEASE_PREFLIGHT_2026-07-07.md`; upload, processing, App Review, and public release remain separate.
 - Real-device bridge execution proof.
 - iPhone and older-device thermal/battery/memory/runtime threshold proof.
 - AMR-WB+ remains separate because this VC-1/Y41P decode bridge does not prove `sawp` AMR-WB+ decode.

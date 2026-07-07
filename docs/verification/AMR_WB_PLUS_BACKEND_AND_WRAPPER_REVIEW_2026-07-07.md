@@ -14,7 +14,7 @@ This is host-side sample/container proof plus engineering review evidence. It is
 - GNU LGPL 2.1 text: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
 - Apple App Review Guidelines, section 2.5.2: https://developer.apple.com/app-store/review/guidelines/
 - VoiceAge AMR-WB+ licensing page: https://voiceage.com/AMR-WBplus.html
-- 3GPP 26-series specification index: https://www.3gpp.org/dynareport?code=26-series.htm
+- 3GPP TS 26.290 AMR-WB+ specification page: https://www.3gpp.org/dynareport/26290.htm
 
 ## Backend Review
 
@@ -29,6 +29,10 @@ Practical decision:
 - VC-1 raw and Y41P remain best served by a minimal bundled FFmpeg-family or equivalent demux/decode backend after license/App Store review.
 - AMR-WB+ should not be assumed covered by that same backend unless the selected backend actually decodes `sawp` in the app build.
 - If AMR-WB+ requires 3GPP/reference-code integration, treat it as a separate dependency review from the broad FFmpeg-family video backend.
+
+Formal AMR-WB+ backend/IPR approval status as of 2026-07-07: not obtained. VoiceAge publishes AMR-WB+ IPR contact information, and 3GPP TS 26.290 identifies AMR-WB+ transcoding functions, but no counsel-approved patent/IPR, source-license, EULA, or App Store dependency decision exists in this repository.
+
+App-side execution status as of 2026-07-07: not proven. The only positive decode proof is host/reference-tool proof, and the only video-wrapper proof is host/container proof. No bundled AMR-WB+ decoder exists, no AMR-WB+ sample is bundled, and no simulator or real-device XCTest currently decodes `sawp` audio in Taption Encoder.
 
 ## Video-Wrapper Sample Path
 

@@ -15,11 +15,14 @@ This is an engineering preflight. It is not legal advice, not formal counsel app
 - GNU LGPL 2.1 text: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
 - Apple App Review overview: https://developer.apple.com/distribute/app-review/
 - Apple App Store Review Guidelines, section 2.5.2 self-contained app rule: https://developer.apple.com/app-store/review/guidelines/
+- Apple App Store Connect maximum build file sizes: https://developer.apple.com/help/app-store-connect/reference/app-uploads/maximum-build-file-sizes
 - VCL Advance / Via Licensing Alliance HEVC/VVC program page: https://www.via-la.com/licensing-programs/hevc-vvc/
 - VoiceAge AMR-WB+ page: https://voiceage.com/AMR-WBplus.html
 - 3GPP TS 26.290 AMR-WB+ specification page: https://www.3gpp.org/dynareport/26290.htm
 
 ## Legal, License, EULA, And Source Availability Preflight
+
+Formal counsel approval status as of 2026-07-07: not obtained. This document is an engineering evidence packet and approval checklist only; it cannot approve LGPL static linking, EULA language, source-availability packaging, HEVC patent/distribution obligations, App Review posture, or AMR-WB+ IPR.
 
 Current engineering-pass items:
 
@@ -115,18 +118,57 @@ Archive inspection notes:
 - `otool -L` did not show FFmpeg/libav dynamic dependencies in the app executable.
 - The app bundle did not contain a separate FFmpeg framework or static archive file; the only app-bundle file matching FFmpeg was `OpenSourceNotices/FFmpeg-LGPL-Decode-Bridge.txt`.
 - The archive used `Release` configuration but Apple Development signing. This is a local release-configuration size preflight only, not an App Store distribution export, not notarized/signing finality, and not upload proof.
-- No IPA/export size was produced in this pass.
+- No IPA/export size was produced in the initial archive-size comparison pass. The follow-up App Store distribution export size review below covers that separate surface.
 
-Decision: the current bridge has minimal measured archive-size impact in this Release archive preflight. Final App Store export/IPA size and App Store Connect processing must be reviewed separately before submission.
+Decision: the current bridge has minimal measured archive-size impact in this Release archive preflight. App Store Connect processing still must be reviewed separately before submission.
+
+## App Store Distribution Export And IPA Size Review
+
+Follow-up command:
+
+```text
+archive command: xcodebuild archive -project TaptionEncoder.xcodeproj -scheme TaptionEncoder -configuration Release -destination 'generic/platform=iOS' -archivePath build/AppStoreDistributionSize-2026-07-07/TaptionEncoder.xcarchive COMPILER_INDEX_STORE_ENABLE=NO
+export command: xcodebuild -exportArchive -archivePath build/AppStoreDistributionSize-2026-07-07/TaptionEncoder.xcarchive -exportPath build/AppStoreDistributionSize-2026-07-07/export -exportOptionsPlist build/AppStoreDistributionSize-2026-07-07/ExportOptions.plist -allowProvisioningUpdates
+export options: method=app-store-connect, destination=export, signingStyle=automatic, stripSwiftSymbols=true, uploadSymbols=false, testFlightInternalTestingOnly=true
+archive result: ** ARCHIVE SUCCEEDED **
+export result: ** EXPORT SUCCEEDED **
+```
+
+Exported app identity:
+
+| Surface | Value |
+| --- | --- |
+| Bundle id | `com.taption.encoder` |
+| Version/build | `1.1.0 (30)` |
+| Architecture | `arm64` |
+| Export signing | Cloud Managed Apple Distribution |
+| Provisioning | iOS Team Store Provisioning Profile for the app and extensions |
+
+Size results:
+
+| Surface | Size |
+| --- | ---: |
+| Export work directory | 175 MB |
+| `.xcarchive` | 117 MB |
+| `.app` bundle inside archive | 91 MB |
+| Export folder | 58 MB |
+| `Taption Encoder.ipa` | 57 MB (`60,136,837` bytes) |
+| IPA uncompressed payload | `95,260,878` bytes across 225 files |
+| Main executable in IPA | `39,379,520` bytes |
+| Bundled `TestVideos` in IPA | `44,080,120` bytes |
+
+Apple's current maximum build-size reference says iOS/iPadOS apps with an iOS 9.0 or later deployment target can be up to 4 GB uncompressed, and each Mach-O executable must stay under the listed executable limit for the supported platform. The exported `1.1.0 (30)` IPA is well below the uncompressed app-size limit, and the main executable is well below the iOS/iPadOS executable limit.
+
+Decision: App Store distribution export and IPA size measurement succeeded locally for build `1.1.0 (30)`. This is not App Store Connect upload proof, not TestFlight availability, not App Review submission/approval, not processing completion, and not public-release proof.
 
 ## Device Runtime Proof Status
 
 Current device availability:
 
 ```text
-iPad Pro (12.9-inch) (6th generation) (iPad14,6): available (paired)
+iPad Pro (12.9-inch) (6th generation) (iPad14,6): connected
 iPhone 14 Pro (iPhone15,2): unavailable
-older device: not connected
+older device: not connected/listed
 ```
 
 No iPhone runtime proof, no older-device thermal/battery/memory/runtime threshold proof, and no real-device FFmpeg-bridge VC-1/Y41P execution proof were collected in this pass.
@@ -150,6 +192,7 @@ Decision: keep AMR-WB+ unsupported/planned until a separate backend, patent/IPR,
 - Engineering preflight completed for the VC-1 raw/Y41P bridge legal/App Review/release-size surface.
 - Formal legal/license/EULA/source-availability/HEVC approval remains open.
 - App Review submission/approval remains open.
-- Current release archive size impact is low in local measurement, but final App Store export/IPA size remains open.
+- Current release archive size impact is low in local measurement.
+- App Store distribution export/IPA size review succeeded locally for `1.1.0 (30)` with a 57 MB IPA. No upload, processing, TestFlight availability, App Review, or public-release proof was produced by this export.
 - iPhone and older-device runtime/thermal/battery/memory proof remains uncollected because the iPhone was unavailable and no older device was connected.
 - AMR-WB+ remains a separate backend/IPR item.
