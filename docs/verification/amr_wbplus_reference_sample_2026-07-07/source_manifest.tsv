@@ -1,3 +1,0 @@
-item	status	source	revision	license_status	notes
-amr_wbp_plus_reference_repo	selected	https://github.com/kholia/amr-wbp-plus.git	b3f202dcfca359875676f8890b8bc4812e328560	not_product_reviewed	Used locally only to generate and decode AMR-WB+ reference samples; not bundled and not approved as an app backend.
-amr_wbplus_reference_temp_patch	applied_locally	/tmp/taption_amr_wbp_plus_repo	n/a	not_product_code	Mac allocation include fix, MP4 movie initialization, AMR-WB+ sample description, audio track bit, and sample table restoration were applied only in temp reference code.

@@ -88,12 +88,9 @@
 		8A2B3C4D5E6F701000000003 /* ProjectDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000103 /* ProjectDocumentTests.swift */; };
 		9A2B3C4D5E6F701000000001 /* OpenSourceNotices in Resources */ = {isa = PBXBuildFile; fileRef = 9A2B3C4D5E6F701000000101 /* OpenSourceNotices */; };
 		AA2B3C4D5E6F701000000001 /* TestVideoSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2B3C4D5E6F701000000101 /* TestVideoSeeder.swift */; };
-		AA2B3C4D5E6F701000000002 /* TestVideos in Resources */ = {isa = PBXBuildFile; fileRef = AA2B3C4D5E6F701000000102 /* TestVideos */; };
-		AA2B3C4D5E6F701000000003 /* SampleThumbnails in Resources */ = {isa = PBXBuildFile; fileRef = AA2B3C4D5E6F701000000103 /* SampleThumbnails */; };
 		B10000000000000000000001 /* ThumbnailProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000101 /* ThumbnailProvider.swift */; };
 		B10000000000000000000002 /* TaptionEncoderThumbnailExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B10000000000000000000100 /* TaptionEncoderThumbnailExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		B10000000000000000000003 /* SampleThumbnailCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000116 /* SampleThumbnailCatalog.swift */; };
-		B10000000000000000000004 /* SampleThumbnails in Resources */ = {isa = PBXBuildFile; fileRef = AA2B3C4D5E6F701000000103 /* SampleThumbnails */; };
 		D3D20F0469FF80AE57F5D7BA /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F82EE42DD1A26E2E406B25B9 /* Foundation.framework */; };
 		E20C10D1912A6156FE012F74 /* Y41P.avi in Resources */ = {isa = PBXBuildFile; fileRef = B8858C4E1F3ED23277456780 /* Y41P.avi */; };
 		E7A52CBD8BD1268A8A0B6461 /* VC-1 Raw.vc1 in Resources */ = {isa = PBXBuildFile; fileRef = 5451DA230C981A72D8E8E1BF /* VC-1 Raw.vc1 */; };
@@ -223,8 +220,6 @@
 		8A2B3C4D5E6F701000000103 /* ProjectDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDocumentTests.swift; sourceTree = "<group>"; };
 		9A2B3C4D5E6F701000000101 /* OpenSourceNotices */ = {isa = PBXFileReference; lastKnownFileType = folder; path = OpenSourceNotices; sourceTree = "<group>"; };
 		AA2B3C4D5E6F701000000101 /* TestVideoSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestVideoSeeder.swift; sourceTree = "<group>"; };
-		AA2B3C4D5E6F701000000102 /* TestVideos */ = {isa = PBXFileReference; lastKnownFileType = folder; path = TestVideos; sourceTree = "<group>"; };
-		AA2B3C4D5E6F701000000103 /* SampleThumbnails */ = {isa = PBXFileReference; lastKnownFileType = folder; path = SampleThumbnails; sourceTree = "<group>"; };
 		ACC87F4CD4CF9E262B4F4A5D /* TaptionEncoderLiveActivityExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; name = TaptionEncoderLiveActivityExtension.appex; path = TaptionEncoderLiveActivityExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10000000000000000000100 /* TaptionEncoderThumbnailExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TaptionEncoderThumbnailExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10000000000000000000101 /* ThumbnailProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailProvider.swift; sourceTree = "<group>"; };
@@ -305,8 +300,6 @@
 				4A2B3C4D5E6F701000000203 /* Shared */,
 				2A2B3C4D5E6F701000000300 /* Core */,
 				1A2B3C4D5E6F701000000103 /* Assets.xcassets */,
-				AA2B3C4D5E6F701000000102 /* TestVideos */,
-				AA2B3C4D5E6F701000000103 /* SampleThumbnails */,
 				9A2B3C4D5E6F701000000101 /* OpenSourceNotices */,
 			);
 			path = TaptionEncoder;
@@ -780,8 +773,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A2B3C4D5E6F701000000003 /* Assets.xcassets in Resources */,
-				AA2B3C4D5E6F701000000002 /* TestVideos in Resources */,
-				AA2B3C4D5E6F701000000003 /* SampleThumbnails in Resources */,
 				9A2B3C4D5E6F701000000001 /* OpenSourceNotices in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -799,7 +790,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B10000000000000000000004 /* SampleThumbnails in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
