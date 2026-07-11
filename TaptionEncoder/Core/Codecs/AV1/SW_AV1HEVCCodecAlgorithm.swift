@@ -292,6 +292,28 @@ enum SW_HEVCHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
     }
 }
 
+enum SW_DolbyVisionHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
+    static let descriptor = TaptionCodecAlgorithmDescriptor(
+        sourceCodec: .dolbyVisionHEVC,
+        outputCodec: .hevc,
+        mode: .software,
+        backend: .softwareVLCDecoder,
+        displayName: "Dolby Vision H.265 to H.265 Software"
+    )
+
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        try SW_AV1HEVCTranscoder.validate(request: request, sourceCodec: .dolbyVisionHEVC)
+        return try await SW_AV1HEVCTranscoder.transcodeToHEVC(
+            request: request,
+            sourceCodecLabel: "Dolby Vision H.265",
+            progress: progress
+        )
+    }
+}
+
 enum SW_VP9HEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
     static let descriptor = TaptionCodecAlgorithmDescriptor(
         sourceCodec: .vp9,
@@ -1481,6 +1503,13 @@ enum SW_RawVideoHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
 }
 
 extension SW_AV1HEVCTranscoder {
+    static func requestedDecoderPlaybackRate(
+        optimizationProfile: TaptionEncodingOptimizationProfile,
+        hasAudioOutput: Bool
+    ) -> Float {
+        hasAudioOutput ? 1 : optimizationProfile.softwareVideoOnlyDecoderPlaybackRate
+    }
+
     static func validate(
         request: TaptionCodecTranscodeRequest,
         sourceCodec: TaptionVideoCodec
@@ -1575,6 +1604,7 @@ extension SW_AV1HEVCTranscoder {
                     elapsedTime: Date().timeIntervalSince(startedAt),
                     estimatedRemainingTime: nil
                 ), force: true)
+                try await Task.sleep(nanoseconds: 500_000_000)
                 runStats = try await transcode(
                     sourceURL: request.sourceURL,
                     configuration: configuration,
@@ -1719,7 +1749,11 @@ extension SW_AV1HEVCTranscoder {
             writer.add(audioInput)
             audioContext = try SW_AV1AudioWriterContext(
                 audioInput: audioInput,
-                configuration: audioConfiguration
+                configuration: audioConfiguration,
+                maximumPendingSampleBufferCount: configuration.optimizationProfile
+                    .softwareAudioPipelineDepth,
+                backpressureSleepMicroseconds: configuration.optimizationProfile
+                    .writerBackpressureSleepMicroseconds
             )
         } else {
             audioContext = nil
@@ -1748,6 +1782,14 @@ extension SW_AV1HEVCTranscoder {
             expectedFrameCount: configuration.expectedFrameCount,
             limitsToExpectedFrameCount: configuration.limitsToExpectedFrameCount,
             allowsLegacyFrameHoldToPreserveDuration: configuration.allowsLegacyFrameHoldToPreserveDuration,
+            progressFrameStride: configuration.optimizationProfile == .performance
+                ? max(
+                    1,
+                    Int((0.5 / max(configuration.frameDuration.seconds, 0.001)).rounded())
+                )
+                : 1,
+            maximumPendingFrameCount: configuration.optimizationProfile.softwareFramePipelineDepth,
+            backpressureSleepMicroseconds: configuration.optimizationProfile.writerBackpressureSleepMicroseconds,
             progressHandler: progressHandler
         )
         let videoOpaque = Unmanaged.passRetained(context).toOpaque()
@@ -1826,6 +1868,27 @@ extension SW_AV1HEVCTranscoder {
                 userInfo: [NSLocalizedDescriptionKey: "Failed to start the software \(sourceCodecLabel) decoder."]
             )
         }
+
+        let profilePlaybackRate = configuration.optimizationProfile.softwareVideoOnlyDecoderPlaybackRate
+        let requestedPlaybackRate = requestedDecoderPlaybackRate(
+            optimizationProfile: configuration.optimizationProfile,
+            hasAudioOutput: audioContext != nil
+        )
+        let playbackRateStatus = requestedPlaybackRate > 1
+            ? libvlc_media_player_set_rate(player, requestedPlaybackRate)
+            : 0
+        let reportedPlaybackRate = libvlc_media_player_get_rate(player)
+        AppLogger.info(
+            "Software \(sourceCodecLabel) decoder playback rate configured",
+            category: .encoding,
+            metadata: [
+                "profileRate": String(format: "%.2f", profilePlaybackRate),
+                "requestedRate": String(format: "%.2f", requestedPlaybackRate),
+                "reportedRate": String(format: "%.2f", reportedPlaybackRate),
+                "accepted": "\(playbackRateStatus == 0)",
+                "limitedByAudioPreservation": "\(audioContext != nil && profilePlaybackRate > 1)"
+            ]
+        )
 
         let startUptime = ProcessInfo.processInfo.systemUptime
         var stopRequested = false
@@ -1954,7 +2017,10 @@ extension SW_AV1HEVCTranscoder {
                 )
             }
 
-            try await Task.sleep(nanoseconds: 50_000_000)
+            try await Task.sleep(
+                nanoseconds: configuration.optimizationProfile
+                    .softwareDecodePollingIntervalNanoseconds
+            )
         }
 
         if let error = context.snapshotError() {
@@ -2035,12 +2101,17 @@ extension SW_AV1HEVCTranscoder {
             compressionProperties[AVVideoAllowFrameReorderingKey] = false
             compressionProperties[AVVideoMaxKeyFrameIntervalKey] = min(max(fps, 1), 240)
         }
-        return [
+        TaptionHEVCWriterPerformanceHints.apply(
+            to: &compressionProperties,
+            optimizationProfile: optimizationProfile
+        )
+        let outputSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.hevc,
             AVVideoWidthKey: width,
             AVVideoHeightKey: height,
             AVVideoCompressionPropertiesKey: compressionProperties
         ]
+        return outputSettings
     }
 
     private static func pixelBufferAttributes(size: CGSize) -> [String: Any] {
@@ -2139,8 +2210,7 @@ extension SW_AV1HEVCTranscoder {
         let deadline = ProcessInfo.processInfo.systemUptime + 2.5
         while ProcessInfo.processInfo.systemUptime < deadline {
             let state = libvlc_media_player_get_state(player)
-            if (state == libvlc_Stopped || state == libvlc_Error),
-               libvlc_media_player_has_vout(player) == 0 {
+            if state == libvlc_Stopped || state == libvlc_Error {
                 return
             }
             usleep(20_000)

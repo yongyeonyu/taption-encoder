@@ -423,7 +423,10 @@ enum TaptionCodecRoutePlanner {
     }
 
     private static func softwareDecodeBackend(for codec: TaptionVideoCodec) -> TaptionEncodingBackend? {
-        SW_SoftwareCodecBackendRegistry.currentExecutableVideoDecodeBackend(for: codec)
+        if TaptionCodecRegistry.appleNativeHEVCSoftwareSourceCodecs.contains(codec) {
+            return .appleAVAssetExport
+        }
+        return SW_SoftwareCodecBackendRegistry.currentExecutableVideoDecodeBackend(for: codec)
     }
 
     private static func implementedRouteWaitingForSoftwareBackendSelection(

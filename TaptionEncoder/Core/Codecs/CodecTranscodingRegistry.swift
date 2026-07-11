@@ -39,6 +39,7 @@ struct TaptionCodecTranscodingRegistry: @unchecked Sendable {
             TaptionCodecTranscodingAlgorithmEntry(SW_AV1HEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_H264HEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_HEVCHEVCTranscoder.self),
+            TaptionCodecTranscodingAlgorithmEntry(SW_DolbyVisionHEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_VP9HEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_VP8HEVCTranscoder.self),
             TaptionCodecTranscodingAlgorithmEntry(SW_MPEG1HEVCTranscoder.self),
@@ -96,6 +97,16 @@ struct TaptionCodecTranscodingRegistry: @unchecked Sendable {
                 descriptor: descriptor,
                 transcode: { request, progress in
                     try await HW_AppleHEVCCodecAlgorithm.transcode(request: request, progress: progress)
+                }
+            )
+        } + TaptionCodecRegistry.bundledFFmpegDecodeBridgeAlgorithmDescriptors.map { descriptor in
+            TaptionCodecTranscodingAlgorithmEntry(
+                descriptor: descriptor,
+                transcode: { request, progress in
+                    try await SW_FFmpegDecodeBridgeFallbackTranscoder.transcode(
+                        request: request,
+                        progress: progress
+                    )
                 }
             )
         }

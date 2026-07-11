@@ -22,22 +22,23 @@ Configure flags:
   --enable-avutil
   --enable-swscale
   --enable-protocol=file
-  --enable-demuxer=vc1,avi
+  --enable-demuxer=vc1,avi,mov
   --enable-parser=vc1
-  --enable-decoder=vc1,vc1image,y41p,rawvideo,pcm_s16le
+  --enable-decoder=vc1,vc1image,y41p,rawvideo,pcm_s16le,prores_raw
 
-Enabled demuxers: vc1, avi
-Enabled decoders: vc1, vc1image, y41p, rawvideo, pcm_s16le
+Enabled demuxers: vc1, avi, mov
+Enabled decoders: vc1, vc1image, y41p, rawvideo, pcm_s16le, prores_raw
 Enabled parser: vc1
 Enabled protocol: file
 Enabled libraries linked into bridge: avformat, avcodec, avutil, swscale
+Bridge frame outputs: direct NV12 video for even dimensions, BGRA fallback video for odd dimensions, and packed signed 16-bit PCM audio
 
 Policy:
 - No --enable-gpl
 - No --enable-nonfree
 - No external libraries
 - No FFmpeg executable or runtime-downloaded plugin
-- Decode-only bridge; H.265 / HEVC MP4/MOV output remains handled by Taption Encoder's AVAssetWriter path.
+- Decode-only bridge for VC-1 raw, Y41P, ProRes RAW fallback, and supported packed signed 16-bit PCM audio; H.265 / HEVC MP4/MOV plus Apple-native audio output remain handled by Taption Encoder's AVAssetWriter path.
 
 Notice/source/EULA checklist:
 - Source availability is pinned to the official source URL and SHA-256 above.

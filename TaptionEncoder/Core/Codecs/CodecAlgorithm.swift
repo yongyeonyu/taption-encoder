@@ -279,10 +279,11 @@ enum TaptionCodecRegistry {
         TaptionCodecRoute(sourceCodec: .h263, outputCodec: .hevc)
     ]
 
-    static let softwareImplementedRoutes: Set<TaptionCodecRoute> = [
+    private static let vlcSoftwareImplementedRoutes: Set<TaptionCodecRoute> = [
         TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .h264, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .hevc, outputCodec: .hevc),
+        TaptionCodecRoute(sourceCodec: .dolbyVisionHEVC, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .vp9, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .vp8, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .mpeg1, outputCodec: .hevc),
@@ -336,6 +337,66 @@ enum TaptionCodecRegistry {
         TaptionCodecRoute(sourceCodec: .yuv4, outputCodec: .hevc),
         TaptionCodecRoute(sourceCodec: .rawVideo, outputCodec: .hevc)
     ]
+
+    static var appleNativeHEVCSoftwareSourceCodecs: [TaptionVideoCodec] {
+        var codecs: [TaptionVideoCodec] = [
+            .hevcWithAlpha,
+            .jpeg,
+            .jpegXL
+        ]
+        if #available(iOS 26.0, macOS 26.0, tvOS 26.0, *) {
+            codecs.append(.proResRaw)
+        }
+        return codecs
+    }
+
+    static var appleNativeHEVCSoftwareRoutes: Set<TaptionCodecRoute> {
+        Set(appleNativeHEVCSoftwareSourceCodecs.map {
+            TaptionCodecRoute(sourceCodec: $0, outputCodec: .hevc)
+        })
+    }
+
+    static let bundledFFmpegDecodeBridgeSourceCodecs: [TaptionVideoCodec] = [
+        .vc1,
+        .y41p,
+        .proResRaw
+    ]
+
+    static var bundledFFmpegDecodeBridgeRoutes: Set<TaptionCodecRoute> {
+        Set(bundledFFmpegDecodeBridgeSourceCodecs.map {
+            TaptionCodecRoute(sourceCodec: $0, outputCodec: .hevc)
+        })
+    }
+
+    static var bundledFFmpegDecodeBridgeAlgorithmDescriptors: [TaptionCodecAlgorithmDescriptor] {
+        bundledFFmpegDecodeBridgeSourceCodecs.map { sourceCodec in
+            TaptionCodecAlgorithmDescriptor(
+                sourceCodec: sourceCodec,
+                outputCodec: .hevc,
+                mode: .software,
+                backend: .ffmpegFamily,
+                displayName: "\(sourceCodec.shortDisplayName) to H.265 Bundled Decode Bridge"
+            )
+        }
+    }
+
+    static var appleNativeHEVCSoftwareAlgorithmDescriptors: [TaptionCodecAlgorithmDescriptor] {
+        appleNativeHEVCSoftwareSourceCodecs.map { sourceCodec in
+            TaptionCodecAlgorithmDescriptor(
+                sourceCodec: sourceCodec,
+                outputCodec: .hevc,
+                mode: .software,
+                backend: .appleAVAssetExport,
+                displayName: "\(sourceCodec.shortDisplayName) to H.265 Apple Native"
+            )
+        }
+    }
+
+    static var softwareImplementedRoutes: Set<TaptionCodecRoute> {
+        vlcSoftwareImplementedRoutes
+            .union(appleNativeHEVCSoftwareRoutes)
+            .union(bundledFFmpegDecodeBridgeRoutes)
+    }
 
     static let appleNativeHEVCHardwareSourceCodecs: [TaptionVideoCodec] = [
         .h264,
@@ -400,6 +461,13 @@ enum TaptionCodecRegistry {
             mode: .software,
             backend: .softwareVLCDecoder,
             displayName: "H.265 to H.265 Software"
+        ),
+        TaptionCodecAlgorithmDescriptor(
+            sourceCodec: .dolbyVisionHEVC,
+            outputCodec: .hevc,
+            mode: .software,
+            backend: .softwareVLCDecoder,
+            displayName: "Dolby Vision H.265 to H.265 Software"
         ),
         TaptionCodecAlgorithmDescriptor(
             sourceCodec: .vp9,
@@ -766,6 +834,8 @@ enum TaptionCodecRegistry {
             displayName: "Raw Video to H.265 Software"
         )
         ] + appleNativeHEVCHardwareAlgorithmDescriptors
+            + appleNativeHEVCSoftwareAlgorithmDescriptors
+            + bundledFFmpegDecodeBridgeAlgorithmDescriptors
     }
 
     static var plannedUniversalRoutes: Set<TaptionCodecRoute> {

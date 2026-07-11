@@ -51,7 +51,7 @@ enum TaptionEncodingOptimizationProfile: String, Codable, Equatable, CaseIterabl
         case .balanced:
             return "Preserves source resolution, frame rate, and the normal automatic bitrate target."
         case .performance:
-            return "Prioritizes the fastest path, raises the automatic bitrate budget, disables frame reordering where the writer path allows it, and samples usage more often."
+            return "Prioritizes the fastest path, raises the automatic bitrate budget, overlaps decode and encode work, and samples usage more often."
         }
     }
 
@@ -103,6 +103,59 @@ enum TaptionEncodingOptimizationProfile: String, Codable, Equatable, CaseIterabl
             return 1_000_000_000
         case .performance:
             return 500_000_000
+        }
+    }
+
+    var softwareDecodePollingIntervalNanoseconds: UInt64 {
+        switch self {
+        case .batterySaver:
+            return 50_000_000
+        case .balanced:
+            return 25_000_000
+        case .performance:
+            return 10_000_000
+        }
+    }
+
+    var softwareFramePipelineDepth: Int {
+        switch self {
+        case .batterySaver:
+            return 1
+        case .balanced:
+            return 3
+        case .performance:
+            return 6
+        }
+    }
+
+    var softwareAudioPipelineDepth: Int {
+        switch self {
+        case .batterySaver, .balanced:
+            return 8
+        case .performance:
+            return 12
+        }
+    }
+
+    var softwareVideoOnlyDecoderPlaybackRate: Float {
+        switch self {
+        case .batterySaver:
+            return 1
+        case .balanced:
+            return 2
+        case .performance:
+            return 4
+        }
+    }
+
+    var writerBackpressureSleepMicroseconds: UInt32 {
+        switch self {
+        case .batterySaver:
+            return 2_000
+        case .balanced:
+            return 1_000
+        case .performance:
+            return 250
         }
     }
 

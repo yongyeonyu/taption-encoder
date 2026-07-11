@@ -177,9 +177,9 @@ struct TaptionFFmpegFamilyBackendDecisionReport: Codable, Equatable {
 enum TaptionFFmpegFamilyBackendDecisionCatalog {
     static var currentVC1Y41PDecision: TaptionFFmpegFamilyBackendDecisionReport {
         TaptionFFmpegFamilyBackendDecisionReport(
-            statusDate: "2026-07-07",
+            statusDate: "2026-07-11",
             selectedCandidateID: "source-built-lgpl-ffmpeg-decode-bridge",
-            selectedOutputPolicy: "Decode VC-1 raw and Y41P with a bundled source-built LGPL FFmpeg-family library bridge, then feed Taption Encoder's existing H.265 / HEVC MP4/MOV writer. Do not add non-H.265 outputs or writable containers beyond MP4/MOV.",
+            selectedOutputPolicy: "Decode VC-1 raw, Y41P, and ProRes RAW fallback with a bundled source-built LGPL FFmpeg-family library bridge, then feed Taption Encoder's existing H.265 / HEVC MP4/MOV writer. Do not add non-H.265 outputs or writable containers beyond MP4/MOV.",
             sourceURLs: [
                 "https://www.ffmpeg.org/legal.html",
                 "https://www.ffmpeg.org/general.html",
@@ -198,9 +198,9 @@ enum TaptionFFmpegFamilyBackendDecisionCatalog {
                     requiredEvidence: [
                         "Engineering configure line with GPL and nonfree features disabled is recorded for the vendored bridge; formal legal approval remains separate.",
                         "Exact source archive URL, SHA-256, local bridge source, and bundled notice/source-availability resources are recorded.",
-                        "iOS static XCFramework integration proves the bridge can execute in process from the app/test bundle on simulator.",
-                        "Focused app-side VC-1 raw and Y41P sample transcodes to H.265 MP4/MOV now have simulator output verification.",
-                        "Real-device thermal, memory, battery, and runtime proof before release promotion."
+                        "iOS static XCFramework integration proves the bridge can execute in process from the app/test bundle on simulator and a connected iPad.",
+                        "Focused app-side VC-1 raw and Y41P sample transcodes to H.265 MP4/MOV have simulator and connected-iPad output verification; Y41P PCM audio preservation to AAC has connected-iPad decoded-signal proof.",
+                        "iPhone and older-device thermal, memory, battery, and runtime threshold proof before release promotion."
                     ]
                 ),
                 TaptionFFmpegFamilyBackendCandidateDecision(
@@ -235,7 +235,7 @@ enum TaptionFFmpegFamilyBackendDecisionCatalog {
                     ]
                 )
             ],
-            proofBoundary: "This decision now has source-built bridge artifacts and focused iOS simulator real-decoder execution proof for VC-1 raw and Y41P. It is not formal legal approval, not App Review approval, not broad-backend release promotion, not real-device proof, not TestFlight proof, and not public-release proof."
+            proofBoundary: "This decision now has source-built bridge artifacts plus focused iOS simulator and connected-iPad real-decoder execution proof for VC-1 raw and Y41P. Y41P PCM audio preservation to AAC has connected-iPad track and decoded-signal proof, and ProRes RAW fallback has simulator output proof. It is not formal legal approval, not App Review approval, not broad-backend release promotion, not iPhone or older-device threshold proof, not TestFlight proof, and not public-release proof."
         )
     }
 }
@@ -246,7 +246,7 @@ enum TaptionSoftwareCodecBackendReviewCatalog {
         return TaptionSoftwareCodecBackendReviewReport(
             backend: profile.backend,
             displayName: profile.displayName,
-            statusDate: "2026-07-07",
+            statusDate: "2026-07-11",
             reviewedSourceURLs: [
                 "https://www.ffmpeg.org/legal.html",
                 "https://www.ffmpeg.org/general.html",
@@ -254,9 +254,14 @@ enum TaptionSoftwareCodecBackendReviewCatalog {
                 "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html",
                 "https://github.com/arthenica/ffmpeg-kit",
                 "https://github.com/arthenica/ffmpeg-kit/wiki/License",
-                "https://www.x265.org/"
+                "https://www.x265.org/",
+                "https://developer.apple.com/documentation/coreaudiotypes/kaudioformatmpegd_usac",
+                "https://www2.iis.fraunhofer.de/AAC/xhe-aac.html",
+                "https://portal.3gpp.org/desktopmodules/Specifications/SpecificationDetails.aspx?specificationId=1450",
+                "https://portal.3gpp.org/desktopmodules/Specifications/SpecificationDetails.aspx?specificationId=1449",
+                "https://www.etsi.org/resources/intellectual-property-rights/"
             ],
-            conclusion: "Engineering review only: a source-built LGPL FFmpeg-family decode bridge is now vendored and simulator-proven for focused VC-1 raw/Y41P decode into Taption Encoder's H.265 MP4/MOV writer. Keep broad-backend release promotion planning-only until App Store-policy review, formal license review, release notices, broad fixture proof, audio proof, binary-size approval, and older-device proof close separately.",
+            conclusion: "Engineering review only: a source-built LGPL FFmpeg-family decode bridge is vendored and proven on simulator plus a connected iPad for focused VC-1 raw/Y41P decode into Taption Encoder's H.265 MP4/MOV writer; ProRes RAW fallback is simulator-proven. Keep broad-backend release promotion planning-only until App Store-policy review, formal license review, release notices, broad fixture proof, audio proof, binary-size approval, and older-device proof close separately.",
             findings: [
                 TaptionSoftwareCodecBackendReviewFinding(
                     gate: .licenseReview,
@@ -291,7 +296,7 @@ enum TaptionSoftwareCodecBackendReviewCatalog {
                 TaptionSoftwareCodecBackendReviewFinding(
                     gate: .iosPackagingIntegration,
                     status: .open,
-                    summary: "The current command-plan model is a planning boundary. A focused static XCFramework now proves an in-process, bundle-contained VC-1/Y41P decode bridge on simulator, but broader release packaging still needs sandboxed source-access and real-device proof.",
+                    summary: "The current command-plan model is a planning boundary. A focused static XCFramework proves an in-process, bundle-contained VC-1/Y41P decode bridge on simulator and a connected iPad, but broader release packaging still needs sandboxed source-access plus iPhone and older-device proof.",
                     requiredEvidence: [
                         "Signed Xcode framework/package integration with no external executable dependency.",
                         "Sandboxed file-access test for Files, folder, and Photos-derived temporary sources.",
@@ -311,9 +316,9 @@ enum TaptionSoftwareCodecBackendReviewCatalog {
                 TaptionSoftwareCodecBackendReviewFinding(
                     gate: .fixtureTranscodeRegressionProof,
                     status: .open,
-                    summary: "Focused app-side simulator proof now exists for VC-1 raw and Y41P through the vendored decode bridge. Other planned routes and broad regression coverage still need app-side fixture/sample transcode proof after their real backend paths are installed.",
+                    summary: "Focused app-side simulator and connected-iPad proof exists for VC-1 raw and Y41P through the vendored decode bridge. The remaining selected video codecs have simulator sample transcode proof, while broad retained-fixture regression evidence remains a separate release gate.",
                     requiredEvidence: [
-                        "Focused app-side simulator proof for VC-1 raw and Y41P to H.265 MP4/MOV.",
+                        "Focused app-side simulator and connected-iPad proof for VC-1 raw and Y41P to H.265 MP4/MOV.",
                         "Regression pass for the existing bundled fixture matrix.",
                         "Output verification for H.265 video, MP4/MOV container, duration, dimensions, and visual decodability."
                     ]
@@ -321,10 +326,11 @@ enum TaptionSoftwareCodecBackendReviewCatalog {
                 TaptionSoftwareCodecBackendReviewFinding(
                     gate: .audioSignalRegressionProof,
                     status: .open,
-                    summary: "Non-AAC and AMR-WB/AMR-WB+ paths need audible-signal regression proof after app-side execution is wired, with AAC output into MP4/MOV unless a supported copy route is selected.",
+                    summary: "Official Fraunhofer xHE-AAC input now has Apple-native AAC output signal proof, and Y41P PCM input has bundled-bridge AAC output signal proof for MP4/MOV. AMR-WB+ remains open: FFmpeg 8.1.1 exposes AMR-WB but no AMR-WB+ decoder, while the 3GPP TS 26.304 reference code only has a host raw encode/decode round-trip proof and cannot be promoted into the app without separate IPR and distribution approval.",
                     requiredEvidence: [
-                        "App-side AMR-WB or AMR-WB+ decodable sample execution proof.",
-                        "Audio signal verification for AAC output tracks and any supported non-AAC output route.",
+                        "Formal AMR-WB+ patent/IPR, reference-source distribution, EULA, and App Store counsel approval before any reference-code or alternate backend is bundled.",
+                        "App-side AMR-WB+ decodable sample execution proof after an approved backend exists; host reference-code raw round-trip proof is not a substitute.",
+                        "Keep xHE-AAC native execution, Y41P PCM-to-AAC signal proof, and AMR-WB+ host/backend review as separate evidence surfaces.",
                         "Negative-sample handling with clear English fallback copy."
                     ]
                 ),
@@ -457,7 +463,7 @@ enum TaptionOpenSourceNoticeCatalog {
             TaptionOpenSourceNoticeEntry(
                 id: "ffmpeg-lgpl-decode-bridge",
                 name: "FFmpeg LGPL Decode Bridge",
-                summary: "Source-built LGPL FFmpeg-family in-process decode bridge used for focused VC-1 raw and Y41P simulator execution proof.",
+                summary: "Source-built LGPL FFmpeg-family in-process decode bridge for VC-1 raw, Y41P, and ProRes RAW fallback, proven on simulator with focused VC-1/Y41P proof also collected on a connected iPad.",
                 category: .shippedComponent,
                 isShippedInCurrentBuild: true,
                 requiresFinalLicenseText: true,
@@ -565,7 +571,7 @@ enum SW_SoftwareCodecBackendRegistry {
     static let vlcSoftwareDecoder = TaptionSoftwareCodecBackendProfile(
         backend: .softwareVLCDecoder,
         displayName: "SwiftVLC Video Software Decoder",
-        videoDecodeCodecs: [.av1, .h264, .hevc, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .realVideo1, .realVideo, .roqVideo, .wmv, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV, .utVideo, .magicYUV, .dvcPro, .dvcProHD, .dv, .cineForm, .dnxhd, .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo, .proRes],
+        videoDecodeCodecs: [.av1, .h264, .hevc, .dolbyVisionHEVC, .vp9, .vp8, .mpeg1, .mpeg2, .mpeg4Visual, .h263, .h261, .flashVideo, .microsoftMPEG4V2, .microsoftMPEG4V3, .motionJPEG, .jpeg2000, .jpegLS, .losslessJPEG, .animation, .cinepak, .sorensonVideo, .sorensonVideo3, .quickTimeVideo, .theora, .realVideo1, .realVideo, .roqVideo, .wmv, .microsoftVideo1, .asusV1, .asusV2, .flashScreenVideo, .flashScreenVideo2, .zmbv, .cljr, .snow, .ffv1, .huffYUV, .utVideo, .magicYUV, .dvcPro, .dvcProHD, .dv, .cineForm, .dnxhd, .pngVideo, .r10k, .v308, .v210, .r210, .v408, .v410, .microsoftRLE, .quickTimeGraphics, .yuv4, .rawVideo, .proRes],
         videoEncodeCodecs: [],
         audioDecodeCodecs: [],
         audioEncodeCodecs: [],
@@ -612,11 +618,20 @@ enum SW_SoftwareCodecBackendRegistry {
         if vlcSoftwareDecoder.canDecodeVideo(codec) {
             return vlcSoftwareDecoder.backend
         }
+        if TaptionCodecRegistry.bundledFFmpegDecodeBridgeSourceCodecs.contains(codec) {
+            return .ffmpegFamily
+        }
         return profiles.first { $0.canDecodeVideo(codec) }?.backend
     }
 
     static func currentExecutableVideoDecodeBackend(for codec: TaptionVideoCodec) -> TaptionEncodingBackend? {
-        vlcSoftwareDecoder.canDecodeVideo(codec) ? vlcSoftwareDecoder.backend : nil
+        if vlcSoftwareDecoder.canDecodeVideo(codec) {
+            return vlcSoftwareDecoder.backend
+        }
+        if TaptionCodecRegistry.bundledFFmpegDecodeBridgeSourceCodecs.contains(codec) {
+            return .ffmpegFamily
+        }
+        return nil
     }
 
     static func preferredVideoEncodeBackend(for codec: TaptionVideoCodec) -> TaptionEncodingBackend? {

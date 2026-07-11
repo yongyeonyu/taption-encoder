@@ -634,6 +634,8 @@ struct SW_FFmpegDecodeBridgeRunReport: Codable, Equatable {
     var averageFrameRate: Double
     var codecName: String
     var pixelFormatName: String
+    var outputPixelFormatName: String
+    var outputAudioTrackCount: Int
     var outputURL: URL
 }
 
@@ -665,20 +667,32 @@ private final class SW_FFmpegDecodeBridgeAssetWriterBox: @unchecked Sendable {
 struct SW_FFmpegDecodeBridgeCommandRunner: SW_FFmpegCommandRunning {
     var maximumFrameCount: Int32
     var targetBitrate: Int?
+    var preserveAudioWhenPossible: Bool
+    var outputAudioCodec: TaptionAudioCodec
+    var optimizationProfile: TaptionEncodingOptimizationProfile
 
     init(
         maximumFrameCount: Int32 = 0,
-        targetBitrate: Int? = nil
+        targetBitrate: Int? = nil,
+        preserveAudioWhenPossible: Bool = false,
+        outputAudioCodec: TaptionAudioCodec = .aac,
+        optimizationProfile: TaptionEncodingOptimizationProfile = .balanced
     ) {
         self.maximumFrameCount = maximumFrameCount
         self.targetBitrate = targetBitrate
+        self.preserveAudioWhenPossible = preserveAudioWhenPossible
+        self.outputAudioCodec = outputAudioCodec
+        self.optimizationProfile = optimizationProfile
     }
 
     func run(commandPlan: SW_FFmpegCommandPlan) async throws -> SW_FFmpegCommandRunResult {
         let report = try await SW_FFmpegDecodeBridgeHEVCTranscoder.transcode(
             commandPlan: commandPlan,
             maximumFrameCount: maximumFrameCount,
-            targetBitrate: targetBitrate
+            targetBitrate: targetBitrate,
+            preserveAudioWhenPossible: preserveAudioWhenPossible,
+            outputAudioCodec: outputAudioCodec,
+            optimizationProfile: optimizationProfile
         )
         return SW_FFmpegCommandRunResult(
             exitCode: 0,
@@ -689,17 +703,260 @@ struct SW_FFmpegDecodeBridgeCommandRunner: SW_FFmpegCommandRunning {
                 "fps=\(String(format: "%.3f", report.averageFrameRate))",
                 "codec=\(report.codecName)",
                 "pixelFormat=\(report.pixelFormatName)",
+                "outputPixelFormat=\(report.outputPixelFormatName)",
+                "audioTracks=\(report.outputAudioTrackCount)",
                 "output=\(report.outputURL.lastPathComponent)"
             ].joined(separator: "\n")
         )
     }
 }
 
+enum SW_FFmpegDecodeBridgeFallbackTranscoder {
+    static func transcode(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput {
+        let commandPlan = try SW_FFmpegCodecCommandPlanner.makeVideoCommandPlan(
+            request: request
+        )
+        progress(TaptionEncodingProgress(stage: .preparing, fractionCompleted: 0))
+        progress(TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.01))
+        let result = try await SW_FFmpegDecodeBridgeCommandRunner(
+            targetBitrate: request.options.outputPolicy.advancedOptions.targetBitrate,
+            preserveAudioWhenPossible: request.options.preserveAudioWhenPossible,
+            outputAudioCodec: request.options.outputPolicy.audioCodec,
+            optimizationProfile: request.options.outputPolicy.advancedOptions.optimizationProfile
+                ?? .balanced
+        ).run(commandPlan: commandPlan)
+        guard result.exitCode == 0 else {
+            throw SW_FFmpegCommandExecutionError.commandFailed(
+                exitCode: result.exitCode,
+                stderrTail: result.stderr
+            )
+        }
+        guard FileManager.default.fileExists(atPath: request.outputURL.path) else {
+            throw SW_FFmpegCommandExecutionError.outputFileMissing(request.outputURL)
+        }
+        let outputAudioTrackCount = await (
+            (try? AVURLAsset(url: request.outputURL).loadTracks(withMediaType: .audio))?.count ?? 0
+        )
+        progress(TaptionEncodingProgress(stage: .waitingForSaveGate, fractionCompleted: 1))
+        return TaptionCodecTranscodeOutput(
+            outputURL: request.outputURL,
+            route: request.route,
+            usedMode: .software,
+            usedBackend: .ffmpegFamily,
+            outputVideoCodec: .hevc,
+            outputAudioTrackCount: outputAudioTrackCount
+        )
+    }
+}
+
+private final class SW_FFmpegNV12FrameOutputContext: @unchecked Sendable {
+    private let writerContext: SW_AV1FrameWriterContext
+    private let targetWidth: Int
+    private let targetHeight: Int
+    private let stateLock = NSLock()
+    private var pixelBufferPool: CVPixelBufferPool?
+    private var pendingPixelBuffer: CVPixelBuffer?
+
+    init(writerContext: SW_AV1FrameWriterContext, targetSize: CGSize) {
+        self.writerContext = writerContext
+        self.targetWidth = max(2, Int(targetSize.width.rounded()))
+        self.targetHeight = max(2, Int(targetSize.height.rounded()))
+    }
+
+    func prepare() -> Bool {
+        let poolAttributes: [String: Any] = [
+            kCVPixelBufferPoolMinimumBufferCountKey as String: 6
+        ]
+        let pixelBufferAttributes: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+            kCVPixelBufferWidthKey as String: targetWidth,
+            kCVPixelBufferHeightKey as String: targetHeight,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any]
+        ]
+        var pool: CVPixelBufferPool?
+        guard CVPixelBufferPoolCreate(
+            kCFAllocatorDefault,
+            poolAttributes as CFDictionary,
+            pixelBufferAttributes as CFDictionary,
+            &pool
+        ) == kCVReturnSuccess,
+              let pool else {
+            return false
+        }
+        stateLock.lock()
+        pixelBufferPool = pool
+        stateLock.unlock()
+        return true
+    }
+
+    func acquire(_ frame: UnsafeMutablePointer<TaptionFFmpegDecodeBridgeWritableNV12Frame>) -> Int32 {
+        guard !writerContext.shouldAbort else {
+            return -3
+        }
+        stateLock.lock()
+        guard pendingPixelBuffer == nil,
+              let pixelBufferPool else {
+            stateLock.unlock()
+            return -1
+        }
+        stateLock.unlock()
+
+        var pixelBuffer: CVPixelBuffer?
+        guard frame.pointee.width == targetWidth,
+              frame.pointee.height == targetHeight,
+              CVPixelBufferPoolCreatePixelBuffer(
+                kCFAllocatorDefault,
+                pixelBufferPool,
+                &pixelBuffer
+              ) == kCVReturnSuccess,
+              let pixelBuffer,
+              CVPixelBufferIsPlanar(pixelBuffer),
+              CVPixelBufferGetPlaneCount(pixelBuffer) >= 2 else {
+            return -2
+        }
+        guard CVPixelBufferLockBaseAddress(pixelBuffer, []) == kCVReturnSuccess else {
+            return -3
+        }
+        guard let yBytes = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0),
+              let uvBytes = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1) else {
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+            return -4
+        }
+
+        frame.pointee.yBytes = yBytes.assumingMemoryBound(to: UInt8.self)
+        frame.pointee.uvBytes = uvBytes.assumingMemoryBound(to: UInt8.self)
+        frame.pointee.yBytesPerRow = Int32(CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0))
+        frame.pointee.uvBytesPerRow = Int32(CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1))
+
+        stateLock.lock()
+        pendingPixelBuffer = pixelBuffer
+        stateLock.unlock()
+        return 0
+    }
+
+    func commit(_ frame: UnsafeMutablePointer<TaptionFFmpegDecodeBridgeWritableNV12Frame>) -> Int32 {
+        stateLock.lock()
+        let pixelBuffer = pendingPixelBuffer
+        pendingPixelBuffer = nil
+        stateLock.unlock()
+        guard let pixelBuffer else {
+            return -1
+        }
+
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+        guard !writerContext.shouldAbort else {
+            return -3
+        }
+        writerContext.appendDecodedPixelBuffer(pixelBuffer)
+        return 0
+    }
+
+    func cancelPendingFrame() {
+        stateLock.lock()
+        let pixelBuffer = pendingPixelBuffer
+        pendingPixelBuffer = nil
+        pixelBufferPool = nil
+        stateLock.unlock()
+        if let pixelBuffer {
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+        }
+    }
+}
+
 private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
+    private struct DecodedVideoResult: Sendable {
+        var frameCount: Int
+        var width: Int
+        var height: Int
+        var averageFrameRate: Double
+        var codecName: String
+        var pixelFormatName: String
+    }
+
+    private final class ConcurrentMediaDecodeState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<DecodedVideoResult, Error>?
+        private var videoResult: DecodedVideoResult?
+        private var firstError: Error?
+        private var completedTaskCount = 0
+        private var didResume = false
+
+        func attach(_ continuation: CheckedContinuation<DecodedVideoResult, Error>) {
+            lock.lock()
+            self.continuation = continuation
+            let completion = completionIfReadyLocked()
+            lock.unlock()
+            completion?()
+        }
+
+        func completeVideo(_ result: Result<DecodedVideoResult, Error>) {
+            switch result {
+            case let .success(videoResult):
+                complete(videoResult: videoResult, error: nil)
+            case let .failure(error):
+                complete(videoResult: nil, error: error)
+            }
+        }
+
+        func completeAudio(_ result: Result<Void, Error>) {
+            switch result {
+            case .success:
+                complete(videoResult: nil, error: nil)
+            case let .failure(error):
+                complete(videoResult: nil, error: error)
+            }
+        }
+
+        private func complete(
+            videoResult: DecodedVideoResult?,
+            error: Error?
+        ) {
+            lock.lock()
+            if let videoResult {
+                self.videoResult = videoResult
+            }
+            if firstError == nil, let error {
+                firstError = error
+            }
+            completedTaskCount += 1
+            let completion = completionIfReadyLocked()
+            lock.unlock()
+            completion?()
+        }
+
+        private func completionIfReadyLocked() -> (() -> Void)? {
+            guard completedTaskCount == 2,
+                  !didResume,
+                  let continuation else {
+                return nil
+            }
+            didResume = true
+            self.continuation = nil
+            let outcome: Result<DecodedVideoResult, Error>
+            if let firstError {
+                outcome = .failure(firstError)
+            } else if let videoResult {
+                outcome = .success(videoResult)
+            } else {
+                outcome = .failure(SW_FFmpegDecodeBridgeRunnerError.decodeFailed(
+                    status: -1,
+                    message: "Concurrent bundled video decoding returned no result."
+                ))
+            }
+            return { continuation.resume(with: outcome) }
+        }
+    }
+
     static func transcode(
         commandPlan: SW_FFmpegCommandPlan,
         maximumFrameCount: Int32,
-        targetBitrate: Int?
+        targetBitrate: Int?,
+        preserveAudioWhenPossible: Bool,
+        outputAudioCodec: TaptionAudioCodec,
+        optimizationProfile: TaptionEncodingOptimizationProfile
     ) async throws -> SW_FFmpegDecodeBridgeRunReport {
         guard [.mp4, .mov].contains(TaptionVideoContainer.inferred(from: commandPlan.outputURL)) else {
             throw SW_FFmpegDecodeBridgeRunnerError.unsupportedOutput(commandPlan.outputURL)
@@ -721,6 +978,8 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
         try? FileManager.default.removeItem(at: commandPlan.outputURL)
 
         let targetSize = CGSize(width: Int(probe.width), height: Int(probe.height))
+        let usesDirectNV12 = Int(probe.width).isMultiple(of: 2)
+            && Int(probe.height).isMultiple(of: 2)
         let frameRate = normalizedFrameRate(probe.averageFrameRate)
         let frameDuration = CMTime(seconds: 1.0 / frameRate, preferredTimescale: 600)
         let writer = try AVAssetWriter(
@@ -732,7 +991,8 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
             outputSettings: writerVideoOutputSettings(
                 targetSize: targetSize,
                 targetBitrate: targetBitrate,
-                frameRate: frameRate
+                frameRate: frameRate,
+                optimizationProfile: optimizationProfile
             )
         )
         videoInput.expectsMediaDataInRealTime = false
@@ -740,12 +1000,48 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
 
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(
             assetWriterInput: videoInput,
-            sourcePixelBufferAttributes: pixelBufferAttributes(size: targetSize)
+            sourcePixelBufferAttributes: pixelBufferAttributes(
+                size: targetSize,
+                pixelFormat: usesDirectNV12
+                    ? kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+                    : kCVPixelFormatType_32BGRA
+            )
         )
         guard writer.canAdd(videoInput) else {
             throw SW_FFmpegDecodeBridgeRunnerError.writerStartFailed("The HEVC video input could not be added.")
         }
         writer.add(videoInput)
+        writer.shouldOptimizeForNetworkUse = false
+
+        let audioProbe = try probeAudioIfPresent(
+            sourceURL: commandPlan.sourceURL,
+            preserveAudioWhenPossible: preserveAudioWhenPossible
+        )
+        let audioContext: SW_AV1AudioWriterContext?
+        if let audioProbe {
+            let audioConfiguration = makeAudioConfiguration(
+                probe: audioProbe,
+                outputCodec: outputAudioCodec
+            )
+            let audioInput = AVAssetWriterInput(
+                mediaType: .audio,
+                outputSettings: audioConfiguration.writerOutputSettings
+            )
+            audioInput.expectsMediaDataInRealTime = false
+            guard writer.canAdd(audioInput) else {
+                throw SW_FFmpegDecodeBridgeRunnerError.writerStartFailed("The audio input could not be added.")
+            }
+            writer.add(audioInput)
+            audioContext = try SW_AV1AudioWriterContext(
+                audioInput: audioInput,
+                configuration: audioConfiguration,
+                maximumPendingSampleBufferCount: optimizationProfile.softwareAudioPipelineDepth,
+                backpressureSleepMicroseconds: optimizationProfile.writerBackpressureSleepMicroseconds
+            )
+        } else {
+            audioContext = nil
+        }
+
         guard writer.startWriting() else {
             throw SW_FFmpegDecodeBridgeRunnerError.writerStartFailed(
                 writer.error?.localizedDescription ?? "Unknown AVAssetWriter start failure."
@@ -762,35 +1058,48 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
             expectedFrameCount: max(Int(maximumFrameCount), 1),
             limitsToExpectedFrameCount: maximumFrameCount > 0,
             allowsLegacyFrameHoldToPreserveDuration: false,
+            maximumPendingFrameCount: optimizationProfile.softwareFramePipelineDepth,
+            backpressureSleepMicroseconds: optimizationProfile.writerBackpressureSleepMicroseconds,
             progressHandler: { _ in }
         )
-        guard context.prepareDecodePoolFormat() != nil else {
+        let nv12Context = usesDirectNV12
+            ? SW_FFmpegNV12FrameOutputContext(writerContext: context, targetSize: targetSize)
+            : nil
+        let preparedDecodeOutput = nv12Context?.prepare() ?? (context.prepareDecodePoolFormat() != nil)
+        guard preparedDecodeOutput else {
             throw SW_FFmpegDecodeBridgeRunnerError.writerStartFailed("The decode pixel buffer pool could not be created.")
         }
         defer {
+            nv12Context?.cancelPendingFrame()
             context.requestCancellation()
+            audioContext?.requestCancellation()
             context.clearDecodePool()
         }
 
-        let decodeResult = try decode(
+        let decodeResult = try await decodeMedia(
             sourceURL: commandPlan.sourceURL,
             maximumFrameCount: maximumFrameCount,
-            context: context
+            videoContext: context,
+            nv12Context: nv12Context,
+            audioContext: audioContext
         )
 
         try context.finishVideoInput()
+        try audioContext?.finishAudioInput()
         try await finishWriter(writer)
         guard FileManager.default.fileExists(atPath: commandPlan.outputURL.path) else {
             throw SW_FFmpegDecodeBridgeRunnerError.outputMissing(commandPlan.outputURL)
         }
 
         return SW_FFmpegDecodeBridgeRunReport(
-            frameCount: max(Int(decodeResult.frameCount), context.currentFrameCount),
-            width: Int(decodeResult.width),
-            height: Int(decodeResult.height),
+            frameCount: max(decodeResult.frameCount, context.currentFrameCount),
+            width: decodeResult.width,
+            height: decodeResult.height,
             averageFrameRate: normalizedFrameRate(decodeResult.averageFrameRate),
-            codecName: stringFromCStringBuffer(decodeResult.codecName),
-            pixelFormatName: stringFromCStringBuffer(decodeResult.pixelFormatName),
+            codecName: decodeResult.codecName,
+            pixelFormatName: decodeResult.pixelFormatName,
+            outputPixelFormatName: usesDirectNV12 ? "nv12" : "bgra",
+            outputAudioTrackCount: audioContext?.didWriteAnySamples == true ? 1 : 0,
             outputURL: commandPlan.outputURL
         )
     }
@@ -815,15 +1124,85 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
         return result
     }
 
+    private static func decodeMedia(
+        sourceURL: URL,
+        maximumFrameCount: Int32,
+        videoContext: SW_AV1FrameWriterContext,
+        nv12Context: SW_FFmpegNV12FrameOutputContext?,
+        audioContext: SW_AV1AudioWriterContext?
+    ) async throws -> DecodedVideoResult {
+        guard let audioContext else {
+            return try decode(
+                sourceURL: sourceURL,
+                maximumFrameCount: maximumFrameCount,
+                context: videoContext,
+                nv12Context: nv12Context
+            )
+        }
+
+        let state = ConcurrentMediaDecodeState()
+        do {
+            return try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    state.attach(continuation)
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let result = Result {
+                            try decode(
+                                sourceURL: sourceURL,
+                                maximumFrameCount: maximumFrameCount,
+                                context: videoContext,
+                                nv12Context: nv12Context
+                            )
+                        }
+                        if case .failure = result {
+                            audioContext.requestCancellation()
+                        }
+                        state.completeVideo(result)
+                    }
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let result = Result {
+                            try decodeAudio(sourceURL: sourceURL, context: audioContext)
+                        }
+                        if case .failure = result {
+                            videoContext.requestCancellation()
+                        }
+                        state.completeAudio(result)
+                    }
+                }
+            } onCancel: {
+                videoContext.requestCancellation()
+                audioContext.requestCancellation()
+            }
+        } catch {
+            if Task.isCancelled {
+                throw CancellationError()
+            }
+            throw error
+        }
+    }
+
     private static func decode(
         sourceURL: URL,
         maximumFrameCount: Int32,
-        context: SW_AV1FrameWriterContext
-    ) throws -> TaptionFFmpegDecodeBridgeProbeResult {
+        context: SW_AV1FrameWriterContext,
+        nv12Context: SW_FFmpegNV12FrameOutputContext?
+    ) throws -> DecodedVideoResult {
         var result = TaptionFFmpegDecodeBridgeProbeResult()
         var errorBuffer = [CChar](repeating: 0, count: 2_048)
-        let status = sourceURL.path.withCString { sourcePath in
-            taption_ffmpeg_decode_bridge_decode_video_to_bgra(
+        let status: Int32 = sourceURL.path.withCString { sourcePath in
+            if let nv12Context {
+                return taption_ffmpeg_decode_bridge_decode_video_to_nv12(
+                    sourcePath,
+                    maximumFrameCount,
+                    ffmpegDecodeBridgeNV12AcquireCallback,
+                    ffmpegDecodeBridgeNV12CommitCallback,
+                    Unmanaged.passUnretained(nv12Context).toOpaque(),
+                    &result,
+                    &errorBuffer,
+                    Int32(errorBuffer.count)
+                )
+            }
+            return taption_ffmpeg_decode_bridge_decode_video_to_bgra(
                 sourcePath,
                 maximumFrameCount,
                 ffmpegDecodeBridgeFrameCallback,
@@ -839,41 +1218,143 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
                 message: String(cString: errorBuffer)
             )
         }
+        return DecodedVideoResult(
+            frameCount: Int(result.frameCount),
+            width: Int(result.width),
+            height: Int(result.height),
+            averageFrameRate: result.averageFrameRate,
+            codecName: stringFromCStringBuffer(result.codecName),
+            pixelFormatName: stringFromCStringBuffer(result.pixelFormatName)
+        )
+    }
+
+    private static func probeAudioIfPresent(
+        sourceURL: URL,
+        preserveAudioWhenPossible: Bool
+    ) throws -> TaptionFFmpegDecodeBridgeAudioProbeResult? {
+        guard preserveAudioWhenPossible else { return nil }
+
+        var result = TaptionFFmpegDecodeBridgeAudioProbeResult()
+        var errorBuffer = [CChar](repeating: 0, count: 2_048)
+        let status = sourceURL.path.withCString { sourcePath in
+            taption_ffmpeg_decode_bridge_probe_audio_s16(
+                sourcePath,
+                &result,
+                &errorBuffer,
+                Int32(errorBuffer.count)
+            )
+        }
+        if status == -11 {
+            return nil
+        }
+        guard status == 0 else {
+            throw SW_FFmpegDecodeBridgeRunnerError.probeFailed(
+                status: status,
+                message: String(cString: errorBuffer)
+            )
+        }
+        guard result.sampleRate > 0, result.channelCount > 0 else {
+            throw SW_FFmpegDecodeBridgeRunnerError.writerStartFailed(
+                "The audio probe reported an invalid sample rate or channel count."
+            )
+        }
         return result
+    }
+
+    private static func makeAudioConfiguration(
+        probe: TaptionFFmpegDecodeBridgeAudioProbeResult,
+        outputCodec: TaptionAudioCodec
+    ) -> SW_AV1NativeAudioEncodingConfiguration {
+        let sampleRate = Double(probe.sampleRate)
+        let channelCount = Int(probe.channelCount)
+        return SW_AV1NativeAudioEncodingConfiguration(
+            sourceTrack: TaptionAudioTrackInfo(
+                codec: .pcm,
+                channelCount: channelCount,
+                sampleRate: sampleRate
+            ),
+            outputCodec: outputCodec,
+            sampleRate: sampleRate,
+            channelCount: channelCount,
+            targetBitrate: min(max(channelCount * 96_000, 96_000), 512_000)
+        )
+    }
+
+    private static func decodeAudio(
+        sourceURL: URL,
+        context: SW_AV1AudioWriterContext
+    ) throws {
+        var result = TaptionFFmpegDecodeBridgeAudioProbeResult()
+        var errorBuffer = [CChar](repeating: 0, count: 2_048)
+        let status = sourceURL.path.withCString { sourcePath in
+            taption_ffmpeg_decode_bridge_decode_audio_s16(
+                sourcePath,
+                ffmpegDecodeBridgeAudioFrameCallback,
+                Unmanaged.passUnretained(context).toOpaque(),
+                &result,
+                &errorBuffer,
+                Int32(errorBuffer.count)
+            )
+        }
+        guard status == 0 else {
+            throw SW_FFmpegDecodeBridgeRunnerError.decodeFailed(
+                status: status,
+                message: String(cString: errorBuffer)
+            )
+        }
+        if let error = context.snapshotError() {
+            throw error
+        }
     }
 
     private static func writerVideoOutputSettings(
         targetSize: CGSize,
         targetBitrate: Int?,
-        frameRate: Double
+        frameRate: Double,
+        optimizationProfile: TaptionEncodingOptimizationProfile
     ) -> [String: Any] {
         let width = max(2, Int(targetSize.width.rounded()))
         let height = max(2, Int(targetSize.height.rounded()))
-        let estimatedBitrate = targetBitrate ?? max(
-            700_000,
-            min(10_000_000, Int(Double(width * height) * max(frameRate, 1) * 0.25))
+        let estimatedBitrate = min(
+            max(
+                targetBitrate ?? Int(Double(width * height) * max(frameRate, 1) * 0.25),
+                700_000
+            ),
+            200_000_000
         )
-        return [
+        var compressionProperties: [String: Any] = [
+            AVVideoAverageBitRateKey: estimatedBitrate,
+            AVVideoExpectedSourceFrameRateKey: Int(max(frameRate.rounded(), 1)),
+            AVVideoAllowFrameReorderingKey: false
+        ]
+        TaptionHEVCWriterPerformanceHints.apply(
+            to: &compressionProperties,
+            optimizationProfile: optimizationProfile
+        )
+        var outputSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.hevc,
             AVVideoWidthKey: width,
-            AVVideoHeightKey: height,
-            AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: estimatedBitrate,
-                AVVideoExpectedSourceFrameRateKey: Int(max(frameRate.rounded(), 1)),
-                AVVideoAllowFrameReorderingKey: false
-            ]
+            AVVideoHeightKey: height
         ]
+        outputSettings[AVVideoCompressionPropertiesKey] = compressionProperties
+        return outputSettings
     }
 
-    private static func pixelBufferAttributes(size: CGSize) -> [String: Any] {
-        [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+    private static func pixelBufferAttributes(
+        size: CGSize,
+        pixelFormat: OSType
+    ) -> [String: Any] {
+        var attributes: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: pixelFormat,
             kCVPixelBufferWidthKey as String: max(2, Int(size.width.rounded())),
             kCVPixelBufferHeightKey as String: max(2, Int(size.height.rounded())),
-            kCVPixelBufferCGImageCompatibilityKey as String: true,
-            kCVPixelBufferCGBitmapContextCompatibilityKey as String: true,
             kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any]
         ]
+        if pixelFormat == kCVPixelFormatType_32BGRA {
+            attributes[kCVPixelBufferCGImageCompatibilityKey as String] = true
+            attributes[kCVPixelBufferCGBitmapContextCompatibilityKey as String] = true
+        }
+        return attributes
     }
 
     private static func avFileType(for outputURL: URL) -> AVFileType {
@@ -911,12 +1392,42 @@ private nonisolated func ffmpegDecodeBridgeFrameWriterContext(
     return Unmanaged<SW_AV1FrameWriterContext>.fromOpaque(opaque).takeUnretainedValue()
 }
 
+private nonisolated func ffmpegDecodeBridgeNV12OutputContext(
+    from opaque: UnsafeMutableRawPointer?
+) -> SW_FFmpegNV12FrameOutputContext? {
+    guard let opaque else { return nil }
+    return Unmanaged<SW_FFmpegNV12FrameOutputContext>.fromOpaque(opaque).takeUnretainedValue()
+}
+
+private nonisolated func ffmpegDecodeBridgeNV12AcquireCallback(
+    _ frame: UnsafeMutablePointer<TaptionFFmpegDecodeBridgeWritableNV12Frame>?,
+    _ opaque: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let frame,
+          let context = ffmpegDecodeBridgeNV12OutputContext(from: opaque) else {
+        return -1
+    }
+    return context.acquire(frame)
+}
+
+private nonisolated func ffmpegDecodeBridgeNV12CommitCallback(
+    _ frame: UnsafeMutablePointer<TaptionFFmpegDecodeBridgeWritableNV12Frame>?,
+    _ opaque: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let frame,
+          let context = ffmpegDecodeBridgeNV12OutputContext(from: opaque) else {
+        return -1
+    }
+    return context.commit(frame)
+}
+
 private nonisolated func ffmpegDecodeBridgeFrameCallback(
     _ frame: UnsafePointer<TaptionFFmpegDecodeBridgeFrame>?,
     _ opaque: UnsafeMutableRawPointer?
 ) -> Int32 {
     guard let frame,
           let context = ffmpegDecodeBridgeFrameWriterContext(from: opaque),
+          !context.shouldAbort,
           let pixelBuffer = context.makeDecodePixelBuffer(),
           frame.pointee.width > 0,
           frame.pointee.height > 0,
@@ -939,13 +1450,44 @@ private nonisolated func ffmpegDecodeBridgeFrameCallback(
     let destinationBytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
     let bytesPerRowToCopy = min(width * 4, sourceBytesPerRow, destinationBytesPerRow)
 
-    for row in 0..<height {
-        let sourceRow = sourceBaseAddress.advanced(by: row * sourceBytesPerRow)
-        let destinationRow = destinationBaseAddress.advanced(by: row * destinationBytesPerRow)
-        memcpy(destinationRow, sourceRow, bytesPerRowToCopy)
+    if sourceBytesPerRow == destinationBytesPerRow,
+       bytesPerRowToCopy == sourceBytesPerRow,
+       height == CVPixelBufferGetHeight(pixelBuffer) {
+        memcpy(destinationBaseAddress, sourceBaseAddress, sourceBytesPerRow * height)
+    } else {
+        for row in 0..<height {
+            let sourceRow = sourceBaseAddress.advanced(by: row * sourceBytesPerRow)
+            let destinationRow = destinationBaseAddress.advanced(by: row * destinationBytesPerRow)
+            memcpy(destinationRow, sourceRow, bytesPerRowToCopy)
+        }
     }
 
     context.appendDecodedPixelBuffer(pixelBuffer)
     return 0
+}
+
+private nonisolated func ffmpegDecodeBridgeAudioFrameCallback(
+    _ frame: UnsafePointer<TaptionFFmpegDecodeBridgeAudioFrame>?,
+    _ opaque: UnsafeMutableRawPointer?
+) -> Int32 {
+    guard let frame,
+          let opaque,
+          let samples = frame.pointee.interleavedS16Samples,
+          frame.pointee.sampleCount > 0 else {
+        return -1
+    }
+    let context = Unmanaged<SW_AV1AudioWriterContext>.fromOpaque(opaque).takeUnretainedValue()
+    guard !context.shouldAbort,
+          frame.pointee.sampleRate == context.sampleRate,
+          frame.pointee.channelCount == context.channelCount else {
+        return -2
+    }
+    let ptsMicroseconds = Int64(max(frame.pointee.ptsSeconds, 0) * 1_000_000)
+    context.appendAudioSamples(
+        samples,
+        sampleCount: UInt32(frame.pointee.sampleCount),
+        ptsMicroseconds: ptsMicroseconds
+    )
+    return context.shouldAbort ? -3 : 0
 }
 #endif

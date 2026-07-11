@@ -131,6 +131,9 @@ struct AVFoundationMediaInspector: MediaInspecting {
         guard let description = descriptions.first else {
             return .unknown
         }
+        if descriptions.contains(where: Self.containsAlphaChannel) {
+            return .hevcWithAlpha
+        }
         switch fourCharacterCode(CMFormatDescriptionGetMediaSubType(description)) {
         case "av01", "av1":
             return .av1
@@ -162,7 +165,9 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return .microsoftMPEG4V2
         case "mp43", "div3", "div4", "div5", "mpg3":
             return .microsoftMPEG4V3
-        case "jpeg", "dmb1", "mjpa", "mjpb", "mjpg":
+        case "jpeg":
+            return .jpeg
+        case "dmb1", "mjpa", "mjpb", "mjpg":
             return .motionJPEG
         case "mjp2", "avj2":
             return .jpeg2000
@@ -192,9 +197,9 @@ struct AVFoundationMediaInspector: MediaInspecting {
             return .roqVideo
         case "dvc":
             return .dv
-        case "dvcp", "dvpp", "dv5n", "dv5p":
+        case "dvcp", "dvpp", "dv5n", "dv5p", "dv50":
             return .dvcPro
-        case "dvhp", "dvhq", "dvh6", "dvh5", "dvh3", "dvh2":
+        case "dvhp", "dvhq", "dvh6", "dvh5", "dvh3", "dvh2", "cdvh":
             return .dvcProHD
         case "wvc1", "vc1":
             return .vc1
@@ -257,6 +262,16 @@ struct AVFoundationMediaInspector: MediaInspecting {
         default:
             return .unknown
         }
+    }
+
+    private static func containsAlphaChannel(_ description: CMFormatDescription) -> Bool {
+        guard let value = CMFormatDescriptionGetExtension(
+            description,
+            extensionKey: kCMFormatDescriptionExtension_ContainsAlphaChannel
+        ) else {
+            return false
+        }
+        return (value as? NSNumber)?.boolValue == true
     }
 
     private func colorDescription(from descriptions: [CMFormatDescription]) -> TaptionColorDescription {
@@ -716,7 +731,9 @@ private struct SW_VLCMediaInspector: MediaInspecting {
                 return .microsoftMPEG4V2
             case "mp43", "div3", "div4", "div5", "mpg3":
                 return .microsoftMPEG4V3
-            case "jpeg", "dmb1", "mjpg", "mjpa", "mjpb":
+            case "jpeg":
+                return .jpeg
+            case "dmb1", "mjpg", "mjpa", "mjpb":
                 return .motionJPEG
             case "mjp2", "avj2":
                 return .jpeg2000
@@ -724,6 +741,8 @@ private struct SW_VLCMediaInspector: MediaInspecting {
                 return .jpegLS
             case "ljpg":
                 return .losslessJPEG
+            case "jxlc":
+                return .jpegXL
             case "rle":
                 return .animation
             case "cvid":
@@ -746,9 +765,9 @@ private struct SW_VLCMediaInspector: MediaInspecting {
                 return .roqVideo
             case "dvc":
                 return .dv
-            case "dvcp", "dvpp", "dv5n", "dv5p":
+            case "dvcp", "dvpp", "dv5n", "dv5p", "dv50":
                 return .dvcPro
-            case "dvhp", "dvhq", "dvh6", "dvh5", "dvh3", "dvh2":
+            case "dvhp", "dvhq", "dvh6", "dvh5", "dvh3", "dvh2", "cdvh":
                 return .dvcProHD
             case "wvc1", "vc1":
                 return .vc1
@@ -861,7 +880,8 @@ private struct SW_VLCMediaInspector: MediaInspecting {
                 return .amr
             case "ilbc":
                 return .ilbc
-            case "lpcm", "sowt", "twos", "in24", "in32", "fl32", "fl64", "raw":
+            case "lpcm", "sowt", "twos", "in24", "in32", "fl32", "fl64", "raw",
+                 "araw", "s16l", "s16b", "u16l", "u16b", "s8", "u8", "f32l", "f32b":
                 return .pcm
             case "alaw":
                 return .aLaw
@@ -1075,7 +1095,25 @@ enum TaptionAudioFormatDescriptionParser {
         guard let description = descriptions.first else {
             return .unknown
         }
-        switch fourCharacterCode(CMFormatDescriptionGetMediaSubType(description)) {
+        let mediaSubtype = CMFormatDescriptionGetMediaSubType(description)
+        switch mediaSubtype {
+        case 0x0001:
+            return .pcm
+        case 0x0002, 0x0011:
+            return .adpcm
+        case 0x0006:
+            return .aLaw
+        case 0x0007:
+            return .muLaw
+        case 0x0050:
+            return .mp2
+        case 0x0055:
+            return .mp3
+        default:
+            break
+        }
+
+        switch fourCharacterCode(mediaSubtype) {
         case "aac", "aach", "aacl":
             return .aac
         case "aace", "usac", "mha1", "mhm1":
@@ -1102,7 +1140,8 @@ enum TaptionAudioFormatDescriptionParser {
             return .amr
         case "ilbc":
             return .ilbc
-        case "lpcm", "sowt", "twos", "in24", "in32", "fl32", "fl64", "raw":
+        case "lpcm", "sowt", "twos", "in24", "in32", "fl32", "fl64", "raw",
+             "araw", "s16l", "s16b", "u16l", "u16b", "s8", "u8", "f32l", "f32b":
             return .pcm
         case "alaw":
             return .aLaw

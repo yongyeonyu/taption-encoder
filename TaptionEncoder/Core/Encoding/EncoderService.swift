@@ -431,6 +431,10 @@ final class AVFoundationHEVCEncoderService: EncoderServicing {
               let commandPlan = plan.videoCommandPlan else {
             return false
         }
+        if let sourceCodec = plan.codecRoute?.sourceCodec,
+           TaptionCodecRegistry.bundledFFmpegDecodeBridgeSourceCodecs.contains(sourceCodec) {
+            return false
+        }
         if executionKind == .planned {
             return true
         }

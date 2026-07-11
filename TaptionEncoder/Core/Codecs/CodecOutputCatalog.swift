@@ -253,6 +253,8 @@ enum TaptionLaunchSupportCatalog {
 
     static let supportedInputVideoCodecs: [TaptionLaunchInputVideoSupportItem] = [
         TaptionLaunchInputVideoSupportItem(codec: .av1, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .hevcWithAlpha, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .dolbyVisionHEVC, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .vp9, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .vp8, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .mpeg1, availability: .availableNow),
@@ -264,9 +266,11 @@ enum TaptionLaunchSupportCatalog {
         TaptionLaunchInputVideoSupportItem(codec: .microsoftMPEG4V2, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .microsoftMPEG4V3, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .motionJPEG, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .jpeg, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .jpeg2000, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .jpegLS, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .losslessJPEG, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .jpegXL, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .animation, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .cinepak, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .sorensonVideo, availability: .availableNow),
@@ -291,6 +295,7 @@ enum TaptionLaunchSupportCatalog {
         TaptionLaunchInputVideoSupportItem(codec: .magicYUV, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .dvcPro, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .dvcProHD, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .vc1, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .dv, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .cineForm, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .dnxhd, availability: .availableNow),
@@ -305,8 +310,10 @@ enum TaptionLaunchSupportCatalog {
         TaptionLaunchInputVideoSupportItem(codec: .quickTimeGraphics, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .yuv4, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .rawVideo, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .y41p, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .h264, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .hevc, availability: .availableNow),
+        TaptionLaunchInputVideoSupportItem(codec: .proResRaw, availability: .availableNow),
         TaptionLaunchInputVideoSupportItem(codec: .proRes, availability: .availableOnSupportedHardware)
     ]
 

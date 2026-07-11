@@ -290,15 +290,15 @@ enum SW_CodecSupportCatalog {
             audioCodec: .aac,
             container: .mov,
             sourceFamily: "QuickTime alpha-channel exports",
-            generationStatus: .planned
+            generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
             name: "dolby_vision_hevc_mov_sample",
             videoCodec: .dolbyVisionHEVC,
-            audioCodec: .aac,
-            container: .mov,
+            audioCodec: .unknown,
+            container: .mp4,
             sourceFamily: "HDR camera and streaming exports",
-            generationStatus: .realWorldSampleRequired
+            generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
             name: "vp9_webm_vpx_opus",
@@ -479,10 +479,10 @@ enum SW_CodecSupportCatalog {
         TaptionSoftwareFixtureTarget(
             name: "prores_raw_mov_camera_sample",
             videoCodec: .proResRaw,
-            audioCodec: .pcm,
+            audioCodec: .unknown,
             container: .mov,
             sourceFamily: "Pro camera RAW capture",
-            generationStatus: .realWorldSampleRequired
+            generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
             name: "mpeg1_mpg_mp2",
@@ -661,20 +661,20 @@ enum SW_CodecSupportCatalog {
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
-            name: "jpeg_still_sequence_sample",
+            name: "jpeg_mov_frames",
             videoCodec: .jpeg,
             audioCodec: .unknown,
-            container: .rawElementaryStream,
-            sourceFamily: "Still-image and frame-sequence imports",
-            generationStatus: .planned
+            container: .mov,
+            sourceFamily: "Apple-native JPEG video frames",
+            generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
-            name: "jpegxl_still_sequence_sample",
+            name: "jpegxl_mov_frames",
             videoCodec: .jpegXL,
             audioCodec: .unknown,
-            container: .rawElementaryStream,
-            sourceFamily: "Modern still-image and frame-sequence imports",
-            generationStatus: .planned
+            container: .mov,
+            sourceFamily: "Apple-native JPEG XL video frames",
+            generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
             name: "qtrle_mov_pcm",
@@ -711,10 +711,10 @@ enum SW_CodecSupportCatalog {
         TaptionSoftwareFixtureTarget(
             name: "sorenson_video3_mov_sample",
             videoCodec: .sorensonVideo3,
-            audioCodec: .pcm,
+            audioCodec: .unknown,
             container: .mov,
             sourceFamily: "Legacy QuickTime Sorenson Video 3",
-            generationStatus: .realWorldSampleRequired
+            generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
             name: "wmv2_asf_wmav2",
@@ -842,7 +842,7 @@ enum SW_CodecSupportCatalog {
             audioCodec: .unknown,
             container: .rawElementaryStream,
             sourceFamily: "Raw VC-1 elementary stream",
-            generationStatus: .realWorldSampleRequired
+            generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
             name: "dv_ntsc_dv",
@@ -853,28 +853,28 @@ enum SW_CodecSupportCatalog {
             generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
-            name: "dvcpro_dv_sample",
+            name: "dvcpro50_avi_sample",
             videoCodec: .dvcPro,
-            audioCodec: .pcm,
-            container: .dv,
+            audioCodec: .unknown,
+            container: .avi,
             sourceFamily: "DVCPro tape capture",
-            generationStatus: .planned
+            generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
-            name: "dvcprohd_mxf_sample",
+            name: "dvcprohd_avi_sample",
             videoCodec: .dvcProHD,
-            audioCodec: .pcm,
-            container: .mxf,
+            audioCodec: .unknown,
+            container: .avi,
             sourceFamily: "DVCPro HD broadcast exports",
-            generationStatus: .planned
+            generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
             name: "theora_ogv_vorbis",
             videoCodec: .theora,
-            audioCodec: .vorbis,
+            audioCodec: .unknown,
             container: .ogg,
             sourceFamily: "Open web archives",
-            generationStatus: .conditionalOnLocalFFmpeg
+            generationStatus: .implemented
         ),
         TaptionSoftwareFixtureTarget(
             name: "realvideo_rm_rv20_ac3",

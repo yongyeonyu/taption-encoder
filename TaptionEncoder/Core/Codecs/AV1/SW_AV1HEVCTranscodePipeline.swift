@@ -6,16 +6,28 @@ import CoreVideo
 import Darwin
 import Foundation
 
+private final class SW_SendableSampleBufferBox: @unchecked Sendable {
+    let sampleBuffer: CMSampleBuffer
+
+    init(_ sampleBuffer: CMSampleBuffer) {
+        self.sampleBuffer = sampleBuffer
+    }
+}
+
 final class SW_AV1AudioWriterContext: @unchecked Sendable {
     private let audioInput: AVAssetWriterInput
     let sampleRate: Int
     let channelCount: Int
     private let bytesPerFrame: Int
+    private let backpressureSleepMicroseconds: UInt32
     private let formatDescription: CMAudioFormatDescription
     private let stateLock = NSLock()
     private let writerQueue = DispatchQueue(label: "com.taption.encoder.av1-software.audio")
+    private let sampleQueueSlots: DispatchSemaphore
 
     nonisolated(unsafe) private var currentSampleCountStorage: Int64 = 0
+    nonisolated(unsafe) private var scheduledSampleCountStorage: Int64 = 0
+    nonisolated(unsafe) private var pendingSampleBufferCountStorage = 0
     nonisolated(unsafe) private var sampleBufferCountStorage = 0
     nonisolated(unsafe) private var backpressureWaitCountStorage = 0
     nonisolated(unsafe) private var backpressureWaitMicrosecondsStorage: Int64 = 0
@@ -27,12 +39,16 @@ final class SW_AV1AudioWriterContext: @unchecked Sendable {
 
     init(
         audioInput: AVAssetWriterInput,
-        configuration: SW_AV1NativeAudioEncodingConfiguration
+        configuration: SW_AV1NativeAudioEncodingConfiguration,
+        maximumPendingSampleBufferCount: Int = 1,
+        backpressureSleepMicroseconds: UInt32 = 2_000
     ) throws {
         self.audioInput = audioInput
         self.sampleRate = max(Int(configuration.sampleRate.rounded()), 8_000)
         self.channelCount = max(configuration.channelCount, 1)
         self.bytesPerFrame = self.channelCount * MemoryLayout<Int16>.size
+        self.backpressureSleepMicroseconds = max(backpressureSleepMicroseconds, 100)
+        self.sampleQueueSlots = DispatchSemaphore(value: max(maximumPendingSampleBufferCount, 1))
         self.formatDescription = try Self.makeFormatDescription(
             sampleRate: self.sampleRate,
             channelCount: self.channelCount,
@@ -50,6 +66,12 @@ final class SW_AV1AudioWriterContext: @unchecked Sendable {
         stateLock.lock()
         defer { stateLock.unlock() }
         return didDrainStorage
+    }
+
+    nonisolated var shouldAbort: Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return cancellationRequested || pendingError != nil
     }
 
     nonisolated func snapshotError() -> Error? {
@@ -90,59 +112,100 @@ final class SW_AV1AudioWriterContext: @unchecked Sendable {
         }
 
         let byteCount = Int(sampleCount) * bytesPerFrame
-        let sampleData = Data(bytes: samples, count: byteCount)
 
-        writerQueue.sync {
+        while sampleQueueSlots.wait(timeout: .now() + .milliseconds(50)) != .success {
+            stateLock.lock()
+            let shouldAbort = cancellationRequested || pendingError != nil
+            stateLock.unlock()
+            if shouldAbort {
+                return
+            }
+        }
+
+        stateLock.lock()
+        let shouldAbort = cancellationRequested || pendingError != nil
+        if !shouldAbort {
+            if firstPTSMicrosecondsStorage == nil {
+                firstPTSMicrosecondsStorage = ptsMicroseconds
+            }
+            let baseline = firstPTSMicrosecondsStorage ?? ptsMicroseconds
+            let fallbackMicroseconds = (scheduledSampleCountStorage * 1_000_000)
+                / Int64(max(sampleRate, 1))
+            let normalizedMicroseconds = max(ptsMicroseconds - baseline, fallbackMicroseconds)
+            scheduledSampleCountStorage += Int64(sampleCount)
+            pendingSampleBufferCountStorage += 1
+            didDrainStorage = false
+            stateLock.unlock()
+
+            do {
+                let sampleBuffer = try makeSampleBuffer(
+                    samples: samples,
+                    byteCount: byteCount,
+                    sampleCount: Int(sampleCount),
+                    presentationTime: CMTime(value: normalizedMicroseconds, timescale: 1_000_000)
+                )
+                enqueueSampleBuffer(sampleBuffer, sampleCount: Int(sampleCount))
+            } catch {
+                finishPendingSampleBuffer(error: error)
+            }
+        } else {
+            stateLock.unlock()
+            sampleQueueSlots.signal()
+        }
+    }
+
+    private func enqueueSampleBuffer(
+        _ sampleBuffer: CMSampleBuffer,
+        sampleCount: Int
+    ) {
+        let sampleBufferBox = SW_SendableSampleBufferBox(sampleBuffer)
+        writerQueue.async { [self, sampleBufferBox] in
+            defer { finishPendingSampleBuffer(error: nil) }
+
             stateLock.lock()
             let shouldAbort = cancellationRequested || pendingError != nil
             stateLock.unlock()
             guard !shouldAbort else { return }
 
-            let waitStartedAt = ProcessInfo.processInfo.systemUptime
             while !audioInput.isReadyForMoreMediaData {
                 stateLock.lock()
                 let cancelled = cancellationRequested || pendingError != nil
                 backpressureWaitCountStorage += 1
-                backpressureWaitMicrosecondsStorage += 2_000
+                backpressureWaitMicrosecondsStorage += Int64(backpressureSleepMicroseconds)
                 stateLock.unlock()
                 if cancelled {
                     return
                 }
-                if ProcessInfo.processInfo.systemUptime - waitStartedAt > 0.35 {
-                    return
-                }
-                usleep(2_000)
+                usleep(backpressureSleepMicroseconds)
             }
 
-            do {
-                let presentationTime = makePresentationTime(
-                    ptsMicroseconds: ptsMicroseconds
-                )
-                let sampleBuffer = try makeSampleBuffer(
-                    data: sampleData,
-                    sampleCount: Int(sampleCount),
-                    presentationTime: presentationTime
-                )
-                guard audioInput.append(sampleBuffer) else {
-                    throw NSError(
-                        domain: "TaptionEncoder",
-                        code: -113,
-                        userInfo: [NSLocalizedDescriptionKey: "Failed to append bundled software audio samples."]
-                    )
-                }
-
+            guard audioInput.append(sampleBufferBox.sampleBuffer) else {
                 stateLock.lock()
-                currentSampleCountStorage += Int64(sampleCount)
-                sampleBufferCountStorage += 1
-                didWriteAnySamplesStorage = true
-                didDrainStorage = false
+                pendingError = NSError(
+                    domain: "TaptionEncoder",
+                    code: -113,
+                    userInfo: [NSLocalizedDescriptionKey: "Failed to append bundled software audio samples."]
+                )
                 stateLock.unlock()
-            } catch {
-                stateLock.lock()
-                pendingError = error
-                stateLock.unlock()
+                return
             }
+
+            stateLock.lock()
+            currentSampleCountStorage += Int64(sampleCount)
+            sampleBufferCountStorage += 1
+            didWriteAnySamplesStorage = true
+            stateLock.unlock()
         }
+    }
+
+    private func finishPendingSampleBuffer(error: Error?) {
+        stateLock.lock()
+        if pendingError == nil, let error {
+            pendingError = error
+        }
+        pendingSampleBufferCountStorage = max(pendingSampleBufferCountStorage - 1, 0)
+        stateLock.unlock()
+        sampleQueueSlots.signal()
     }
 
     nonisolated func flush() {
@@ -183,27 +246,16 @@ final class SW_AV1AudioWriterContext: @unchecked Sendable {
         }
     }
 
-    private func makePresentationTime(
-        ptsMicroseconds: Int64
-    ) -> CMTime {
-        stateLock.lock()
-        if firstPTSMicrosecondsStorage == nil {
-            firstPTSMicrosecondsStorage = ptsMicroseconds
-        }
-        let baseline = firstPTSMicrosecondsStorage ?? ptsMicroseconds
-        let fallbackMicroseconds = (currentSampleCountStorage * 1_000_000) / Int64(max(sampleRate, 1))
-        stateLock.unlock()
-
-        let normalizedMicroseconds = max(ptsMicroseconds - baseline, fallbackMicroseconds)
-        return CMTime(value: normalizedMicroseconds, timescale: 1_000_000)
-    }
-
     private func makeSampleBuffer(
-        data: Data,
+        samples: UnsafeRawPointer,
+        byteCount: Int,
         sampleCount: Int,
         presentationTime: CMTime
     ) throws -> CMSampleBuffer {
-        let blockBuffer = try Self.makeBlockBuffer(from: data)
+        let blockBuffer = try Self.makeBlockBuffer(
+            copying: samples,
+            byteCount: byteCount
+        )
         var timing = CMSampleTimingInfo(
             duration: CMTime(value: 1, timescale: CMTimeScale(sampleRate)),
             presentationTimeStamp: presentationTime,
@@ -272,17 +324,18 @@ final class SW_AV1AudioWriterContext: @unchecked Sendable {
     }
 
     private static func makeBlockBuffer(
-        from data: Data
+        copying samples: UnsafeRawPointer,
+        byteCount: Int
     ) throws -> CMBlockBuffer {
         var blockBuffer: CMBlockBuffer?
         let createStatus = CMBlockBufferCreateWithMemoryBlock(
             allocator: kCFAllocatorDefault,
             memoryBlock: nil,
-            blockLength: data.count,
+            blockLength: byteCount,
             blockAllocator: kCFAllocatorDefault,
             customBlockSource: nil,
             offsetToData: 0,
-            dataLength: data.count,
+            dataLength: byteCount,
             flags: 0,
             blockBufferOut: &blockBuffer
         )
@@ -296,14 +349,12 @@ final class SW_AV1AudioWriterContext: @unchecked Sendable {
             )
         }
 
-        let replaceStatus = data.withUnsafeBytes { rawBuffer in
-            CMBlockBufferReplaceDataBytes(
-                with: rawBuffer.baseAddress!,
-                blockBuffer: blockBuffer,
-                offsetIntoDestination: 0,
-                dataLength: data.count
-            )
-        }
+        let replaceStatus = CMBlockBufferReplaceDataBytes(
+            with: samples,
+            blockBuffer: blockBuffer,
+            offsetIntoDestination: 0,
+            dataLength: byteCount
+        )
 
         guard replaceStatus == kCMBlockBufferNoErr else {
             throw NSError(
@@ -317,6 +368,14 @@ final class SW_AV1AudioWriterContext: @unchecked Sendable {
     }
 }
 
+private final class SW_SendablePixelBufferBox: @unchecked Sendable {
+    let pixelBuffer: CVPixelBuffer
+
+    init(_ pixelBuffer: CVPixelBuffer) {
+        self.pixelBuffer = pixelBuffer
+    }
+}
+
 final class SW_AV1FrameWriterContext: @unchecked Sendable {
     nonisolated(unsafe) private let writer: AVAssetWriter
     nonisolated(unsafe) private let videoInput: AVAssetWriterInput
@@ -326,13 +385,17 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
     private let expectedFrameCount: Int
     private let limitsToExpectedFrameCount: Bool
     private let allowsLegacyFrameHoldToPreserveDuration: Bool
+    private let progressFrameStride: Int
+    private let backpressureSleepMicroseconds: UInt32
     nonisolated(unsafe) private let progressHandler: (Double) -> Void
     private let stateLock = NSLock()
     private let writerQueue = DispatchQueue(label: "com.taption.encoder.av1-software.writer")
+    private let frameQueueSlots: DispatchSemaphore
 
     nonisolated(unsafe) private var decodePool: CVPixelBufferPool?
     nonisolated(unsafe) private var lastPixelBufferStorage: CVPixelBuffer?
     nonisolated(unsafe) private var currentFrameCountStorage = 0
+    nonisolated(unsafe) private var pendingFrameCountStorage = 0
     nonisolated(unsafe) private var backpressureWaitCountStorage = 0
     nonisolated(unsafe) private var backpressureWaitMicrosecondsStorage: Int64 = 0
     nonisolated(unsafe) private var didWriteAnyFrame = false
@@ -348,6 +411,9 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
         expectedFrameCount: Int,
         limitsToExpectedFrameCount: Bool,
         allowsLegacyFrameHoldToPreserveDuration: Bool,
+        progressFrameStride: Int = 1,
+        maximumPendingFrameCount: Int = 1,
+        backpressureSleepMicroseconds: UInt32 = 2_000,
         progressHandler: @escaping (Double) -> Void
     ) {
         self.writer = writer
@@ -358,7 +424,10 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
         self.expectedFrameCount = expectedFrameCount
         self.limitsToExpectedFrameCount = limitsToExpectedFrameCount
         self.allowsLegacyFrameHoldToPreserveDuration = allowsLegacyFrameHoldToPreserveDuration
+        self.progressFrameStride = max(progressFrameStride, 1)
+        self.backpressureSleepMicroseconds = max(backpressureSleepMicroseconds, 100)
         self.progressHandler = progressHandler
+        self.frameQueueSlots = DispatchSemaphore(value: max(maximumPendingFrameCount, 1))
     }
 
     nonisolated var currentFrameCount: Int {
@@ -368,7 +437,16 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
     }
 
     nonisolated var didReachExpectedFrameCount: Bool {
-        limitsToExpectedFrameCount && currentFrameCount >= expectedFrameCount
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return limitsToExpectedFrameCount
+            && currentFrameCountStorage + pendingFrameCountStorage >= expectedFrameCount
+    }
+
+    nonisolated var shouldAbort: Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return cancellationRequested || pendingError != nil
     }
 
     nonisolated func snapshotError() -> Error? {
@@ -464,11 +542,39 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
     }
 
     nonisolated func appendDecodedPixelBuffer(_ pixelBuffer: CVPixelBuffer) {
-        writerQueue.sync {
+        while frameQueueSlots.wait(timeout: .now() + .milliseconds(50)) != .success {
             stateLock.lock()
-            let reachedFrameLimit = limitsToExpectedFrameCount
-                && currentFrameCountStorage >= expectedFrameCount
-            let shouldAbort = cancellationRequested || pendingError != nil || reachedFrameLimit
+            let shouldAbort = cancellationRequested || pendingError != nil
+            stateLock.unlock()
+            if shouldAbort {
+                return
+            }
+        }
+
+        stateLock.lock()
+        let reachedFrameLimit = limitsToExpectedFrameCount
+            && currentFrameCountStorage + pendingFrameCountStorage >= expectedFrameCount
+        let shouldAbort = cancellationRequested || pendingError != nil || reachedFrameLimit
+        if !shouldAbort {
+            pendingFrameCountStorage += 1
+        }
+        stateLock.unlock()
+        guard !shouldAbort else {
+            frameQueueSlots.signal()
+            return
+        }
+
+        let pixelBufferBox = SW_SendablePixelBufferBox(pixelBuffer)
+        writerQueue.async { [self, pixelBufferBox] in
+            defer {
+                stateLock.lock()
+                pendingFrameCountStorage = max(pendingFrameCountStorage - 1, 0)
+                stateLock.unlock()
+                frameQueueSlots.signal()
+            }
+
+            stateLock.lock()
+            let shouldAbort = cancellationRequested || pendingError != nil
             stateLock.unlock()
             guard !shouldAbort else { return }
 
@@ -476,12 +582,12 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
                 stateLock.lock()
                 let cancelled = cancellationRequested || pendingError != nil
                 backpressureWaitCountStorage += 1
-                backpressureWaitMicrosecondsStorage += 2_000
+                backpressureWaitMicrosecondsStorage += Int64(backpressureSleepMicroseconds)
                 stateLock.unlock()
                 if cancelled {
                     return
                 }
-                usleep(2_000)
+                usleep(backpressureSleepMicroseconds)
             }
 
             stateLock.lock()
@@ -489,7 +595,7 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
             stateLock.unlock()
 
             let presentationTime = CMTimeMultiply(frameDuration, multiplier: Int32(frameIndex))
-            guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
+            guard adaptor.append(pixelBufferBox.pixelBuffer, withPresentationTime: presentationTime) else {
                 let error = writer.error ?? NSError(
                     domain: "TaptionEncoder",
                     code: -108,
@@ -504,10 +610,14 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
             stateLock.lock()
             currentFrameCountStorage += 1
             didWriteAnyFrame = true
-            lastPixelBufferStorage = pixelBuffer
+            lastPixelBufferStorage = pixelBufferBox.pixelBuffer
             let progress = Double(currentFrameCountStorage) / Double(max(expectedFrameCount, 1))
+            let shouldReportProgress = currentFrameCountStorage == 1
+                || currentFrameCountStorage % progressFrameStride == 0
             stateLock.unlock()
-            progressHandler(min(max(progress, 0), 1))
+            if shouldReportProgress {
+                progressHandler(min(max(progress, 0), 1))
+            }
         }
     }
 
@@ -579,7 +689,7 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
                 stateLock.lock()
                 let cancelled = cancellationRequested || pendingError != nil
                 backpressureWaitCountStorage += 1
-                backpressureWaitMicrosecondsStorage += 2_000
+                backpressureWaitMicrosecondsStorage += Int64(backpressureSleepMicroseconds)
                 stateLock.unlock()
                 if cancelled {
                     stateLock.lock()
@@ -590,7 +700,7 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
                 if ProcessInfo.processInfo.systemUptime - holdStartedAt > frameHoldTimeout {
                     return nil
                 }
-                usleep(2_000)
+                usleep(backpressureSleepMicroseconds)
             }
 
             stateLock.lock()
@@ -613,8 +723,12 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
             stateLock.lock()
             currentFrameCountStorage += 1
             let progress = Double(currentFrameCountStorage) / Double(max(expectedFrameCount, 1))
+            let shouldReportProgress = currentFrameCountStorage == 1
+                || currentFrameCountStorage % progressFrameStride == 0
             stateLock.unlock()
-            progressHandler(min(max(progress, 0), 1))
+            if shouldReportProgress {
+                progressHandler(min(max(progress, 0), 1))
+            }
         }
     }
 }
