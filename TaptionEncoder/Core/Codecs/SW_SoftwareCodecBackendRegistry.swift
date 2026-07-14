@@ -373,6 +373,11 @@ enum TaptionOpenSourceNoticeCategory: String, Codable, CaseIterable, Comparable 
     }
 }
 
+enum TaptionOpenSourceDistributionMaterialRequirement: String, Codable, Equatable {
+    case none
+    case lgplStaticLinking
+}
+
 struct TaptionOpenSourceNoticeEntry: Codable, Equatable, Identifiable {
     var id: String
     var name: String
@@ -381,10 +386,24 @@ struct TaptionOpenSourceNoticeEntry: Codable, Equatable, Identifiable {
     var isShippedInCurrentBuild: Bool
     var requiresFinalLicenseText: Bool
     var licenseTextResourcePath: String?
+    var supplementalLicenseTextResourcePaths: [String] = []
+    var distributionMaterialRequirement: TaptionOpenSourceDistributionMaterialRequirement = .none
+    var verifiedDistributionMaterialsURL: String? = nil
     var relatedBackend: TaptionEncodingBackend?
 
+    var allLicenseTextResourcePaths: [String] {
+        [licenseTextResourcePath].compactMap { $0 } + supplementalLicenseTextResourcePaths
+    }
+
     var hasFinalLicenseText: Bool {
-        !requiresFinalLicenseText || licenseTextResourcePath?.isEmpty == false
+        !requiresFinalLicenseText || !allLicenseTextResourcePaths.isEmpty
+    }
+
+    var hasVerifiedDistributionMaterials: Bool {
+        guard distributionMaterialRequirement != .none else {
+            return true
+        }
+        return verifiedDistributionMaterialsURL?.isEmpty == false
     }
 }
 
@@ -393,9 +412,14 @@ struct TaptionOpenSourceNoticeReadinessReport: Codable, Equatable {
     var shippedEntryCount: Int
     var entriesRequiringFinalLicenseTextCount: Int
     var missingFinalLicenseTextEntries: [TaptionOpenSourceNoticeEntry]
+    var missingDistributionMaterialEntries: [TaptionOpenSourceNoticeEntry]
 
     var isReadyForReleaseNotices: Bool {
         missingFinalLicenseTextEntries.isEmpty
+    }
+
+    var isReadyForPublicDistribution: Bool {
+        isReadyForReleaseNotices && missingDistributionMaterialEntries.isEmpty
     }
 }
 
@@ -414,10 +438,19 @@ enum TaptionOpenSourceNoticeTextLoader {
         for entry: TaptionOpenSourceNoticeEntry,
         bundle: Bundle = .main
     ) -> String? {
-        guard let url = licenseTextURL(for: entry, bundle: bundle) else {
+        guard !entry.allLicenseTextResourcePaths.isEmpty else {
             return nil
         }
-        return try? String(contentsOf: url, encoding: .utf8)
+
+        var texts: [String] = []
+        for resourcePath in entry.allLicenseTextResourcePaths {
+            guard let url = resourceURL(forResourcePath: resourcePath, bundle: bundle),
+                  let text = try? String(contentsOf: url, encoding: .utf8) else {
+                return nil
+            }
+            texts.append(text)
+        }
+        return texts.joined(separator: "\n\n")
     }
 
     static func licenseTextURL(
@@ -451,13 +484,28 @@ enum TaptionOpenSourceNoticeCatalog {
     static var shippedComponents: [TaptionOpenSourceNoticeEntry] {
         [
             TaptionOpenSourceNoticeEntry(
-                id: "swiftvlc-libvlc",
-                name: "SwiftVLC / libVLC",
-                summary: "Software decoding fallback for the current executable broad video input set used by the app's H.265 output routes.",
+                id: "swiftvlc",
+                name: "SwiftVLC 0.10.0",
+                summary: "MIT-licensed Swift wrapper used to call the separately licensed libVLC engine.",
                 category: .shippedComponent,
                 isShippedInCurrentBuild: true,
                 requiresFinalLicenseText: true,
-                licenseTextResourcePath: "OpenSourceNotices/SwiftVLC-libVLC.txt",
+                licenseTextResourcePath: "OpenSourceNotices/SwiftVLC-MIT.txt",
+                relatedBackend: .softwareVLCDecoder
+            ),
+            TaptionOpenSourceNoticeEntry(
+                id: "libvlc",
+                name: "libVLC",
+                summary: "Statically linked VideoLAN media engine built from source revision c833c4be0. It is covered by LGPL 2.1 or later; checksum-verified notices for its separately licensed contrib inputs are included below.",
+                category: .shippedComponent,
+                isShippedInCurrentBuild: true,
+                requiresFinalLicenseText: true,
+                licenseTextResourcePath: "OpenSourceNotices/libVLC-LGPL-Notice.txt",
+                supplementalLicenseTextResourcePaths: [
+                    "OpenSourceNotices/LGPL-2.1.txt",
+                    "OpenSourceNotices/libVLC-Contrib-Licenses.txt"
+                ],
+                distributionMaterialRequirement: .lgplStaticLinking,
                 relatedBackend: .softwareVLCDecoder
             ),
             TaptionOpenSourceNoticeEntry(
@@ -468,12 +516,14 @@ enum TaptionOpenSourceNoticeCatalog {
                 isShippedInCurrentBuild: true,
                 requiresFinalLicenseText: true,
                 licenseTextResourcePath: "OpenSourceNotices/FFmpeg-LGPL-Decode-Bridge.txt",
+                supplementalLicenseTextResourcePaths: ["OpenSourceNotices/LGPL-2.1.txt"],
+                distributionMaterialRequirement: .lgplStaticLinking,
                 relatedBackend: .ffmpegFamily
             ),
             TaptionOpenSourceNoticeEntry(
                 id: "google-mobile-ads",
-                name: "Google Mobile Ads SDK",
-                summary: "Banner, interstitial, app-open, and rewarded ad integration.",
+                name: "Google Mobile Ads Swift Package Wrapper 13.5.0",
+                summary: "Apache 2.0 package manifest and wrapper for the separately distributed Google Mobile Ads SDK binary.",
                 category: .shippedComponent,
                 isShippedInCurrentBuild: true,
                 requiresFinalLicenseText: true,
@@ -482,8 +532,8 @@ enum TaptionOpenSourceNoticeCatalog {
             ),
             TaptionOpenSourceNoticeEntry(
                 id: "google-user-messaging-platform",
-                name: "Google User Messaging Platform",
-                summary: "Consent and privacy messaging support when required.",
+                name: "Google User Messaging Platform Swift Package Wrapper 3.1.0",
+                summary: "Apache 2.0 package manifest and wrapper for the separately distributed User Messaging Platform SDK binary.",
                 category: .shippedComponent,
                 isShippedInCurrentBuild: true,
                 requiresFinalLicenseText: true,
@@ -542,7 +592,8 @@ enum TaptionOpenSourceNoticeCatalog {
             entryCount: entries.count,
             shippedEntryCount: entries.filter(\.isShippedInCurrentBuild).count,
             entriesRequiringFinalLicenseTextCount: requiringFinalText.count,
-            missingFinalLicenseTextEntries: requiringFinalText.filter { !$0.hasFinalLicenseText }
+            missingFinalLicenseTextEntries: requiringFinalText.filter { !$0.hasFinalLicenseText },
+            missingDistributionMaterialEntries: entries.filter { !$0.hasVerifiedDistributionMaterials }
         )
     }
 
@@ -555,13 +606,26 @@ enum TaptionOpenSourceNoticeCatalog {
         return TaptionOpenSourceNoticeBundleResourceReport(
             entriesRequiringFinalLicenseText: requiringFinalText,
             missingResourceEntries: requiringFinalText.filter {
-                TaptionOpenSourceNoticeTextLoader.licenseTextURL(for: $0, bundle: bundle) == nil
+                $0.allLicenseTextResourcePaths.contains { resourcePath in
+                    TaptionOpenSourceNoticeTextLoader.resourceURL(
+                        forResourcePath: resourcePath,
+                        bundle: bundle
+                    ) == nil
+                }
             },
             emptyResourceEntries: requiringFinalText.filter {
-                guard let text = TaptionOpenSourceNoticeTextLoader.licenseText(for: $0, bundle: bundle) else {
-                    return false
+                $0.allLicenseTextResourcePaths.contains { resourcePath in
+                    guard let url = TaptionOpenSourceNoticeTextLoader.resourceURL(
+                        forResourcePath: resourcePath,
+                        bundle: bundle
+                    ) else {
+                        return false
+                    }
+                    guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+                        return true
+                    }
+                    return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 }
-                return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }
         )
     }

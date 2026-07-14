@@ -1,6 +1,8 @@
 FFmpeg LGPL Decode Bridge
 
-This build includes a source-built FFmpeg-family decode bridge for selected
+This application uses libraries from the FFmpeg project under the GNU Lesser
+General Public License version 2.1 or later. It includes a source-built decode
+bridge for selected
 legacy and ProRes RAW input decoding. The bridge is built from FFmpeg 8.1.1
 source code with GPL and nonfree components disabled.
 
@@ -8,6 +10,7 @@ Project: FFmpeg
 Website: https://ffmpeg.org/
 Source release: https://ffmpeg.org/releases/ffmpeg-8.1.1.tar.xz
 Source SHA-256: b6863adde98898f42602017462871b5f6333e65aec803fdd7a6308639c52edf3
+Copyright: FFmpeg project contributors
 License: GNU Lesser General Public License version 2.1 or later
 
 Enabled surface in this Taption Encoder bridge:
@@ -26,14 +29,20 @@ Build policy:
 - Supported bridge audio is written by AVAssetWriter as AAC in MP4/MOV, or as
   a supported Apple-native audio output selected for MOV.
 
-Source/build reproduction details are recorded in
-Vendor/FFmpegLGPLDecodeBridge/FFMPEG_LGPL_DECODE_BRIDGE_BUILD.txt.
+The exact configure line, enabled component map, and build reproduction notes
+are included with the corresponding-source materials described below.
 
-Release/EULA status:
-- This notice records the engineering source-availability and build surface.
-- Final App Store release still needs formal legal approval.
-- Final EULA review must preserve any LGPL-required reverse-engineering or
-  relinking rights needed for debugging modified LGPL components.
+Corresponding source and relinking materials:
+To request the complete corresponding FFmpeg source, build scripts, local
+changes, and materials needed to relink this Taption Encoder release with a
+modified LGPL library, contact help@taption.com. This written offer is valid
+for at least three years from the date this application version is
+distributed. Any charge will be no more than the reasonable cost of
+physically providing the materials.
 
-The LGPL license text is available from:
-https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+The LGPL permits reverse engineering when needed to debug modifications to
+the LGPL-covered library. Nothing in Taption Encoder's terms is intended to
+restrict rights granted by the applicable open-source licenses.
+
+The complete GNU Lesser General Public License version 2.1 text follows this
+notice in the app.

@@ -217,92 +217,16 @@ private enum AdPrivacyActionHandler {
 
 private struct HelpSheetContentView: View {
     private let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "00.00.00"
-    private let deviceReport = HW_CodecCapabilityProbe.makeReport()
-
-    private var videoCodecEntries: [HelpCodecEntry] {
-        let entries = TaptionCodecRegistry.universalSourceCodecs.map { codec in
-            HelpCodecEntry(
-                name: codec.displayName,
-                state: videoEntryState(for: codec)
-            )
-        }
-        return sort(entries: entries)
-    }
-
-    private var audioCodecEntries: [HelpCodecEntry] {
-        let entries = TaptionAudioCodecRoutePlanner.universalAudioCodecs.map { codec in
-            let isAvailableNow = TaptionAudioCodecRoutePlanner
-                .selectRoute(
-                    sourceCodec: codec,
-                    outputCodec: .aac,
-                    outputContainer: .mp4
-                )
-                .isSupportedNow
-            return HelpCodecEntry(
-                name: codec.displayName,
-                state: isAvailableNow ? .now : .planned
-            )
-        }
-        return sort(entries: entries)
-    }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                SheetInfoCard(
-                    title: "Version",
-                    rows: [
-                        ("App", appVersion)
-                    ]
-                )
-
-                SheetInfoCard(
-                    title: "Containers",
-                    rows: [
-                        ("Input", TaptionLaunchSupportCatalog.supportedInputContainerSummary),
-                        ("Output", TaptionLaunchSupportCatalog.supportedOutputContainerSummary)
-                    ]
-                )
-
-                HelpLegendCard()
-
-                HelpCodecSectionCard(
-                    title: "Video Codecs",
-                    entries: videoCodecEntries
-                )
-
-                HelpCodecSectionCard(
-                    title: "Audio Codecs",
-                    entries: audioCodecEntries
-                )
-            }
+            SheetInfoCard(
+                title: "Version",
+                rows: [
+                    ("App", appVersion)
+                ]
+            )
             .padding(18)
-        }
-    }
-
-    private func sort(entries: [HelpCodecEntry]) -> [HelpCodecEntry] {
-        entries.sorted { lhs, rhs in
-            if lhs.state.priority != rhs.state.priority {
-                return lhs.state.priority < rhs.state.priority
-            }
-            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
-        }
-    }
-
-    private func videoEntryState(for codec: TaptionVideoCodec) -> HelpCodecEntryState {
-        switch deviceReport.runtimeAvailability(for: codec) {
-        case .nowHardware:
-            return .nowHardware
-        case .nowSoftware:
-            return .nowSoftware
-        case .nowMixed:
-            return .nowMixed
-        case .needsHardware:
-            return .needsHardware
-        case .planned:
-            return .planned
-        case .unsupported:
-            return .unsupported
         }
     }
 }
@@ -487,14 +411,12 @@ private struct BatterySettingsSheetContentView: View {
 }
 
 private struct OpenSourceNoticesSheetContentView: View {
-    private let readinessReport = SW_SoftwareCodecBackendRegistry.broadBackendReadinessReport()
     private let shippedNotices = TaptionOpenSourceNoticeCatalog.shippedComponents
-    private let toolingNotices = TaptionOpenSourceNoticeCatalog.localDevelopmentTooling
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Third-party components used by this app or its local development tooling are listed here. Final release notices must include the exact shipped binary components and license text.")
+                Text("Taption Encoder includes the third-party components listed below. Open each item to read its notices and license terms.")
                     .font(.subheadline)
                     .foregroundStyle(Color.white.opacity(0.72))
                     .fixedSize(horizontal: false, vertical: true)
@@ -502,18 +424,6 @@ private struct OpenSourceNoticesSheetContentView: View {
                 OpenSourceNoticeSection(
                     title: TaptionOpenSourceNoticeCategory.shippedComponent.displayName,
                     notices: shippedNotices
-                )
-
-                OpenSourceNoticeSection(
-                    title: TaptionOpenSourceNoticeCategory.localDevelopmentTooling.displayName,
-                    notices: toolingNotices
-                )
-
-                BroadCodecBackendNoticeCard(
-                    report: readinessReport,
-                    notice: TaptionOpenSourceNoticeCatalog
-                        .planningOnlyCandidates(readinessReport: readinessReport)
-                        .first
                 )
             }
             .padding(18)
@@ -575,7 +485,7 @@ private struct OpenSourceNoticeRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 6)
                 } label: {
-                    Text("License Text")
+                    Text("Notices and Licenses")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(TaptionTheme.accent)
                 }
@@ -590,38 +500,6 @@ private struct OpenSourceNoticeRow: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(TaptionTheme.border, lineWidth: 1)
         )
-    }
-}
-
-private struct BroadCodecBackendNoticeCard: View {
-    var report: TaptionSoftwareCodecBackendReadinessReport
-    var notice: TaptionOpenSourceNoticeEntry?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(TaptionOpenSourceNoticeCategory.planningOnlyCandidate.displayName)
-                .font(.headline)
-                .foregroundStyle(.white)
-
-            OpenSourceNoticeRow(
-                title: notice?.name ?? report.displayName,
-                detail: notice?.summary ?? "Not bundled in the current app build."
-            )
-
-            Text("Open gates: \(openGateSummary)")
-                .font(.caption)
-                .foregroundStyle(Color.white.opacity(0.58))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var openGateSummary: String {
-        guard !report.openGates.isEmpty else {
-            return "None"
-        }
-        return report.openGates
-            .map(\.displayName)
-            .joined(separator: ", ")
     }
 }
 
@@ -1106,140 +984,6 @@ private struct CapabilityBadge: View {
         case .none:
             return Color.white.opacity(0.42)
         }
-    }
-}
-
-private enum HelpCodecEntryState {
-    case nowHardware
-    case nowSoftware
-    case nowMixed
-    case now
-    case needsHardware
-    case planned
-    case unsupported
-
-    var label: String {
-        switch self {
-        case .nowHardware:
-            return "HW"
-        case .nowSoftware:
-            return "SW"
-        case .nowMixed:
-            return "HW/SW"
-        case .now:
-            return "Now"
-        case .needsHardware:
-            return "Needs HW"
-        case .planned:
-            return "Planned"
-        case .unsupported:
-            return "No"
-        }
-    }
-
-    var priority: Int {
-        switch self {
-        case .nowHardware:
-            return 0
-        case .nowMixed:
-            return 1
-        case .nowSoftware:
-            return 2
-        case .now:
-            return 3
-        case .needsHardware:
-            return 4
-        case .planned:
-            return 5
-        case .unsupported:
-            return 6
-        }
-    }
-
-    var titleOpacity: Double {
-        switch self {
-        case .nowHardware, .nowSoftware, .nowMixed, .now:
-            return 0.92
-        case .needsHardware:
-            return 0.78
-        case .planned:
-            return 0.46
-        case .unsupported:
-            return 0.32
-        }
-    }
-
-    var labelOpacity: Double {
-        switch self {
-        case .nowHardware, .nowSoftware, .nowMixed, .now:
-            return 0.58
-        case .needsHardware:
-            return 0.50
-        case .planned:
-            return 0.34
-        case .unsupported:
-            return 0.28
-        }
-    }
-}
-
-private struct HelpCodecEntry: Identifiable {
-    let id = UUID()
-    var name: String
-    var state: HelpCodecEntryState
-}
-
-private struct HelpLegendCard: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Video rows use this installed device: HW is native hardware, SW is software fallback, and Needs HW waits for Apple-native hardware.")
-                .font(.subheadline)
-                .foregroundStyle(Color.white.opacity(0.76))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(TaptionTheme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(TaptionTheme.border, lineWidth: 1)
-        )
-    }
-}
-
-private struct HelpCodecSectionCard: View {
-    var title: String
-    var entries: [HelpCodecEntry]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(.white)
-
-            ForEach(entries) { entry in
-                HStack(spacing: 10) {
-                    Text(entry.name)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.white.opacity(entry.state.titleOpacity))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Text(entry.state.label)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.white.opacity(entry.state.labelOpacity))
-                }
-                .padding(.vertical, 2)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(TaptionTheme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(TaptionTheme.border, lineWidth: 1)
-        )
     }
 }
 

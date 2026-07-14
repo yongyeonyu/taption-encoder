@@ -195,6 +195,31 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(menuText.contains("help@taption.com"))
     }
 
+    func testHelpSheetShowsVersionInformationOnly() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let menuURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeMenuSheetView.swift")
+        let menuText = try String(contentsOf: menuURL, encoding: .utf8)
+        let helpStart = try XCTUnwrap(menuText.range(of: "private struct HelpSheetContentView"))
+        let batteryStart = try XCTUnwrap(
+            menuText.range(
+                of: "private struct BatterySettingsSheetContentView",
+                range: helpStart.upperBound..<menuText.endIndex
+            )
+        )
+        let helpText = String(menuText[helpStart.lowerBound..<batteryStart.lowerBound])
+
+        XCTAssertTrue(helpText.contains("CFBundleShortVersionString"))
+        XCTAssertTrue(helpText.contains("title: \"Version\""))
+        XCTAssertFalse(helpText.contains("Containers"))
+        XCTAssertFalse(helpText.contains("Video Codecs"))
+        XCTAssertFalse(helpText.contains("Audio Codecs"))
+        XCTAssertFalse(helpText.contains("Codec"))
+        XCTAssertFalse(menuText.contains("HelpCodecEntry"))
+        XCTAssertFalse(menuText.contains("HelpCodecSectionCard"))
+    }
+
     func testEncodingActivitySnapshotFormatsLiveActivityContent() {
         let snapshot = TaptionEncodingActivitySnapshot(
             sessionID: UUID().uuidString,
@@ -7927,8 +7952,14 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertTrue(currentReport.isReadyForReleaseNotices)
         XCTAssertTrue(currentReport.missingFinalLicenseTextEntries.isEmpty)
+        XCTAssertFalse(currentReport.isReadyForPublicDistribution)
+        XCTAssertEqual(
+            Set(currentReport.missingDistributionMaterialEntries.map(\.id)),
+            Set(["libvlc", "ffmpeg-lgpl-decode-bridge"])
+        )
 
         XCTAssertFalse(bundledCandidateReport.isReadyForReleaseNotices)
+        XCTAssertFalse(bundledCandidateReport.isReadyForPublicDistribution)
         XCTAssertEqual(bundledCandidateReport.missingFinalLicenseTextEntries.count, 1)
         XCTAssertEqual(
             bundledCandidateReport.missingFinalLicenseTextEntries.first?.id,
@@ -7940,7 +7971,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
     }
 
-    func testOpenSourceNoticeLicenseTextResourcesAreBundledAndReadable() {
+    func testOpenSourceNoticeLicenseTextResourcesAreBundledAndReadable() throws {
         let resourceReport = TaptionOpenSourceNoticeCatalog.bundleResourceReport(bundle: .main)
         let missingIDs = resourceReport.missingResourceEntries.map(\.id).joined(separator: ", ")
         let emptyIDs = resourceReport.emptyResourceEntries.map(\.id).joined(separator: ", ")
@@ -7959,6 +7990,234 @@ final class CodecRoutePlannerTests: XCTestCase {
             XCTAssertNotNil(licenseText, entry.id)
             XCTAssertFalse(licenseText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true, entry.id)
         }
+
+        let lgplEntries = TaptionOpenSourceNoticeCatalog.shippedComponents.filter {
+            $0.distributionMaterialRequirement == .lgplStaticLinking
+        }
+        XCTAssertEqual(
+            Set(lgplEntries.map(\.id)),
+            Set(["libvlc", "ffmpeg-lgpl-decode-bridge"])
+        )
+        for entry in lgplEntries {
+            XCTAssertTrue(
+                entry.supplementalLicenseTextResourcePaths.contains("OpenSourceNotices/LGPL-2.1.txt"),
+                entry.id
+            )
+            XCTAssertTrue(
+                TaptionOpenSourceNoticeTextLoader.licenseText(for: entry, bundle: .main)?
+                    .contains("GNU LESSER GENERAL PUBLIC LICENSE") == true,
+                entry.id
+            )
+        }
+
+        let libVLC = TaptionOpenSourceNoticeCatalog.shippedComponents.first { $0.id == "libvlc" }
+        XCTAssertTrue(
+            libVLC?.supplementalLicenseTextResourcePaths.contains(
+                "OpenSourceNotices/libVLC-Contrib-Licenses.txt"
+            ) == true
+        )
+        XCTAssertTrue(
+            TaptionOpenSourceNoticeTextLoader.licenseText(for: try XCTUnwrap(libVLC), bundle: .main)?
+                .contains("libVLC iOS Static Contrib Notices") == true
+        )
+    }
+
+    func testLibVLCComplianceInventoryPinsExactSourceInputsAndBlocksPublicRelease() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let complianceURL = rootURL.appendingPathComponent("Vendor/OpenSourceCompliance")
+        let provenanceURL = complianceURL.appendingPathComponent("libvlc-ios-provenance.json")
+        let manifestURL = complianceURL.appendingPathComponent("libvlc-ios-contrib-manifest.tsv")
+        let noticesURL = rootURL.appendingPathComponent(
+            "TaptionEncoder/OpenSourceNotices/libVLC-Contrib-Licenses.txt"
+        )
+        let relinkScriptURL = complianceURL.appendingPathComponent("prepare_relink_materials.sh")
+        let distributionGateURL = complianceURL.appendingPathComponent(
+            "verify_public_distribution_gate.sh"
+        )
+        let pendingApprovalURL = complianceURL.appendingPathComponent(
+            "legal-approval.pending.json"
+        )
+
+        let provenanceData = try Data(contentsOf: provenanceURL)
+        let provenanceObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: provenanceData) as? [String: Any]
+        )
+        let libVLC = try XCTUnwrap(provenanceObject["libVLC"] as? [String: Any])
+        let gateState = try XCTUnwrap(provenanceObject["gateState"] as? [String: Any])
+
+        XCTAssertEqual(provenanceObject["schemaVersion"] as? Int, 1)
+        XCTAssertEqual(
+            libVLC["revision"] as? String,
+            "c833c4be000b426d73ff4324bec574065f00e3df"
+        )
+        XCTAssertEqual(libVLC["contribTargetCount"] as? Int, 57)
+        XCTAssertEqual(libVLC["contribSourceArchiveCount"] as? Int, 56)
+        let contribTargets = try XCTUnwrap(libVLC["contribTargets"] as? [String])
+        XCTAssertEqual(contribTargets.count, 57)
+        XCTAssertTrue(contribTargets.contains("ffmpeg"))
+        XCTAssertFalse(contribTargets.contains("x264"))
+        XCTAssertFalse(contribTargets.contains("x265"))
+        XCTAssertFalse(contribTargets.contains("dvdcss"))
+        XCTAssertFalse(contribTargets.contains("faad2"))
+        XCTAssertEqual(
+            gateState["formalLegalApproval"] as? String,
+            "external-approval-required"
+        )
+        XCTAssertEqual(
+            gateState["publicDistribution"] as? String,
+            "blocked-until-all-external-and-release-artifact-gates-pass"
+        )
+
+        let manifestText = try String(contentsOf: manifestURL, encoding: .utf8)
+        let manifestLines = manifestText.split(separator: "\n").map(String.init)
+        XCTAssertEqual(manifestLines.count, 57)
+        XCTAssertEqual(
+            manifestLines.first,
+            "archive\tsha512\trole\tlicense_files\treview_status"
+        )
+
+        let rows = manifestLines.dropFirst().map { $0.split(separator: "\t").map(String.init) }
+        XCTAssertTrue(rows.allSatisfy { $0.count == 5 })
+        XCTAssertTrue(rows.allSatisfy { row in
+            row[1].range(of: "^[0-9a-f]{128}$", options: .regularExpression) != nil
+        })
+        XCTAssertEqual(Set(rows.map { $0[0] }).count, 56)
+        XCTAssertTrue(rows.allSatisfy { $0[4] == "technical-inventory-only" })
+        XCTAssertFalse(rows.contains { $0[0].contains("x264") })
+        XCTAssertFalse(rows.contains { $0[0].contains("x265") })
+        XCTAssertFalse(rows.contains { $0[0].contains("dvdcss") })
+        XCTAssertFalse(rows.contains { $0[0].contains("faad") })
+
+        let noticesText = try String(contentsOf: noticesURL, encoding: .utf8)
+        XCTAssertTrue(noticesText.contains("Source archive: ffmpeg-8.0.tar.xz"))
+        XCTAssertTrue(noticesText.contains("Source archive: libvpx-1.15.2.tar.gz"))
+        XCTAssertFalse(noticesText.contains("Source archive: jinja-3.1.2.tar.gz"))
+        XCTAssertFalse(noticesText.contains("Source archive: markupsafe-2.1.1.tar.gz"))
+
+        let relinkScript = try String(contentsOf: relinkScriptURL, encoding: .utf8)
+        XCTAssertTrue(relinkScript.contains("TaptionEncoder-AppObjects.tar.xz"))
+        XCTAssertTrue(relinkScript.contains("candidate-external-legal-review-required"))
+        XCTAssertTrue(relinkScript.contains("Mach-O.*object"))
+        XCTAssertTrue(relinkScript.contains("-lvlc"))
+        XCTAssertTrue(relinkScript.contains("-lTaptionFFmpegDecodeBridge"))
+
+        let distributionGate = try String(contentsOf: distributionGateURL, encoding: .utf8)
+        XCTAssertTrue(distributionGate.contains("--distribution-ipa"))
+        XCTAssertTrue(distributionGate.contains("Apple Distribution"))
+        XCTAssertTrue(distributionGate.contains("distributionIPASHA256"))
+        XCTAssertTrue(distributionGate.contains("candidate-external-legal-review-required"))
+
+        let approvalData = try Data(contentsOf: pendingApprovalURL)
+        let approvalObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: approvalData) as? [String: Any]
+        )
+        XCTAssertEqual(approvalObject["status"] as? String, "pending")
+        XCTAssertEqual(approvalObject["distributionIPASHA256"] as? String, "")
+    }
+
+    func testFFmpegBridgeRebuildRecipeKeepsNarrowDecodeAndHEVCOutputPolicy() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let buildScriptURL = rootURL.appendingPathComponent(
+            "Vendor/FFmpegLGPLDecodeBridge/build_ffmpeg_lgpl_decode_bridge.sh"
+        )
+        let provenanceURL = rootURL.appendingPathComponent(
+            "Vendor/OpenSourceCompliance/libvlc-ios-provenance.json"
+        )
+        let buildScript = try String(contentsOf: buildScriptURL, encoding: .utf8)
+        let provenance = try String(contentsOf: provenanceURL, encoding: .utf8)
+
+        XCTAssertTrue(buildScript.contains("--disable-everything"))
+        XCTAssertTrue(buildScript.contains("--enable-demuxer=vc1,avi,mov"))
+        XCTAssertTrue(
+            buildScript.contains(
+                "--enable-decoder=vc1,vc1image,y41p,rawvideo,pcm_s16le,prores_raw"
+            )
+        )
+        XCTAssertFalse(buildScript.contains("--enable-gpl"))
+        XCTAssertFalse(buildScript.contains("--enable-nonfree"))
+        XCTAssertTrue(provenance.contains("H.265 / HEVC only in MP4 or MOV"))
+    }
+
+    func testReleaseConfigurationAndDistributionGateKeepBinaryHardening() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let projectURL = rootURL.appendingPathComponent("TaptionEncoder.xcodeproj/project.pbxproj")
+        let gateURL = rootURL.appendingPathComponent(
+            "Vendor/OpenSourceCompliance/verify_public_distribution_gate.sh"
+        )
+        let loggerURL = rootURL.appendingPathComponent(
+            "TaptionEncoder/Core/Diagnostics/AppLogger.swift"
+        )
+        let projectText = try String(contentsOf: projectURL, encoding: .utf8)
+        let gateText = try String(contentsOf: gateURL, encoding: .utf8)
+        let loggerText = try String(contentsOf: loggerURL, encoding: .utf8)
+
+        for requiredSetting in [
+            "COPY_PHASE_STRIP = YES;",
+            "DEAD_CODE_STRIPPING = YES;",
+            "DEPLOYMENT_POSTPROCESSING = YES;",
+            "ENABLE_TESTABILITY = NO;",
+            "GCC_INLINES_ARE_PRIVATE_EXTERN = YES;",
+            "GCC_SYMBOLS_PRIVATE_EXTERN = YES;",
+            "LLVM_LTO = YES_THIN;",
+            "STRIP_INSTALLED_PRODUCT = YES;",
+            "STRIP_STYLE = all;",
+            "STRIP_SWIFT_SYMBOLS = YES;",
+            "SWIFT_COMPILATION_MODE = wholemodule;",
+            "SWIFT_OPTIMIZATION_LEVEL = \"-O\";",
+            "SWIFT_REFLECTION_METADATA_LEVEL = \"without-names\";",
+            "SWIFT_SERIALIZE_DEBUGGING_OPTIONS = NO;"
+        ] {
+            XCTAssertTrue(projectText.contains(requiredSetting), requiredSetting)
+        }
+
+        XCTAssertTrue(gateText.contains("app and dSYM UUIDs do not match"))
+        XCTAssertTrue(gateText.contains("verify_no_local_build_paths"))
+        XCTAssertTrue(
+            gateText.contains(
+                "verify_no_local_build_paths \"$APP_DIR\" \"Release app bundle\""
+            )
+        )
+        XCTAssertTrue(
+            gateText.contains(
+                "verify_no_local_build_paths \"$DIST_APP_DIR\" \"Distribution IPA app bundle\""
+            )
+        )
+        XCTAssertTrue(gateText.contains("exposes a local build/source path"))
+        XCTAssertTrue(gateText.contains("unexpectedly contains a dSYM bundle"))
+        XCTAssertTrue(gateText.contains("compiler, object, archive, or interface artifacts"))
+        XCTAssertTrue(gateText.contains("get-task-allow"))
+        XCTAssertTrue(loggerText.contains("#if DEBUG"))
+        XCTAssertTrue(loggerText.contains("source: nil"))
+        XCTAssertTrue(loggerText.contains("let sourceText = source.map"))
+    }
+
+    func testOpenSourceNoticeSheetShowsShippedComponentsWithoutInternalPlanning() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let menuURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeMenuSheetView.swift")
+        let menuText = try String(contentsOf: menuURL, encoding: .utf8)
+        let sheetStart = try XCTUnwrap(menuText.range(of: "private struct OpenSourceNoticesSheetContentView"))
+        let sectionStart = try XCTUnwrap(
+            menuText.range(
+                of: "private struct OpenSourceNoticeSection",
+                range: sheetStart.upperBound..<menuText.endIndex
+            )
+        )
+        let sheetText = String(menuText[sheetStart.lowerBound..<sectionStart.lowerBound])
+
+        XCTAssertTrue(sheetText.contains("shippedComponents"))
+        XCTAssertTrue(sheetText.contains("shippedNotices"))
+        XCTAssertFalse(sheetText.contains("localDevelopmentTooling"))
+        XCTAssertFalse(sheetText.contains("planningOnlyCandidates"))
+        XCTAssertFalse(sheetText.contains("readinessReport"))
+        XCTAssertFalse(menuText.contains("BroadCodecBackendNoticeCard"))
     }
 
     func testBroadSoftwareBackendReadinessCanPromoteOnlyAfterAllGatesClose() {

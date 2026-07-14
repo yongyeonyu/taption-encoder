@@ -41,7 +41,17 @@ Policy:
 - Decode-only bridge for VC-1 raw, Y41P, ProRes RAW fallback, and supported packed signed 16-bit PCM audio; H.265 / HEVC MP4/MOV plus Apple-native audio output remain handled by Taption Encoder's AVAssetWriter path.
 
 Notice/source/EULA checklist:
-- Source availability is pinned to the official source URL and SHA-256 above.
+- The official source URL and SHA-256 above record provenance only; they do
+  not by themselves satisfy LGPL distribution requirements for a statically
+  linked application.
 - Local bridge source is stored under Vendor/FFmpegLGPLDecodeBridge/Sources.
-- Open-source notice draft is stored at TaptionEncoder/OpenSourceNotices/FFmpeg-LGPL-Decode-Bridge.txt.
-- Formal counsel approval, final release EULA language, and any LGPL relinking/reverse-engineering obligations remain separate release gates.
+- The shipped notice and written source-material offer are stored at
+  TaptionEncoder/OpenSourceNotices/FFmpeg-LGPL-Decode-Bridge.txt.
+- The complete LGPL 2.1 text is stored at
+  TaptionEncoder/OpenSourceNotices/LGPL-2.1.txt.
+- Public distribution remains blocked until the exact corresponding source,
+  local changes, build scripts, and application relinking materials are
+  assembled and verified as deliverable for the distributed binary.
+- Formal counsel approval and confirmation that the final App Store EULA and
+  distribution mechanism preserve required reverse-engineering and relinking
+  rights remain separate release gates.

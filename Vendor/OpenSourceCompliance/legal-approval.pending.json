@@ -1,0 +1,17 @@
+{
+  "status": "pending",
+  "approvalID": "",
+  "reviewer": "",
+  "approvedAt": "",
+  "bundleIdentifier": "com.taption.encoder",
+  "marketingVersion": "",
+  "buildVersion": "",
+  "sourceBundleSHA256": "",
+  "relinkBundleSHA256": "",
+  "appSizeReportSHA256": "",
+  "distributionIPASHA256": "",
+  "lgplStaticLinking": "pending",
+  "appStoreEULACarveout": "pending",
+  "libvlcContribMap": "pending",
+  "hevcDistribution": "pending"
+}

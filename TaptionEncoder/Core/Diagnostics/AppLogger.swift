@@ -48,6 +48,7 @@ enum AppLogger {
         )
     }
 
+    #if DEBUG
     static func debug(
         _ message: @autoclosure @escaping () -> String,
         category: AppLogCategory,
@@ -56,7 +57,7 @@ enum AppLogger {
         function: StaticString = #function,
         line: UInt = #line
     ) {
-        log(.debug, message(), category: category, metadata: metadata, file: file, function: function, line: line)
+        log(.debug, message(), category: category, metadata: metadata, source: "\(file):\(line) \(function)")
     }
 
     static func info(
@@ -67,7 +68,7 @@ enum AppLogger {
         function: StaticString = #function,
         line: UInt = #line
     ) {
-        log(.info, message(), category: category, metadata: metadata, file: file, function: function, line: line)
+        log(.info, message(), category: category, metadata: metadata, source: "\(file):\(line) \(function)")
     }
 
     static func warning(
@@ -78,7 +79,7 @@ enum AppLogger {
         function: StaticString = #function,
         line: UInt = #line
     ) {
-        log(.warning, message(), category: category, metadata: metadata, file: file, function: function, line: line)
+        log(.warning, message(), category: category, metadata: metadata, source: "\(file):\(line) \(function)")
     }
 
     static func error(
@@ -89,26 +90,55 @@ enum AppLogger {
         function: StaticString = #function,
         line: UInt = #line
     ) {
-        log(.error, message(), category: category, metadata: metadata, file: file, function: function, line: line)
+        log(.error, message(), category: category, metadata: metadata, source: "\(file):\(line) \(function)")
     }
+    #else
+    static func debug(
+        _ message: @autoclosure @escaping () -> String,
+        category: AppLogCategory,
+        metadata: [String: String] = [:]
+    ) {
+        log(.debug, message(), category: category, metadata: metadata, source: nil)
+    }
+
+    static func info(
+        _ message: @autoclosure @escaping () -> String,
+        category: AppLogCategory,
+        metadata: [String: String] = [:]
+    ) {
+        log(.info, message(), category: category, metadata: metadata, source: nil)
+    }
+
+    static func warning(
+        _ message: @autoclosure @escaping () -> String,
+        category: AppLogCategory,
+        metadata: [String: String] = [:]
+    ) {
+        log(.warning, message(), category: category, metadata: metadata, source: nil)
+    }
+
+    static func error(
+        _ message: @autoclosure @escaping () -> String,
+        category: AppLogCategory,
+        metadata: [String: String] = [:]
+    ) {
+        log(.error, message(), category: category, metadata: metadata, source: nil)
+    }
+    #endif
 
     private static func log(
         _ level: AppLogLevel,
         _ message: String,
         category: AppLogCategory,
         metadata: [String: String],
-        file: StaticString,
-        function: StaticString,
-        line: UInt
+        source: String?
     ) {
         let formattedLine = formattedLogLine(
             level: level,
             category: category,
             message: message,
             metadata: metadata,
-            file: file,
-            function: function,
-            line: line
+            source: source
         )
         writeToUnifiedLog(formattedLine, level: level, category: category)
         appendToFile(formattedLine)
@@ -181,19 +211,17 @@ enum AppLogger {
         category: AppLogCategory,
         message: String,
         metadata: [String: String],
-        file: StaticString,
-        function: StaticString,
-        line: UInt
+        source: String?
     ) -> String {
         let timestamp = ISO8601DateFormatter.appLoggerFormatter.string(from: Date())
-        let source = "\(file):\(line) \(function)"
         let metadataText = metadata.isEmpty
             ? ""
             : " " + metadata
                 .sorted { $0.key < $1.key }
                 .map { "\($0.key)=\(sanitize($0.value))" }
                 .joined(separator: " ")
-        return "\(timestamp) [\(level.rawValue)] [\(category.rawValue)] \(sanitize(message))\(metadataText) source=\(source)"
+        let sourceText = source.map { " source=\($0)" } ?? ""
+        return "\(timestamp) [\(level.rawValue)] [\(category.rawValue)] \(sanitize(message))\(metadataText)\(sourceText)"
     }
 
     private static func sanitize(_ value: String) -> String {

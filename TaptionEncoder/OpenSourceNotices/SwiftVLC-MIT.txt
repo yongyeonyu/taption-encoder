@@ -1,3 +1,14 @@
+SwiftVLC 0.10.0
+
+Project: SwiftVLC
+Source: https://github.com/harflabs/SwiftVLC/tree/v0.10.0
+Revision: 9065ad6338ddd2d689bf6220b45e90ab4695b3a8
+License: MIT License
+
+SwiftVLC is a Swift wrapper. The bundled libVLC engine is a separate
+component with separate license terms and is listed independently in this
+screen.
+
 MIT License
 
 Copyright (c) 2025 Omar Albeik
