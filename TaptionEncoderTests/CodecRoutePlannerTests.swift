@@ -195,12 +195,14 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(menuText.contains("help@taption.com"))
     }
 
-    func testHelpSheetShowsVersionInformationOnly() throws {
+    func testHelpSheetIntegratesVersionDeviceInfoAndOpenSourceNotices() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let menuURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeMenuSheetView.swift")
+        let homeURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
         let menuText = try String(contentsOf: menuURL, encoding: .utf8)
+        let homeText = try String(contentsOf: homeURL, encoding: .utf8)
         let helpStart = try XCTUnwrap(menuText.range(of: "private struct HelpSheetContentView"))
         let batteryStart = try XCTUnwrap(
             menuText.range(
@@ -211,13 +213,18 @@ final class CodecRoutePlannerTests: XCTestCase {
         let helpText = String(menuText[helpStart.lowerBound..<batteryStart.lowerBound])
 
         XCTAssertTrue(helpText.contains("CFBundleShortVersionString"))
+        XCTAssertTrue(helpText.contains("CFBundleVersion"))
         XCTAssertTrue(helpText.contains("title: \"Version\""))
-        XCTAssertFalse(helpText.contains("Containers"))
-        XCTAssertFalse(helpText.contains("Video Codecs"))
-        XCTAssertFalse(helpText.contains("Audio Codecs"))
-        XCTAssertFalse(helpText.contains("Codec"))
-        XCTAssertFalse(menuText.contains("HelpCodecEntry"))
-        XCTAssertFalse(menuText.contains("HelpCodecSectionCard"))
+        XCTAssertTrue(helpText.contains("DeviceInfoContentView()"))
+        XCTAssertTrue(helpText.contains("OpenSourceNoticesContentView()"))
+        XCTAssertTrue(menuText.contains("TaptionOpenSourceNoticeCatalog.shippedComponents"))
+        XCTAssertTrue(menuText.contains("Required notice text is unavailable in this build."))
+        XCTAssertFalse(menuText.contains("case openSource"))
+        XCTAssertFalse(menuText.contains("case deviceInfo"))
+        XCTAssertFalse(homeText.contains("activeMenuSheet = .openSource"))
+        XCTAssertFalse(homeText.contains("activeMenuSheet = .deviceInfo"))
+        XCTAssertFalse(homeText.contains("Label(\"Open Source Notices\""))
+        XCTAssertFalse(homeText.contains("Label(\"Device Info\""))
     }
 
     func testEncodingActivitySnapshotFormatsLiveActivityContent() {
@@ -7926,6 +7933,16 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(shipped.allSatisfy(\.hasFinalLicenseText))
         XCTAssertEqual(Set(shipped.map(\.category)), [.shippedComponent])
         XCTAssertTrue(shipped.contains { $0.relatedBackend == .softwareVLCDecoder })
+        XCTAssertEqual(
+            Set(shipped.map(\.id)),
+            Set([
+                "swiftvlc",
+                "libvlc",
+                "ffmpeg-lgpl-decode-bridge",
+                "google-mobile-ads",
+                "google-user-messaging-platform"
+            ])
+        )
 
         XCTAssertTrue(tooling.allSatisfy { !$0.isShippedInCurrentBuild })
         XCTAssertTrue(tooling.allSatisfy { !$0.requiresFinalLicenseText })
@@ -7939,6 +7956,58 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(candidates.first?.requiresFinalLicenseText, false)
         XCTAssertEqual(candidates.first?.hasFinalLicenseText, true)
         XCTAssertEqual(allEntries.count, shipped.count + tooling.count + candidates.count)
+    }
+
+    func testOpenSourceNoticesMatchResolvedThirdPartyPackagePins() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let resolvedURL = rootURL.appendingPathComponent(
+            "TaptionEncoder.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+        )
+        let data = try Data(contentsOf: resolvedURL)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let pins = try XCTUnwrap(json["pins"] as? [[String: Any]])
+        let pinsByIdentity = Dictionary(uniqueKeysWithValues: pins.compactMap { pin in
+            (pin["identity"] as? String).map { ($0, pin) }
+        })
+        let expectations: [(identity: String, noticeID: String, version: String, revision: String)] = [
+            (
+                "swiftvlc",
+                "swiftvlc",
+                "0.10.0",
+                "9065ad6338ddd2d689bf6220b45e90ab4695b3a8"
+            ),
+            (
+                "swift-package-manager-google-mobile-ads",
+                "google-mobile-ads",
+                "13.5.0",
+                "166a2dcff33c893b22e4bfccbbdd0ed00a248c24"
+            ),
+            (
+                "swift-package-manager-google-user-messaging-platform",
+                "google-user-messaging-platform",
+                "3.1.0",
+                "13b248eaa73b7826f0efb1bcf455e251d65ecb1b"
+            )
+        ]
+
+        XCTAssertEqual(Set(pinsByIdentity.keys), Set(expectations.map(\.identity)))
+
+        let noticesByID = Dictionary(
+            uniqueKeysWithValues: TaptionOpenSourceNoticeCatalog.shippedComponents.map { ($0.id, $0) }
+        )
+        for expectation in expectations {
+            let pin = try XCTUnwrap(pinsByIdentity[expectation.identity])
+            let state = try XCTUnwrap(pin["state"] as? [String: Any])
+            XCTAssertEqual(state["version"] as? String, expectation.version)
+            XCTAssertEqual(state["revision"] as? String, expectation.revision)
+
+            let notice = try XCTUnwrap(noticesByID[expectation.noticeID])
+            let noticeText = try XCTUnwrap(TaptionOpenSourceNoticeTextLoader.licenseText(for: notice))
+            XCTAssertTrue(noticeText.contains(expectation.version), expectation.noticeID)
+            XCTAssertTrue(noticeText.contains(expectation.revision), expectation.noticeID)
+        }
     }
 
     func testOpenSourceNoticeReadinessBlocksBundledCandidateWithoutLicenseText() {
@@ -8197,13 +8266,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(loggerText.contains("let sourceText = source.map"))
     }
 
-    func testOpenSourceNoticeSheetShowsShippedComponentsWithoutInternalPlanning() throws {
+    func testHelpOpenSourceSectionShowsShippedComponentsWithoutInternalPlanning() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let menuURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeMenuSheetView.swift")
         let menuText = try String(contentsOf: menuURL, encoding: .utf8)
-        let sheetStart = try XCTUnwrap(menuText.range(of: "private struct OpenSourceNoticesSheetContentView"))
+        let sheetStart = try XCTUnwrap(menuText.range(of: "private struct OpenSourceNoticesContentView"))
         let sectionStart = try XCTUnwrap(
             menuText.range(
                 of: "private struct OpenSourceNoticeSection",

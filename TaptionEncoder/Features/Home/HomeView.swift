@@ -874,17 +874,6 @@ struct HomeView: View {
                     Label("Privacy & Ads", systemImage: "hand.raised")
                 }
 
-                Button {
-                    activeMenuSheet = .openSource
-                } label: {
-                    Label("Open Source Notices", systemImage: "curlybraces")
-                }
-
-                Button {
-                    activeMenuSheet = .deviceInfo
-                } label: {
-                    Label("Device Info", systemImage: "iphone")
-                }
             } label: {
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: metrics.headerIconSize, weight: .semibold))

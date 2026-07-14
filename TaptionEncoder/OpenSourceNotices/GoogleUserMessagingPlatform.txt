@@ -2,10 +2,13 @@ Google User Messaging Platform Swift Package Wrapper 3.1.0
 
 Source: https://github.com/googleads/swift-package-manager-google-user-messaging-platform/tree/3.1.0
 Revision: 13b248eaa73b7826f0efb1bcf455e251d65ecb1b
+Upstream license SHA-256: fd112c80352fc42a60f051012c6b9adef055123e395dece30fa8f44880f39e96
 
-The Apache License below applies to the Swift Package manifest and wrapper.
-The separately downloaded User Messaging Platform SDK binary is provided
-under Google's applicable SDK terms.
+The Apache License below applies only to the Swift Package manifest and
+wrapper at the revision above. It does not apply to the separately downloaded
+UserMessagingPlatform SDK binary included by that package. Use of the binary
+SDK is governed by the Google Developers Site Terms of Service:
+https://developers.google.com/terms
 
                                  Apache License
                            Version 2.0, January 2004

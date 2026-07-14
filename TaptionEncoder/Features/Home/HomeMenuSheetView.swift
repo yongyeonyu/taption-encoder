@@ -5,8 +5,6 @@ enum HomeMenuSheet: String, Identifiable {
     case help
     case batterySettings
     case privacyAds
-    case openSource
-    case deviceInfo
 
     var id: String { rawValue }
 
@@ -18,10 +16,6 @@ enum HomeMenuSheet: String, Identifiable {
             return "Battery Settings"
         case .privacyAds:
             return "Privacy & Ads"
-        case .openSource:
-            return "Open Source Notices"
-        case .deviceInfo:
-            return "Device Info"
         }
     }
 }
@@ -62,10 +56,6 @@ struct HomeMenuSheetView: View {
             )
         case .privacyAds:
             PrivacyAdsSheetContentView()
-        case .openSource:
-            OpenSourceNoticesSheetContentView()
-        case .deviceInfo:
-            DeviceInfoSheetContentView()
         }
     }
 }
@@ -217,15 +207,23 @@ private enum AdPrivacyActionHandler {
 
 private struct HelpSheetContentView: View {
     private let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "00.00.00"
+    private let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
 
     var body: some View {
         ScrollView {
-            SheetInfoCard(
-                title: "Version",
-                rows: [
-                    ("App", appVersion)
-                ]
-            )
+            VStack(alignment: .leading, spacing: 20) {
+                SheetInfoCard(
+                    title: "Version",
+                    rows: [
+                        ("App", appVersion),
+                        ("Build", buildNumber)
+                    ]
+                )
+
+                DeviceInfoContentView()
+
+                OpenSourceNoticesContentView()
+            }
             .padding(18)
         }
     }
@@ -410,23 +408,24 @@ private struct BatterySettingsSheetContentView: View {
     }
 }
 
-private struct OpenSourceNoticesSheetContentView: View {
+private struct OpenSourceNoticesContentView: View {
     private let shippedNotices = TaptionOpenSourceNoticeCatalog.shippedComponents
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Taption Encoder includes the third-party components listed below. Open each item to read its notices and license terms.")
-                    .font(.subheadline)
-                    .foregroundStyle(Color.white.opacity(0.72))
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Open Source Notices")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
 
-                OpenSourceNoticeSection(
-                    title: TaptionOpenSourceNoticeCategory.shippedComponent.displayName,
-                    notices: shippedNotices
-                )
-            }
-            .padding(18)
+            Text("These notices identify open-source components and package metadata used to produce this build. Separately distributed binary SDK terms are identified independently.")
+                .font(.subheadline)
+                .foregroundStyle(Color.white.opacity(0.72))
+                .fixedSize(horizontal: false, vertical: true)
+
+            OpenSourceNoticeSection(
+                title: "Current Build Dependencies",
+                notices: shippedNotices
+            )
         }
     }
 }
@@ -449,47 +448,46 @@ private struct OpenSourceNoticeSection: View {
 }
 
 private struct OpenSourceNoticeRow: View {
-    var title: String
-    var detail: String
-    var licenseText: String?
-
-    init(title: String, detail: String, licenseText: String? = nil) {
-        self.title = title
-        self.detail = detail
-        self.licenseText = licenseText
-    }
-
-    init(notice: TaptionOpenSourceNoticeEntry) {
-        self.title = notice.name
-        self.detail = notice.summary
-        self.licenseText = TaptionOpenSourceNoticeTextLoader.licenseText(for: notice)
-    }
+    var notice: TaptionOpenSourceNoticeEntry
+    @State private var isExpanded = false
+    @State private var licenseText: String?
+    @State private var didLoadLicenseText = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
+            Text(notice.name)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.white)
 
-            Text(detail)
+            Text(notice.summary)
                 .font(.caption)
                 .foregroundStyle(Color.white.opacity(0.68))
                 .fixedSize(horizontal: false, vertical: true)
 
-            if let licenseText {
-                DisclosureGroup {
+            DisclosureGroup(isExpanded: $isExpanded) {
+                if let licenseText {
                     Text(licenseText)
                         .font(.caption2.monospaced())
                         .foregroundStyle(Color.white.opacity(0.62))
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.top, 6)
-                } label: {
-                    Text("Notices and Licenses")
+                } else if didLoadLicenseText {
+                    Text("Required notice text is unavailable in this build.")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(TaptionTheme.accent)
+                        .foregroundStyle(Color.red.opacity(0.86))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .tint(TaptionTheme.accent)
+            } label: {
+                Text("Notices and Licenses")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(TaptionTheme.accent)
+            }
+            .tint(TaptionTheme.accent)
+            .onChange(of: isExpanded) { _, expanded in
+                guard expanded, !didLoadLicenseText else { return }
+                didLoadLicenseText = true
+                licenseText = TaptionOpenSourceNoticeTextLoader.licenseText(for: notice)
             }
         }
         .padding(14)
@@ -503,128 +501,129 @@ private struct OpenSourceNoticeRow: View {
     }
 }
 
-private struct DeviceInfoSheetContentView: View {
+private struct DeviceInfoContentView: View {
     @State private var report = HW_CodecCapabilityProbe.makeReport()
     @State private var reportSaveMessage: ReportSaveMessage?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                SheetInfoCard(
-                    title: "Device",
-                    rows: [
-                        ("Model", report.modelDisplayName),
-                        ("OS", "\(report.systemName) \(report.systemVersion)"),
-                        ("Probe", "\(report.probeResolution.width)x\(report.probeResolution.height)"),
-                        ("Checked", generatedAtText)
-                    ]
-                )
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Device Info")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
 
-                SheetInfoCard(
-                    title: "Input Scope",
-                    rows: [
-                        ("Now(HW)", "\(runtimeReadiness.nowHardwareVideoCodecs.count) video codecs"),
-                        ("Now(SW)", "\(runtimeReadiness.nowSoftwareVideoCodecs.count) video codecs"),
-                        ("Now(HW/SW)", "\(runtimeReadiness.nowMixedVideoCodecs.count) video codecs"),
-                        ("Needs HW", "\(runtimeReadiness.needsHardwareVideoCodecs.count) hardware-gated codecs"),
-                        ("Plan", "\(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.count) roadmap codecs"),
-                        ("Out", "H.265 / \(TaptionLaunchSupportCatalog.supportedOutputContainerSummary)")
-                    ]
-                )
+            SheetInfoCard(
+                title: "Device",
+                rows: [
+                    ("Model", report.modelDisplayName),
+                    ("OS", "\(report.systemName) \(report.systemVersion)"),
+                    ("Probe", "\(report.probeResolution.width)x\(report.probeResolution.height)"),
+                    ("Checked", generatedAtText)
+                ]
+            )
 
-                Button {
-                    saveDeviceReport()
-                } label: {
-                    Label("Save Device Report", systemImage: "square.and.arrow.down")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                }
-                .buttonStyle(.plain)
-                .background(TaptionTheme.accent)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(TaptionTheme.accent.opacity(0.65), lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            SheetInfoCard(
+                title: "Input Scope",
+                rows: [
+                    ("Now(HW)", "\(runtimeReadiness.nowHardwareVideoCodecs.count) video codecs"),
+                    ("Now(SW)", "\(runtimeReadiness.nowSoftwareVideoCodecs.count) video codecs"),
+                    ("Now(HW/SW)", "\(runtimeReadiness.nowMixedVideoCodecs.count) video codecs"),
+                    ("Needs HW", "\(runtimeReadiness.needsHardwareVideoCodecs.count) hardware-gated codecs"),
+                    ("Plan", "\(TaptionLaunchSupportCatalog.plannedInputVideoCodecs.count) roadmap codecs"),
+                    ("Out", "H.265 / \(TaptionLaunchSupportCatalog.supportedOutputContainerSummary)")
+                ]
+            )
 
-                if let reportSaveMessage {
-                    Text(reportSaveMessage.text)
-                        .font(.caption)
-                        .foregroundStyle(reportSaveMessage.isError ? Color.red.opacity(0.86) : TaptionTheme.mutedText)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                }
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Video Codec Paths")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-
-                    Text("Now(HW), Now(SW), mixed, hardware-gated, and roadmap-only input states are evaluated for this installed device.")
-                        .font(.caption)
-                        .foregroundStyle(TaptionTheme.mutedText)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if allVideoCapabilities.isEmpty {
-                        Text("No video codec probe results are available.")
-                            .font(.caption)
-                            .foregroundStyle(TaptionTheme.mutedText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } else {
-                        ForEach(allVideoCapabilities) { capability in
-                            DeviceVideoCodecCapabilityRow(
-                                capability: capability,
-                                runtimeAvailability: report.runtimeAvailability(for: capability.videoCodec),
-                                routeSelection: report.routeSelection(for: capability.videoCodec)
-                            )
-                        }
-                    }
-                }
-                .padding(14)
-                .background(TaptionTheme.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(TaptionTheme.border, lineWidth: 1)
-                )
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Audio Codec Paths")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-
-                    Text("App and Device badges are evaluated separately for this installed device.")
-                        .font(.caption)
-                        .foregroundStyle(TaptionTheme.mutedText)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if allAudioCapabilities.isEmpty {
-                        Text("No audio codec probe results are available.")
-                            .font(.caption)
-                            .foregroundStyle(TaptionTheme.mutedText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } else {
-                        ForEach(allAudioCapabilities) { capability in
-                            DeviceAudioCodecCapabilityRow(capability: capability)
-                        }
-                    }
-                }
-                .padding(14)
-                .background(TaptionTheme.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(TaptionTheme.border, lineWidth: 1)
-                )
-
-                Text("This screen is focused on the installed device only. Planned input rows are roadmap entries and should not be treated as runnable in this build.")
-                    .font(.footnote)
-                    .foregroundStyle(Color.white.opacity(0.58))
-                    .fixedSize(horizontal: false, vertical: true)
+            Button {
+                saveDeviceReport()
+            } label: {
+                Label("Save Device Report", systemImage: "square.and.arrow.down")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
             }
-            .padding(18)
+            .buttonStyle(.plain)
+            .background(TaptionTheme.accent)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(TaptionTheme.accent.opacity(0.65), lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            if let reportSaveMessage {
+                Text(reportSaveMessage.text)
+                    .font(.caption)
+                    .foregroundStyle(reportSaveMessage.isError ? Color.red.opacity(0.86) : TaptionTheme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Video Codec Paths")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+
+                Text("Now(HW), Now(SW), mixed, hardware-gated, and roadmap-only input states are evaluated for this installed device.")
+                    .font(.caption)
+                    .foregroundStyle(TaptionTheme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if allVideoCapabilities.isEmpty {
+                    Text("No video codec probe results are available.")
+                        .font(.caption)
+                        .foregroundStyle(TaptionTheme.mutedText)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    ForEach(allVideoCapabilities) { capability in
+                        DeviceVideoCodecCapabilityRow(
+                            capability: capability,
+                            runtimeAvailability: report.runtimeAvailability(for: capability.videoCodec),
+                            routeSelection: report.routeSelection(for: capability.videoCodec)
+                        )
+                    }
+                }
+            }
+            .padding(14)
+            .background(TaptionTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(TaptionTheme.border, lineWidth: 1)
+            )
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Audio Codec Paths")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+
+                Text("App and Device badges are evaluated separately for this installed device.")
+                    .font(.caption)
+                    .foregroundStyle(TaptionTheme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if allAudioCapabilities.isEmpty {
+                    Text("No audio codec probe results are available.")
+                        .font(.caption)
+                        .foregroundStyle(TaptionTheme.mutedText)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    ForEach(allAudioCapabilities) { capability in
+                        DeviceAudioCodecCapabilityRow(capability: capability)
+                    }
+                }
+            }
+            .padding(14)
+            .background(TaptionTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(TaptionTheme.border, lineWidth: 1)
+            )
+
+            Text("Device results apply only to this installed device. Planned input rows are roadmap entries and are not runnable in this build.")
+                .font(.footnote)
+                .foregroundStyle(Color.white.opacity(0.58))
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -711,7 +710,7 @@ private struct DeviceInfoSheetContentView: View {
             reportSaveMessage = ReportSaveMessage(
                 text: HomeErrorPresenter.cardDetail(
                     summary: "The device report could not be saved.",
-                    recovery: "Try saving the report again from Device Info.",
+                    recovery: "Try saving the report again from Help.",
                     error: error
                 ),
                 isError: true

@@ -486,7 +486,7 @@ enum TaptionOpenSourceNoticeCatalog {
             TaptionOpenSourceNoticeEntry(
                 id: "swiftvlc",
                 name: "SwiftVLC 0.10.0",
-                summary: "MIT-licensed Swift wrapper used to call the separately licensed libVLC engine.",
+                summary: "MIT-licensed Swift wrapper pinned to revision 9065ad6338ddd2d689bf6220b45e90ab4695b3a8. The separately licensed libVLC engine is disclosed independently.",
                 category: .shippedComponent,
                 isShippedInCurrentBuild: true,
                 requiresFinalLicenseText: true,
@@ -496,7 +496,7 @@ enum TaptionOpenSourceNoticeCatalog {
             TaptionOpenSourceNoticeEntry(
                 id: "libvlc",
                 name: "libVLC",
-                summary: "Statically linked VideoLAN media engine built from source revision c833c4be0. It is covered by LGPL 2.1 or later; checksum-verified notices for its separately licensed contrib inputs are included below.",
+                summary: "Statically linked VideoLAN media engine built from revision c833c4be000b426d73ff4324bec574065f00e3df under LGPL 2.1 or later. Its checksum-verified contrib notices and relinking offer are included.",
                 category: .shippedComponent,
                 isShippedInCurrentBuild: true,
                 requiresFinalLicenseText: true,
@@ -510,8 +510,8 @@ enum TaptionOpenSourceNoticeCatalog {
             ),
             TaptionOpenSourceNoticeEntry(
                 id: "ffmpeg-lgpl-decode-bridge",
-                name: "FFmpeg LGPL Decode Bridge",
-                summary: "Source-built LGPL FFmpeg-family in-process decode bridge for VC-1 raw, Y41P, and ProRes RAW fallback, proven on simulator with focused VC-1/Y41P proof also collected on a connected iPad.",
+                name: "FFmpeg 8.1.1 LGPL Decode Bridge",
+                summary: "Statically linked, decode-only FFmpeg 8.1.1 bridge under LGPL 2.1 or later. GPL and nonfree components are disabled; exact enabled components and relinking offer are included.",
                 category: .shippedComponent,
                 isShippedInCurrentBuild: true,
                 requiresFinalLicenseText: true,
@@ -523,7 +523,7 @@ enum TaptionOpenSourceNoticeCatalog {
             TaptionOpenSourceNoticeEntry(
                 id: "google-mobile-ads",
                 name: "Google Mobile Ads Swift Package Wrapper 13.5.0",
-                summary: "Apache 2.0 package manifest and wrapper for the separately distributed Google Mobile Ads SDK binary.",
+                summary: "Apache 2.0 applies to the pinned Swift Package manifest and wrapper. It does not license the separately distributed GoogleMobileAds SDK binary, which is governed by Google's SDK terms.",
                 category: .shippedComponent,
                 isShippedInCurrentBuild: true,
                 requiresFinalLicenseText: true,
@@ -533,7 +533,7 @@ enum TaptionOpenSourceNoticeCatalog {
             TaptionOpenSourceNoticeEntry(
                 id: "google-user-messaging-platform",
                 name: "Google User Messaging Platform Swift Package Wrapper 3.1.0",
-                summary: "Apache 2.0 package manifest and wrapper for the separately distributed User Messaging Platform SDK binary.",
+                summary: "Apache 2.0 applies to the pinned Swift Package manifest and wrapper. It does not license the separately distributed UserMessagingPlatform SDK binary, which is governed by Google's SDK terms.",
                 category: .shippedComponent,
                 isShippedInCurrentBuild: true,
                 requiresFinalLicenseText: true,
