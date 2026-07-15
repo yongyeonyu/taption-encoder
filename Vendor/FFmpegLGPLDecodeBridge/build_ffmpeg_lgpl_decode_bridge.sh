@@ -22,18 +22,18 @@ COMMON_CONFIGURE_FLAGS=(
   --disable-asm
   --disable-avdevice
   --disable-avfilter
-  --disable-swresample
   --disable-shared
   --enable-pic
   --enable-static
   --enable-avcodec
   --enable-avformat
   --enable-avutil
+  --enable-swresample
   --enable-swscale
   --enable-protocol=file
-  --enable-demuxer=vc1,avi,mov
-  --enable-parser=vc1
-  --enable-decoder=vc1,vc1image,y41p,rawvideo,pcm_s16le,prores_raw
+  --enable-demuxer=vc1,avi,mov,dv,asf,rm
+  --enable-parser=vc1,mpeg4video
+  --enable-decoder=vc1,vc1image,y41p,rawvideo,prores_raw,dvvideo,mjpeg,mpeg4,msmpeg4v3,msrle,smc,r10k,r210,rv10,rv20,snow,utvideo,wmv2,pcm_s16le,mp3,aac,ac3,wmav2
 )
 
 require_file() {
@@ -116,6 +116,7 @@ build_slice() {
     "$prefix_path/lib/libavformat.a" \
     "$prefix_path/lib/libavcodec.a" \
     "$prefix_path/lib/libavutil.a" \
+    "$prefix_path/lib/libswresample.a" \
     "$prefix_path/lib/libswscale.a"
 }
 

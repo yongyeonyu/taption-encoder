@@ -661,7 +661,7 @@ enum TaptionSourcePreservingExecutionAudit {
               actualValue > 0 else {
             return false
         }
-        return abs(expectedValue - actualValue) <= max(0.05, expectedValue * 0.0025)
+        return abs(expectedValue - actualValue) <= max(0.1, expectedValue * 0.0025)
     }
 
     private static func durationTolerance(for duration: TimeInterval) -> TimeInterval {

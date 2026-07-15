@@ -104,6 +104,7 @@ final class HomeViewModel: ObservableObject {
     private var deferredBatteryStopReason: BatteryEncodingBlockReason?
     private var batteryObservationTokens: [NSObjectProtocol] = []
     private var isEncodingAdSuppressed = false
+    private var activeBackgroundSavePlanIDs: Set<UUID> = []
 
     init(
         environment: AppEnvironment = .phase0,
@@ -1211,11 +1212,20 @@ final class HomeViewModel: ObservableObject {
         let selectedURLs = urls.sorted {
             $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
         }
-        guard let firstURL = selectedURLs.first else {
+        guard !selectedURLs.isEmpty else {
             return
         }
 
-        let fileURLs = selectedURLs.filter { !selectedURLIsDirectory($0) }
+        let folderURLs = selectedURLs.filter(selectedURLIsDirectory)
+        let fileURLs = supportedVideoFileURLs(from: selectedURLs)
+        let skippedFileCount = selectedURLs.count - folderURLs.count - fileURLs.count
+        if skippedFileCount > 0 {
+            AppLogger.info(
+                "Unsupported files skipped from picker selection",
+                category: .fileImport,
+                metadata: ["count": "\(skippedFileCount)"]
+            )
+        }
         if !fileURLs.isEmpty {
             if fileURLs.count == 1 {
                 startFilesFlow(url: fileURLs[0])
@@ -1225,7 +1235,14 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
-        startFolderFlow(url: firstURL)
+        guard let folderURL = folderURLs.first else {
+            AppLogger.warning(
+                "Picker selection ignored because it contains no supported videos or folders",
+                category: .fileImport
+            )
+            return
+        }
+        startFolderFlow(url: folderURL)
     }
 
     func openImportBrowser(mode: HomeImportBrowserMode) {
@@ -1449,11 +1466,7 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
-        let selectedURLs = urls
-            .filter { !selectedURLIsDirectory($0) }
-            .sorted {
-                $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
-            }
+        let selectedURLs = supportedVideoFileURLs(from: urls)
         guard !selectedURLs.isEmpty else {
             AppLogger.warning("Files preview browser ignored because no files were selected", category: .fileImport)
             return
@@ -1626,9 +1639,7 @@ final class HomeViewModel: ObservableObject {
         guard canStartNewSourceFlow() else {
             return
         }
-        let selectedURLs = urls.sorted {
-            $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
-        }
+        let selectedURLs = supportedVideoFileURLs(from: urls)
         guard let firstURL = selectedURLs.first else {
             return
         }
@@ -3184,6 +3195,11 @@ final class HomeViewModel: ObservableObject {
                     requiredBytes: requiredBytes,
                     availableBytes: availableBytes
                 )
+                logCodecBenchmarkProbeTerminalIfNeeded(
+                    status: "prepare_failed",
+                    sourceName: source.displayName,
+                    errorMessage: storageMessage
+                )
                 AppLogger.error(
                     "Prepare encoding blocked due to insufficient storage",
                     category: .storage,
@@ -3212,6 +3228,11 @@ final class HomeViewModel: ObservableObject {
                 trace.finish("storage_blocked", metadata: ["reason": storageMessage])
                 activeTask = nil
             } catch let error as TaptionVideoCoreError {
+                logCodecBenchmarkProbeTerminalIfNeeded(
+                    status: "prepare_failed",
+                    sourceName: source.displayName,
+                    errorMessage: error.localizedDescription
+                )
                 AppLogger.error(
                     "Prepare encoding failed with TaptionVideoCoreError",
                     category: .encoding,
@@ -3248,6 +3269,11 @@ final class HomeViewModel: ObservableObject {
                 requestSessionEndAd(reason: .failedEncoding)
                 trace.finish("failed", metadata: ["error": error.localizedDescription])
             } catch {
+                logCodecBenchmarkProbeTerminalIfNeeded(
+                    status: "prepare_failed",
+                    sourceName: source.displayName,
+                    errorMessage: error.localizedDescription
+                )
                 AppLogger.error(
                     "Prepare encoding failed",
                     category: .encoding,
@@ -3347,12 +3373,16 @@ final class HomeViewModel: ObservableObject {
                 return
             }
 
+            let core = TaptionVideoCore(services: environment.videoCoreServices)
+            var retainedBackgroundPlanID: UUID?
             do {
-                let core = TaptionVideoCore(services: environment.videoCoreServices)
                 var lastLoggedProgressBucket = -1
                 let firstProgressLock = NSLock()
                 var didMarkFirstProgress = false
-                let result = try await core.encodePreparedJob(review.job) { [weak self] progress in
+                let result = try await core.encodePreparedJob(
+                    review.job,
+                    backgroundTaskCompletionPolicy: .callerManaged
+                ) { [weak self] progress in
                     let shouldMarkFirstProgress: Bool = {
                         firstProgressLock.lock()
                         defer {
@@ -3407,6 +3437,8 @@ final class HomeViewModel: ObservableObject {
                         self.updateEncodingActivity(for: review, progress: snapshot)
                     }
                 }
+                retainedBackgroundPlanID = result.planID
+                activeBackgroundSavePlanIDs.insert(result.planID)
 
                 try Task.checkCancellation()
                 trace.mark(
@@ -3472,8 +3504,15 @@ final class HomeViewModel: ObservableObject {
                 activeTask = nil
                 state = .pendingSave(pendingJob)
                 trace.finish("pending_save_started", metadata: ["pendingSave": pendingJob.id.uuidString])
-                requestSaveDestinationIfNeeded(for: pendingJob)
+                let didStartImmediateSave = requestSaveDestinationIfNeeded(for: pendingJob)
+                if !didStartImmediateSave {
+                    await completeBackgroundSaveLease(planID: result.planID)
+                }
+                retainedBackgroundPlanID = nil
             } catch is CancellationError {
+                if let retainedBackgroundPlanID {
+                    await completeBackgroundSaveLease(planID: retainedBackgroundPlanID)
+                }
                 AppLogger.warning(
                     "Encoding task cancelled",
                     category: .encoding,
@@ -3499,6 +3538,14 @@ final class HomeViewModel: ObservableObject {
                 requestSessionEndAd(reason: .cancelledEncoding)
                 trace.finish("cancelled")
             } catch let error as TaptionVideoCoreError {
+                if let retainedBackgroundPlanID {
+                    await completeBackgroundSaveLease(planID: retainedBackgroundPlanID)
+                }
+                logCodecBenchmarkProbeTerminalIfNeeded(
+                    status: "encode_failed",
+                    sourceName: review.source.displayName,
+                    errorMessage: error.localizedDescription
+                )
                 AppLogger.error(
                     "Encoding task failed with TaptionVideoCoreError",
                     category: .encoding,
@@ -3540,6 +3587,14 @@ final class HomeViewModel: ObservableObject {
                 requestSessionEndAd(reason: .failedEncoding)
                 trace.finish("failed", metadata: ["error": error.localizedDescription])
             } catch {
+                if let retainedBackgroundPlanID {
+                    await completeBackgroundSaveLease(planID: retainedBackgroundPlanID)
+                }
+                logCodecBenchmarkProbeTerminalIfNeeded(
+                    status: "encode_failed",
+                    sourceName: review.source.displayName,
+                    errorMessage: error.localizedDescription
+                )
                 AppLogger.error(
                     "Encoding task failed",
                     category: .encoding,
@@ -3666,6 +3721,7 @@ final class HomeViewModel: ObservableObject {
                 await finishPendingSaveJob(workingJob, savedURL: savedURL)
                 trace.finish("completed", metadata: ["saved": savedURL.lastPathComponent])
             } catch is CancellationError {
+                await completeBackgroundSaveLease(planID: workingJob.state.planID)
                 AppLogger.warning(
                     "Save pending job cancelled; pending state retained",
                     category: .saving,
@@ -3730,6 +3786,11 @@ final class HomeViewModel: ObservableObject {
                     saveDestination: workingJob.state.saveDestination,
                     requiresRewardedAd: workingJob.state.requiresRewardedAd
                 )
+                logCodecBenchmarkProbeTerminalIfNeeded(
+                    status: "save_failed",
+                    sourceName: workingJob.sourceName,
+                    errorMessage: error.localizedDescription
+                )
                 AppLogger.error(
                     "Save pending job failed",
                     category: .saving,
@@ -3751,6 +3812,7 @@ final class HomeViewModel: ObservableObject {
                     title: "Save failed",
                     message: failure.displayMessage
                 ))
+                await completeBackgroundSaveLease(planID: workingJob.state.planID)
                 activeTask = nil
                 trace.finish("failed", metadata: ["error": error.localizedDescription])
             }
@@ -3803,8 +3865,32 @@ final class HomeViewModel: ObservableObject {
         AdMobBootstrapper.endFullScreenAdSuppression(reason: "encoding")
     }
 
-    private func requestSaveDestinationIfNeeded(for job: PendingSaveJob) {
+    @discardableResult
+    private func requestSaveDestinationIfNeeded(for job: PendingSaveJob) -> Bool {
         let routedJob = applySelectedFolderBatchDestination(to: job)
+        #if DEBUG
+        if debugBenchmarkAllowsFreeEncoding, debugCodecProbeID != nil {
+            let internalJob = reroutePendingSaveToInternalOutput(
+                routedJob,
+                reason: "debug codec probe"
+            )
+            persistPendingSaveState(internalJob.state)
+            updatePendingSaveJob(internalJob)
+            state = .pendingSave(internalJob)
+            activeTask = nil
+            AppLogger.info(
+                "Debug codec probe output save started",
+                category: .saving,
+                metadata: [
+                    "probeID": debugCodecProbeID ?? "none",
+                    "source": internalJob.sourceName,
+                    "final": internalJob.state.finalOutputURL?.lastPathComponent ?? "none"
+                ]
+            )
+            savePendingJob(internalJob)
+            return !internalJob.state.requiresRewardedAd
+        }
+        #endif
         if routedJob.state.saveDestinationWasChosen == true {
             updatePendingSaveJob(routedJob)
             state = .pendingSave(routedJob)
@@ -3819,10 +3905,10 @@ final class HomeViewModel: ObservableObject {
                 state = .pendingSave(internalJob)
                 activeTask = nil
                 savePendingJob(internalJob)
-                return
+                return !internalJob.state.requiresRewardedAd
             }
             savePendingJob(routedJob)
-            return
+            return !routedJob.state.requiresRewardedAd
         }
 
         pendingSaveDestinationPrompt = PendingSaveDestinationPrompt(job: routedJob)
@@ -3843,6 +3929,7 @@ final class HomeViewModel: ObservableObject {
                 "id": routedJob.id.uuidString
             ]
         )
+        return false
     }
 
     private func finishPendingSaveJob(
@@ -3884,12 +3971,18 @@ final class HomeViewModel: ObservableObject {
                 "size": fileSizeText(completedFileSize)
             ]
         )
+        logCodecBenchmarkProbeTerminalIfNeeded(
+            status: "saved",
+            sourceName: job.sourceName,
+            outputURL: completedOutputURL
+        )
         markCurrentSaveItem(
             statusText: "Save Complete",
             detailText: nil,
             progress: completedProgressSnapshot(label: "Save Complete"),
             isActive: false
         )
+        await completeBackgroundSaveLease(planID: job.state.planID)
 
         if folderBatch != nil,
            handleFolderItemEncoded() {
@@ -3913,6 +4006,18 @@ final class HomeViewModel: ObservableObject {
         endEncodingActivity(statusText: "Save Complete", fractionCompleted: 1)
         stopSecurityScopedAccess()
         activeTask = nil
+    }
+
+    private func completeBackgroundSaveLease(planID: UUID) async {
+        guard activeBackgroundSavePlanIDs.remove(planID) != nil else {
+            return
+        }
+        await environment.backgroundCoordinator.endBackgroundEncoding(planID: planID)
+        AppLogger.info(
+            "Background encoding lease completed after save handling",
+            category: .encoding,
+            metadata: ["plan": planID.uuidString]
+        )
     }
 
     private func saveGateMessage(for decision: AdGateDecision) -> String {
@@ -4552,6 +4657,31 @@ final class HomeViewModel: ObservableObject {
         #endif
     }
 
+    private func logCodecBenchmarkProbeTerminalIfNeeded(
+        status: String,
+        sourceName: String,
+        errorMessage: String? = nil,
+        outputURL: URL? = nil
+    ) {
+        #if DEBUG
+        guard let probeID = debugCodecProbeID else {
+            return
+        }
+        AppLogger.info(
+            "Codec benchmark probe terminal",
+            category: .encoding,
+            metadata: [
+                "probeID": probeID,
+                "source": sourceName,
+                "status": status,
+                "error": errorMessage ?? "none",
+                "output": outputURL?.lastPathComponent ?? "none",
+                "outputBytes": outputURL.flatMap(fileSizeInBytes(at:)).map(String.init) ?? "unknown"
+            ]
+        )
+        #endif
+    }
+
     #if DEBUG
     private var debugCodecProbeID: String? {
         ProcessInfo.processInfo.environment["TAPTION_CODEC_PROBE_ID"]
@@ -5126,6 +5256,17 @@ final class HomeViewModel: ObservableObject {
         return values?.isDirectory == true
     }
 
+    private func supportedVideoFileURLs(from urls: [URL]) -> [URL] {
+        urls
+            .filter {
+                !selectedURLIsDirectory($0)
+                    && SupportedVideoFileExtensions.contains($0.pathExtension)
+            }
+            .sorted {
+                $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+            }
+    }
+
     private func filesPreviewBrowserTitle(for urls: [URL]) -> String {
         guard urls.count == 1,
               let firstURL = urls.first else {
@@ -5467,52 +5608,23 @@ final class HomeViewModel: ObservableObject {
         return "Low space. Need \(requiredText) free. Available \(availableText)."
     }
 
-    private func videoFileURLs(in folderURL: URL) throws -> [URL] {
-        let keys: [URLResourceKey] = [.isRegularFileKey, .isHiddenKey]
-        let urls = try FileManager.default
-            .contentsOfDirectory(
-                at: folderURL,
-                includingPropertiesForKeys: keys,
-                options: [.skipsHiddenFiles, .skipsPackageDescendants]
-            )
-            .filter { url in
-                let values = try? url.resourceValues(forKeys: Set(keys))
-                guard values?.isRegularFile == true,
-                      values?.isHidden != true else {
-                    return false
-                }
-                return SupportedVideoFileExtensions.contains(url.pathExtension)
-            }
-            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+    private func folderContents(in folderURL: URL) throws -> FolderContentsScanResult {
+        let result = try FolderContentsScanner.scan(folderURL: folderURL)
         AppLogger.info(
-            "Supported video files scanned",
+            "Folder contents scanned",
             category: .folderImport,
             metadata: [
                 "folder": folderURL.lastPathComponent,
-                "count": "\(urls.count)"
+                "videoCount": "\(result.videoURLs.count)",
+                "folderCount": "\(result.folderURLs.count)",
+                "skippedNonVideoFileCount": "\(result.skippedNonVideoFileCount)"
             ]
         )
-        return urls
+        return result
     }
 
-    private func folderURLs(in folderURL: URL) throws -> [URL] {
-        let keys: [URLResourceKey] = [.isDirectoryKey, .isHiddenKey, .isPackageKey]
-        return try FileManager.default
-            .contentsOfDirectory(
-                at: folderURL,
-                includingPropertiesForKeys: keys,
-                options: [.skipsHiddenFiles, .skipsPackageDescendants]
-            )
-            .filter { url in
-                let values = try? url.resourceValues(forKeys: Set(keys))
-                guard values?.isDirectory == true,
-                      values?.isHidden != true,
-                      values?.isPackage != true else {
-                    return false
-                }
-                return true
-            }
-            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+    private func videoFileURLs(in folderURL: URL) throws -> [URL] {
+        try folderContents(in: folderURL).videoURLs
     }
 
     private func refreshImportBrowser() {
@@ -5548,8 +5660,9 @@ final class HomeViewModel: ObservableObject {
         }
 
         do {
-            let folders = try folderURLs(in: currentURL)
-            let files = try videoFileURLs(in: currentURL)
+            let contents = try folderContents(in: currentURL)
+            let folders = contents.folderURLs
+            let files = contents.videoURLs
             importBrowserSelectedFileURLs = importBrowserSelectedFileURLs.filter { selectedURL in
                 importBrowserURL(selectedURL, isInsideRoot: rootURL)
                     && FileManager.default.fileExists(atPath: selectedURL.path)

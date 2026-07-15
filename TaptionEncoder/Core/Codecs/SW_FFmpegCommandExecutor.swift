@@ -639,6 +639,59 @@ struct SW_FFmpegDecodeBridgeRunReport: Codable, Equatable {
     var outputURL: URL
 }
 
+enum SW_FFmpegDecodeBridgeWriterMetadata {
+    static func expectedFrameCount(
+        durationSeconds: Double,
+        frameRate: Double,
+        maximumFrameCount: Int32
+    ) -> Int {
+        if maximumFrameCount > 0 {
+            return Int(maximumFrameCount)
+        }
+        guard durationSeconds.isFinite,
+              durationSeconds > 0,
+              frameRate.isFinite,
+              frameRate > 0 else {
+            return 1
+        }
+        return max(1, Int((durationSeconds * frameRate).rounded()))
+    }
+
+    static func pixelAspectRatio(
+        horizontalSpacing: Int,
+        verticalSpacing: Int
+    ) -> [String: Any]? {
+        guard horizontalSpacing > 0,
+              verticalSpacing > 0,
+              horizontalSpacing != verticalSpacing else {
+            return nil
+        }
+        return [
+            AVVideoPixelAspectRatioHorizontalSpacingKey: horizontalSpacing,
+            AVVideoPixelAspectRatioVerticalSpacingKey: verticalSpacing
+        ]
+    }
+
+    static func sessionEndTime(
+        videoDurationSeconds: Double,
+        audioDurationSeconds: Double?
+    ) -> CMTime? {
+        let durations = [videoDurationSeconds, audioDurationSeconds]
+            .compactMap { duration -> Double? in
+                guard let duration,
+                      duration.isFinite,
+                      duration > 0 else {
+                    return nil
+                }
+                return duration
+            }
+        guard let durationSeconds = durations.max() else {
+            return nil
+        }
+        return CMTime(seconds: durationSeconds, preferredTimescale: 600)
+    }
+}
+
 private final class SW_FFmpegDecodeBridgeAssetWriterBox: @unchecked Sendable {
     private let writer: AVAssetWriter
 
@@ -670,19 +723,22 @@ struct SW_FFmpegDecodeBridgeCommandRunner: SW_FFmpegCommandRunning {
     var preserveAudioWhenPossible: Bool
     var outputAudioCodec: TaptionAudioCodec
     var optimizationProfile: TaptionEncodingOptimizationProfile
+    var color: TaptionColorDescription
 
     init(
         maximumFrameCount: Int32 = 0,
         targetBitrate: Int? = nil,
         preserveAudioWhenPossible: Bool = false,
         outputAudioCodec: TaptionAudioCodec = .aac,
-        optimizationProfile: TaptionEncodingOptimizationProfile = .balanced
+        optimizationProfile: TaptionEncodingOptimizationProfile = .balanced,
+        color: TaptionColorDescription = TaptionColorDescription()
     ) {
         self.maximumFrameCount = maximumFrameCount
         self.targetBitrate = targetBitrate
         self.preserveAudioWhenPossible = preserveAudioWhenPossible
         self.outputAudioCodec = outputAudioCodec
         self.optimizationProfile = optimizationProfile
+        self.color = color
     }
 
     func run(commandPlan: SW_FFmpegCommandPlan) async throws -> SW_FFmpegCommandRunResult {
@@ -692,7 +748,8 @@ struct SW_FFmpegDecodeBridgeCommandRunner: SW_FFmpegCommandRunning {
             targetBitrate: targetBitrate,
             preserveAudioWhenPossible: preserveAudioWhenPossible,
             outputAudioCodec: outputAudioCodec,
-            optimizationProfile: optimizationProfile
+            optimizationProfile: optimizationProfile,
+            color: color
         )
         return SW_FFmpegCommandRunResult(
             exitCode: 0,
@@ -719,6 +776,11 @@ enum SW_FFmpegDecodeBridgeFallbackTranscoder {
         let commandPlan = try SW_FFmpegCodecCommandPlanner.makeVideoCommandPlan(
             request: request
         )
+        let inspectedAsset = try? await AVFoundationMediaInspector()
+            .inspectVideo(at: request.sourceURL)
+        let outputColor = request.options.outputPolicy.advancedOptions.color
+            ?? inspectedAsset?.videoTrack?.color
+            ?? TaptionColorDescription()
         progress(TaptionEncodingProgress(stage: .preparing, fractionCompleted: 0))
         progress(TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.01))
         let result = try await SW_FFmpegDecodeBridgeCommandRunner(
@@ -726,7 +788,8 @@ enum SW_FFmpegDecodeBridgeFallbackTranscoder {
             preserveAudioWhenPossible: request.options.preserveAudioWhenPossible,
             outputAudioCodec: request.options.outputPolicy.audioCodec,
             optimizationProfile: request.options.outputPolicy.advancedOptions.optimizationProfile
-                ?? .balanced
+                ?? .balanced,
+            color: outputColor
         ).run(commandPlan: commandPlan)
         guard result.exitCode == 0 else {
             throw SW_FFmpegCommandExecutionError.commandFailed(
@@ -956,7 +1019,8 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
         targetBitrate: Int?,
         preserveAudioWhenPossible: Bool,
         outputAudioCodec: TaptionAudioCodec,
-        optimizationProfile: TaptionEncodingOptimizationProfile
+        optimizationProfile: TaptionEncodingOptimizationProfile,
+        color: TaptionColorDescription
     ) async throws -> SW_FFmpegDecodeBridgeRunReport {
         guard [.mp4, .mov].contains(TaptionVideoContainer.inferred(from: commandPlan.outputURL)) else {
             throw SW_FFmpegDecodeBridgeRunnerError.unsupportedOutput(commandPlan.outputURL)
@@ -982,6 +1046,13 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
             && Int(probe.height).isMultiple(of: 2)
         let frameRate = normalizedFrameRate(probe.averageFrameRate)
         let frameDuration = CMTime(seconds: 1.0 / frameRate, preferredTimescale: 600)
+        let expectedFrameCount = SW_FFmpegDecodeBridgeWriterMetadata.expectedFrameCount(
+            durationSeconds: probe.durationSeconds,
+            frameRate: frameRate,
+            maximumFrameCount: maximumFrameCount
+        )
+        let limitsToExpectedFrameCount = maximumFrameCount > 0
+            || (probe.durationSeconds.isFinite && probe.durationSeconds > 0)
         let writer = try AVAssetWriter(
             outputURL: commandPlan.outputURL,
             fileType: avFileType(for: commandPlan.outputURL)
@@ -992,7 +1063,10 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
                 targetSize: targetSize,
                 targetBitrate: targetBitrate,
                 frameRate: frameRate,
-                optimizationProfile: optimizationProfile
+                optimizationProfile: optimizationProfile,
+                color: color,
+                pixelAspectRatioHorizontalSpacing: Int(probe.sampleAspectRatioNumerator),
+                pixelAspectRatioVerticalSpacing: Int(probe.sampleAspectRatioDenominator)
             )
         )
         videoInput.expectsMediaDataInRealTime = false
@@ -1055,9 +1129,9 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
             adaptor: adaptor,
             targetSize: targetSize,
             frameDuration: frameDuration,
-            expectedFrameCount: max(Int(maximumFrameCount), 1),
-            limitsToExpectedFrameCount: maximumFrameCount > 0,
-            allowsLegacyFrameHoldToPreserveDuration: false,
+            expectedFrameCount: expectedFrameCount,
+            limitsToExpectedFrameCount: limitsToExpectedFrameCount,
+            allowsLegacyFrameHoldToPreserveDuration: limitsToExpectedFrameCount,
             maximumPendingFrameCount: optimizationProfile.softwareFramePipelineDepth,
             backpressureSleepMicroseconds: optimizationProfile.writerBackpressureSleepMicroseconds,
             progressHandler: { _ in }
@@ -1086,6 +1160,12 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
 
         try context.finishVideoInput()
         try audioContext?.finishAudioInput()
+        if let sessionEndTime = SW_FFmpegDecodeBridgeWriterMetadata.sessionEndTime(
+            videoDurationSeconds: probe.durationSeconds,
+            audioDurationSeconds: audioProbe?.durationSeconds
+        ) {
+            writer.endSession(atSourceTime: sessionEndTime)
+        }
         try await finishWriter(writer)
         guard FileManager.default.fileExists(atPath: commandPlan.outputURL.path) else {
             throw SW_FFmpegDecodeBridgeRunnerError.outputMissing(commandPlan.outputURL)
@@ -1311,7 +1391,10 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
         targetSize: CGSize,
         targetBitrate: Int?,
         frameRate: Double,
-        optimizationProfile: TaptionEncodingOptimizationProfile
+        optimizationProfile: TaptionEncodingOptimizationProfile,
+        color: TaptionColorDescription,
+        pixelAspectRatioHorizontalSpacing: Int,
+        pixelAspectRatioVerticalSpacing: Int
     ) -> [String: Any] {
         let width = max(2, Int(targetSize.width.rounded()))
         let height = max(2, Int(targetSize.height.rounded()))
@@ -1337,6 +1420,15 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
             AVVideoHeightKey: height
         ]
         outputSettings[AVVideoCompressionPropertiesKey] = compressionProperties
+        if let colorProperties = SW_AV1HEVCWriterColorProperties.make(for: color) {
+            outputSettings[AVVideoColorPropertiesKey] = colorProperties
+        }
+        if let pixelAspectRatio = SW_FFmpegDecodeBridgeWriterMetadata.pixelAspectRatio(
+            horizontalSpacing: pixelAspectRatioHorizontalSpacing,
+            verticalSpacing: pixelAspectRatioVerticalSpacing
+        ) {
+            outputSettings[AVVideoPixelAspectRatioKey] = pixelAspectRatio
+        }
         return outputSettings
     }
 

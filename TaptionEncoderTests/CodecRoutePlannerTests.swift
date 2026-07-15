@@ -3305,6 +3305,48 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(report.metadata["actualAudioTracks"], "1")
     }
 
+    func testSourcePreservingOutputVerificationAcceptsSmallAverageFrameRateDrift() throws {
+        let sourceAsset = TaptionVideoAsset(
+            displayName: "source.mp4",
+            location: TaptionVideoAssetLocation(kind: .file),
+            duration: 120.032,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .av1,
+                naturalSize: TaptionPixelSize(width: 320, height: 180),
+                displaySize: TaptionPixelSize(width: 320, height: 180),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 23_902, denominator: 1_000)
+            ),
+            audioTracks: []
+        )
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: sourceAsset,
+            sourceURL: URL(fileURLWithPath: "/tmp/source.mp4"),
+            temporaryOutputURL: URL(fileURLWithPath: "/tmp/output.mp4"),
+            outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4)
+        )
+        let outputAsset = TaptionVideoAsset(
+            displayName: "output.mp4",
+            location: TaptionVideoAssetLocation(kind: .temporary),
+            container: .mp4,
+            duration: 120,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .hevc,
+                naturalSize: TaptionPixelSize(width: 320, height: 180),
+                displaySize: TaptionPixelSize(width: 320, height: 180),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 24)
+            )
+        )
+
+        let report = try TaptionSourcePreservingExecutionAudit.verifyOutput(
+            plan: plan,
+            outputAsset: outputAsset
+        )
+
+        XCTAssertTrue(report.isPassing)
+        XCTAssertEqual(report.metadata["expectedFrameRate"], "23902/1000")
+        XCTAssertEqual(report.metadata["actualFrameRate"], "24/1")
+    }
+
     func testSourcePreservingOutputVerificationRejectsMismatchedOutputMetadata() {
         let sourceAsset = TaptionVideoAsset(
             displayName: "source.mp4",
@@ -5065,6 +5107,134 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(configuration.outputFileType, .mov)
     }
 
+    func testAV1SoftwareHEVCConfigurationPreservesSourceColorMetadata() throws {
+        let sourceColor = TaptionColorDescription(
+            primaries: .bt709,
+            transfer: .bt709,
+            matrix: .bt709,
+            bitDepth: 8,
+            isHDR: false
+        )
+        let asset = makeAsset(sourceCodec: .av1, color: sourceColor)
+
+        let configuration = try SW_AV1HEVCTranscodeConfiguration.make(
+            asset: asset,
+            outputURL: URL(fileURLWithPath: "/tmp/av1-color.mp4")
+        )
+
+        XCTAssertEqual(configuration.color, sourceColor)
+    }
+
+    func testAV1SoftwareHEVCWriterCreatesCompleteBT709ColorProperties() throws {
+        let properties = try XCTUnwrap(SW_AV1HEVCWriterColorProperties.make(
+            for: TaptionColorDescription(
+                primaries: .bt709,
+                transfer: .bt709,
+                matrix: .bt709
+            )
+        ))
+
+        XCTAssertEqual(properties[AVVideoColorPrimariesKey], AVVideoColorPrimaries_ITU_R_709_2)
+        XCTAssertEqual(properties[AVVideoTransferFunctionKey], AVVideoTransferFunction_ITU_R_709_2)
+        XCTAssertEqual(properties[AVVideoYCbCrMatrixKey], AVVideoYCbCrMatrix_ITU_R_709_2)
+    }
+
+    func testSoftwareHEVCWriterInfersBT601MatrixForSMPTEColor() throws {
+        let properties = try XCTUnwrap(SW_AV1HEVCWriterColorProperties.make(
+            for: TaptionColorDescription(
+                primaries: .smpteC,
+                transfer: .bt709,
+                matrix: .unknown
+            )
+        ))
+
+        XCTAssertEqual(properties[AVVideoColorPrimariesKey], AVVideoColorPrimaries_SMPTE_C)
+        XCTAssertEqual(properties[AVVideoTransferFunctionKey], AVVideoTransferFunction_ITU_R_709_2)
+        XCTAssertEqual(properties[AVVideoYCbCrMatrixKey], AVVideoYCbCrMatrix_ITU_R_601_4)
+    }
+
+    func testAV1SoftwareHEVCWriterOmitsIncompleteColorProperties() {
+        XCTAssertNil(SW_AV1HEVCWriterColorProperties.make(
+            for: TaptionColorDescription(
+                primaries: .bt709,
+                transfer: .unknown,
+                matrix: .bt709
+            )
+        ))
+    }
+
+    func testFFmpegDecodeBridgeWriterPreservesNonSquarePixelAspectRatio() throws {
+        let properties = try XCTUnwrap(
+            SW_FFmpegDecodeBridgeWriterMetadata.pixelAspectRatio(
+                horizontalSpacing: 352,
+                verticalSpacing: 427
+            )
+        )
+
+        XCTAssertEqual(properties[AVVideoPixelAspectRatioHorizontalSpacingKey] as? Int, 352)
+        XCTAssertEqual(properties[AVVideoPixelAspectRatioVerticalSpacingKey] as? Int, 427)
+        XCTAssertNil(SW_FFmpegDecodeBridgeWriterMetadata.pixelAspectRatio(
+            horizontalSpacing: 1,
+            verticalSpacing: 1
+        ))
+    }
+
+    func testFFmpegDecodeBridgeWriterEndsAtLongestSourceDuration() throws {
+        let endTime = try XCTUnwrap(
+            SW_FFmpegDecodeBridgeWriterMetadata.sessionEndTime(
+                videoDurationSeconds: 5,
+                audioDurationSeconds: 5.024
+            )
+        )
+
+        XCTAssertEqual(endTime.seconds, 5.024, accuracy: 0.001)
+        XCTAssertNil(SW_FFmpegDecodeBridgeWriterMetadata.sessionEndTime(
+            videoDurationSeconds: 0,
+            audioDurationSeconds: nil
+        ))
+    }
+
+    func testFFmpegDecodeBridgeWriterHoldsLastFrameThroughDeclaredDuration() {
+        XCTAssertEqual(
+            SW_FFmpegDecodeBridgeWriterMetadata.expectedFrameCount(
+                durationSeconds: 5,
+                frameRate: 1,
+                maximumFrameCount: 0
+            ),
+            5
+        )
+        XCTAssertEqual(
+            SW_FFmpegDecodeBridgeWriterMetadata.expectedFrameCount(
+                durationSeconds: 5,
+                frameRate: 1,
+                maximumFrameCount: 3
+            ),
+            3
+        )
+    }
+
+    func testKnownDeviceFailuresPreferBundledDecodeBridge() {
+        XCTAssertEqual(
+            SW_AV1HEVCTranscoder.bundledDecodeBridgePreferredSourceCodecs,
+            Set([
+                .dv,
+                .dvcPro,
+                .losslessJPEG,
+                .mpeg4Visual,
+                .microsoftMPEG4V3,
+                .microsoftRLE,
+                .quickTimeGraphics,
+                .r10k,
+                .r210,
+                .realVideo1,
+                .realVideo,
+                .snow,
+                .utVideo,
+                .wmv
+            ])
+        )
+    }
+
     func testQuickTimeVideoSoftwareHEVCConfigurationAllowsLegacyFrameHold() throws {
         let rpzaAsset = makeAsset(
             sourceCodec: .quickTimeVideo,
@@ -6546,6 +6716,43 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(result.pendingSaveState?.temporaryOutputURL, outputURL)
         XCTAssertEqual(result.pendingSaveState?.saveDestination, .sourceFolder)
         XCTAssertEqual(result.pendingSaveState?.requiresRewardedAd, false)
+    }
+
+    func testCallerManagedBackgroundTaskStaysActiveUntilExplicitCompletion() async throws {
+        let outputURL = temporaryTestURL(fileName: "caller-managed-background.mp4")
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+        let backgroundCoordinator = RecordingBackgroundEncodingCoordinator()
+        let core = TaptionVideoCore(
+            services: TaptionVideoCoreServices(
+                inspector: FakeMediaInspector(),
+                encoder: ImmediateEncoderService(outputData: Data("encoded".utf8)),
+                storageChecker: FakeStorageChecker(),
+                pendingSaveStore: FakePendingSaveStore(),
+                saveGateAuthorizer: FakeAdGate(),
+                backgroundCoordinator: backgroundCoordinator
+            )
+        )
+        let job = try await core.prepareSingleAssetHEVCJob(
+            sourceURL: URL(fileURLWithPath: "/tmp/input.mp4"),
+            temporaryOutputURL: outputURL,
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+        )
+
+        let result = try await core.encodePreparedJob(
+            job,
+            backgroundTaskCompletionPolicy: .callerManaged,
+            progress: { _ in }
+        )
+        let beganBeforeCompletion = await backgroundCoordinator.recordedBeginPlanIDs()
+        let endedBeforeCompletion = await backgroundCoordinator.recordedEndPlanIDs()
+
+        XCTAssertEqual(beganBeforeCompletion, [result.planID])
+        XCTAssertTrue(endedBeforeCompletion.isEmpty)
+
+        await core.completeBackgroundEncoding(planID: result.planID)
+
+        let endedAfterCompletion = await backgroundCoordinator.recordedEndPlanIDs()
+        XCTAssertEqual(endedAfterCompletion, [result.planID])
     }
 
     func testAudioCodecRoutesCoverEveryPlannedSourceToAAC() {
@@ -9987,12 +10194,17 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         let rewardedAdProvider = RecordingRewardedAdProvider(showResult: .earnedReward)
         let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 1))
+        let finalOutputURL = directoryURL.appendingPathComponent("source_taption.mp4")
+        let backgroundCoordinator = RecordingBackgroundEncodingCoordinator(
+            observedFinalOutputURL: finalOutputURL
+        )
         let viewModel = HomeViewModel(
             environment: makeHomeViewModelTestEnvironment(
                 pendingSaveStore: FakePendingSaveStore(),
                 encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
                 rewardedAdProvider: rewardedAdProvider,
-                starWalletStore: walletStore
+                starWalletStore: walletStore,
+                backgroundCoordinator: backgroundCoordinator
             )
         )
 
@@ -10004,8 +10216,11 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertEqual(viewModel.starWalletSnapshot.balance, 0)
         let showCallCount = await rewardedAdProvider.recordedShowCallCount()
+        let finalOutputPresenceAtBackgroundEnd = await backgroundCoordinator
+            .recordedFinalOutputPresenceAtEnd()
         XCTAssertEqual(showCallCount, 0)
         XCTAssertEqual(viewModel.state.title, "Save Complete")
+        XCTAssertEqual(finalOutputPresenceAtBackgroundEnd, [false])
     }
 
     @MainActor
@@ -10739,6 +10954,35 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
+    func testFolderPickerSelectionSkipsNonVideoFiles() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: directoryURL)
+        }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let sourceURL = directoryURL.appendingPathComponent("picked.mp4")
+        let textURL = directoryURL.appendingPathComponent("notes.txt")
+        try Data("source".utf8).write(to: sourceURL)
+        try Data("notes".utf8).write(to: textURL)
+
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+
+        viewModel.handleFolderPickerSelection(urls: [textURL, sourceURL])
+        try await waitForReadyToStartState(in: viewModel)
+
+        guard case .readyToStart(let review) = viewModel.state else {
+            return XCTFail("Expected ready state for supported video")
+        }
+        XCTAssertEqual(review.source.url, sourceURL)
+        XCTAssertEqual(viewModel.fileCardSnapshots.map(\.fileName), ["picked.mp4"])
+    }
+
+    @MainActor
     func testFolderPickerSelectionRoutesFolderToFolderFlow() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
@@ -10746,8 +10990,14 @@ final class CodecRoutePlannerTests: XCTestCase {
         }
         let folderURL = directoryURL.appendingPathComponent("PickedFolder", isDirectory: true)
         let sourceURL = folderURL.appendingPathComponent("inside.mp4")
+        let textURL = folderURL.appendingPathComponent("notes.txt")
         try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
         try Data("source".utf8).write(to: sourceURL)
+        try Data("notes".utf8).write(to: textURL)
+
+        let scanResult = try FolderContentsScanner.scan(folderURL: folderURL)
+        XCTAssertEqual(scanResult.videoURLs, [sourceURL])
+        XCTAssertEqual(scanResult.skippedNonVideoFileCount, 1)
 
         let viewModel = HomeViewModel(
             environment: makeHomeViewModelTestEnvironment(
@@ -10786,17 +11036,24 @@ final class CodecRoutePlannerTests: XCTestCase {
         let sourceFolderURL = parentURL.appendingPathComponent("VideoFolder", isDirectory: true)
         let firstURL = sourceFolderURL.appendingPathComponent("a.mp4")
         let secondURL = sourceFolderURL.appendingPathComponent("b.mp4")
+        let outputFolderURL = parentURL.appendingPathComponent("VideoFolder_taption", isDirectory: true)
+        let firstOutputURL = outputFolderURL.appendingPathComponent("a_taption.mp4")
+        let secondOutputURL = outputFolderURL.appendingPathComponent("b_taption.mp4")
         try FileManager.default.createDirectory(at: sourceFolderURL, withIntermediateDirectories: true)
         try Data("source a".utf8).write(to: firstURL)
         try Data("source b".utf8).write(to: secondURL)
 
         let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 2))
+        let backgroundCoordinator = RecordingBackgroundEncodingCoordinator(
+            observedFinalOutputURL: secondOutputURL
+        )
         let viewModel = HomeViewModel(
             environment: makeHomeViewModelTestEnvironment(
                 pendingSaveStore: FakePendingSaveStore(),
                 mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264)),
                 encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
-                starWalletStore: walletStore
+                starWalletStore: walletStore,
+                backgroundCoordinator: backgroundCoordinator
             )
         )
 
@@ -10807,9 +11064,6 @@ final class CodecRoutePlannerTests: XCTestCase {
         viewModel.startPreparedEncoding()
         try await chooseFolderForPendingSaveDestination(in: viewModel)
 
-        let outputFolderURL = parentURL.appendingPathComponent("VideoFolder_taption", isDirectory: true)
-        let firstOutputURL = outputFolderURL.appendingPathComponent("a_taption.mp4")
-        let secondOutputURL = outputFolderURL.appendingPathComponent("b_taption.mp4")
         try await waitForCondition(timeout: 3) {
             FileManager.default.fileExists(atPath: firstOutputURL.path)
                 && FileManager.default.fileExists(atPath: secondOutputURL.path)
@@ -10824,6 +11078,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         ))
         XCTAssertEqual(try String(contentsOf: firstOutputURL, encoding: .utf8), "encoded")
         XCTAssertEqual(try String(contentsOf: secondOutputURL, encoding: .utf8), "encoded")
+        let finalOutputPresenceAtBackgroundEnd = await backgroundCoordinator
+            .recordedFinalOutputPresenceAtEnd()
+        XCTAssertEqual(finalOutputPresenceAtBackgroundEnd, [false, true])
     }
 
     @MainActor
@@ -12270,6 +12527,51 @@ final class CodecRoutePlannerTests: XCTestCase {
         }
     }
 
+    private actor RecordingBackgroundEncodingCoordinator: BackgroundEncodingCoordinating {
+        nonisolated var support: TaptionBackgroundEncodingSupport {
+            .availableWhenUserChooses
+        }
+
+        private let observedFinalOutputURL: URL?
+        private var beginPlanIDs: [UUID] = []
+        private var endPlanIDs: [UUID] = []
+        private var finalOutputPresenceAtEnd: [Bool] = []
+
+        init(observedFinalOutputURL: URL? = nil) {
+            self.observedFinalOutputURL = observedFinalOutputURL
+        }
+
+        func beginBackgroundEncoding(plan: TaptionEncodingPlan) async throws {
+            beginPlanIDs.append(plan.id)
+        }
+
+        func updateBackgroundEncoding(
+            planID: UUID,
+            snapshot: TaptionBackgroundEncodingSnapshot
+        ) async {}
+
+        func endBackgroundEncoding(planID: UUID) async {
+            endPlanIDs.append(planID)
+            if let observedFinalOutputURL {
+                finalOutputPresenceAtEnd.append(
+                    FileManager.default.fileExists(atPath: observedFinalOutputURL.path)
+                )
+            }
+        }
+
+        func recordedBeginPlanIDs() -> [UUID] {
+            beginPlanIDs
+        }
+
+        func recordedEndPlanIDs() -> [UUID] {
+            endPlanIDs
+        }
+
+        func recordedFinalOutputPresenceAtEnd() -> [Bool] {
+            finalOutputPresenceAtEnd
+        }
+    }
+
     private struct ImmediateEncoderService: EncoderServicing {
         var outputData: Data
 
@@ -12541,7 +12843,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         storageChecker: StorageChecking = FakeStorageChecker(),
         rewardedAdProvider: RewardedAdProviding = FakeRewardedAdProvider(),
         sessionEndAdProvider: SessionEndAdProviding = FakeSessionEndAdProvider(),
-        starWalletStore: StarWalletManaging = FakeStarWalletStore()
+        starWalletStore: StarWalletManaging = FakeStarWalletStore(),
+        backgroundCoordinator: BackgroundEncodingCoordinating = FakeBackgroundEncodingCoordinator()
     ) -> AppEnvironment {
         let configuration = AppConfiguration()
         let starEarningService = DefaultStarEarningService(
@@ -12566,7 +12869,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             starWalletStore: starWalletStore,
             starEarningService: starEarningService,
             sessionEndAdProvider: sessionEndAdProvider,
-            backgroundCoordinator: FakeBackgroundEncodingCoordinator(),
+            backgroundCoordinator: backgroundCoordinator,
             projectDocumentStore: FakeProjectFileStore()
         )
     }
@@ -13296,6 +13599,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         displaySize: TaptionPixelSize = TaptionPixelSize(width: 1920, height: 1080),
         frameRate: TaptionRationalFrameRate = TaptionRationalFrameRate(numerator: 30),
         videoBitrate: Int? = nil,
+        color: TaptionColorDescription = TaptionColorDescription(),
         duration: TimeInterval = 1,
         fileSize: Int64 = 1_000_000,
         fingerprint: TaptionMediaFingerprint? = nil
@@ -13310,7 +13614,8 @@ final class CodecRoutePlannerTests: XCTestCase {
                 naturalSize: displaySize,
                 displaySize: displaySize,
                 nominalFrameRate: frameRate,
-                estimatedBitrate: videoBitrate
+                estimatedBitrate: videoBitrate,
+                color: color
             ),
             audioTracks: [
                 TaptionAudioTrackInfo(

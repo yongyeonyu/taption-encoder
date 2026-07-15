@@ -14,11 +14,12 @@ Copyright: FFmpeg project contributors
 License: GNU Lesser General Public License version 2.1 or later
 
 Enabled surface in this Taption Encoder bridge:
-- Libraries: avformat, avcodec, avutil, swscale
-- Demuxers: vc1, avi, mov
-- Decoders: vc1, vc1image, y41p, rawvideo, pcm_s16le, prores_raw
-- Bridge outputs: direct NV12 video frames for even dimensions, BGRA fallback frames for odd dimensions, and packed signed 16-bit PCM audio frames
-- Parser: vc1
+- Libraries: avformat, avcodec, avutil, swresample, swscale
+- Demuxers: vc1, avi, mov, dv, asf, rm
+- Video decoders: vc1, vc1image, y41p, rawvideo, prores_raw, dvvideo, h263, mjpeg, mpeg4, msmpeg4v3, msrle, smc, r10k, r210, rv10, rv20, snow, utvideo, wmv2
+- Audio decoders: pcm_s16le, mp3, aac, ac3, wmav2
+- Bridge outputs: direct NV12 video frames for even dimensions, BGRA fallback frames for odd dimensions, and swresample-converted packed signed 16-bit PCM audio frames
+- Parsers: ac3, vc1, mpeg4video
 - Protocol: file
 
 Build policy:

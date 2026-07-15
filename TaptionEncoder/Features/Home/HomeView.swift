@@ -555,7 +555,7 @@ struct HomeView: View {
     private func handleFilePickerResult(_ result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
-            let selectedURLs = urls.map(\.standardizedFileURL)
+            let selectedURLs = urls
             guard !selectedURLs.isEmpty else {
                 return
             }
@@ -580,7 +580,7 @@ struct HomeView: View {
     private func handleFolderPickerResult(_ result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
-            guard let folderURL = urls.first?.standardizedFileURL else {
+            guard let folderURL = urls.first else {
                 return
             }
             AppLogger.info(

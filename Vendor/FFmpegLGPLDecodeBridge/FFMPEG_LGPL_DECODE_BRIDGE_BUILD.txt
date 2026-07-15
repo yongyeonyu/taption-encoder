@@ -13,32 +13,32 @@ Configure flags:
   --disable-asm
   --disable-avdevice
   --disable-avfilter
-  --disable-swresample
   --disable-shared
   --enable-pic
   --enable-static
   --enable-avcodec
   --enable-avformat
   --enable-avutil
+  --enable-swresample
   --enable-swscale
   --enable-protocol=file
-  --enable-demuxer=vc1,avi,mov
-  --enable-parser=vc1
-  --enable-decoder=vc1,vc1image,y41p,rawvideo,pcm_s16le,prores_raw
+  --enable-demuxer=vc1,avi,mov,dv,asf,rm
+  --enable-parser=vc1,mpeg4video
+  --enable-decoder=vc1,vc1image,y41p,rawvideo,prores_raw,dvvideo,mjpeg,mpeg4,msmpeg4v3,msrle,smc,r10k,r210,rv10,rv20,snow,utvideo,wmv2,pcm_s16le,mp3,aac,ac3,wmav2
 
-Enabled demuxers: vc1, avi, mov
-Enabled decoders: vc1, vc1image, y41p, rawvideo, pcm_s16le, prores_raw
-Enabled parser: vc1
+Enabled demuxers: vc1, avi, mov, dv, asf, rm
+Enabled decoders: vc1, vc1image, y41p, rawvideo, prores_raw, dvvideo, h263, mjpeg, mpeg4, msmpeg4v3, msrle, smc, r10k, r210, rv10, rv20, snow, utvideo, wmv2, pcm_s16le, mp3, aac, ac3, wmav2
+Enabled parsers: ac3, vc1, mpeg4video
 Enabled protocol: file
-Enabled libraries linked into bridge: avformat, avcodec, avutil, swscale
-Bridge frame outputs: direct NV12 video for even dimensions, BGRA fallback video for odd dimensions, and packed signed 16-bit PCM audio
+Enabled libraries linked into bridge: avformat, avcodec, avutil, swresample, swscale
+Bridge frame outputs: direct NV12 video for even dimensions, BGRA fallback video for odd dimensions, and swresample-converted packed signed 16-bit PCM audio
 
 Policy:
 - No --enable-gpl
 - No --enable-nonfree
 - No external libraries
 - No FFmpeg executable or runtime-downloaded plugin
-- Decode-only bridge for VC-1 raw, Y41P, ProRes RAW fallback, and supported packed signed 16-bit PCM audio; H.265 / HEVC MP4/MOV plus Apple-native audio output remain handled by Taption Encoder's AVAssetWriter path.
+- Decode-only bridge for the enabled legacy input codecs and audio formats; H.265 / HEVC MP4/MOV plus Apple-native audio output remain handled by Taption Encoder's AVAssetWriter path.
 
 Notice/source/EULA checklist:
 - The official source URL and SHA-256 above record provenance only; they do

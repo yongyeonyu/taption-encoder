@@ -30,6 +30,8 @@ typedef struct TaptionFFmpegDecodeBridgeProbeResult {
     int32_t frameCount;
     double durationSeconds;
     double averageFrameRate;
+    int32_t sampleAspectRatioNumerator;
+    int32_t sampleAspectRatioDenominator;
     int32_t codecID;
     int32_t pixelFormat;
     char codecName[64];

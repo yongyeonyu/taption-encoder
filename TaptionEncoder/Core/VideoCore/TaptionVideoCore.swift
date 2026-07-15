@@ -30,6 +30,11 @@ struct TaptionPreparedEncodingJob: Equatable {
     }
 }
 
+enum TaptionBackgroundTaskCompletionPolicy: Equatable {
+    case afterEncoding
+    case callerManaged
+}
+
 struct TaptionVideoCore {
     var services: TaptionVideoCoreServices
 
@@ -122,6 +127,7 @@ struct TaptionVideoCore {
 
     func encodePreparedJob(
         _ job: TaptionPreparedEncodingJob,
+        backgroundTaskCompletionPolicy: TaptionBackgroundTaskCompletionPolicy = .afterEncoding,
         progress: @escaping (TaptionEncodingProgress) -> Void
     ) async throws -> TaptionEncodingResult {
         let trace = TaptionEncodingPerformanceTrace(
@@ -176,8 +182,12 @@ struct TaptionVideoCore {
                 )
             }
 
-            await services.backgroundCoordinator?.endBackgroundEncoding(planID: job.plan.id)
-            didBeginBackgroundEncoding = false
+            if backgroundTaskCompletionPolicy == .afterEncoding {
+                await services.backgroundCoordinator?.endBackgroundEncoding(planID: job.plan.id)
+                didBeginBackgroundEncoding = false
+            } else {
+                trace.mark("background_task_retained_for_caller")
+            }
             trace.finish("completed")
             return result
         } catch is CancellationError {
@@ -197,6 +207,10 @@ struct TaptionVideoCore {
 
     func cancelEncoding(planID: UUID) async {
         await services.encoder.cancelEncoding(planID: planID)
+        await services.backgroundCoordinator?.endBackgroundEncoding(planID: planID)
+    }
+
+    func completeBackgroundEncoding(planID: UUID) async {
         await services.backgroundCoordinator?.endBackgroundEncoding(planID: planID)
     }
 

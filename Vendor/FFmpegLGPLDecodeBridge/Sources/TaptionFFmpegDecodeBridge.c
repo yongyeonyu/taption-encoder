@@ -5,6 +5,7 @@
 #include <libavutil/mem.h>
 #include <libavutil/pixdesc.h>
 #include <libavutil/rational.h>
+#include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
 
 #include <stdio.h>
@@ -32,6 +33,9 @@ typedef struct TaptionFFmpegDecodeBridgeAudioContext {
     const AVCodec *codec;
     AVFrame *decodedFrame;
     AVPacket *packet;
+    SwrContext *swrContext;
+    uint8_t *s16Buffer;
+    unsigned int s16BufferCapacity;
     int audioStreamIndex;
     int decodedFrameCount;
     int64_t decodedSampleCount;
@@ -198,6 +202,8 @@ static void taption_ffmpeg_update_result(
     result->frameCount = context->decodedFrameCount;
     result->codecID = context->codecContext->codec_id;
     result->pixelFormat = context->codecContext->pix_fmt;
+    result->sampleAspectRatioNumerator = 1;
+    result->sampleAspectRatioDenominator = 1;
 
     const char *codecName = avcodec_get_name(context->codecContext->codec_id);
     const char *pixelFormatName = av_get_pix_fmt_name(context->codecContext->pix_fmt);
@@ -210,6 +216,18 @@ static void taption_ffmpeg_update_result(
     );
 
     if (stream != NULL) {
+        AVRational sampleAspectRatio = stream->sample_aspect_ratio;
+        if ((sampleAspectRatio.num <= 0 || sampleAspectRatio.den <= 0)
+            && context->decodedFrame != NULL) {
+            sampleAspectRatio = context->decodedFrame->sample_aspect_ratio;
+        }
+        if (sampleAspectRatio.num <= 0 || sampleAspectRatio.den <= 0) {
+            sampleAspectRatio = context->codecContext->sample_aspect_ratio;
+        }
+        if (sampleAspectRatio.num > 0 && sampleAspectRatio.den > 0) {
+            result->sampleAspectRatioNumerator = sampleAspectRatio.num;
+            result->sampleAspectRatioDenominator = sampleAspectRatio.den;
+        }
         result->averageFrameRate = taption_ffmpeg_rational_to_double(stream->avg_frame_rate);
         if (result->averageFrameRate <= 0.0) {
             result->averageFrameRate = taption_ffmpeg_rational_to_double(stream->r_frame_rate);
@@ -713,6 +731,12 @@ static void taption_ffmpeg_close_audio_context(TaptionFFmpegDecodeBridgeAudioCon
     if (context == NULL) {
         return;
     }
+    if (context->s16Buffer != NULL) {
+        av_freep(&context->s16Buffer);
+    }
+    if (context->swrContext != NULL) {
+        swr_free(&context->swrContext);
+    }
     if (context->packet != NULL) {
         av_packet_free(&context->packet);
     }
@@ -738,12 +762,12 @@ static void taption_ffmpeg_update_audio_result(
     TaptionFFmpegDecodeBridgeAudioProbeResult *result = &context->result;
     result->sampleRate = context->codecContext->sample_rate;
     result->channelCount = context->codecContext->ch_layout.nb_channels;
-    result->sampleFormat = context->codecContext->sample_fmt;
+    result->sampleFormat = AV_SAMPLE_FMT_S16;
     result->codecID = context->codecContext->codec_id;
     result->sampleCount = context->decodedSampleCount;
 
     const char *codecName = avcodec_get_name(context->codecContext->codec_id);
-    const char *sampleFormatName = av_get_sample_fmt_name(context->codecContext->sample_fmt);
+    const char *sampleFormatName = av_get_sample_fmt_name(AV_SAMPLE_FMT_S16);
     snprintf(result->codecName, sizeof(result->codecName), "%s", codecName != NULL ? codecName : "unknown");
     snprintf(
         result->sampleFormatName,
@@ -823,6 +847,43 @@ static int32_t taption_ffmpeg_open_audio_context(
         return TaptionFFmpegDecodeBridgeStatusDecoderOpenFailed;
     }
 
+    AVChannelLayout outputChannelLayout;
+    av_channel_layout_default(
+        &outputChannelLayout,
+        context->codecContext->ch_layout.nb_channels
+    );
+    status = swr_alloc_set_opts2(
+        &context->swrContext,
+        &outputChannelLayout,
+        AV_SAMPLE_FMT_S16,
+        context->codecContext->sample_rate,
+        &context->codecContext->ch_layout,
+        context->codecContext->sample_fmt,
+        context->codecContext->sample_rate,
+        0,
+        NULL
+    );
+    av_channel_layout_uninit(&outputChannelLayout);
+    if (status < 0 || context->swrContext == NULL) {
+        taption_ffmpeg_set_av_error(
+            errorBuffer,
+            errorBufferCapacity,
+            "Failed to configure FFmpeg packed S16 audio conversion",
+            status
+        );
+        return TaptionFFmpegDecodeBridgeStatusAudioSampleFormatUnsupported;
+    }
+    status = swr_init(context->swrContext);
+    if (status < 0) {
+        taption_ffmpeg_set_av_error(
+            errorBuffer,
+            errorBufferCapacity,
+            "Failed to initialize FFmpeg packed S16 audio conversion",
+            status
+        );
+        return TaptionFFmpegDecodeBridgeStatusAudioSampleFormatUnsupported;
+    }
+
     context->decodedFrame = av_frame_alloc();
     context->packet = av_packet_alloc();
     if (context->decodedFrame == NULL || context->packet == NULL) {
@@ -851,12 +912,50 @@ static int32_t taption_ffmpeg_receive_audio_frames(
             return TaptionFFmpegDecodeBridgeStatusDecodeFailed;
         }
 
-        if (context->decodedFrame->format != AV_SAMPLE_FMT_S16
-            || context->decodedFrame->data[0] == NULL) {
-            taption_ffmpeg_set_error(
+        int channelCount = context->codecContext->ch_layout.nb_channels;
+        int maximumOutputSampleCount = swr_get_out_samples(
+            context->swrContext,
+            context->decodedFrame->nb_samples
+        );
+        int requiredBufferSize = av_samples_get_buffer_size(
+            NULL,
+            channelCount,
+            maximumOutputSampleCount,
+            AV_SAMPLE_FMT_S16,
+            1
+        );
+        if (channelCount <= 0 || maximumOutputSampleCount <= 0 || requiredBufferSize <= 0) {
+            taption_ffmpeg_set_error(errorBuffer, errorBufferCapacity, "FFmpeg audio conversion reported an invalid buffer size.");
+            av_frame_unref(context->decodedFrame);
+            return TaptionFFmpegDecodeBridgeStatusAudioSampleFormatUnsupported;
+        }
+        if ((unsigned int)requiredBufferSize > context->s16BufferCapacity) {
+            av_fast_malloc(
+                &context->s16Buffer,
+                &context->s16BufferCapacity,
+                (size_t)requiredBufferSize
+            );
+        }
+        if (context->s16Buffer == NULL) {
+            taption_ffmpeg_set_error(errorBuffer, errorBufferCapacity, "Failed to allocate FFmpeg packed S16 audio output.");
+            av_frame_unref(context->decodedFrame);
+            return TaptionFFmpegDecodeBridgeStatusAudioSampleFormatUnsupported;
+        }
+
+        uint8_t *outputData[1] = {context->s16Buffer};
+        int convertedSampleCount = swr_convert(
+            context->swrContext,
+            outputData,
+            maximumOutputSampleCount,
+            (const uint8_t **)context->decodedFrame->extended_data,
+            context->decodedFrame->nb_samples
+        );
+        if (convertedSampleCount < 0) {
+            taption_ffmpeg_set_av_error(
                 errorBuffer,
                 errorBufferCapacity,
-                "FFmpeg audio bridge currently requires packed signed 16-bit PCM output."
+                "FFmpeg failed to convert decoded audio to packed S16",
+                convertedSampleCount
             );
             av_frame_unref(context->decodedFrame);
             return TaptionFFmpegDecodeBridgeStatusAudioSampleFormatUnsupported;
@@ -873,10 +972,10 @@ static int32_t taption_ffmpeg_receive_audio_frames(
         TaptionFFmpegDecodeBridgeAudioFrame callbackFrame;
         callbackFrame.frameIndex = context->decodedFrameCount;
         callbackFrame.sampleRate = context->codecContext->sample_rate;
-        callbackFrame.channelCount = context->codecContext->ch_layout.nb_channels;
-        callbackFrame.sampleCount = context->decodedFrame->nb_samples;
+        callbackFrame.channelCount = channelCount;
+        callbackFrame.sampleCount = convertedSampleCount;
         callbackFrame.ptsSeconds = ptsSeconds;
-        callbackFrame.interleavedS16Samples = (const int16_t *)context->decodedFrame->data[0];
+        callbackFrame.interleavedS16Samples = (const int16_t *)context->s16Buffer;
 
         if (callback != NULL && callback(&callbackFrame, opaque) != 0) {
             taption_ffmpeg_set_error(errorBuffer, errorBufferCapacity, "The FFmpeg audio decode bridge callback failed.");
@@ -885,7 +984,7 @@ static int32_t taption_ffmpeg_receive_audio_frames(
         }
 
         context->decodedFrameCount += 1;
-        context->decodedSampleCount += context->decodedFrame->nb_samples;
+        context->decodedSampleCount += convertedSampleCount;
         taption_ffmpeg_update_audio_result(context, stream);
         av_frame_unref(context->decodedFrame);
     }
@@ -972,15 +1071,6 @@ int32_t taption_ffmpeg_decode_bridge_probe_audio_s16(
     if (status != TaptionFFmpegDecodeBridgeStatusOK) {
         taption_ffmpeg_close_audio_context(&context);
         return status;
-    }
-    if (context.codecContext->sample_fmt != AV_SAMPLE_FMT_S16) {
-        taption_ffmpeg_set_error(
-            errorBuffer,
-            errorBufferCapacity,
-            "FFmpeg audio bridge currently requires packed signed 16-bit PCM output."
-        );
-        taption_ffmpeg_close_audio_context(&context);
-        return TaptionFFmpegDecodeBridgeStatusAudioSampleFormatUnsupported;
     }
     if (result != NULL) {
         *result = context.result;

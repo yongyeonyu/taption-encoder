@@ -17,6 +17,7 @@ struct SW_AV1HEVCTranscodeConfiguration {
     let outputURL: URL
     let outputFileType: AVFileType
     let optimizationProfile: TaptionEncodingOptimizationProfile
+    let color: TaptionColorDescription
 
     static func make(
         asset: TaptionVideoAsset,
@@ -61,7 +62,8 @@ struct SW_AV1HEVCTranscodeConfiguration {
             duration: duration,
             outputURL: outputURL,
             outputFileType: avFileType(for: options.outputPolicy.container),
-            optimizationProfile: options.outputPolicy.advancedOptions.optimizationProfile ?? .balanced
+            optimizationProfile: options.outputPolicy.advancedOptions.optimizationProfile ?? .balanced,
+            color: options.outputPolicy.advancedOptions.color ?? videoTrack.color
         )
     }
 
@@ -105,6 +107,82 @@ struct SW_AV1HEVCTranscodeConfiguration {
         return max(Int(targetSize.width * targetSize.height * 6), 2_000_000)
     }
 }
+
+enum SW_AV1HEVCWriterColorProperties {
+    static func make(for color: TaptionColorDescription) -> [String: String]? {
+        guard let primaries = primariesValue(for: color.primaries),
+              let transfer = transferValue(for: color.transfer) else {
+            return nil
+        }
+        let matrix = matrixValue(for: color.matrix)
+            ?? inferredMatrixValue(for: color.primaries)
+        guard let matrix else { return nil }
+        return [
+            AVVideoColorPrimariesKey: primaries,
+            AVVideoTransferFunctionKey: transfer,
+            AVVideoYCbCrMatrixKey: matrix
+        ]
+    }
+
+    private static func primariesValue(for primaries: TaptionColorPrimaries) -> String? {
+        switch primaries {
+        case .bt709:
+            return AVVideoColorPrimaries_ITU_R_709_2
+        case .bt2020:
+            return AVVideoColorPrimaries_ITU_R_2020
+        case .p3D65:
+            return AVVideoColorPrimaries_P3_D65
+        case .smpteC:
+            return AVVideoColorPrimaries_SMPTE_C
+        case .unknown:
+            return nil
+        }
+    }
+
+    private static func transferValue(for transfer: TaptionColorTransfer) -> String? {
+        switch transfer {
+        case .bt709:
+            return AVVideoTransferFunction_ITU_R_709_2
+        case .sRGB:
+            return AVVideoTransferFunction_IEC_sRGB
+        case .pq:
+            return AVVideoTransferFunction_SMPTE_ST_2084_PQ
+        case .hlg:
+            return AVVideoTransferFunction_ITU_R_2100_HLG
+        case .linear:
+            return AVVideoTransferFunction_Linear
+        case .unknown:
+            return nil
+        }
+    }
+
+    private static func matrixValue(for matrix: TaptionColorMatrix) -> String? {
+        switch matrix {
+        case .bt709:
+            return AVVideoYCbCrMatrix_ITU_R_709_2
+        case .bt2020NonConstantLuminance:
+            return AVVideoYCbCrMatrix_ITU_R_2020
+        case .smpte240M:
+            return AVVideoYCbCrMatrix_ITU_R_601_4
+        case .identity, .unknown:
+            return nil
+        }
+    }
+
+    private static func inferredMatrixValue(for primaries: TaptionColorPrimaries) -> String? {
+        switch primaries {
+        case .bt709, .p3D65:
+            return AVVideoYCbCrMatrix_ITU_R_709_2
+        case .bt2020:
+            return AVVideoYCbCrMatrix_ITU_R_2020
+        case .smpteC:
+            return AVVideoYCbCrMatrix_ITU_R_601_4
+        case .unknown:
+            return nil
+        }
+    }
+}
+
 struct SW_AV1NativeAudioEncodingConfiguration {
     let sourceTrack: TaptionAudioTrackInfo
     let outputCodec: TaptionAudioCodec
@@ -1503,6 +1581,23 @@ enum SW_RawVideoHEVCTranscoder: TaptionStaticCodecTranscodingAlgorithm {
 }
 
 extension SW_AV1HEVCTranscoder {
+    static let bundledDecodeBridgePreferredSourceCodecs: Set<TaptionVideoCodec> = [
+        .dv,
+        .dvcPro,
+        .losslessJPEG,
+        .mpeg4Visual,
+        .microsoftMPEG4V3,
+        .microsoftRLE,
+        .quickTimeGraphics,
+        .r10k,
+        .r210,
+        .realVideo1,
+        .realVideo,
+        .snow,
+        .utVideo,
+        .wmv
+    ]
+
     static func requestedDecoderPlaybackRate(
         optimizationProfile: TaptionEncodingOptimizationProfile,
         hasAudioOutput: Bool
@@ -1532,6 +1627,21 @@ extension SW_AV1HEVCTranscoder {
         sourceCodecLabel: String,
         progress: @escaping (TaptionEncodingProgress) -> Void
     ) async throws -> TaptionCodecTranscodeOutput {
+        if bundledDecodeBridgePreferredSourceCodecs.contains(request.route.sourceCodec) {
+            AppLogger.info(
+                "Using bundled decode bridge for validated legacy input",
+                category: .encoding,
+                metadata: [
+                    "source": request.sourceURL.lastPathComponent,
+                    "codec": request.route.sourceCodec.rawValue
+                ]
+            )
+            return try await SW_FFmpegDecodeBridgeFallbackTranscoder.transcode(
+                request: request,
+                progress: progress
+            )
+        }
+
         let startedAt = Date()
         let trace = TaptionEncodingPerformanceTrace(
             name: "software_hevc_transcode",
@@ -1703,7 +1813,8 @@ extension SW_AV1HEVCTranscoder {
                 targetSize: configuration.targetSize,
                 targetBitrate: configuration.targetBitrate,
                 frameDuration: configuration.frameDuration,
-                optimizationProfile: configuration.optimizationProfile
+                optimizationProfile: configuration.optimizationProfile,
+                color: configuration.color
             )
         )
         videoInput.expectsMediaDataInRealTime = false
@@ -2088,7 +2199,8 @@ extension SW_AV1HEVCTranscoder {
         targetSize: CGSize,
         targetBitrate: Int,
         frameDuration: CMTime,
-        optimizationProfile: TaptionEncodingOptimizationProfile
+        optimizationProfile: TaptionEncodingOptimizationProfile,
+        color: TaptionColorDescription
     ) -> [String: Any] {
         let width = Int(max(targetSize.width.rounded(), 2))
         let height = Int(max(targetSize.height.rounded(), 2))
@@ -2105,12 +2217,15 @@ extension SW_AV1HEVCTranscoder {
             to: &compressionProperties,
             optimizationProfile: optimizationProfile
         )
-        let outputSettings: [String: Any] = [
+        var outputSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.hevc,
             AVVideoWidthKey: width,
             AVVideoHeightKey: height,
             AVVideoCompressionPropertiesKey: compressionProperties
         ]
+        if let colorProperties = SW_AV1HEVCWriterColorProperties.make(for: color) {
+            outputSettings[AVVideoColorPropertiesKey] = colorProperties
+        }
         return outputSettings
     }
 
