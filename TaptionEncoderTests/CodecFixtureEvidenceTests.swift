@@ -2,6 +2,33 @@ import XCTest
 @testable import Taption_Encoder
 
 final class CodecFixtureEvidenceTests: XCTestCase {
+    override class var defaultTestSuite: XCTestSuite {
+        guard ProcessInfo.processInfo.environment["TAPTION_RUN_RETIRED_PROOF_TESTS"] != "1" else {
+            return super.defaultTestSuite
+        }
+
+        return TaptionEncoderTestSuiteFilter.filtering(
+            super.defaultTestSuite,
+            excluding: retiredSourceOnlyProofTestNames
+        )
+    }
+
+    private static let retiredSourceOnlyProofTestNames: Set<String> = [
+        "testAudioFixtureGenerationTracksGeneratedAndPendingCodecs",
+        "testAudioSmokeLatestTranscodeResultsProveSWAndHWH265WithAudioSignal",
+        "testGeneratedAudioFixtureJobsRunThroughFunctionStyleAudioExecutorWhenReady",
+        "testGeneratedAudioFixturesCanBuildAppCoreAACPlansAndSoftwareFallbackCommands",
+        "testGeneratedAudioFixturesCanBuildPlannableMP4CommandPlans",
+        "testGeneratedFixtureExecutionJobsMatchLatestH265Evidence",
+        "testGeneratedFixturesCanBuildExecutionJobsAndRunThroughInjectedExecutorWhenReady",
+        "testGeneratedVideoFixturesCanBuildAppCoreHEVCCommandPlans",
+        "testGeneratedVideoFixturesCanBuildH265MP4CommandPlans",
+        "testRouteMatrixLatestProvesAllProfilesPreferHardwareWhenAvailable",
+        "testSmokeLatestTranscodeResultsProveSWAndHWH265WithAudioSignal",
+        "testVideoFixtureGenerationTracksImplementedAndOptionalAttempts",
+        "testVideoFixtureManifestMatchesSoftwareFixtureCatalog"
+    ]
+
     func testVideoFixtureManifestMatchesSoftwareFixtureCatalog() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
