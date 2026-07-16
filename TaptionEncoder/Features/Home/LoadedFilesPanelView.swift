@@ -393,7 +393,7 @@ private struct EncodingFileCardView: View {
     }
 
     private var starLimitedStatusColor: Color {
-        Color(red: 0.96, green: 0.18, blue: 0.22)
+        TaptionTheme.coral
     }
 
     private var swipeGesture: some Gesture {
@@ -499,7 +499,7 @@ private struct EncodingFileCardView: View {
             if file.isMultiSelected && selectedGroupCount > 1 {
                 Text("\(selectedGroupCount)")
                     .font(.caption.bold())
-                    .foregroundStyle(.white)
+                    .foregroundStyle(TaptionTheme.accentButtonText)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(TaptionTheme.accent)
@@ -581,7 +581,7 @@ private struct EncodingFileCardView: View {
     }
 
     private var deleteColor: Color {
-        Color(red: 0.96, green: 0.18, blue: 0.22)
+        TaptionTheme.coral
     }
 
     private var queueSpringAnimation: Animation {
@@ -990,7 +990,7 @@ struct HomeImportBrowserView: View {
             }
             .buttonStyle(.plain)
             .disabled(!canImport)
-            .foregroundStyle(canImport ? Color.white : ImportBrowserExplorerStyle.secondaryText)
+            .foregroundStyle(canImport ? TaptionTheme.accentButtonText : ImportBrowserExplorerStyle.secondaryText)
             .background(canImport ? ImportBrowserExplorerStyle.blueAccent : ImportBrowserExplorerStyle.disabledControl)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
@@ -1053,15 +1053,15 @@ struct HomeImportBrowserView: View {
 }
 
 private enum ImportBrowserExplorerStyle {
-    static let navigationBar = Color(red: 0.02, green: 0.04, blue: 0.08)
-    static let background = Color(red: 0.005, green: 0.01, blue: 0.02)
-    static let primaryText = Color.white.opacity(0.94)
-    static let secondaryText = Color(red: 0.52, green: 0.72, blue: 1.0)
-    static let blueAccent = Color(red: 0.0, green: 0.48, blue: 1.0)
-    static let disabledControl = Color(red: 0.05, green: 0.10, blue: 0.18)
-    static let folderFront = Color(red: 0.05, green: 0.34, blue: 0.86)
-    static let folderBack = Color(red: 0.02, green: 0.18, blue: 0.46)
-    static let selectedRing = Color(red: 0.0, green: 0.64, blue: 1.0)
+    static let navigationBar = TaptionTheme.surface
+    static let background = TaptionTheme.appBackground
+    static let primaryText = TaptionTheme.primaryText
+    static let secondaryText = TaptionTheme.mutedText
+    static let blueAccent = TaptionTheme.accent
+    static let disabledControl = TaptionTheme.elevatedSurface
+    static let folderFront = TaptionTheme.accent
+    static let folderBack = TaptionTheme.selectedSurface
+    static let selectedRing = TaptionTheme.accent
 }
 
 private struct ImportBrowserBackButton: View {
@@ -1490,7 +1490,7 @@ private struct QueueFileThumbnailView: View {
     private var playBadge: some View {
         Image(systemName: "play.fill")
             .font(.system(size: max(7, 8 * contentScale), weight: .bold))
-            .foregroundStyle(.white)
+            .foregroundStyle(TaptionTheme.accentButtonText)
             .frame(width: max(15, 17 * contentScale), height: max(15, 17 * contentScale))
             .background(TaptionTheme.accent)
             .clipShape(Circle())

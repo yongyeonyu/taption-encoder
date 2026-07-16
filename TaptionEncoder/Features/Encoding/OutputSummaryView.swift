@@ -9,7 +9,7 @@ struct OutputSummaryView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8 * contentScale) {
             Image(systemName: "film")
                 .font(contentScale < 0.9 ? .subheadline.weight(.semibold) : .headline)
-                .foregroundStyle(TaptionTheme.accent)
+                .foregroundStyle(TaptionTheme.success)
 
             HStack(alignment: .firstTextBaseline, spacing: 8 * contentScale) {
                 codecLine(videoCodecText)
@@ -30,7 +30,7 @@ struct OutputSummaryView: View {
     private func codecLine(_ text: String) -> some View {
         Text(text)
             .font(.caption2.weight(.semibold))
-            .foregroundStyle(Color.white.opacity(0.9))
+            .foregroundStyle(TaptionTheme.primaryText)
             .lineLimit(1)
             .minimumScaleFactor(0.7)
     }

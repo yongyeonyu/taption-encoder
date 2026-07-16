@@ -16,7 +16,7 @@ struct PendingSaveRecoveryView: View {
                     onRetry()
                 } label: {
                     Label(primaryButtonTitle, systemImage: primaryButtonImage)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(TaptionTheme.accentButtonText)
                         .frame(maxWidth: .infinity)
                         .frame(height: 40)
                 }

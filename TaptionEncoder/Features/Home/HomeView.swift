@@ -867,17 +867,10 @@ struct HomeView: View {
                 } label: {
                     Label("Battery Settings", systemImage: "battery.100percent")
                 }
-
-                Button {
-                    activeMenuSheet = .privacyAds
-                } label: {
-                    Label("Privacy & Ads", systemImage: "hand.raised")
-                }
-
             } label: {
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: metrics.headerIconSize, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.9))
+                    .foregroundStyle(TaptionTheme.primaryText)
                     .frame(width: 34 * metrics.contentScale, height: 34 * metrics.contentScale)
                     .background(TaptionTheme.elevatedSurface)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -898,7 +891,7 @@ struct HomeView: View {
 
                 Text(viewModel.subtitle)
                     .font(metrics.headerFont.weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.72))
+                    .foregroundStyle(TaptionTheme.mutedText)
                     .multilineTextAlignment(.center)
                     .lineLimit(1)
             }
@@ -916,7 +909,7 @@ struct HomeView: View {
             HStack(spacing: 6 * metrics.contentScale) {
                 Image(systemName: "star.fill")
                     .font(.system(size: max(13, metrics.headerIconSize - 3), weight: .semibold))
-                    .foregroundStyle(Color.yellow.opacity(0.95))
+                    .foregroundStyle(TaptionTheme.reward)
 
                 Text(viewModel.starBalanceDisplayText)
                     .font((metrics.contentScale < 0.84 ? Font.caption : Font.subheadline).monospacedDigit().weight(.semibold))
@@ -948,10 +941,10 @@ struct HomeView: View {
                 Text("Exit")
                     .font(metrics.buttonFont.weight(.semibold))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(TaptionTheme.accentButtonText)
             .frame(maxWidth: .infinity)
             .frame(height: metrics.footerExitButtonHeight)
-            .background(Color(red: 0.96, green: 0.18, blue: 0.22))
+            .background(TaptionTheme.coral)
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(Color.white.opacity(0.18), lineWidth: 1)
@@ -959,6 +952,7 @@ struct HomeView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
+        .padding(.horizontal, TaptionTheme.cardContentPadding)
         .accessibilityLabel("Exit")
         .accessibilityIdentifier("button.exit")
     }
@@ -1022,9 +1016,9 @@ struct HomeView: View {
                 secondaryValue: viewModel.outputSizeSecondaryText,
                 systemImage: "internaldrive",
                 isEnabled: viewModel.canChangeOutputSizeSelection,
-                secondaryValueColor: viewModel.outputSizeShowsWarning ? Color.orange.opacity(0.95) : nil,
+                secondaryValueColor: viewModel.outputSizeShowsWarning ? TaptionTheme.coral : nil,
                 trailingStatusSystemImage: viewModel.outputSizeShowsWarning ? "exclamationmark.triangle.fill" : nil,
-                trailingStatusColor: viewModel.outputSizeShowsWarning ? Color.orange.opacity(0.95) : nil,
+                trailingStatusColor: viewModel.outputSizeShowsWarning ? TaptionTheme.coral : nil,
                 metrics: metrics
             )
         }
@@ -1056,7 +1050,7 @@ struct HomeView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(
                                 viewModel.outputSizeShowsWarning
-                                    ? Color.orange.opacity(0.95)
+                                    ? TaptionTheme.coral
                                     : TaptionTheme.mutedText
                             )
                             .frame(width: 14 * metrics.contentScale, alignment: .top)
@@ -1065,7 +1059,7 @@ struct HomeView: View {
                             .font(.caption)
                             .foregroundStyle(
                                 viewModel.outputSizeShowsWarning
-                                    ? Color.orange.opacity(0.95)
+                                    ? TaptionTheme.coral
                                     : TaptionTheme.mutedText
                             )
                             .fixedSize(horizontal: false, vertical: true)
@@ -1120,10 +1114,18 @@ struct HomeView: View {
         } label: {
             Text(preset.menuTitle)
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(viewModel.selectedOutput.sizePreset == preset ? Color.black : Color.white.opacity(0.86))
+                .foregroundStyle(
+                    viewModel.selectedOutput.sizePreset == preset
+                        ? TaptionTheme.accentButtonText
+                        : TaptionTheme.primaryText
+                )
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 7)
-                .background(viewModel.selectedOutput.sizePreset == preset ? Color.white : Color.white.opacity(0.10))
+                .background(
+                    viewModel.selectedOutput.sizePreset == preset
+                        ? TaptionTheme.accent
+                        : TaptionTheme.elevatedSurface
+                )
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         }
         .buttonStyle(.plain)

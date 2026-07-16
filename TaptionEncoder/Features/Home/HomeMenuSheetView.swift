@@ -4,7 +4,6 @@ import UIKit
 enum HomeMenuSheet: String, Identifiable {
     case help
     case batterySettings
-    case privacyAds
 
     var id: String { rawValue }
 
@@ -14,8 +13,6 @@ enum HomeMenuSheet: String, Identifiable {
             return "Help"
         case .batterySettings:
             return "Battery Settings"
-        case .privacyAds:
-            return "Privacy & Ads"
         }
     }
 }
@@ -54,154 +51,7 @@ struct HomeMenuSheetView: View {
             BatterySettingsSheetContentView(
                 onOptimizationProfileChanged: onOptimizationProfileChanged
             )
-        case .privacyAds:
-            PrivacyAdsSheetContentView()
         }
-    }
-}
-
-private struct PrivacyAdsSheetContentView: View {
-    @State private var consentStatus = "Checking"
-    @State private var privacyOptionsStatus = "Checking"
-    @State private var actionMessage: String?
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                SheetInfoCard(
-                    title: "Ad Privacy",
-                    rows: [
-                        ("Ads", "Non-personalized"),
-                        ("Consent", consentStatus),
-                        ("Privacy Options", privacyOptionsStatus)
-                    ]
-                )
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Button {
-                        presentPrivacyOptions()
-                    } label: {
-                        Label("Privacy Options", systemImage: "hand.raised")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(TaptionTheme.accent)
-
-                    Button {
-                        reportAdIssue()
-                    } label: {
-                        Label("Report Ad Issue", systemImage: "exclamationmark.bubble")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .tint(TaptionTheme.accent)
-
-                    if let actionMessage {
-                        Text(actionMessage)
-                            .font(.caption)
-                            .foregroundStyle(TaptionTheme.mutedText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(TaptionTheme.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(TaptionTheme.border, lineWidth: 1)
-                )
-            }
-            .padding(18)
-        }
-        .onAppear {
-            AdPrivacyActionHandler.refreshConsentStatus()
-            refreshStatus()
-        }
-    }
-
-    private func presentPrivacyOptions() {
-        actionMessage = "Opening privacy options..."
-        Task { @MainActor in
-            let didPresent = await AdPrivacyActionHandler.presentPrivacyOptions()
-            refreshStatus()
-            actionMessage = didPresent
-                ? "Privacy options were opened."
-                : "Privacy options are not available for this region or session yet."
-        }
-    }
-
-    private func reportAdIssue() {
-        actionMessage = AdPrivacyActionHandler.openAdReportEmail()
-            ? "Opening your mail app for the ad report."
-            : "Mail is unavailable. Contact help@taption.com with the ad details."
-    }
-
-    private func refreshStatus() {
-        consentStatus = AdPrivacyActionHandler.consentStatusText()
-        privacyOptionsStatus = AdPrivacyActionHandler.privacyOptionsStatusText()
-    }
-}
-
-private enum AdPrivacyActionHandler {
-    @MainActor
-    static func refreshConsentStatus() {
-        #if canImport(GoogleMobileAds)
-        AdMobConsentManager.shared.refreshConsentStatusIfNeeded()
-        #endif
-    }
-
-    @MainActor
-    static func presentPrivacyOptions() async -> Bool {
-        #if canImport(GoogleMobileAds)
-        return await AdMobConsentManager.shared.presentPrivacyOptionsIfAvailable()
-        #else
-        return false
-        #endif
-    }
-
-    @MainActor
-    static func consentStatusText() -> String {
-        #if canImport(GoogleMobileAds)
-        return AdMobConsentManager.shared.consentStatusText
-        #else
-        return "Unavailable"
-        #endif
-    }
-
-    @MainActor
-    static func privacyOptionsStatusText() -> String {
-        #if canImport(GoogleMobileAds)
-        return AdMobConsentManager.shared.privacyOptionsStatusText
-        #else
-        return "Unavailable"
-        #endif
-    }
-
-    @MainActor
-    static func openAdReportEmail() -> Bool {
-        var components = URLComponents()
-        components.scheme = "mailto"
-        components.path = "help@taption.com"
-        components.queryItems = [
-            URLQueryItem(name: "subject", value: "Taption Encoder Ad Report"),
-            URLQueryItem(
-                name: "body",
-                value: [
-                    "Describe the inappropriate ad:",
-                    "",
-                    "Approximate time:",
-                    "Advertiser or app name:",
-                    "Screenshot attached:"
-                ].joined(separator: "\n")
-            )
-        ]
-        guard let url = components.url,
-              UIApplication.shared.canOpenURL(url) else {
-            return false
-        }
-        UIApplication.shared.open(url)
-        return true
     }
 }
 
@@ -475,7 +325,7 @@ private struct OpenSourceNoticeRow: View {
                 } else if didLoadLicenseText {
                     Text("Required notice text is unavailable in this build.")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.red.opacity(0.86))
+                        .foregroundStyle(TaptionTheme.coral)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             } label: {
@@ -538,7 +388,7 @@ private struct DeviceInfoContentView: View {
             } label: {
                 Label("Save Device Report", systemImage: "square.and.arrow.down")
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(TaptionTheme.accentButtonText)
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
             }
@@ -553,7 +403,7 @@ private struct DeviceInfoContentView: View {
             if let reportSaveMessage {
                 Text(reportSaveMessage.text)
                     .font(.caption)
-                    .foregroundStyle(reportSaveMessage.isError ? Color.red.opacity(0.86) : TaptionTheme.mutedText)
+                    .foregroundStyle(reportSaveMessage.isError ? TaptionTheme.coral : TaptionTheme.mutedText)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
             }
@@ -977,7 +827,7 @@ private struct CapabilityBadge: View {
     private var color: Color {
         switch value {
         case .some(true):
-            return TaptionTheme.accent
+            return TaptionTheme.success
         case .some(false):
             return Color.white.opacity(0.66)
         case .none:

@@ -45,7 +45,7 @@ struct PrimaryActionButton: View {
         if !isEnabled {
             return TaptionTheme.disabledText
         }
-        return isProminent ? .white : TaptionTheme.accent
+        return isProminent ? TaptionTheme.accentButtonText : TaptionTheme.accent
     }
 
     private var borderColor: Color {

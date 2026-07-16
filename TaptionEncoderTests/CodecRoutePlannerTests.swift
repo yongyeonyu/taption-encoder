@@ -126,7 +126,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     ]
 
     private static let hostCheckoutContractTestNames: Set<String> = [
-        "testAdMobPrivacyNativeAndPlacementSurfacesAreWired",
+        "testAdMobNativeAndPlacementSurfacesAreWiredWithoutPrivacyMenu",
         "testBatterySettingsSheetContainsEncodingOptimizationSlider",
         "testDebugLiveActivityProbeCanStartForLockScreenVerification",
         "testEncodingLiveActivityLockScreenSmallFamilyUsesCondensedLayout",
@@ -148,7 +148,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         "testQueuePreviewPlayerUsesPictureInPictureSurfaceAndBannerOnlyAds",
         "testQuickLookThumbnailExtensionCoversDocumentBrowserVideoTypes",
         "testReleaseConfigurationAndDistributionGateKeepBinaryHardening",
-        "testStarBadgeRunsRewardedAdFlowWithoutPurchaseSheet"
+        "testStarBadgeRunsRewardedAdFlowWithoutPurchaseSheet",
+        "testTaptionThemeUsesCoolSlateTokyoNightPalette"
     ]
 
     func testBackgroundReliabilityPresenterWarnsToKeepAppOpenBeforeContinuedProcessingOS() {
@@ -278,7 +279,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         limiter.reset()
     }
 
-    func testAdMobPrivacyNativeAndPlacementSurfacesAreWired() throws {
+    func testAdMobNativeAndPlacementSurfacesAreWiredWithoutPrivacyMenu() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -305,9 +306,51 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(homeViewText.contains("AdMobNativeAdSlotView("))
         XCTAssertFalse(homeViewText.contains("showsNativeAdSlot"))
         XCTAssertTrue(homeViewText.contains(".padding(.top, metrics.footerAdSeparationHeight)"))
-        XCTAssertTrue(menuText.contains("Privacy & Ads"))
-        XCTAssertTrue(menuText.contains("Report Ad Issue"))
-        XCTAssertTrue(menuText.contains("help@taption.com"))
+        XCTAssertFalse(homeViewText.contains("Privacy & Ads"))
+        XCTAssertFalse(menuText.contains("Privacy & Ads"))
+        XCTAssertFalse(menuText.contains("case privacyAds"))
+        XCTAssertFalse(menuText.contains("PrivacyAdsSheetContentView"))
+        XCTAssertFalse(menuText.contains("AdPrivacyActionHandler"))
+    }
+
+    func testTaptionThemeUsesCoolSlateTokyoNightPalette() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let themeText = try String(
+            contentsOf: rootURL.appendingPathComponent("TaptionEncoder/Shared/UI/ProgressCard.swift"),
+            encoding: .utf8
+        )
+        let primaryButtonText = try String(
+            contentsOf: rootURL.appendingPathComponent("TaptionEncoder/Shared/UI/PrimaryActionButton.swift"),
+            encoding: .utf8
+        )
+        let homeText = try String(
+            contentsOf: rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift"),
+            encoding: .utf8
+        )
+        let loadedFilesText = try String(
+            contentsOf: rootURL.appendingPathComponent("TaptionEncoder/Features/Home/LoadedFilesPanelView.swift"),
+            encoding: .utf8
+        )
+        let outputSummaryText = try String(
+            contentsOf: rootURL.appendingPathComponent("TaptionEncoder/Features/Encoding/OutputSummaryView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(themeText.contains("0x1A1B26"))
+        XCTAssertTrue(themeText.contains("0x1F2335"))
+        XCTAssertTrue(themeText.contains("0x24283B"))
+        XCTAssertTrue(themeText.contains("0x292E42"))
+        XCTAssertTrue(themeText.contains("0x7AA2F7"))
+        XCTAssertTrue(themeText.contains("0xFF9E64"))
+        XCTAssertTrue(themeText.contains("0x9ECE6A"))
+        XCTAssertTrue(themeText.contains("0xE0AF68"))
+        XCTAssertTrue(primaryButtonText.contains("TaptionTheme.accentButtonText"))
+        XCTAssertTrue(homeText.contains(".foregroundStyle(TaptionTheme.reward)"))
+        XCTAssertTrue(homeText.contains(".background(TaptionTheme.coral)"))
+        XCTAssertTrue(loadedFilesText.contains("static let blueAccent = TaptionTheme.accent"))
+        XCTAssertTrue(outputSummaryText.contains(".foregroundStyle(TaptionTheme.success)"))
     }
 
     func testHelpSheetIntegratesVersionDeviceInfoAndOpenSourceNotices() throws {
@@ -4535,8 +4578,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         let exitButtonEnd = try XCTUnwrap(homeViewText[exitButtonStart.lowerBound...].range(of: "\n    private func outputSelector"))
         let exitButtonText = String(homeViewText[exitButtonStart.lowerBound..<exitButtonEnd.lowerBound])
         XCTAssertFalse(exitButtonText.contains(".background(Color(red: 1.0, green: 0.30, blue: 0.34).opacity(0.16))"))
-        XCTAssertTrue(exitButtonText.contains(".foregroundStyle(.white)"))
-        XCTAssertTrue(exitButtonText.contains(".background(Color(red: 0.96, green: 0.18, blue: 0.22))"))
+        XCTAssertTrue(exitButtonText.contains(".foregroundStyle(TaptionTheme.accentButtonText)"))
+        XCTAssertTrue(exitButtonText.contains(".background(TaptionTheme.coral)"))
+        XCTAssertTrue(exitButtonText.contains(".padding(.horizontal, TaptionTheme.cardContentPadding)"))
         let homeContentStart = try XCTUnwrap(homeViewText.range(of: "private func homeContent("))
         let homeContentEnd = try XCTUnwrap(homeViewText[homeContentStart.lowerBound...].range(of: "\n    private func sourceControls"))
         let homeContentText = String(homeViewText[homeContentStart.lowerBound..<homeContentEnd.lowerBound])
@@ -5292,6 +5336,38 @@ final class CodecRoutePlannerTests: XCTestCase {
             horizontalSpacing: 1,
             verticalSpacing: 1
         ))
+    }
+
+    func testFFmpegDecodeBridgeGeometrySeparatesCodedAndDisplaySize() {
+        let snowGeometry = SW_FFmpegDecodeBridgeVideoGeometry(
+            codedSize: TaptionPixelSize(width: 240, height: 136),
+            sampleAspectRatioHorizontalSpacing: 136,
+            sampleAspectRatioVerticalSpacing: 135
+        )
+        XCTAssertEqual(snowGeometry.codedSize, TaptionPixelSize(width: 240, height: 136))
+        XCTAssertEqual(snowGeometry.displaySize, TaptionPixelSize(width: 242, height: 136))
+
+        let palDVGeometry = SW_FFmpegDecodeBridgeVideoGeometry(
+            codedSize: TaptionPixelSize(width: 720, height: 576),
+            sampleAspectRatioHorizontalSpacing: 16,
+            sampleAspectRatioVerticalSpacing: 15
+        )
+        XCTAssertEqual(palDVGeometry.codedSize, TaptionPixelSize(width: 720, height: 576))
+        XCTAssertEqual(palDVGeometry.displaySize, TaptionPixelSize(width: 768, height: 576))
+
+        let vc1Geometry = SW_FFmpegDecodeBridgeVideoGeometry(
+            codedSize: TaptionPixelSize(width: 720, height: 480),
+            sampleAspectRatioHorizontalSpacing: 40,
+            sampleAspectRatioVerticalSpacing: 33
+        )
+        XCTAssertEqual(vc1Geometry.displaySize, TaptionPixelSize(width: 873, height: 480))
+
+        let y41pGeometry = SW_FFmpegDecodeBridgeVideoGeometry(
+            codedSize: TaptionPixelSize(width: 160, height: 120),
+            sampleAspectRatioHorizontalSpacing: 225,
+            sampleAspectRatioVerticalSpacing: 481
+        )
+        XCTAssertEqual(y41pGeometry.displaySize, TaptionPixelSize(width: 75, height: 120))
     }
 
     func testFFmpegDecodeBridgeWriterEndsAtLongestSourceDuration() throws {

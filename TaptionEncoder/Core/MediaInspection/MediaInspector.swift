@@ -36,7 +36,7 @@ struct AVFoundationMediaInspector: MediaInspecting {
             let audioTracks = try await asset.loadTracks(withMediaType: .audio)
             let videoTrack: TaptionVideoTrackInfo?
             if let firstVideoTrack = videoTracks.first {
-                videoTrack = try await inspectVideoTrack(firstVideoTrack)
+                videoTrack = try await inspectVideoTrack(firstVideoTrack, sourceURL: url)
             } else {
                 videoTrack = nil
             }
@@ -87,25 +87,37 @@ struct AVFoundationMediaInspector: MediaInspecting {
         return mergedAsset
     }
 
-    private func inspectVideoTrack(_ track: AVAssetTrack) async throws -> TaptionVideoTrackInfo {
+    private func inspectVideoTrack(
+        _ track: AVAssetTrack,
+        sourceURL: URL
+    ) async throws -> TaptionVideoTrackInfo {
         let naturalSize = try await track.load(.naturalSize)
         let preferredTransform = try await track.load(.preferredTransform)
         let nominalFrameRate = try await track.load(.nominalFrameRate)
         let estimatedDataRate = try await track.load(.estimatedDataRate)
         let formatDescriptions = try await track.load(.formatDescriptions)
         let codec = codec(from: formatDescriptions)
-        let displaySize = naturalSize.applying(preferredTransform)
+        let usesBundledBridgeGeometry = TaptionCodecRegistry.bundledFFmpegDecodeBridgeSourceCodecs.contains(codec)
+            || SW_AV1HEVCTranscoder.bundledDecodeBridgePreferredSourceCodecs.contains(codec)
+        let bridgeGeometry = usesBundledBridgeGeometry
+            ? SW_FFmpegDecodeBridgeVideoGeometryProbe.inspect(sourceURL: sourceURL)
+            : nil
+        let displayBasis = bridgeGeometry.map {
+            CGSize(width: $0.displaySize.width, height: $0.displaySize.height)
+        } ?? naturalSize
+        let displaySize = displayBasis.applying(preferredTransform)
         let normalizedDisplaySize = CGSize(
             width: abs(displaySize.width),
             height: abs(displaySize.height)
         )
+        let resolvedNaturalSize = bridgeGeometry?.codedSize ?? TaptionPixelSize(
+            width: Int(abs(naturalSize.width).rounded()),
+            height: Int(abs(naturalSize.height).rounded())
+        )
 
         return TaptionVideoTrackInfo(
             codec: codec,
-            naturalSize: TaptionPixelSize(
-                width: Int(abs(naturalSize.width).rounded()),
-                height: Int(abs(naturalSize.height).rounded())
-            ),
+            naturalSize: resolvedNaturalSize,
             displaySize: TaptionPixelSize(
                 width: Int(normalizedDisplaySize.width.rounded()),
                 height: Int(normalizedDisplaySize.height.rounded())
@@ -520,10 +532,12 @@ private struct SW_VLCMediaInspector: MediaInspecting {
         let parsedHeight = track.height.flatMap { $0 > 2 ? $0 : nil }
         let width = max(parsedWidth ?? headerSize?.width ?? 0, 2)
         let height = max(parsedHeight ?? headerSize?.height ?? 0, 2)
+        let fallbackSize = TaptionPixelSize(width: width, height: height)
+        let bridgeGeometry = SW_FFmpegDecodeBridgeVideoGeometryProbe.inspect(sourceURL: url)
         return TaptionVideoTrackInfo(
             codec: codec,
-            naturalSize: TaptionPixelSize(width: width, height: height),
-            displaySize: TaptionPixelSize(width: width, height: height),
+            naturalSize: bridgeGeometry?.codedSize ?? fallbackSize,
+            displaySize: bridgeGeometry?.displaySize ?? fallbackSize,
             nominalFrameRate: frameRate(from: track.frameRate) ?? headerInfo?.frameRate,
             estimatedBitrate: track.bitrate > 0 ? track.bitrate : nil,
             color: TaptionColorDescription(),

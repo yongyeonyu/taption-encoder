@@ -597,6 +597,65 @@ enum TaptionVideoCodecExecutionReadinessReporter {
     }
 }
 
+struct SW_FFmpegDecodeBridgeVideoGeometry: Equatable {
+    var codedSize: TaptionPixelSize
+    var displaySize: TaptionPixelSize
+
+    init(
+        codedSize: TaptionPixelSize,
+        sampleAspectRatioHorizontalSpacing: Int,
+        sampleAspectRatioVerticalSpacing: Int
+    ) {
+        self.codedSize = codedSize
+        guard sampleAspectRatioHorizontalSpacing > 0,
+              sampleAspectRatioVerticalSpacing > 0 else {
+            displaySize = codedSize
+            return
+        }
+
+        let displayWidth = Int(
+            (Double(codedSize.width) * Double(sampleAspectRatioHorizontalSpacing)
+                / Double(sampleAspectRatioVerticalSpacing)).rounded()
+        )
+        displaySize = TaptionPixelSize(
+            width: max(displayWidth, 2),
+            height: codedSize.height
+        )
+    }
+}
+
+enum SW_FFmpegDecodeBridgeVideoGeometryProbe {
+    static func inspect(sourceURL: URL) -> SW_FFmpegDecodeBridgeVideoGeometry? {
+        #if canImport(TaptionFFmpegDecodeBridge)
+        var result = TaptionFFmpegDecodeBridgeProbeResult()
+        var errorBuffer = [CChar](repeating: 0, count: 512)
+        let status = sourceURL.path.withCString { sourcePath in
+            taption_ffmpeg_decode_bridge_probe_video(
+                sourcePath,
+                &result,
+                &errorBuffer,
+                Int32(errorBuffer.count)
+            )
+        }
+        guard status == 0,
+              result.width > 0,
+              result.height > 0 else {
+            return nil
+        }
+        return SW_FFmpegDecodeBridgeVideoGeometry(
+            codedSize: TaptionPixelSize(
+                width: Int(result.width),
+                height: Int(result.height)
+            ),
+            sampleAspectRatioHorizontalSpacing: Int(result.sampleAspectRatioNumerator),
+            sampleAspectRatioVerticalSpacing: Int(result.sampleAspectRatioDenominator)
+        )
+        #else
+        return nil
+        #endif
+    }
+}
+
 #if canImport(TaptionFFmpegDecodeBridge)
 enum SW_FFmpegDecodeBridgeRunnerError: LocalizedError, Equatable {
     case unsupportedOutput(URL)

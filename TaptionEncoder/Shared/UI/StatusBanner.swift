@@ -10,7 +10,7 @@ struct StatusBanner<Actions: View>: View {
         VStack(alignment: .leading, spacing: 10) {
             Label(title, systemImage: systemImage)
                 .font(.headline)
-                .foregroundStyle(Color.white.opacity(0.92))
+                .foregroundStyle(TaptionTheme.primaryText)
 
             Text(message)
                 .font(.subheadline)

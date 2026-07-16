@@ -26,7 +26,7 @@ struct EncodingProgressView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(state.title)
                             .font(contentScale < 0.9 ? .subheadline.weight(.semibold) : .headline)
-                            .foregroundStyle(Color.white.opacity(0.92))
+                            .foregroundStyle(TaptionTheme.primaryText)
                             .lineLimit(1)
                         detailMessage
                     }
@@ -134,7 +134,7 @@ struct EncodingProgressView: View {
             } label: {
                 Label(startActionTitle, systemImage: "play.fill")
                     .font(contentScale < 0.9 ? .caption.weight(.semibold) : .body.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(TaptionTheme.accentButtonText)
                     .frame(maxWidth: .infinity)
                     .frame(height: controlHeight)
                     .lineLimit(1)
@@ -153,7 +153,7 @@ struct EncodingProgressView: View {
             } label: {
                 Label(saveActionTitle, systemImage: "square.and.arrow.down")
                     .font(contentScale < 0.9 ? .caption.weight(.semibold) : .body.weight(.semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(TaptionTheme.accentButtonText)
                     .frame(maxWidth: .infinity)
                     .frame(height: controlHeight)
             }
@@ -211,7 +211,7 @@ struct EncodingProgressView: View {
         } label: {
             Label(watchAdButtonTitle, systemImage: "star.fill")
                 .font(contentScale < 0.9 ? .caption.weight(.semibold) : .body.weight(.semibold))
-                .foregroundStyle(canWatchAd ? .white : TaptionTheme.disabledText)
+                .foregroundStyle(canWatchAd ? TaptionTheme.accentButtonText : TaptionTheme.disabledText)
                 .frame(maxWidth: .infinity)
                 .frame(height: controlHeight)
         }
@@ -332,9 +332,9 @@ private struct EncodingResourceUsageWidget: View {
         case .notice:
             return TaptionTheme.accent
         case .warning:
-            return .orange
+            return TaptionTheme.coral
         case .critical:
-            return .red
+            return TaptionTheme.coral
         }
     }
 }

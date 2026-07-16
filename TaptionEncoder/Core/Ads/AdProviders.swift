@@ -1292,8 +1292,18 @@ private struct AdMobNativeAdRepresentable: UIViewRepresentable {
             let callToActionButton = UIButton(type: .system)
             callToActionButton.titleLabel?.font = .systemFont(ofSize: 12, weight: .semibold)
             var callToActionConfiguration = UIButton.Configuration.filled()
-            callToActionConfiguration.baseForegroundColor = .white
-            callToActionConfiguration.baseBackgroundColor = UIColor(red: 0.18, green: 0.55, blue: 1.0, alpha: 1)
+            callToActionConfiguration.baseForegroundColor = UIColor(
+                red: 22.0 / 255.0,
+                green: 22.0 / 255.0,
+                blue: 30.0 / 255.0,
+                alpha: 1
+            )
+            callToActionConfiguration.baseBackgroundColor = UIColor(
+                red: 122.0 / 255.0,
+                green: 162.0 / 255.0,
+                blue: 247.0 / 255.0,
+                alpha: 1
+            )
             callToActionConfiguration.cornerStyle = .small
             callToActionConfiguration.contentInsets = NSDirectionalEdgeInsets(top: 5, leading: 10, bottom: 5, trailing: 10)
             callToActionButton.configuration = callToActionConfiguration
