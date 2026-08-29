@@ -3763,6 +3763,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             defaults.removePersistentDomain(forName: suiteName)
         }
 
+        XCTAssertEqual(BatteryEncodingSettings.load(defaults: defaults).optimizationProfile, .performance)
+
         let settings = BatteryEncodingSettings(
             batteryLimitPercent: 45,
             powerConnectedOnly: true,
@@ -4039,6 +4041,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(HW_AppleHEVCCodecAlgorithm.requestsCompressedVideoReaderWriterFastPath(request))
 
         request.options.outputPolicy.container = .mp4
+        request.route.sourceCodec = .hevc
+        XCTAssertTrue(HW_AppleHEVCCodecAlgorithm.requestsCompressedVideoReaderWriterFastPath(request))
         request.route.sourceCodec = .proRes
         XCTAssertTrue(HW_AppleHEVCCodecAlgorithm.requestsCompressedVideoReaderWriterFastPath(request))
         request.route.sourceCodec = .h264
@@ -4207,11 +4211,19 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testPreviewOrientationControllerAllowsLandscapeOnlyDuringPreview() {
+    func testOrientationControllerKeepsIPhonePortraitAndAllowsIPadLandscape() {
         let controller = AppOrientationController.shared
+        let expectedHomeOrientations = AppOrientationController.homeOrientations(
+            for: UIDevice.current.userInterfaceIdiom
+        )
 
         controller.restorePortrait(requestGeometryUpdate: false)
-        XCTAssertEqual(controller.supportedOrientations, .portrait)
+        XCTAssertEqual(controller.supportedOrientations, expectedHomeOrientations)
+        XCTAssertEqual(AppOrientationController.homeOrientations(for: .phone), .portrait)
+        let padOrientations = AppOrientationController.homeOrientations(for: .pad)
+        XCTAssertTrue(padOrientations.contains(.portrait))
+        XCTAssertTrue(padOrientations.contains(.landscapeLeft))
+        XCTAssertTrue(padOrientations.contains(.landscapeRight))
 
         controller.activatePreviewOrientations(requestGeometryUpdate: false)
         XCTAssertTrue(controller.supportedOrientations.contains(.portrait))
@@ -4219,7 +4231,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(controller.supportedOrientations.contains(.landscapeRight))
 
         controller.restorePortrait(requestGeometryUpdate: false)
-        XCTAssertEqual(controller.supportedOrientations, .portrait)
+        XCTAssertEqual(controller.supportedOrientations, expectedHomeOrientations)
     }
 
     func testQueuePreviewPlaybackMathFormatsAndClampsControls() {
@@ -4393,6 +4405,12 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(previewText.contains("startsAutomaticallyFromInline: true"))
         XCTAssertTrue(previewText.contains("managesAudioSession: false"))
         XCTAssertTrue(previewText.contains("Button(action: togglePictureInPicture)"))
+        XCTAssertTrue(previewText.contains("pipController.start()"))
+        XCTAssertTrue(previewText.contains("Queue preview Picture in Picture requested on current player"))
+        XCTAssertTrue(previewText.contains(".onChange(of: pipController?.isActive)"))
+        XCTAssertTrue(previewText.contains("onPictureInPictureActiveChanged(isActive)"))
+        XCTAssertFalse(previewText.contains("onPictureInPictureHome"))
+        XCTAssertFalse(previewText.contains("Queue preview Picture in Picture home requested"))
         XCTAssertTrue(previewText.contains("startDebugAutoPictureInPictureIfRequested()"))
         XCTAssertTrue(previewText.contains("TAPTION_AUTO_START_PIP"))
         XCTAssertTrue(previewText.contains("nativeValidationProbe"))
@@ -4461,13 +4479,18 @@ final class CodecRoutePlannerTests: XCTestCase {
         let progressViewText = try String(contentsOf: progressViewURL, encoding: .utf8)
 
         XCTAssertTrue(homeViewText.contains("@State private var miniPlayerPreview: QueueVideoPreview?"))
-        XCTAssertTrue(homeViewText.contains("@State private var autoStartMiniPlayerPiPPreviewID: String?"))
+        XCTAssertTrue(homeViewText.contains("@State private var isPreviewPictureInPictureActive = false"))
+        XCTAssertFalse(homeViewText.contains("autoStartMiniPlayerPiPPreviewID"))
         XCTAssertTrue(homeViewText.contains("QueueMiniPlayerView("))
+        XCTAssertTrue(homeViewText.contains("queueVideoPreviewOverlay(preview: preview)"))
         XCTAssertTrue(homeViewText.contains("onMinimize:"))
-        XCTAssertTrue(homeViewText.contains("onPictureInPictureHome:"))
+        XCTAssertTrue(homeViewText.contains("onPictureInPictureActiveChanged:"))
+        XCTAssertFalse(homeViewText.contains("onPictureInPictureHome:"))
         XCTAssertTrue(previewViewText.contains("minimizePreview()"))
         XCTAssertTrue(previewViewText.contains("Queue preview minimized to floating player"))
-        XCTAssertTrue(previewViewText.contains("Queue preview Picture in Picture home requested"))
+        XCTAssertTrue(previewViewText.contains("Queue preview Picture in Picture requested on current player"))
+        XCTAssertFalse(previewViewText.contains("Queue preview Picture in Picture home requested"))
+        XCTAssertTrue(previewViewText.contains("Image(systemName: \"arrow.down.right.and.arrow.up.left\")"))
         XCTAssertTrue(previewViewText.contains("TAPTION_AUTO_MINIMIZE_PREVIEW"))
         XCTAssertTrue(previewViewText.contains("Debug auto mini player requested"))
         XCTAssertTrue(previewViewText.contains("Button(action: onExpand)"))
@@ -4475,19 +4498,20 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(previewViewText.contains("Queue mini player PiP requested"))
         XCTAssertTrue(previewViewText.contains("Queue mini player PiP exit requested"))
         XCTAssertTrue(previewViewText.contains("Queue mini player PiP ignored because controller is unavailable"))
-        XCTAssertTrue(previewViewText.contains("Queue mini player auto PiP requested"))
-        XCTAssertTrue(previewViewText.contains("Queue mini player auto PiP state checked"))
-        XCTAssertTrue(homeViewText.contains("autoStartPictureInPicture: autoStartMiniPlayerPiPPreviewID == preview.id"))
+        XCTAssertFalse(previewViewText.contains("Queue mini player auto PiP requested"))
+        XCTAssertFalse(previewViewText.contains("Queue mini player auto PiP state checked"))
+        XCTAssertFalse(previewViewText.contains("autoStartPictureInPicture"))
+        XCTAssertFalse(previewViewText.contains("onAutoPictureInPictureHandled"))
         XCTAssertTrue(previewViewText.contains(".onChange(of: preview.id)"))
         XCTAssertTrue(previewViewText.contains("keepControlsVisibleForPreviewSwitch()"))
         XCTAssertFalse(homeViewText.contains(".id(preview.id)"))
-        XCTAssertTrue(homeViewText.contains("isPresented: Binding<Bool>"))
-        XCTAssertTrue(homeViewText.contains("get: { viewModel.activePreview != nil }"))
-        XCTAssertTrue(homeViewText.contains("queueVideoPreviewFullScreenCoverContent"))
-        XCTAssertFalse(homeViewText.contains("item: Binding<QueueVideoPreview?>"))
+        XCTAssertFalse(homeViewText.contains(".fullScreenCover("))
+        XCTAssertTrue(homeViewText.contains(".zIndex(isPreviewPictureInPictureActive ? 30 : 0)"))
+        XCTAssertTrue(homeViewText.contains("queueVideoPreviewOverlay(preview: preview)"))
+        XCTAssertTrue(homeViewText.contains(".zIndex(20)"))
         XCTAssertTrue(homeViewText.contains("viewModel.restorePreview(preview)"))
         XCTAssertTrue(previewViewText.contains("queueMiniPlayer"))
-        XCTAssertTrue(homeViewText.contains("let isFullScreenVideoPlaybackActive = viewModel.activePreview != nil"))
+        XCTAssertTrue(homeViewText.contains("viewModel.activePreview != nil && !isPreviewPictureInPictureActive"))
         XCTAssertTrue(homeViewText.contains("showsPlaybackActions: !isFullScreenVideoPlaybackActive"))
         XCTAssertTrue(homeViewText.contains("showsWorkAction: showsPlaybackActions"))
         XCTAssertTrue(homeViewText.contains("showsWatchAdAction: showsPlaybackActions"))
@@ -4529,6 +4553,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("private enum HomeSystemDocumentPickerMode: String"))
         XCTAssertTrue(homeViewText.contains("case files"))
         XCTAssertTrue(homeViewText.contains("case folder"))
+        XCTAssertTrue(homeViewText.contains("case outputFolder"))
         XCTAssertTrue(homeViewText.contains("import UniformTypeIdentifiers"))
         XCTAssertFalse(homeViewText.contains("@State private var pendingImportPicker"))
         XCTAssertTrue(sourceBarText.contains("onFiles: openFilesImportBrowser"))
@@ -4552,6 +4577,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("handleSystemDocumentPickerResult"))
         XCTAssertTrue(homeViewText.contains("handleFilePickerResult"))
         XCTAssertTrue(homeViewText.contains("handleFolderPickerResult"))
+        XCTAssertTrue(homeViewText.contains("handleOutputFolderPickerResult"))
+        XCTAssertTrue(homeViewText.contains("prepareFolderOutputDirectoryForStart"))
+        XCTAssertTrue(homeViewText.contains("selectFolderOutputDirectory"))
         XCTAssertTrue(homeViewText.contains("viewModel.handleFolderPickerSelection(urls: selectedURLs)"))
         XCTAssertTrue(homeViewText.contains("viewModel.handleFolderPickerSelection(urls: [folderURL])"))
         XCTAssertFalse(sourceBarText.contains("onSamples"))
@@ -8382,8 +8410,8 @@ final class CodecRoutePlannerTests: XCTestCase {
             (
                 "swiftvlc",
                 "swiftvlc",
-                "0.10.0",
-                "9065ad6338ddd2d689bf6220b45e90ab4695b3a8"
+                "0.10.1",
+                "58d1f3a8fc1366b2ffcd4748203a52d8410b7da2"
             ),
             (
                 "swift-package-manager-google-mobile-ads",
@@ -8520,14 +8548,24 @@ final class CodecRoutePlannerTests: XCTestCase {
         let provenanceObject = try XCTUnwrap(
             JSONSerialization.jsonObject(with: provenanceData) as? [String: Any]
         )
+        let swiftVLC = try XCTUnwrap(provenanceObject["swiftVLC"] as? [String: Any])
         let libVLC = try XCTUnwrap(provenanceObject["libVLC"] as? [String: Any])
         let gateState = try XCTUnwrap(provenanceObject["gateState"] as? [String: Any])
 
-        XCTAssertEqual(provenanceObject["schemaVersion"] as? Int, 1)
+        XCTAssertEqual(provenanceObject["schemaVersion"] as? Int, 2)
+        XCTAssertEqual(swiftVLC["version"] as? String, "0.10.1")
+        XCTAssertEqual(
+            swiftVLC["revision"] as? String,
+            "58d1f3a8fc1366b2ffcd4748203a52d8410b7da2"
+        )
         XCTAssertEqual(
             libVLC["revision"] as? String,
             "c833c4be000b426d73ff4324bec574065f00e3df"
         )
+        let swiftVLCLocalPatches = try XCTUnwrap(
+            libVLC["swiftVLCLocalPatches"] as? [[String: String]]
+        )
+        XCTAssertEqual(swiftVLCLocalPatches.count, 4)
         XCTAssertEqual(libVLC["contribTargetCount"] as? Int, 57)
         XCTAssertEqual(libVLC["contribSourceArchiveCount"] as? Int, 56)
         let contribTargets = try XCTUnwrap(libVLC["contribTargets"] as? [String])
@@ -9993,6 +10031,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     func testStarWalletStoreGrantsInitialInstallBonusOnce() async throws {
+        XCTAssertEqual(StarWalletStore.initialInstallBonusStarCount, 3)
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -11277,7 +11316,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testFolderBatchFolderDestinationSavesIntoSiblingTaptionFolder() async throws {
+    func testFolderBatchSavesDirectlyIntoSelectedOutputFolderWithUniqueNames() async throws {
         let parentURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: parentURL)
@@ -11285,12 +11324,20 @@ final class CodecRoutePlannerTests: XCTestCase {
         let sourceFolderURL = parentURL.appendingPathComponent("VideoFolder", isDirectory: true)
         let firstURL = sourceFolderURL.appendingPathComponent("a.mp4")
         let secondURL = sourceFolderURL.appendingPathComponent("b.mp4")
-        let outputFolderURL = parentURL.appendingPathComponent("VideoFolder_taption", isDirectory: true)
+        let outputFolderURL = parentURL.appendingPathComponent("ChosenOutput", isDirectory: true)
         let firstOutputURL = outputFolderURL.appendingPathComponent("a_taption.mp4")
+        let uniqueFirstOutputURL = outputFolderURL.appendingPathComponent("a_taption (2).mp4")
         let secondOutputURL = outputFolderURL.appendingPathComponent("b_taption.mp4")
         try FileManager.default.createDirectory(at: sourceFolderURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outputFolderURL, withIntermediateDirectories: true)
         try Data("source a".utf8).write(to: firstURL)
         try Data("source b".utf8).write(to: secondURL)
+        try Data("existing".utf8).write(to: firstOutputURL)
+        let defaultsSuiteName = "FolderOutputSelectionTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: defaultsSuiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: defaultsSuiteName)
+        }
 
         let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 2))
         let backgroundCoordinator = RecordingBackgroundEncodingCoordinator(
@@ -11310,11 +11357,12 @@ final class CodecRoutePlannerTests: XCTestCase {
         viewModel.startFolderFlow(url: sourceFolderURL)
         viewModel.importFolderPreviewBatch()
         try await waitForReadyToStartState(in: viewModel)
+        XCTAssertFalse(viewModel.prepareFolderOutputDirectoryForStart(defaults: defaults))
+        XCTAssertTrue(viewModel.selectFolderOutputDirectory(outputFolderURL, defaults: defaults))
         viewModel.startPreparedEncoding()
-        try await chooseFolderForPendingSaveDestination(in: viewModel)
 
         try await waitForCondition(timeout: 3) {
-            FileManager.default.fileExists(atPath: firstOutputURL.path)
+            FileManager.default.fileExists(atPath: uniqueFirstOutputURL.path)
                 && FileManager.default.fileExists(atPath: secondOutputURL.path)
                 && viewModel.state.title == "Save Complete"
         }
@@ -11325,11 +11373,65 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(
             atPath: sourceFolderURL.appendingPathComponent("b_taption.mp4").path
         ))
-        XCTAssertEqual(try String(contentsOf: firstOutputURL, encoding: .utf8), "encoded")
+        XCTAssertEqual(try String(contentsOf: firstOutputURL, encoding: .utf8), "existing")
+        XCTAssertEqual(try String(contentsOf: uniqueFirstOutputURL, encoding: .utf8), "encoded")
         XCTAssertEqual(try String(contentsOf: secondOutputURL, encoding: .utf8), "encoded")
         let finalOutputPresenceAtBackgroundEnd = await backgroundCoordinator
             .recordedFinalOutputPresenceAtEnd()
         XCTAssertEqual(finalOutputPresenceAtBackgroundEnd, [false, true])
+    }
+
+    @MainActor
+    func testFolderOutputBookmarkIsReusedForTheNextFolderBatch() async throws {
+        let parentURL = temporaryDirectoryURL()
+        defer {
+            try? FileManager.default.removeItem(at: parentURL)
+        }
+        let firstSourceFolderURL = parentURL.appendingPathComponent("First", isDirectory: true)
+        let secondSourceFolderURL = parentURL.appendingPathComponent("Second", isDirectory: true)
+        let outputFolderURL = parentURL.appendingPathComponent("Output", isDirectory: true)
+        try FileManager.default.createDirectory(at: firstSourceFolderURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: secondSourceFolderURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outputFolderURL, withIntermediateDirectories: true)
+        try Data("source".utf8).write(to: firstSourceFolderURL.appendingPathComponent("first.mp4"))
+        try Data("source".utf8).write(to: secondSourceFolderURL.appendingPathComponent("second.mp4"))
+
+        let defaultsSuiteName = "FolderOutputBookmarkTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: defaultsSuiteName)!
+        defer {
+            defaults.removePersistentDomain(forName: defaultsSuiteName)
+        }
+
+        let firstViewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264))
+            )
+        )
+        firstViewModel.startFolderFlow(url: firstSourceFolderURL)
+        firstViewModel.importFolderPreviewBatch()
+        try await waitForReadyToStartState(in: firstViewModel)
+        XCTAssertTrue(firstViewModel.selectFolderOutputDirectory(outputFolderURL, defaults: defaults))
+
+        let secondViewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(),
+                mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264)),
+                encoderService: ImmediateEncoderService(outputData: Data("encoded".utf8)),
+                starWalletStore: FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 1))
+            )
+        )
+        await secondViewModel.refreshStarsIfNeeded()
+        secondViewModel.startFolderFlow(url: secondSourceFolderURL)
+        secondViewModel.importFolderPreviewBatch()
+        try await waitForReadyToStartState(in: secondViewModel)
+        XCTAssertTrue(secondViewModel.prepareFolderOutputDirectoryForStart(defaults: defaults))
+        secondViewModel.startPreparedEncoding()
+        try await waitForCondition(timeout: 3) {
+            FileManager.default.fileExists(
+                atPath: outputFolderURL.appendingPathComponent("second_taption.mp4").path
+            ) && secondViewModel.state.title == "Save Complete"
+        }
     }
 
     @MainActor
@@ -12025,6 +12127,59 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertLessThan(compactLandscapeMetrics.filePanelHeight, portraitMetrics.filePanelHeight)
         XCTAssertLessThanOrEqual(compactLandscapeMetrics.filePanelHeight, 1)
         XCTAssertGreaterThanOrEqual(compactLandscapeMetrics.filePanelHeight, 0)
+    }
+
+    func testHomeLayoutMetricsUsesTwoColumnsOnlyForIPadLandscape() {
+        let padLandscape = HomeLayoutMetrics(
+            size: CGSize(width: 1194, height: 834),
+            reservesFailureLogArea: false,
+            userInterfaceIdiom: .pad
+        )
+        let padPortrait = HomeLayoutMetrics(
+            size: CGSize(width: 834, height: 1194),
+            reservesFailureLogArea: false,
+            userInterfaceIdiom: .pad
+        )
+        let padLandscapeWithFailureLog = HomeLayoutMetrics(
+            size: CGSize(width: 1194, height: 834),
+            reservesFailureLogArea: true,
+            userInterfaceIdiom: .pad
+        )
+        let phoneLandscape = HomeLayoutMetrics(
+            size: CGSize(width: 852, height: 393),
+            reservesFailureLogArea: false,
+            userInterfaceIdiom: .phone
+        )
+
+        XCTAssertTrue(padLandscape.usesPadLandscapeColumns)
+        XCTAssertGreaterThan(padLandscape.columnWidth, 400)
+        XCTAssertGreaterThanOrEqual(padLandscape.filePanelHeight, 120)
+        XCTAssertEqual(
+            padLandscape.filePanelHeight,
+            padLandscapeWithFailureLog.filePanelHeight,
+            accuracy: 0.1
+        )
+        XCTAssertFalse(padPortrait.usesPadLandscapeColumns)
+        XCTAssertFalse(phoneLandscape.usesPadLandscapeColumns)
+    }
+
+    func testIPadLandscapePlacesEncodingProgressAboveExitInLeftColumn() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let homeViewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
+        let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
+        let landscapeStart = try XCTUnwrap(homeViewText.range(of: "private func padLandscapeHomeContent("))
+        let landscapeEnd = try XCTUnwrap(homeViewText[landscapeStart.upperBound...].range(of: "\n    private func topBanner"))
+        let landscapeText = String(homeViewText[landscapeStart.lowerBound..<landscapeEnd.lowerBound])
+        let spacerRange = try XCTUnwrap(landscapeText.range(of: "Spacer(minLength: 0)"))
+        let encodingRange = try XCTUnwrap(landscapeText.range(of: "encodingControls("))
+        let exitRange = try XCTUnwrap(landscapeText.range(of: "exitButton(metrics: metrics)"))
+        let loadedRange = try XCTUnwrap(landscapeText.range(of: "loadedFilesPanel(metrics: metrics)"))
+
+        XCTAssertLessThan(spacerRange.lowerBound, encodingRange.lowerBound)
+        XCTAssertLessThan(encodingRange.lowerBound, exitRange.lowerBound)
+        XCTAssertLessThan(exitRange.lowerBound, loadedRange.lowerBound)
     }
 
     func testHomeLayoutMetricsDoesNotReserveMiddleNativeAdSlot() throws {

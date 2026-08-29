@@ -135,11 +135,10 @@ struct QueueVideoPreviewView: View {
     var adUnitID: String
     var onClose: () -> Void
     var onMinimize: () -> Void
-    var onPictureInPictureHome: () -> Void
+    var onPictureInPictureActiveChanged: (Bool) -> Void
     var onPrevious: () -> Void
     var onNext: () -> Void
 
-    @Environment(\.dismiss) private var dismiss
     @State private var player = QueuePreviewPlayerFactory.makePreviewPlayer()
     @State private var playbackError: String?
     @State private var isLoading = true
@@ -226,7 +225,11 @@ struct QueueVideoPreviewView: View {
                 showControls(scheduleAutoHide: false)
             }
         }
+        .onChange(of: pipController?.isActive) { _, isActive in
+            handlePictureInPictureActiveChange(isActive == true)
+        }
         .onDisappear {
+            onPictureInPictureActiveChanged(false)
             shutdownPlayer()
         }
     }
@@ -368,7 +371,7 @@ struct QueueVideoPreviewView: View {
             Spacer(minLength: 4)
 
             Button(action: minimizePreview) {
-                Image(systemName: "pip.enter")
+                Image(systemName: "arrow.down.right.and.arrow.up.left")
                     .font(.system(size: 24, weight: .semibold))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(Color.white.opacity(0.94))
@@ -713,7 +716,6 @@ struct QueueVideoPreviewView: View {
         )
         shutdownPlayer()
         onClose()
-        dismiss()
     }
 
     private func minimizePreview() {
@@ -723,7 +725,6 @@ struct QueueVideoPreviewView: View {
             metadata: ["name": preview.displayName]
         )
         onMinimize()
-        dismiss()
     }
 
     private func beginVideoPlaybackAdSuppressionIfNeeded() {
@@ -767,8 +768,9 @@ struct QueueVideoPreviewView: View {
             return
         }
 
+        pipController.start()
         AppLogger.info(
-            "Queue preview Picture in Picture home requested",
+            "Queue preview Picture in Picture requested on current player",
             category: .ui,
             metadata: [
                 "name": preview.displayName,
@@ -776,9 +778,25 @@ struct QueueVideoPreviewView: View {
                 "active": "\(pipController.isActive)"
             ]
         )
-        onPictureInPictureHome()
-        dismiss()
+        showGestureFeedback(systemImage: "pip.enter", text: "Picture in Picture")
         showControls(scheduleAutoHide: false)
+    }
+
+    private func handlePictureInPictureActiveChange(_ isActive: Bool) {
+        AppLogger.info(
+            "Queue preview Picture in Picture active state changed",
+            category: .ui,
+            metadata: [
+                "name": preview.displayName,
+                "active": "\(isActive)"
+            ]
+        )
+        if isActive {
+            AppOrientationController.shared.restorePortrait()
+        } else if !didRequestShutdown {
+            AppOrientationController.shared.activatePreviewOrientations()
+        }
+        onPictureInPictureActiveChanged(isActive)
     }
 
     #if DEBUG
@@ -1351,10 +1369,8 @@ struct QueueVideoPreviewView: View {
 
 struct QueueMiniPlayerView: View {
     var preview: QueueVideoPreview
-    var autoStartPictureInPicture: Bool = false
     var onClose: () -> Void
     var onExpand: () -> Void
-    var onAutoPictureInPictureHandled: () -> Void = {}
 
     @State private var player = QueuePreviewPlayerFactory.makePreviewPlayer()
     @State private var pipController: PiPController?
@@ -1363,7 +1379,6 @@ struct QueueMiniPlayerView: View {
     @State private var didAttachVideoSurface = false
     @State private var didBeginVideoPlaybackAdSuppression = false
     @State private var didRequestShutdown = false
-    @State private var didAttemptAutoPictureInPicture = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1482,14 +1497,6 @@ struct QueueMiniPlayerView: View {
         .task(id: preview.id) {
             await startMiniPlayback()
         }
-        .onChange(of: autoStartPictureInPicture) { _, shouldStart in
-            guard shouldStart else {
-                return
-            }
-            Task { @MainActor in
-                await startAutoPictureInPictureIfRequested()
-            }
-        }
         .onDisappear {
             shutdownMiniPlayer()
         }
@@ -1502,7 +1509,6 @@ struct QueueMiniPlayerView: View {
     @MainActor
     private func startMiniPlayback() async {
         didRequestShutdown = false
-        didAttemptAutoPictureInPicture = false
         playbackError = nil
         isLoading = true
         player.aspectRatio = .default
@@ -1528,14 +1534,11 @@ struct QueueMiniPlayerView: View {
                     ]
                 )
                 isLoading = false
-                clearAutoPictureInPictureRequestIfNeeded()
                 return
             }
             isLoading = false
-            await startAutoPictureInPictureIfRequested()
         } catch is CancellationError {
             isLoading = false
-            clearAutoPictureInPictureRequestIfNeeded()
         } catch {
             playbackError = "Preview unavailable"
             isLoading = false
@@ -1547,7 +1550,6 @@ struct QueueMiniPlayerView: View {
                     "error": String(describing: error)
                 ]
             )
-            clearAutoPictureInPictureRequestIfNeeded()
         }
     }
 
@@ -1587,80 +1589,6 @@ struct QueueMiniPlayerView: View {
                 "active": "\(pipController.isActive)"
             ]
         )
-    }
-
-    @MainActor
-    private func startAutoPictureInPictureIfRequested() async {
-        guard autoStartPictureInPicture,
-              !didAttemptAutoPictureInPicture,
-              !isLoading,
-              playbackError == nil else {
-            return
-        }
-        didAttemptAutoPictureInPicture = true
-        defer {
-            onAutoPictureInPictureHandled()
-        }
-
-        for _ in 0..<30 {
-            if pipController?.isPossible == true {
-                break
-            }
-            if Task.isCancelled {
-                return
-            }
-            try? await Task.sleep(nanoseconds: 100_000_000)
-        }
-
-        guard let pipController else {
-            AppLogger.info(
-                "Queue mini player auto PiP ignored because controller is unavailable",
-                category: .ui,
-                metadata: ["name": preview.displayName]
-            )
-            return
-        }
-
-        AppLogger.info(
-            "Queue mini player auto PiP requested",
-            category: .ui,
-            metadata: miniPictureInPictureMetadata(for: pipController)
-        )
-
-        guard pipController.isPossible else {
-            return
-        }
-
-        pipController.start()
-        for _ in 0..<20 {
-            if pipController.isActive {
-                break
-            }
-            if Task.isCancelled {
-                return
-            }
-            try? await Task.sleep(nanoseconds: 250_000_000)
-        }
-        AppLogger.info(
-            "Queue mini player auto PiP state checked",
-            category: .ui,
-            metadata: miniPictureInPictureMetadata(for: pipController)
-        )
-    }
-
-    private func clearAutoPictureInPictureRequestIfNeeded() {
-        guard autoStartPictureInPicture else {
-            return
-        }
-        onAutoPictureInPictureHandled()
-    }
-
-    private func miniPictureInPictureMetadata(for pipController: PiPController) -> [String: String] {
-        [
-            "name": preview.displayName,
-            "possible": "\(pipController.isPossible)",
-            "active": "\(pipController.isActive)"
-        ]
     }
 
     private func beginVideoPlaybackAdSuppressionIfNeeded() {

@@ -1,5 +1,5 @@
 {
-  "originHash" : "19369761937ff148c166d4254a091daafb190e1310eed3ad870918454e12dd6f",
+  "originHash" : "d04765cc9e6e95a4f090d3cf879a6c4faadb2b7d34532322d91afce666761aaf",
   "pins" : [
     {
       "identity" : "swift-package-manager-google-mobile-ads",
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/harflabs/SwiftVLC.git",
       "state" : {
-        "revision" : "9065ad6338ddd2d689bf6220b45e90ab4695b3a8",
-        "version" : "0.10.0"
+        "revision" : "58d1f3a8fc1366b2ffcd4748203a52d8410b7da2",
+        "version" : "0.10.1"
       }
     }
   ],

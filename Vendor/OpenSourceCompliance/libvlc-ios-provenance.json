@@ -1,22 +1,39 @@
 {
-  "schemaVersion": 1,
-  "capturedAt": "2026-07-14",
+  "schemaVersion": 2,
+  "capturedAt": "2026-07-28",
   "swiftVLC": {
-    "version": "0.10.0",
-    "revision": "9065ad6338ddd2d689bf6220b45e90ab4695b3a8",
-    "sourceURL": "https://github.com/harflabs/SwiftVLC/archive/9065ad6338ddd2d689bf6220b45e90ab4695b3a8.tar.gz",
-    "sourceSHA256": "597406535abac3df68de65ede0ff01b005c9261a316a22302fe96db533a3944b",
-    "binaryURL": "https://github.com/harflabs/SwiftVLC/releases/download/v0.10.0/libvlc.xcframework.zip",
-    "binaryPackageSHA256": "4ae6e8978b61d458080ac5dbcf1f412118bae1c250091b0f790fc65a847e960d"
+    "version": "0.10.1",
+    "revision": "58d1f3a8fc1366b2ffcd4748203a52d8410b7da2",
+    "sourceURL": "https://github.com/harflabs/SwiftVLC/archive/58d1f3a8fc1366b2ffcd4748203a52d8410b7da2.tar.gz",
+    "sourceSHA256": "cb6c56ddb2181eb17a914df44c66f7052364ab5a946f3e1e1b92b636bcd0c134",
+    "binaryURL": "https://github.com/harflabs/SwiftVLC/releases/download/v0.10.1/libvlc.xcframework.zip",
+    "binaryPackageSHA256": "b3a318c3068e2567c5533f6da5c79f4ac10c16cc60b8b8402e52e8ec3c9f3c03"
   },
   "libVLC": {
     "revision": "c833c4be000b426d73ff4324bec574065f00e3df",
     "sourceURL": "https://code.videolan.org/videolan/vlc/-/archive/c833c4be000b426d73ff4324bec574065f00e3df/vlc-c833c4be000b426d73ff4324bec574065f00e3df.tar.gz",
     "sourceSHA256": "f4ec8860d690fb3efe393da6c1ddf91d9396a2cc32c3fc0a5bb8a8211b3a4858",
-    "iosArm64ArchiveSHA256": "fbddfd2bb528903b8a8ef9062724b3624d56980d37ab109a9b729e31e083bac0",
+    "iosArm64ArchiveSHA256": "9dd27ac2857e5efb5239f728866dbd5a0439e3bccc20306b7117734b2881cc57",
     "minimumIOS": "18.0",
-    "buildRecipe": "SwiftVLC 0.10.0 scripts/build-libvlc.sh --ios-only",
-    "swiftVLCLocalPatchSHA256": "112897f206ce6ed30ea097ae97da3becbf9811951e4cb2643a0f6e450a6f9316",
+    "buildRecipe": "SwiftVLC 0.10.1 scripts/build-libvlc.sh --ios-only",
+    "swiftVLCLocalPatches": [
+      {
+        "path": "scripts/patches/0001-chromecast-hardening.patch",
+        "sha256": "112897f206ce6ed30ea097ae97da3becbf9811951e4cb2643a0f6e450a6f9316"
+      },
+      {
+        "path": "scripts/patches/0002-samplebufferdisplay-aspect.patch",
+        "sha256": "d701a9c87254f59ae9a1816567e251a888fe98fe0916d7bc327a4559a359cde4"
+      },
+      {
+        "path": "scripts/patches/0003-samplebufferdisplay-lifetime-placement.patch",
+        "sha256": "bcb83407cbc4d727ef6866ee3c46353b268c60abd52766b3e8f1d7fe0cd59f81"
+      },
+      {
+        "path": "scripts/patches/0004-samplebuffer-pip-safety-geometry.patch",
+        "sha256": "febaea84d74ce7f1bf6fea77edfa202a9ac1bf8d2ddba5d5c2451bbab6c259f5"
+      }
+    ],
     "licenseProfile": "LGPL-2.1-or-later with advertising-clause packages enabled; GPL and GNUv3 contrib selections disabled",
     "contribTargetCount": 57,
     "contribSourceArchiveCount": 56,

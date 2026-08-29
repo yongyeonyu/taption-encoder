@@ -11,8 +11,8 @@ CONTRIB_TARBALLS_DIR=""
 MARKETING_VERSION=""
 BUILD_VERSION=""
 
-SWIFTVLC_SOURCE_URL="https://github.com/harflabs/SwiftVLC/archive/9065ad6338ddd2d689bf6220b45e90ab4695b3a8.tar.gz"
-SWIFTVLC_SOURCE_SHA256="597406535abac3df68de65ede0ff01b005c9261a316a22302fe96db533a3944b"
+SWIFTVLC_SOURCE_URL="https://github.com/harflabs/SwiftVLC/archive/58d1f3a8fc1366b2ffcd4748203a52d8410b7da2.tar.gz"
+SWIFTVLC_SOURCE_SHA256="cb6c56ddb2181eb17a914df44c66f7052364ab5a946f3e1e1b92b636bcd0c134"
 VLC_SOURCE_URL="https://code.videolan.org/videolan/vlc/-/archive/c833c4be000b426d73ff4324bec574065f00e3df/vlc-c833c4be000b426d73ff4324bec574065f00e3df.tar.gz"
 VLC_SOURCE_SHA256="f4ec8860d690fb3efe393da6c1ddf91d9396a2cc32c3fc0a5bb8a8211b3a4858"
 FFMPEG_SOURCE_URL="https://ffmpeg.org/releases/ffmpeg-8.1.1.tar.xz"
@@ -89,7 +89,7 @@ download_and_verify() {
 download_and_verify \
   "$SWIFTVLC_SOURCE_URL" \
   "$SWIFTVLC_SOURCE_SHA256" \
-  "$STAGE_DIR/sources/SwiftVLC-0.10.0.tar.gz"
+  "$STAGE_DIR/sources/SwiftVLC-0.10.1.tar.gz"
 download_and_verify \
   "$VLC_SOURCE_URL" \
   "$VLC_SOURCE_SHA256" \

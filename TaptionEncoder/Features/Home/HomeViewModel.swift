@@ -46,6 +46,8 @@ struct UIDeviceBatteryPowerMonitor: BatteryPowerMonitoring {
 
 @MainActor
 final class HomeViewModel: ObservableObject {
+    private static let folderOutputBookmarkKey = "folderEncoding.outputDirectoryBookmark"
+
     @Published private(set) var state: HomeScreenState
     @Published private(set) var selectedOutput: TaptionOutputSelection
     @Published private(set) var multiFileEncodingPrompt: MultiFileEncodingPrompt?
@@ -175,6 +177,67 @@ final class HomeViewModel: ObservableObject {
             return false
         }
         return estimatedStartStarShortage == 0
+    }
+
+    func prepareFolderOutputDirectoryForStart(
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        guard var batch = folderBatch,
+              batch.sourceKind == .folder else {
+            return true
+        }
+        if batch.outputFolderURL != nil {
+            return true
+        }
+        guard let bookmarkData = defaults.data(forKey: Self.folderOutputBookmarkKey),
+              let outputFolderURL = resolveSecurityScopedAccessURL(from: bookmarkData),
+              activateFolderOutputDirectory(outputFolderURL) else {
+            defaults.removeObject(forKey: Self.folderOutputBookmarkKey)
+            return false
+        }
+
+        batch.selectedSaveDestination = .sourceFolder
+        batch.outputFolderURL = outputFolderURL.standardizedFileURL
+        folderBatch = batch
+        AppLogger.info(
+            "Stored folder output directory restored",
+            category: .saving,
+            metadata: ["name": outputFolderURL.lastPathComponent]
+        )
+        return true
+    }
+
+    @discardableResult
+    func selectFolderOutputDirectory(
+        _ url: URL,
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        guard var batch = folderBatch,
+              batch.sourceKind == .folder,
+              activateFolderOutputDirectory(url) else {
+            AppLogger.warning(
+                "Folder output directory selection rejected",
+                category: .saving,
+                metadata: ["name": url.lastPathComponent]
+            )
+            return false
+        }
+
+        let outputFolderURL = url.standardizedFileURL
+        batch.selectedSaveDestination = .sourceFolder
+        batch.outputFolderURL = outputFolderURL
+        folderBatch = batch
+        if let bookmarkData = makeSecurityScopedBookmarkData(for: outputFolderURL) {
+            defaults.set(bookmarkData, forKey: Self.folderOutputBookmarkKey)
+        } else {
+            defaults.removeObject(forKey: Self.folderOutputBookmarkKey)
+        }
+        AppLogger.info(
+            "Folder output directory selected",
+            category: .saving,
+            metadata: ["name": outputFolderURL.lastPathComponent]
+        )
+        return true
     }
 
     var startActionTitle: String {
@@ -2110,6 +2173,13 @@ final class HomeViewModel: ObservableObject {
     }
 
     func startPreparedEncoding() {
+        guard prepareFolderOutputDirectoryForStart() else {
+            AppLogger.info(
+                "Start encoding is waiting for a folder output directory",
+                category: .saving
+            )
+            return
+        }
         guard let review = state.preparedEncodingReview else {
             AppLogger.warning("Start encoding ignored because no prepared review exists", category: .encoding)
             return
@@ -5876,10 +5946,6 @@ final class HomeViewModel: ObservableObject {
             return
         }
         batch.selectedSaveDestination = destination
-        if destination == .sourceFolder,
-           batch.sourceKind == .folder {
-            batch.outputFolderURL = folderBatchOutputDirectoryURL(for: batch)
-        }
         folderBatch = batch
     }
 
@@ -5903,9 +5969,9 @@ final class HomeViewModel: ObservableObject {
                let finalFileName = job.state.finalOutputURL?.lastPathComponent {
                 updatedJob.state.finalOutputURL = outputFolderURL.appendingPathComponent(finalFileName)
                 updatedJob.state.accessBookmarkData = makeSecurityScopedBookmarkData(
-                    for: outputFolderURL.deletingLastPathComponent()
+                    for: outputFolderURL
                 )
-                pendingSaveAccessURLs[updatedJob.id] = outputFolderURL.deletingLastPathComponent()
+                pendingSaveAccessURLs[updatedJob.id] = outputFolderURL
             }
         case .temporaryOnly:
             updatedJob.state.finalOutputURL = nil
@@ -5972,16 +6038,6 @@ final class HomeViewModel: ObservableObject {
         case .temporaryOnly:
             job.plan.finalOutputURL = nil
         }
-    }
-
-    private func folderBatchOutputDirectoryURL(for batch: FolderEncodingBatch) -> URL? {
-        guard batch.sourceKind == .folder,
-              let folderURL = batch.folderURL else {
-            return nil
-        }
-        return folderURL
-            .deletingLastPathComponent()
-            .appendingPathComponent(folderURL.lastPathComponent + environment.configuration.outputSuffix, isDirectory: true)
     }
 
     private func folderBatchOutputURL(
@@ -6103,6 +6159,7 @@ final class HomeViewModel: ObservableObject {
         conflictResolution: PendingSaveConflictResolution = .prompt
     ) async throws -> URL {
         let fileManager = FileManager.default
+        let usesFolderBatchNaming = folderBatch?.sourceKind == .folder
         guard fileManager.fileExists(atPath: state.temporaryOutputURL.path) else {
             AppLogger.error(
                 "Final save failed because temporary output is missing",
@@ -6166,7 +6223,8 @@ final class HomeViewModel: ObservableObject {
                 case .saveAsUnique:
                     let uniqueURL = uniqueDestinationURL(
                         preferred: finalOutputURL,
-                        fileManager: fileManager
+                        fileManager: fileManager,
+                        usesParenthesizedCounter: usesFolderBatchNaming
                     )
                     AppLogger.info(
                         "Saving final output with unique name",
@@ -6208,7 +6266,8 @@ final class HomeViewModel: ObservableObject {
                 case .saveAsUnique:
                     let uniqueURL = uniqueDestinationURL(
                         preferred: finalOutputURL,
-                        fileManager: fileManager
+                        fileManager: fileManager,
+                        usesParenthesizedCounter: usesFolderBatchNaming
                     )
                     let writeResult = try writeFinalOutputFastPath(
                         temporaryURL: state.temporaryOutputURL,
@@ -6239,15 +6298,19 @@ final class HomeViewModel: ObservableObject {
 
     private func uniqueDestinationURL(
         preferred url: URL,
-        fileManager: FileManager
+        fileManager: FileManager,
+        usesParenthesizedCounter: Bool = false
     ) -> URL {
         let directoryURL = url.deletingLastPathComponent()
         let baseName = url.deletingPathExtension().lastPathComponent
         let pathExtension = url.pathExtension
 
         for index in 2...999 {
+            let numberedBaseName = usesParenthesizedCounter
+                ? "\(baseName) (\(index))"
+                : "\(baseName) \(index)"
             let candidate = directoryURL
-                .appendingPathComponent("\(baseName) \(index)")
+                .appendingPathComponent(numberedBaseName)
                 .appendingPathExtension(pathExtension)
             if !fileManager.fileExists(atPath: candidate.path) {
                 return candidate
@@ -6525,6 +6588,30 @@ final class HomeViewModel: ObservableObject {
             )
             return nil
         }
+    }
+
+    private func activateFolderOutputDirectory(_ url: URL) -> Bool {
+        let outputFolderURL = url.standardizedFileURL
+        let alreadyActive = hasActiveSecurityScopedAccess(for: outputFolderURL)
+        let didStartSecurityScope = alreadyActive
+            ? false
+            : outputFolderURL.startAccessingSecurityScopedResource()
+        var isDirectory: ObjCBool = false
+        let isReachableDirectory = FileManager.default.fileExists(
+            atPath: outputFolderURL.path,
+            isDirectory: &isDirectory
+        ) && isDirectory.boolValue
+
+        guard isReachableDirectory else {
+            if didStartSecurityScope {
+                outputFolderURL.stopAccessingSecurityScopedResource()
+            }
+            return false
+        }
+        if didStartSecurityScope {
+            securityScopedURLs.append(outputFolderURL)
+        }
+        return true
     }
 
     private func beginRestoredPendingSaveAccessIfNeeded(for states: [TaptionPendingSaveState]) {

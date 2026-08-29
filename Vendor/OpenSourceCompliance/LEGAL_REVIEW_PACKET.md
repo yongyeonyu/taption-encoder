@@ -16,8 +16,8 @@ TestFlight upload, or App Store Connect record into legal approval.
 
 ## Pinned components
 
-- SwiftVLC 0.10.0, MIT, revision
-  `9065ad6338ddd2d689bf6220b45e90ab4695b3a8`.
+- SwiftVLC 0.10.1, MIT, revision
+  `58d1f3a8fc1366b2ffcd4748203a52d8410b7da2`.
 - libVLC, LGPL 2.1 or later, revision
   `c833c4be000b426d73ff4324bec574065f00e3df`, statically linked through the
   SwiftVLC binary package.

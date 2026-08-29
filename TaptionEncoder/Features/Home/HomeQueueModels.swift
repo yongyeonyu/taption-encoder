@@ -16,7 +16,7 @@ struct BatteryEncodingSettings: Equatable {
     init(
         batteryLimitPercent: Int = Self.defaultLimitPercent,
         powerConnectedOnly: Bool = false,
-        optimizationProfile: TaptionEncodingOptimizationProfile = .balanced
+        optimizationProfile: TaptionEncodingOptimizationProfile = .performance
     ) {
         self.batteryLimitPercent = Self.clampLimitPercent(batteryLimitPercent)
         self.powerConnectedOnly = powerConnectedOnly
@@ -39,7 +39,7 @@ struct BatteryEncodingSettings: Equatable {
         return BatteryEncodingSettings(
             batteryLimitPercent: storedLimit ?? defaultLimitPercent,
             powerConnectedOnly: storedPowerOnly ?? false,
-            optimizationProfile: storedOptimizationProfile ?? .balanced
+            optimizationProfile: storedOptimizationProfile ?? .performance
         )
     }
 

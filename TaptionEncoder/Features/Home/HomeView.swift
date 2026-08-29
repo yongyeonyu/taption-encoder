@@ -7,12 +7,13 @@ import UIKit
 private enum HomeSystemDocumentPickerMode: String {
     case files
     case folder
+    case outputFolder
 
     var allowedContentTypes: [UTType] {
         switch self {
         case .files:
             return ImportableVideoTypes.all
-        case .folder:
+        case .folder, .outputFolder:
             return [.folder]
         }
     }
@@ -21,7 +22,7 @@ private enum HomeSystemDocumentPickerMode: String {
         switch self {
         case .files:
             return true
-        case .folder:
+        case .folder, .outputFolder:
             return false
         }
     }
@@ -154,7 +155,7 @@ struct HomeView: View {
     @State private var isOutputSizePopoverPresented = false
     @State private var outputSizeDraftMB: Double?
     @State private var miniPlayerPreview: QueueVideoPreview?
-    @State private var autoStartMiniPlayerPiPPreviewID: String?
+    @State private var isPreviewPictureInPictureActive = false
     @State private var lastExternalVideoOpenURL: URL?
     @State private var lastExternalVideoOpenDate: Date?
     @State private var isDocumentPickerAdSuppressed = false
@@ -176,26 +177,36 @@ struct HomeView: View {
                 size: geometry.size,
                 reservesFailureLogArea: reservesFailureLogArea
             )
-            let isFullScreenVideoPlaybackActive = viewModel.activePreview != nil
+            let isFullScreenVideoPlaybackActive =
+                viewModel.activePreview != nil && !isPreviewPictureInPictureActive
 
             ZStack {
-                TaptionTheme.appBackground
-                    .ignoresSafeArea()
+                ZStack {
+                    TaptionTheme.appBackground
+                        .ignoresSafeArea()
 
-                homeContent(
-                    metrics: metrics,
-                    reservesFailureLogArea: reservesFailureLogArea,
-                    showsPlaybackActions: !isFullScreenVideoPlaybackActive
-                )
-
-                if let preview = miniPlayerPreview {
-                    miniPlayerOverlay(
-                        preview: preview,
-                        containerSize: geometry.size,
-                        safeAreaInsets: geometry.safeAreaInsets
+                    homeContent(
+                        metrics: metrics,
+                        reservesFailureLogArea: reservesFailureLogArea,
+                        showsPlaybackActions: !isFullScreenVideoPlaybackActive
                     )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .zIndex(20)
+
+                    if let preview = miniPlayerPreview {
+                        miniPlayerOverlay(
+                            preview: preview,
+                            containerSize: geometry.size,
+                            safeAreaInsets: geometry.safeAreaInsets
+                        )
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .zIndex(20)
+                    }
+                }
+                .zIndex(isPreviewPictureInPictureActive ? 30 : 0)
+
+                if let preview = viewModel.activePreview {
+                    queueVideoPreviewOverlay(preview: preview)
+                        .ignoresSafeArea()
+                        .zIndex(20)
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
@@ -266,18 +277,6 @@ struct HomeView: View {
         .multiFileMergeUnavailableAlert(viewModel: viewModel)
         .pendingSaveDestinationDialog(viewModel: viewModel)
         .savedFolderDialog(viewModel: viewModel)
-        .fullScreenCover(
-            isPresented: Binding<Bool>(
-                get: { viewModel.activePreview != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        viewModel.dismissPreview()
-                    }
-                }
-            )
-        ) {
-            queueVideoPreviewFullScreenCoverContent
-        }
         .photosPicker(
             isPresented: $isPhotosPickerPresented,
             selection: $selectedPhotoItem,
@@ -293,6 +292,9 @@ struct HomeView: View {
         )
         .onChange(of: selectedPhotoItem) { _, newItem in
             handleSelectedPhotoItemChange(newItem)
+        }
+        .onChange(of: viewModel.activePreview?.id) { _, _ in
+            isPreviewPictureInPictureActive = false
         }
         .onChange(of: isPhotosPickerPresented) { _, isPresented in
             if !isPresented {
@@ -318,30 +320,25 @@ struct HomeView: View {
         }
     }
 
-    @ViewBuilder
-    private var queueVideoPreviewFullScreenCoverContent: some View {
-        if let preview = viewModel.activePreview {
-            QueueVideoPreviewView(
-                preview: preview,
-                adUnitID: viewModel.bannerAdUnitID,
-                onClose: { viewModel.dismissPreview() },
-                onMinimize: {
-                    miniPlayerPreview = preview
-                    autoStartMiniPlayerPiPPreviewID = nil
-                    viewModel.dismissPreview()
-                },
-                onPictureInPictureHome: {
-                    miniPlayerPreview = preview
-                    autoStartMiniPlayerPiPPreviewID = preview.id
-                    viewModel.dismissPreview()
-                },
-                onPrevious: { viewModel.openPreviousPreview() },
-                onNext: { viewModel.openNextPreview() }
-            )
-        } else {
-            Color.black
-                .ignoresSafeArea()
-        }
+    private func queueVideoPreviewOverlay(preview: QueueVideoPreview) -> some View {
+        QueueVideoPreviewView(
+            preview: preview,
+            adUnitID: viewModel.bannerAdUnitID,
+            onClose: {
+                isPreviewPictureInPictureActive = false
+                viewModel.dismissPreview()
+            },
+            onMinimize: {
+                isPreviewPictureInPictureActive = false
+                miniPlayerPreview = preview
+                viewModel.dismissPreview()
+            },
+            onPictureInPictureActiveChanged: { isActive in
+                isPreviewPictureInPictureActive = isActive
+            },
+            onPrevious: { viewModel.openPreviousPreview() },
+            onNext: { viewModel.openNextPreview() }
+        )
     }
 
     @ViewBuilder
@@ -350,11 +347,35 @@ struct HomeView: View {
         reservesFailureLogArea: Bool,
         showsPlaybackActions: Bool
     ) -> some View {
+        Group {
+            if metrics.usesPadLandscapeColumns {
+                padLandscapeHomeContent(
+                    metrics: metrics,
+                    reservesFailureLogArea: reservesFailureLogArea,
+                    showsPlaybackActions: showsPlaybackActions
+                )
+            } else {
+                singleColumnHomeContent(
+                    metrics: metrics,
+                    reservesFailureLogArea: reservesFailureLogArea,
+                    showsPlaybackActions: showsPlaybackActions
+                )
+            }
+        }
+        .padding(.horizontal, metrics.horizontalPadding)
+        .padding(.vertical, metrics.verticalPadding)
+        .frame(width: metrics.canvasWidth, height: metrics.canvasHeight, alignment: .top)
+        .background(TaptionTheme.appBackground)
+        .clipped()
+    }
+
+    private func singleColumnHomeContent(
+        metrics: HomeLayoutMetrics,
+        reservesFailureLogArea: Bool,
+        showsPlaybackActions: Bool
+    ) -> some View {
         VStack(spacing: metrics.verticalSpacing) {
-            AdMobBannerSlotView(
-                adUnitID: viewModel.bannerAdUnitID,
-                displayScale: metrics.bannerScale
-            )
+            topBanner(metrics: metrics)
             header(metrics: metrics)
             sourceControls(metrics: metrics)
             outputSelector(metrics: metrics)
@@ -371,18 +392,60 @@ struct HomeView: View {
             }
 
             exitButton(metrics: metrics)
-
-            AdMobBannerSlotView(
-                adUnitID: viewModel.bannerAdUnitID,
-                displayScale: metrics.bannerScale
-            )
-            .padding(.top, metrics.footerAdSeparationHeight)
+            bottomBanner(metrics: metrics)
         }
-        .padding(.horizontal, metrics.horizontalPadding)
-        .padding(.vertical, metrics.verticalPadding)
-        .frame(width: metrics.canvasWidth, height: metrics.canvasHeight, alignment: .top)
-        .background(TaptionTheme.appBackground)
-        .clipped()
+    }
+
+    private func padLandscapeHomeContent(
+        metrics: HomeLayoutMetrics,
+        reservesFailureLogArea: Bool,
+        showsPlaybackActions: Bool
+    ) -> some View {
+        VStack(spacing: metrics.verticalSpacing) {
+            topBanner(metrics: metrics)
+            header(metrics: metrics)
+
+            HStack(alignment: .top, spacing: metrics.columnSpacing) {
+                VStack(spacing: metrics.verticalSpacing) {
+                    sourceControls(metrics: metrics)
+                    outputSelector(metrics: metrics)
+                    outputSummary(metrics: metrics)
+                    Spacer(minLength: 0)
+                    encodingControls(
+                        metrics: metrics,
+                        reservesFailureLogArea: reservesFailureLogArea,
+                        showsPlaybackActions: showsPlaybackActions
+                    )
+                    exitButton(metrics: metrics)
+                }
+                .frame(width: metrics.columnWidth)
+                .frame(maxHeight: .infinity, alignment: .top)
+
+                VStack(spacing: metrics.verticalSpacing) {
+                    loadedFilesPanel(metrics: metrics)
+                }
+                .frame(width: metrics.columnWidth)
+                .frame(maxHeight: .infinity, alignment: .top)
+            }
+            .frame(maxHeight: .infinity, alignment: .top)
+
+            bottomBanner(metrics: metrics)
+        }
+    }
+
+    private func topBanner(metrics: HomeLayoutMetrics) -> some View {
+        AdMobBannerSlotView(
+            adUnitID: viewModel.bannerAdUnitID,
+            displayScale: metrics.bannerScale
+        )
+    }
+
+    private func bottomBanner(metrics: HomeLayoutMetrics) -> some View {
+        AdMobBannerSlotView(
+            adUnitID: viewModel.bannerAdUnitID,
+            displayScale: metrics.bannerScale
+        )
+        .padding(.top, metrics.footerAdSeparationHeight)
     }
 
     private func sourceControls(metrics: HomeLayoutMetrics) -> some View {
@@ -441,7 +504,7 @@ struct HomeView: View {
             controlHeight: metrics.controlHeight,
             contentScale: metrics.contentScale,
             reservesFailureLogArea: reservesFailureLogArea,
-            onStart: { viewModel.startPreparedEncoding() },
+            onStart: startPreparedEncoding,
             onSave: { viewModel.saveCurrentPendingOutput() },
             onWatchAd: { viewModel.watchAdForStar() },
             onCancel: { viewModel.cancel() }
@@ -498,7 +561,6 @@ struct HomeView: View {
             ]
         )
         self.miniPlayerPreview = nil
-        autoStartMiniPlayerPiPPreviewID = nil
     }
 
     private func handleImportBrowserDismiss() {
@@ -535,8 +597,16 @@ struct HomeView: View {
     private func resetHome() {
         AppLogger.info("Reset button tapped", category: .ui)
         miniPlayerPreview = nil
-        autoStartMiniPlayerPiPPreviewID = nil
         viewModel.reset()
+    }
+
+    private func startPreparedEncoding() {
+        guard viewModel.prepareFolderOutputDirectoryForStart() else {
+            beginDocumentPickerAdSuppressionIfNeeded(reason: "outputFolderPicker")
+            activeSystemDocumentPicker = .outputFolder
+            return
+        }
+        viewModel.startPreparedEncoding()
     }
 
     private func handleSystemDocumentPickerResult(
@@ -549,6 +619,8 @@ struct HomeView: View {
             handleFilePickerResult(result)
         case .folder:
             handleFolderPickerResult(result)
+        case .outputFolder:
+            handleOutputFolderPickerResult(result)
         }
     }
 
@@ -593,6 +665,30 @@ struct HomeView: View {
             AppLogger.warning(
                 "Folder picker selection failed",
                 category: .folderImport,
+                metadata: ["error": error.localizedDescription]
+            )
+        }
+    }
+
+    private func handleOutputFolderPickerResult(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let folderURL = urls.first else {
+                return
+            }
+            AppLogger.info(
+                "Output folder picker selection completed",
+                category: .saving,
+                metadata: ["name": folderURL.lastPathComponent]
+            )
+            guard viewModel.selectFolderOutputDirectory(folderURL) else {
+                return
+            }
+            viewModel.startPreparedEncoding()
+        case .failure(let error):
+            AppLogger.warning(
+                "Output folder picker selection failed",
+                category: .saving,
                 metadata: ["error": error.localizedDescription]
             )
         }
@@ -830,20 +926,12 @@ struct HomeView: View {
                 Spacer(minLength: 0)
                 QueueMiniPlayerView(
                     preview: preview,
-                    autoStartPictureInPicture: autoStartMiniPlayerPiPPreviewID == preview.id,
                     onClose: {
                         miniPlayerPreview = nil
-                        autoStartMiniPlayerPiPPreviewID = nil
                     },
                     onExpand: {
                         miniPlayerPreview = nil
-                        autoStartMiniPlayerPiPPreviewID = nil
                         viewModel.restorePreview(preview)
-                    },
-                    onAutoPictureInPictureHandled: {
-                        if autoStartMiniPlayerPiPPreviewID == preview.id {
-                            autoStartMiniPlayerPiPPreviewID = nil
-                        }
                     }
                 )
                 .frame(width: max(210, width))

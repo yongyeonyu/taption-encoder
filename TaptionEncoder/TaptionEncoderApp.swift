@@ -68,9 +68,17 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 final class AppOrientationController {
     static let shared = AppOrientationController()
 
-    private(set) var supportedOrientations: UIInterfaceOrientationMask = .portrait
+    private(set) var supportedOrientations: UIInterfaceOrientationMask
 
-    private init() {}
+    private init() {
+        supportedOrientations = Self.homeOrientations(for: UIDevice.current.userInterfaceIdiom)
+    }
+
+    static func homeOrientations(for userInterfaceIdiom: UIUserInterfaceIdiom) -> UIInterfaceOrientationMask {
+        userInterfaceIdiom == .pad
+            ? [.portrait, .landscapeLeft, .landscapeRight]
+            : .portrait
+    }
 
     func activatePreviewOrientations(requestGeometryUpdate: Bool = true) {
         setSupportedOrientations(
@@ -80,7 +88,10 @@ final class AppOrientationController {
     }
 
     func restorePortrait(requestGeometryUpdate: Bool = true) {
-        setSupportedOrientations(.portrait, requestGeometryUpdate: requestGeometryUpdate)
+        setSupportedOrientations(
+            Self.homeOrientations(for: UIDevice.current.userInterfaceIdiom),
+            requestGeometryUpdate: requestGeometryUpdate
+        )
     }
 
     private func setSupportedOrientations(

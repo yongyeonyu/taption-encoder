@@ -485,8 +485,8 @@ enum TaptionOpenSourceNoticeCatalog {
         [
             TaptionOpenSourceNoticeEntry(
                 id: "swiftvlc",
-                name: "SwiftVLC 0.10.0",
-                summary: "MIT-licensed Swift wrapper pinned to revision 9065ad6338ddd2d689bf6220b45e90ab4695b3a8. The separately licensed libVLC engine is disclosed independently.",
+                name: "SwiftVLC 0.10.1",
+                summary: "MIT-licensed Swift wrapper pinned to revision 58d1f3a8fc1366b2ffcd4748203a52d8410b7da2. The separately licensed libVLC engine is disclosed independently.",
                 category: .shippedComponent,
                 isShippedInCurrentBuild: true,
                 requiresFinalLicenseText: true,

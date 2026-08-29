@@ -104,7 +104,7 @@ enum HW_AppleHEVCCodecAlgorithm {
         let optimizationProfile = request.options.outputPolicy.advancedOptions.optimizationProfile
             ?? .balanced
         if optimizationProfile == .performance,
-           [.h264, .proRes].contains(request.route.sourceCodec) {
+           [.h264, .hevc, .proRes].contains(request.route.sourceCodec) {
             do {
                 if let output = try await transcodeCompressedVideoWithReaderWriterIfEligible(
                     request: request,
@@ -363,7 +363,7 @@ enum HW_AppleHEVCCodecAlgorithm {
 
         let startedAt = Date()
         let trace = TaptionEncodingPerformanceTrace(
-            name: "hw_h264_hevc_reader_writer",
+            name: "hw_compressed_hevc_reader_writer",
             category: .encoding,
             metadata: [
                 "source": request.sourceURL.lastPathComponent,
@@ -544,7 +544,7 @@ enum HW_AppleHEVCCodecAlgorithm {
         let policy = request.options.outputPolicy
         let profile = policy.advancedOptions.optimizationProfile ?? .balanced
         let color = policy.advancedOptions.color
-        return [.h264, .proRes].contains(request.route.sourceCodec)
+        return [.h264, .hevc, .proRes].contains(request.route.sourceCodec)
             && profile == .performance
             && [.mp4, .mov].contains(policy.container)
             && policy.audioCodec == .aac

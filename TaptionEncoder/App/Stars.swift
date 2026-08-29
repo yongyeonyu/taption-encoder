@@ -328,7 +328,7 @@ struct KeychainStarWalletSecureStore: StarWalletSecureStoring {
 }
 
 actor StarWalletStore: StarWalletManaging {
-    static let initialInstallBonusStarCount = 10
+    static let initialInstallBonusStarCount = 3
 
     private let fileURL: URL
     private let quarantineDirectoryURL: URL

@@ -8,10 +8,10 @@ Website: https://www.videolan.org/vlc/libvlc.html
 Upstream source: https://code.videolan.org/videolan/vlc/-/tree/c833c4be000b426d73ff4324bec574065f00e3df
 Source revision: c833c4be000b426d73ff4324bec574065f00e3df
 Source archive SHA-256: f4ec8860d690fb3efe393da6c1ddf91d9396a2cc32c3fc0a5bb8a8211b3a4858
-Build wrapper: SwiftVLC 0.10.0
-Build recipe: https://github.com/harflabs/SwiftVLC/blob/v0.10.0/scripts/build-libvlc.sh
-Binary package checksum: 4ae6e8978b61d458080ac5dbcf1f412118bae1c250091b0f790fc65a847e960d
-Bundled iOS arm64 archive SHA-256: fbddfd2bb528903b8a8ef9062724b3624d56980d37ab109a9b729e31e083bac0
+Build wrapper: SwiftVLC 0.10.1
+Build recipe: https://github.com/harflabs/SwiftVLC/blob/v0.10.1/scripts/build-libvlc.sh
+Binary package checksum: b3a318c3068e2567c5533f6da5c79f4ac10c16cc60b8b8402e52e8ec3c9f3c03
+Bundled iOS arm64 archive SHA-256: 9dd27ac2857e5efb5239f728866dbd5a0439e3bccc20306b7117734b2881cc57
 Copyright: VideoLAN and the VLC authors
 License: GNU Lesser General Public License version 2.1 or later
 Linkage: Static
