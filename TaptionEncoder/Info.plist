@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Taption Encoder</string>
+	<string>YYY Encoder</string>
 	<key>CFBundleIconName</key>
 	<string>AppIcon</string>
 	<key>CFBundleExecutable</key>
@@ -96,9 +96,9 @@
 		<key>UISupportsDocumentBrowser</key>
 		<true/>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>Taption Encoder needs access to selected videos for local conversion.</string>
+		<string>YYY Encoder needs access to selected videos for local conversion.</string>
 		<key>NSPhotoLibraryAddUsageDescription</key>
-		<string>Taption Encoder saves converted H.265 videos as new Photos assets.</string>
+		<string>YYY Encoder saves converted H.265 videos as new Photos assets.</string>
 		<key>NSSupportsLiveActivities</key>
 		<true/>
 	<key>SKAdNetworkItems</key>

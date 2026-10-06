@@ -1209,7 +1209,7 @@ enum HomeBackgroundReliabilityPresenter {
             }
             return "Background encoding can continue after lock. Turn on Live Activities in iOS settings to show Lock Screen progress."
         }
-        return "Keep Taption Encoder open while encoding on iOS/iPadOS 18-25. Locking the screen or leaving the app can pause the job."
+        return "Keep YYY Encoder open while encoding on iOS/iPadOS 18-25. Locking the screen or leaving the app can pause the job."
     }
 }
 

@@ -136,6 +136,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         "testFileAndFolderButtonsUseSystemPickersWithFolderSelection",
         "testHelpOpenSourceSectionShowsShippedComponentsWithoutInternalPlanning",
         "testHelpSheetIntegratesVersionDeviceInfoAndOpenSourceNotices",
+        "testHomeHeaderDoesNotDisplayAppName",
         "testHomeLayoutMetricsDoesNotReserveMiddleNativeAdSlot",
         "testHomeViewModelStartsAndStopsResourceMonitoringAroundEncoding",
         "testImportableVideoTypesMatchCurrentLaunchInputContainers",
@@ -152,6 +153,42 @@ final class CodecRoutePlannerTests: XCTestCase {
         "testTaptionThemeUsesCoolSlateTokyoNightPalette"
     ]
 
+    func testAppConfigurationUsesYYYEncoderWithoutChangingStorageOrOutputPolicy() {
+        let configuration = AppConfiguration()
+
+        XCTAssertEqual(configuration.appName, "YYY Encoder")
+        XCTAssertEqual(configuration.bundleIdentifier, "com.taption.encoder")
+        XCTAssertEqual(configuration.outputSuffix, "_taption")
+        XCTAssertEqual(configuration.defaultOutputContainer, .mp4)
+        XCTAssertEqual(configuration.defaultOutputCodec, .hevc)
+        XCTAssertEqual(
+            TaptionEncoderStorageLocations.exportedVideosDirectoryURL.lastPathComponent,
+            "Taption Encoder Outputs"
+        )
+    }
+
+    func testHomeHeaderDoesNotDisplayAppName() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let viewURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeView.swift")
+        let viewText = try String(contentsOf: viewURL, encoding: .utf8)
+        let headerStart = try XCTUnwrap(viewText.range(of: "private func header(metrics: HomeLayoutMetrics)"))
+        let headerEnd = try XCTUnwrap(viewText.range(
+            of: "private func starBadge(metrics: HomeLayoutMetrics)",
+            range: headerStart.upperBound..<viewText.endIndex
+        ))
+        let headerText = String(viewText[headerStart.lowerBound..<headerEnd.lowerBound])
+
+        XCTAssertFalse(headerText.contains("viewModel.subtitle"))
+        XCTAssertFalse(headerText.contains("viewModel.appName"))
+        XCTAssertFalse(headerText.contains("Taption Encoder"))
+        XCTAssertFalse(headerText.contains("YYY Encoder"))
+        XCTAssertTrue(headerText.contains("line.3.horizontal"))
+        XCTAssertTrue(headerText.contains("film.stack"))
+        XCTAssertTrue(headerText.contains("starBadge(metrics: metrics)"))
+    }
+
     func testBackgroundReliabilityPresenterWarnsToKeepAppOpenBeforeContinuedProcessingOS() {
         let message = HomeBackgroundReliabilityPresenter.message(
             currentOSMajorVersion: 25,
@@ -159,7 +196,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             liveActivitiesEnabled: false
         )
 
-        XCTAssertTrue(message.contains("Keep Taption Encoder open"))
+        XCTAssertTrue(message.contains("Keep YYY Encoder open"))
         XCTAssertTrue(message.contains("iOS/iPadOS 18-25"))
         XCTAssertTrue(message.contains("pause the job"))
     }
@@ -12302,7 +12339,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(viewModel.importBrowserContext?.canGoBack, false)
         XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, false)
         XCTAssertTrue(viewModel.importBrowserFolders.contains {
-            $0.folderName == "Taption Encoder Files"
+            $0.folderName == "YYY Encoder Files"
         })
         XCTAssertTrue(viewModel.importBrowserFiles.isEmpty)
 
@@ -12481,14 +12518,14 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         viewModel.openImportBrowserRoot(url: childURL, mode: .files)
 
-        XCTAssertEqual(viewModel.importBrowserContext?.rootFolderName, "Taption Encoder Files")
-        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "Taption Encoder Files/\(childName)")
+        XCTAssertEqual(viewModel.importBrowserContext?.rootFolderName, "YYY Encoder Files")
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "YYY Encoder Files/\(childName)")
         XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, true)
         XCTAssertEqual(viewModel.importBrowserFiles.map(\.fileName), ["child.mp4"])
 
         viewModel.navigateImportBrowserUp()
 
-        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "Taption Encoder Files")
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "YYY Encoder Files")
         XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, true)
         XCTAssertTrue(viewModel.importBrowserFolders.contains { $0.folderName == childName })
 

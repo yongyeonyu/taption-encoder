@@ -349,3 +349,243 @@
 - 위 새/이전 증거·패키지·DerivedData·배포 로그의 정확한 경로는 모두 최종 **ABSENT**. `/tmp`, 해당 macOS 임시 폴더, Xcode DerivedData/Archives, Downloads, Trash의 Encoder 이름 한정 목록에서도 추가 일치 항목이 없음. `git ls-files --others --ignored --exclude-standard` 결과도 빈 목록임. 공유 simulator OS 자체를 모두 삭제했다는 뜻은 아님.
 - 삭제한 raw proof/IPA/archive/dSYMs는 휴지통에서 복구할 수 없음. 소스는 GitHub/main으로 보존되지만 동일 업로드 빌드의 디버그 심볼 재생성·복구는 보장하지 않음. 다음 빌드는 패키지 resolve와 derived 산출물 재생성이 필요함.
 - 완료 기록 전 `git diff --check` 통과, build source 커밋 이후 차이는 기록 파일뿐임. 추가 worktree는 없고 유일한 worktree는 프로젝트의 main checkout. 이번 REL06T7M9C만 temp.md에서 제거하며 별도 미확인인 FIX06P3M7Q는 유지함.
+
+## PUB06V8N2R — 출시 초안·수정사항 등록 및 공개 배포 차단 확인 (2026-10-06)
+
+### 상태·범위·차단 조건
+
+- 사용자는 앱 출시 및 수정사항 작성을 요청함. 시작 HEAD/main/origin/main은 모두 `ed17d666df085bfd08df1648a07ee907d0e0e53f`, 작업 트리는 clean. 릴리스 코드 source commit은 `c5e5e8fb832fee4ed06dd86576f81dd9dcbb1e93`이며 이번에 앱 소스·프로젝트 버전은 변경하지 않음.
+- 공식 ASC API로 app `6780777838`의 `bundleId=com.taption.encoder`, name=`taption encoder`, primaryLocale=`en-US`를 재확인함. 공개 버전 `1.1.5 / READY_FOR_SALE`; 새 출시 초안은 처음에 없었음. latest uploaded build는 `1.1.7 (38) / VALID / INTERNAL_ONLY / IN_BETA_TESTING`이며 expired=false. 이전 `1.1.6 (37)`의 APP_STORE_ELIGIBLE 상태를 최신 preview/audio 수정 포함 증거로 쓰거나 대신 제출하지 않음.
+- 내부 테스트 전용 빌드가 App Store 제출을 방지하는 선택임은 [Apple 배포 안내](https://developer.apple.com/documentation/xcode/distributing-your-app-for-beta-testing-and-releases)로 확인함. 기존 38을 App Store용으로 바꿨다고 주장하지 않음. 새 업로드를 진행하려면 프로젝트 지침에 따라 marketing/build를 함께 증가한 일반 App Store 배포본이 필요함.
+- `Vendor/OpenSourceCompliance/README.md`, `LEGAL_REVIEW_PACKET.md`, gate script 및 `legal-approval.pending.json`을 확인함. 승인 status와 네 가지 결정 모두 pending, approvalID/reviewer/approvedAt 및 release/digest 필드가 비어 있음. gate는 정확한 archive/Distribution IPA/대응 source/relink/size-report와 외부 승인 digest를 요구함. 지난 정리에서 생성물을 영구 삭제한 상황이며, 공개 배포 gate를 실행·PASS한 것으로 기록하지 않음. 소스 수정이나 pending → approved 임의 변경은 하지 않음.
+- 승인 자료가 없는 현재 범위에서는 공개 build 생성·업로드·심사 제출·공개 출시를 수행하지 않음. 외부 승인 기록의 경로 또는 승인용 자료 준비 방향을 사용자에게 요청해야 하며 PUB06V8N2R는 미완료로 temp.md에 유지함. 이 로컬 gate 차단을 Apple의 새로운 rejection 또는 법률적 불법 확정으로 표현하지 않음.
+
+### App Store Connect 초안·문구·보존 검증
+
+- 현재 등록 locale는 **ko / en-US 두 개**임. 요청의 짧고 기능 중심인 작성 방향에 맞춰 실제 수정된 자막 영상 preview/playback, seek/player 전환, file opening/encoding Start·Reset 안정화만 작성함. 이미 공개 1.1.5에서 소개한 iPad landscape를 새 변경으로 반복하지 않고, 측정하지 않은 성능 향상 수치를 쓰지 않음.
+- 올바른 app 관계로 `POST /v1/appStoreVersions`: version **1.1.8**, platform IOS, releaseType **AFTER_APPROVAL**. 생성한 version ID **`0649aa64-cc2d-4e5c-b95c-129053c487ad`**. 최종 API readback은 **PREPARE_FOR_SUBMISSION**, releaseType=AFTER_APPROVAL, selected build relationship **null**. 설정만 준비했으며 심사 승인 또는 실제 출시 완료라는 뜻이 아님.
+- Apple는 새 version 생성 시 기존 metadata가 이전됨을 안내함([새 버전 생성](https://developer.apple.com/help/app-store-connect/update-your-app/create-a-new-version/)). 실제 비교에서도 두 locale의 description/keywords/marketingUrl/promotionalText/supportUrl이 공개 버전과 동일함을 확인한 뒤, 새 초안의 whatsNew만 PATCH함. 공개 1.1.5의 수정사항·메타데이터를 덮어쓰지 않음.
+- 한국어 등록 문구: `일부 자막 영상의 미리보기와 재생을 개선했습니다.\n재생 위치 이동과 플레이어 전환의 안정성을 개선했습니다.\n파일 열기와 인코딩 시작·초기화 처리의 안정성을 개선했습니다.` (실제 값은 세 줄).
+- 영어 등록 문구: `Improved previews and playback for certain subtitle videos.\nImproved stability when seeking and switching players.\nImproved stability when opening files and starting or resetting encoding jobs.` (실제 값은 세 줄).
+- 두 PATCH 성공 후 공식 GET으로 다시 읽은 whatsNew가 locale별 작성값과 정확히 일치함. 다른 metadata 다섯 필드도 작성 전/후 일치. screenshot signature(display type·파일명·크기·source checksum·image dimensions·delivery state 및 관계의 순서)를 공개 버전, 새 초안 작성 전, 작성 후에 비교해 동일함을 확인함.
+- 스크린샷은 locale마다 **APP_IPHONE_65 5개 + APP_IPAD_PRO_3GEN_129 10개**, 총 **30개**로 유지됨. 이번에 새 이미지를 생성/업로드하거나 기존 이미지를 삭제하지 않음.
+- 임시 API/helper/검증 JSON 위치는 `/tmp/TaptionEncoder-PUB06V8N2R.VyAdty`; private P8는 서명 내부에서만 사용하고 값/JWT를 출력·저장하지 않음. 새 archive/IPA/DerivedData/시뮬레이터 데이터는 만들지 않음. commit/push는 이번 요청으로 수행하지 않으며 기록 파일만 로컬 변경으로 남김.
+- 검증 결과를 위 compact 기록으로 남긴 뒤 이번에 생성한 해당 임시 API/helper/JSON 폴더만 source-only 유지 방향으로 삭제함(`rm -r` exit 0, 정확한 경로 최종 ABSENT). 소스·private key·원본 영상 및 기존 다른 작업 데이터는 삭제하지 않음. 최종 `git diff --check` 통과, 앱 source/build configuration diff 없음. AGENTS.md/temp.md/test.md만 이번 요청의 로컬 기록 변경으로 남으며 출시 요청은 미완료 상태임.
+
+## LAW06N5K8T — 1.1.8 (39) 외부 승인 검토 자료 준비·출시 문구 정정 (2026-10-06)
+
+### 요청·범위·소스
+
+- 사용자는 PUB06V8N2R의 차단 조건에 대해 승인 검토 자료 준비를 요청함. 이후 기존 자막/미리보기 표현을 빼고 일부 영상 재생 불가 개선으로 정정하도록 요청함. 이번 작업은 로컬 검토 자료 및 해당 ASC 문구 변경까지이며 Apple 업로드/심사 제출·외부 검토자 발송·commit/push를 수행하지 않음.
+- 시작 및 최종 확인 HEAD/main/origin/main은 `ed17d666df085bfd08df1648a07ee907d0e0e53f`. 기존 dirty AGENTS.md/temp.md/test.md를 보존함. 실제 runtime 수정 commit은 `c5e5e8fb832fee4ed06dd86576f81dd9dcbb1e93`이며, 8개 target/configuration의 marketing/build를 함께 `1.1.8 (39)`로 증가해 새 후보를 만듦. 앱 Swift/C 코드·library binary·encoder/output 정책은 변경하지 않음.
+- 라이브러리 대조에서 기존 출처 JSON의 FFmpeg bridge device/simulator hash가 이전 바이너리에 해당함을 발견함. 현재 두 바이너리가 Git HEAD 및 마지막 변경 commit `94a5294c5f93d9ae670d416a1832f4cf8baaacb6`과 동일함을 확인하고, 비번들 `libvlc-ios-provenance.json`의 hash와 검증 날짜·binary source commit만 수정함. 현재 arm64 SHA-256 `9ef599100adf0972f766d0ad86239db6ba705e8d27037fd67d827e4a99515704`, simulator arm64 `2ebd28e4c02c3dd730c6decb1ec83ba7a3b76c68d561c8988fb0b2ef4963df17`. 이 JSON은 Xcode의 컴파일/리소스 입력이 아니며 archive 뒤 이 기록 수정으로 앱 binary는 바뀌지 않음.
+- BaseSource 스냅샷(`git archive`로 앱/프로젝트/두 extension/테스트/Vendor/.gitignore만 포함, 비공개 자료)에 CandidateVersion.patch와 CandidateComplianceMetadata.patch를 순서대로 적용해 **119개 구성 파일 전부**가 현재 작업 트리와 일치함을 확인함. 새 후보가 이미 commit된 소스라고 표현하지 않음.
+
+### 새 Release archive·Distribution export·기술 검증
+
+- 새 전용 `/tmp/TaptionEncoder-LAW06N5K8T.RF8id0`에서 SwiftPM resolve 후 generic iOS / Release `clean archive`: **CLEAN SUCCEEDED / ARCHIVE SUCCEEDED**, exit 0. SDK/Xcode는 27.0 / 27A266a. 고정 GoogleMobileAds 13.5.0, UMP 3.1.0, SwiftVLC 0.10.1을 유지함. archive는 소스 폴더 밖의 새 `1.1.8-39-LAW06N5K8T` record로 생성했고 부재한 역사적 1.1.3 record를 덮어쓰거나 재구성하지 않음.
+- `app-store-connect` / `destination=export`, automatic signing, `manageAppVersionAndBuildNumber=false`, **testFlightInternalTestingOnly=false**, `uploadSymbols=false`로 **EXPORT SUCCEEDED**, exit 0. IPA **23,347,059 bytes**, SHA-256 **`302a267ebbc28c21546da17a7713b1ec39a5043b896113d977811e5c2ac32b2b`**. 이는 로컬 일반 배포 export이며 Apple 서버 validate/upload/processing/App Store eligibility 확인이 아님.
+- archive 및 추출 IPA의 앱·Live Activity extension·Thumbnail extension 모두 `1.1.8 (39)` / iphoneos / 최소 OS 18.0 일치. `codesign --verify --deep --strict` 통과, IPA Apple Distribution 및 get-task-allow=false 확인. 세 실행 파일 각각 archive dSYM UUID와 일치함. 전체 archive 앱 bytes **45,986,620**; __TEXT bytes는 main **36,913,152**, Live Activity **98,304**, Thumbnail **49,152**.
+- 같은 archive의 별도 **release-testing / thin-for-all-variants export**도 exit 0으로 성공해 실제 Xcode `App Thinning Size Report.txt`를 수집함. iPhone/iPad 각 **20.9 MB compressed / 43.5 MB uncompressed**, universal **23.3 MB / 46 MB**, ODR 없음. 이 보고서의 provenance는 같은 archive의 별도 export이며 App Store IPA와 동일한 byte의 Apple 서버 크기 보고서로 주장하지 않음. [Apple 크기 규격](https://developer.apple.com/help/app-store-connect/reference/app-uploads/maximum-build-file-sizes/)도 확인함.
+- preview/native/VM/test 주요 소스 4개의 SHA-256이 FIX06A8V2N/REL06T7M9C의 최종 값과 모두 일치함. 기존 75개 unique tests와 신규 28개×3=84 runs / 실패 0 compact 기록을 재사용함. 이전 raw proof는 소유자 요청으로 삭제되어 있으므로 새 test 실행 또는 raw result 재검사로 표현하지 않음. 이번에 simulator/실기기/minimum OS/PiP/background audio 회귀를 새로 수행하지 않음.
+
+### 고정 대응 소스·정확한 재링크·승인 gate
+
+- 제공된 source bundle 도구를 사용해 SwiftVLC/VLC/FFmpeg 8.1.1의 고정 SHA-256, **contrib source 56건의 SHA-512**, SwiftVLC의 local patch 4건 SHA-256을 확인함. VLC revision의 실제 contrib recipe는 FFmpeg **8.0**이며 mirror의 새 버전으로 대체하지 않음. mirror에서 받지 못한 6건은 고정 upstream URL에서 동일 checksum으로 확보하고, FluidLite는 고정 Git commit의 upstream `git archive` + xz recipe로 재현해 매니페스트 SHA-512와 일치시킴. 예상 hash를 낮추거나 변경하지 않음.
+- 최종 대응 소스는 **377,927,008 bytes**, SHA-256 **`0ba94db56f6c237f1eef0a56e4c946eeabfa860b59cd303ed13714d3cddc8ab6`**. 수정한 출처 JSON과 최신 bridge source/build recipe가 포함됨. generated contrib 고지 **54항목**이 실제 앱의 `libVLC-Contrib-Licenses.txt`와 byte 단위로 동일함. 2건 순수 host build inputs도 source 묶음에는 포함됨. source inventory의 2026-07-14와 provenance의 기존 2026-07-28은 역사적 capture 기준이며 새 생성일로 위장하지 않음.
+- 실제 archive LinkFileList/clang link command에서 Mach-O arm64 앱 객체 **76개**를 수집하고 내부 checksum을 검증함. relink **4,096,716 bytes**, SHA-256 **`c75745ca0e94b1ee269b67fc81d2a03988aa151fdb8a2192c87e0a16241b2164`**. 정규화 명령을 원래 release의 **수정하지 않은** libVLC/FFmpeg/Google SDK 입력으로 실행해 exit 0, unsigned arm64 executable을 생성함. 변경 라이브러리 재빌드·서명·설치·runtime 또는 Apple 플랫폼에서의 실용적인 modified-library 배포를 입증한 결과는 아님.
+- 크기 보고서 **12,312 bytes**, SHA-256 **`5cc8914ed66be3cd7452bf32c4ed030d889865bc446aea1e40958ea774f5abd1`**. exact version/build 및 위 source/relink/size-report/IPA 4 digest를 `legal-approval.pending-1.1.8-39.json`에 채웠지만 status와 네 판단은 **pending**, reviewer/approvalID/approvedAt은 빈 값으로 유지함. 저장소 원래 pending template도 비승인 상태 그대로임.
+- `verify_public_distribution_gate.sh` 실행은 **exit 1 / PUBLIC_DISTRIBUTION_GATE=BLOCKED / Legal status is not approved.**. archive·IPA 서명/dSYM/로컬 경로 노출·compiler artifact/필수 고지/size, source/relink metadata·내부 checksum·Mach-O object 검사를 모두 지나 외부 status 확인까지 도달함. 이후 승인 ID·날짜·승인 판단 검사까지 실행된 것으로 주장하지 않음. pending record의 4 digest는 별도 프로그램으로 실제 파일/manifest와 일치함을 검증함. 이 차단은 프로젝트 외부 승인 요건이며 Apple rejection이나 법적 위반 확정이 아님.
+
+### ASC 정정 문구·외부 검토 안내
+
+- 올바른 app `6780777838`, 1.1.8 version `0649aa64-cc2d-4e5c-b95c-129053c487ad`의 ko/en-US **첫 whatsNew 항목만** 정정함. 현재 한국어 첫 줄은 **`일부 영상이 재생되지 않는 문제를 개선했습니다.`**, 영어는 **`Fixed an issue that prevented some videos from playing.`**. 자막/미리보기 표현을 해당 항목에서 제거하고 나머지 두 줄은 그대로 보존함.
+- 최종 공식 GET 재조회 **2026-10-06 20:06:32 KST**: 두 locale 정정 값 일치, description/keywords/marketingUrl/promotionalText/supportUrl 불변, draft **PREPARE_FOR_SUBMISSION / AFTER_APPROVAL / selectedBuild=null**. 이전 PUB의 30 screenshot 보존 검증을 재사용하며 이번에 screenshot API write/업로드/삭제하지 않음. 공개 1.1.5와 내부 TF 38은 변경하지 않음.
+- ASC custom EULA resource는 **data=null**. Apple 안내와 함께 Standard EULA 적용 구성으로 추론하되, 포함된 오픈소스 예외의 충분성은 외부 검토 질문으로 남김. [Apple Standard EULA](https://www.apple.com/legal/internet-services/itunes/dev/stdeula/), [FFmpeg 공식 legal/compliance](https://ffmpeg.org/legal.html), [VideoLAN 공지](https://images.videolan.org/press/lgpl-libvlc.html)를 확인해 라이선스 출처와 법적 승인·특허·서명/설치 가능성을 분리함. GNU 웹 접속 오류는 기록하고, 실제 앱에 포함된 전체 LGPL-2.1 text를 검토 자료로 제공함.
+- 작성 스타일 지침을 읽고 요청·확인 결과·외부 판단을 구분한 중립적 한국어 검토 안내를 작성함. 허용 범위의 관련 sent-email reference 검색 결과는 0건이었으므로 글쓰기 샘플을 임의 생성하거나 검색 범위를 넓히지 않음. **No suitable writing references found in the returned results.** 이메일 draft/send나 외부 자료 전송은 하지 않음.
+- `REVIEW_REQUEST-ko.pdf` **3쪽 전부 렌더·육안 확인**, 필수 상태/버전/4 digest/정정 문구 text 검사 통과. DOCX ZIP 비손상·필수 문구/해시 확인(Word layout 육안 검증은 별도 미수행). TXT 편집본, 버전 결속 pending 승인 양식, 제공된 영문 검토 template, 고정 manifest/Package.resolved, 실제 앱 notices, compact/raw 기술 로그와 ASC readback을 함께 보관함. source-offer의 help@taption.com 수신/장기 운영, 사업자·배포 국가·수익 모델 등은 미확인 외부 입력으로 명시함.
+
+### 전달 파일·보존
+
+- 보관 폴더: `/Users/u_mo_c/Documents/TaptionEncoderReleases/1.1.8-39-LAW06N5K8T` (약 466 MiB). 문서·exact archive/IPA/dSYM/source/relink를 보존하며 일반 캐시로 삭제하지 않음. 검토용 proprietary source/객체도 포함되어 있으므로 공개 게시와 source-offer delivery 범위는 별도 판단 대상임.
+- 전달용 ZIP: `/Users/u_mo_c/Documents/TaptionEncoderReleases/TaptionEncoder-1.1.8-39-ReviewPacket.zip`, **445,508,827 bytes**, SHA-256 **`2977fe8c3f2bbba1cc22358bf1de628373f067351f8e1079431b423886a654a8`**. ZIP CRC 비손상 및 내부 `SHA256SUMS`의 **104개 파일 전부**를 ZIP stream에서 재검증함. SHA256SUMS 자체 SHA-256은 **`85d1746f8ea397cac24db850d7546b64bdc094c934638215d2178088c8fda6b4`**. API helper/private P8/PEM/KEY/JWT는 전달 자료에 포함하지 않음. sibling verification JSON도 보관함.
+- 소스 snapshot SHA-256 **`97ce839a687a0c304cfcfc598de143f51ef138559d6e0c4066011925c82f37eb`**, version patch **`747e0acfa23540ebb4dd88a9bd620ea82dfcd8e77ec76a08f8399b919e99bada`**, provenance-only patch **`201ec5a858d55ff4d6bfe28952a4f8622e33ff2972a09e7bf6541627f897590e`**. 검토 대상은 base+두 patch이며 새 source commit 또는 새 TestFlight 업로드 완료로 표현하지 않음.
+- PDF 패널 open 요청은 queued로 반환됨. 실제 앱 내 표시 완료를 주장하지 않고 영구 local file link로 제공한다. 이 자료 준비 LAW06N5K8T는 검증·정리 완료 후 temp.md에서 제거하되, 외부 승인·공개 출시 PUB06V8N2R 및 기기 기본 연결 UI FIX06P3M7Q는 계속 남긴다.
+- 완성 ZIP의 CRC/104-file checksum 검증 후 이번 owned scratch **약 2.4 GiB**(DerivedData, package checkout, 중복·이전 source bundle, source 복원/test relink 복사본, size-report variant IPAs, 문서 runtime/preview/API helper) 및 같은 39의 export에서 생성한 위 두 xcdistributionlogs **약 6.5 MiB**만 영구 삭제함(`rm -r`, exit 0). 정확한 세 경로는 최종 모두 ABSENT. 삭제한 임시 캐시는 휴지통 복구 대상이 아니며 재생성 가능함. 요청한 review record/ZIP/dSYM/객체/대응 소스, Git 원본·private key·서명 자료·원본 사용자 영상과 다른 프로젝트 데이터는 보존함.
+- 새 simulator/device/runtime는 생성·설치·초기화·삭제하지 않음. 최종 ignored/untracked 목록은 빈 값, 여유 공간 **4.1 GiB**. HEAD/main/origin/main은 기존 ed17d66이며, 남은 변경은 AGENTS.md/project.pbxproj/provenance JSON/temp.md/test.md 다섯 파일임. 최종 `git diff --check` 통과. LAW06N5K8T 자료 준비는 완료, PUB06V8N2R 공개 출시는 실제 외부 승인 입력을 기다리는 미완료 상태로 유지함.
+
+## PUB06V8N2R 재개 — 심사 제출 재요청·승인 기록 미충족 재확인 (2026-10-06)
+
+- 검토 자료 준비 완료 후 사용자가 ‘제출해’라고 요청해 기존 공개 출시 작업을 재개함. 현재 사용자 AGENTS.md 및 파일을 다시 읽고 main/HEAD/origin/main이 모두 `ed17d666df085bfd08df1648a07ee907d0e0e53f`인 것을 확인함. 기존 다섯 dirty 파일과 exact-release 검토 자료를 보존함.
+- **2026-10-06 21:18:42 KST**, 공식 ASC API **GET만** 실행함. bundleId 조회에서 app **6780777838 / com.taption.encoder**를 확인하고, 1.1.8 version **0649aa64-cc2d-4e5c-b95c-129053c487ad**를 재조회함. 상태 **PREPARE_FOR_SUBMISSION**, releaseType **AFTER_APPROVAL**, selected build **null**. 이 설정은 승인 후 자동 출시를 위한 초안 설정이지 실제 제출/승인이 아님.
+- `GET /v1/builds?filter[app]=6780777838&filter[version]=39`의 결과 **0건**. 최신 build는 **1.1.7 (38) / VALID / INTERNAL_ONLY** / ID **30e114f0-e77e-48c4-b2e2-8d35c7255fdd**. 37/36의 APP_STORE_ELIGIBLE 상태를 최신 preview/audio 수정 포함 자료로 대체하거나 제출하지 않음. 현재 39의 Apple upload/processing 완료라고 주장하지 않음.
+- ko/en-US whatsNew를 공식 GET으로 재조회해 LAW06N5K8T의 최종 등록 값과 전체 일치를 확인함. ‘일부 영상이 재생되지 않는 문제를 개선했습니다.’와 같은 의미의 영어 첫 줄 및 기존 두 안정화 항목을 보존하며 이번에 metadata를 PATCH하지 않음.
+- 후보 source/relink/size-report/IPA의 SHA-256을 실제 파일에서 다시 계산해 RELEASE_MANIFEST.json 및 exact-release pending 양식의 4 digest와 모두 일치함을 확인함. archive/export의 기존 LAW06N5K8T 서명·dSYM·56 source·76 object 및 gate 증거를 재사용함. full build/test 또는 full gate를 새로 실행했다고 주장하지 않음.
+- `legal-approval.pending-1.1.8-39.json`의 status, lgplStaticLinking, appStoreEULACarveout, libvlcContribMap, hevcDistribution은 여전히 **pending**이며 **approvalID/reviewer/approvedAt은 빈 값**. 저장소 원래 pending template도 비승인 상태임. ‘제출해’는 App Store 제출 권한 요청이지만 현재 프로젝트가 요구하는 실제 외부 법률 검토 기록으로 간주하거나 승인자를 대신 작성하지 않음.
+- 차단 사유는 프로젝트의 공개 배포 승인 요건 미충족임. Apple의 새로운 rejection, 제출 불가능하다는 일반 법률 판단 또는 위법 확정으로 표현하지 않음. 버전/digest 결속 실제 외부 승인 기록의 파일 경로를 사용자에게 요청하며, 업로드·심사 제출·commit/push·외부 검토 자료 발송을 하지 않음. PUB06V8N2R는 temp.md에 미완료로 남김.
+- API private key와 JWT는 인증 내부 메모리에만 사용했고 내용/token을 출력·파일 저장하지 않음. 임시 helper 파일 생성이 실패하여 파일 수정 없이 읽기 전용 in-memory CLI로 재조회함. 빈 owned 임시 디렉터리 외 빌드·시뮬레이터·새 배포 산출물을 생성하지 않고 기존 검토 폴더/ZIP을 수정·삭제하지 않음. 필요한 compact 근거는 이 항목에 남김.
+
+## HIS06G2N8P — 내부 외부승인 조건 도입·이전 배포 적용 이력 확인 (2026-10-06)
+
+- 사용자 질문 ‘이전에는 그런거 없었는데?’에 대해 이력 확인과 설명만 진행함. `git status --short --branch`에서 main...origin/main 및 기존 다섯 dirty 파일을 확인하고 보존함. 신규 제출·규칙 변경 권한으로 해석하지 않음.
+- `git log --diff-filter=A` 결과 공개 배포 gate, pending 승인 양식, LEGAL_REVIEW_PACKET은 **2026-07-14 13:14:24 KST / 76769a9c162378290de7aaa7ea47b4c460601133 / Prepare 1.1.2 build 33 compliance release candidate**에서 최초 추가됨. gate의 `status == approved` 조건은 현재와 도입 당시 모두 존재하며 현재 파일 322행에서 `Legal status is not approved.`를 발생시킴. 이번 자료 준비에서 새로 만든 Apple 제출 요건이 아님.
+- AGENTS의 `external legal` 및 `public-distribution` 문구 도입은 **2026-07-17 01:39:14 KST / 1fab2e446ce2d0f6a19774bc8c4568fe9226925a / Document maintenance handoff for 1.1.3**임. 동일 commit은 1.1.3 (34)의 owner-reported App Review 제출, Apple VALID / APP_STORE_ELIGIBLE 및 delivery UUID 0c043b6a-f0f6-4014-9d2d-07c3c7911c3f를 기록하면서도 대응소스/외부 법률승인 미비로 내부 gate가 blocked라고 기록함. 과거 제출과 내부 규칙 적용·기록이 일관되지 않았다는 근거이며, 과거 법적 승인 존재/부재나 법적 적합성을 확정하는 증거로 사용하지 않음.
+- project.pbxproj에 gate/승인 JSON/external counsel 참조가 없음을 scoped rg로 확인함. 이 저장소의 자체 배포 절차 조건이며 Xcode의 자동 빌드 단계나 Apple 검증 서버의 필수 승인 JSON으로 표현하지 않음. commit Author/Committer 이름만으로 사람과 agent 중 도입 주체를 구분할 수 없으므로 사용자 또는 이번 작업자가 새로 만들었다고 단정하지 않음.
+- Apple 공식 일반 제출 안내 https://developer.apple.com/help/app-store-connect/manage-submissions-to-app-review/submit-an-app/ 에서 필수 metadata/build 선택 및 Add for Review/Submit for Review 절차를 확인함. 확인한 안내에는 이 프로젝트의 외부 법률승인 JSON 단계가 없음. Apple App Review Guidelines 5.2/5.2.1 https://developer.apple.com/app-store/review/guidelines/#intellectual-property 의 권리·라이선스 준수 책임과, FFmpeg 공식 https://ffmpeg.org/legal.html 의 라이선스/대응소스/고지 요건은 별도로 유지되는 사항임. 외부 승인서가 Apple 일반 필수 제출 서류가 아니라는 사실을 법적 위험 없음이나 라이선스 의무 면제로 확대하지 않음.
+- 현재 질문에 대한 설명만 완료함. 내부 필수 외부승인 규칙을 변경하려면 사용자 지시를 확인해야 하며, pending을 approved로 조작하거나 gate를 우회하지 않음. gate 재실행, build/test, 업로드, App Review 제출, metadata 수정, commit/push 또는 외부 packet 전송을 수행하지 않음. 기존 PUB06V8N2R 및 FIX06P3M7Q는 미완료로 보존함.
+
+## RULE06V2Q8 — 외부 승인서 의무 규칙 변경·공개 제출 재개 (2026-10-06)
+
+- 사용자는 HIS06G2N8P 설명 뒤 내부 외부승인서 필수 규칙 변경에 ‘ㅇㅇ’로 동의하고 별도 승인서 제출이 이전에도 필요하지 않았다고 설명함. 별도 외부승인서는 제출하지 않는다는 뜻으로 사용자에게 명시하고, 기존 앱 심사 제출 요청은 계속 진행함. Apple 일반 필수 제출 자료와 프로젝트 자체 요구를 구분함.
+- main/HEAD/origin/main은 기존 ed17d666df085bfd08df1648a07ee907d0e0e53f이며 기존 dirty 다섯 파일을 보존함. 사용자 지시에 따라 AGENTS/README/LEGAL_REVIEW_PACKET과 gate/향후 relink metadata 문구를 변경함. mandatory external approval만 opt-in으로 바꾸며 pending 승인 양식·과거 exact-release 자료/ZIP·app runtime code·library binaries·공지/EULA·private credentials는 변경하지 않음.
+- 기본 gate는 승인 JSON 없이 서명/dSYM/version/IPA entitlements/크기/notice/내부 source·relink checksum/76개 Mach-O object 검사와 4 digest 계산을 모두 실행함. 기존 historical relink status를 보존해서 받을 수 있으며 새 packet은 technical-relink-materials로 표시함. PASS는 기술 검사 통과이며 법적 검토가 이루어진 것으로 표현하지 않도록 LEGAL_REVIEW_STATUS=NOT_VERIFIED를 출력함. --legal-approval 또는 --require-legal-approval은 원래 strict version/digest-bound 검사를 켬.
+- 실제 보관 1.1.8 (39) 자료로 기본 gate **exit 0 / PUBLIC_DISTRIBUTION_GATE=PASS / TECHNICAL_RELEASE_CHECKS=PASS / EXTERNAL_LEGAL_APPROVAL=NOT_REQUIRED_BY_PROJECT_POLICY / LEGAL_REVIEW_STATUS=NOT_VERIFIED**. archive app 45,986,620 bytes, IPA 23,347,059 bytes, 앱/두 extension의 __TEXT 36,913,152/98,304/49,152 bytes. source/relink/size/IPA SHA-256은 LAW06N5K8T의 0ba94db56f6c237f1eef0a56e4c946eeabfa860b59cd303ed13714d3cddc8ab6 / c75745ca0e94b1ee269b67fc81d2a03988aa151fdb8a2192c87e0a16241b2164 / 5cc8914ed66be3cd7452bf32c4ed030d889865bc446aea1e40958ea774f5abd1 / 302a267ebbc28c21546da17a7713b1ec39a5043b896113d977811e5c2ac32b2b와 모두 일치함.
+- scoped 검증: bash -n(두 script), --help exit 0, require-without-record exit 1, missing archive exit 1, missing option value/unknown option 각각 exit 64, 실제 preserved pending 양식을 명시한 strict 실행 exit 1 / Legal status is not approved. 모두 예상대로임. 실제 외부 승인 record를 만들어 통과시킨 테스트는 수행하지 않음. 기존 기술 fail-closed 조건을 삭제하지 않음.
+- 기존 browser의 다른 앱 TestFlight 탭을 변경하지 않고, 신규 read-only API key 설정 탭에서 기존 issuer/key ID만 확인함. private p8/JWT는 인증 내부에서만 사용하고 출력/저장하지 않음. browser 키 생성/다운로드/권한 변경 없음. official App Store Connect API로 bundleId=com.taption.encoder → app 6780777838 확인.
+- **21:44:06 KST** 제출 전 GET: 1.1.8 / PREPARE_FOR_SUBMISSION / AFTER_APPROVAL / selectedBuild=null, uploaded build 39 0건. 기존 iOS review submission 다섯 건은 모두 COMPLETE이며 새 submission 없음. ko/en-US first line과 기존 두 안정화 문구 전체 일치. App Review 연락처 필드는 존재, demoAccountRequired=false. metadata/contact/release notes를 새로 변경하지 않음. 새로운 Apple 검증/업로드/심사 결과는 후속 항목으로 분리하여 기록함.
+- 추가 negative 검증: 승인 기록을 생략한 모드에서 잘못된 size-report 입력은 exit 1 / The supplied file is not an App Thinning Size Report., 일반 Markdown을 source archive로 지정하면 exit 1 / Could not extract source bundle. 기존 기술 검사 차단 유지. 최초 size negative fixture인 README에는 검사 marker 자체가 포함되어 예상 실패가 발생하지 않았으므로, 해당 fixture는 invalid-report 증거로 사용하지 않고 marker가 없는 기존 pending JSON으로 바꿔 검증함. report validator는 기존 marker/크기 경고 검사이며 새 정밀 report-format parser를 구현했다고 주장하지 않음. 실제 배포 report는 보관된 exact digest와 일치함.
+- **21:47:49 KST** ASC screenshot readback: ko/en-US 각각 iPhone 5개 + iPad 10개, 총 **30개**, 네 screenshot set과 모든 assetDeliveryState=COMPLETE. 기존 screenshot/localization IDs를 보존하며 재업로드/수정하지 않음.
+- Apple altool 27.0.5의 실제 후보 IPA validation **2026-10-06 21:46:45 KST / exit 0 / VERIFY SUCCEEDED with no errors**. 이어 upload **21:50:12 KST / exit 0 / UPLOAD SUCCEEDED with no errors**, delivery UUID **141b3cb7-e2ca-4584-a8f4-4c8fb875cbcb**, 전송 23,347,059 bytes. 동일 source/relink/IPA candidate를 사용하며 내부-only build 38이나 옛 build 37로 대체하지 않음. 업로드 receipt는 서버 processing 완료나 App Review 제출로 확대하지 않음. 21:50:33 GET의 build39 결과는 아직 0건이며 --build-status --delivery-id … --wait로 Apple 처리 완료를 별도 대기함.
+- Apple `--build-status --delivery-id … --wait` **exit 0**: build 39의 **processingState=VALID / import-status=VALID / APP_STORE_ELIGIBLE / is-on-app-store-connect=true / usesNonExemptEncryption=false**. 공식 GET **21:53:32 KST**에서도 같은 build ID 141b3cb7-e2ca-4584-a8f4-4c8fb875cbcb / version 39 / expired=false 및 preReleaseVersion **411b2700-6f3f-4879-a11a-3c3dd8773148 / 1.1.8 / IOS**를 확인함.
+- 올바른 App Store version 0649aa64-cc2d-4e5c-b95c-129053c487ad에 build39를 PATCH 연결(HTTP 204)하고 GET selectedBuild의 동일 ID/version/state/audience를 확인함. 기존 다른 build 선택이 없는 것을 먼저 검사했으며 기존 사용자 변경을 덮어쓰지 않음. 새 review 생성 직전 active iOS review 없음, 전체 ko/en-US whatsNew 일치 및 AFTER_APPROVAL 설정을 다시 검사함.
+- 공개 App Review submission **f0a2e763-efe5-4396-bb34-429a8d90ba0b** 생성, 정확한 1.1.8 version을 review item **ZjBhMmU3NjMtZWZlNS00Mzk2LWJiMzQtNDI5YThkOTBiYTBifDZ8ODkyNjE5NDU5**으로 추가한 뒤 `submitted=true` PATCH 성공. Apple 응답 submittedDate **2026-10-06T12:54:54.382Z (21:54:54 KST)**, platform IOS, **WAITING_FOR_REVIEW**. 외부 법률승인서나 검토 ZIP을 제출한 것이 아니라 사용자가 요청한 앱 심사 제출임.
+- **21:54:57 KST final 공식 readback**: submission WAITING_FOR_REVIEW, appStoreVersionForReview=정확한 1.1.8 version ID, item total=1, version **1.1.8 / WAITING_FOR_REVIEW / AFTER_APPROVAL / earliestReleaseDate=null**, selectedBuild=정확한 39/VALID/APP_STORE_ELIGIBLE. 심사 승인/READY_FOR_SALE/새 public release 완료로 표현하지 않음. Apple 심사를 법적 검토 승인으로 사용하지 않음. 현재 공개 1.1.5는 새 승인 후 자동 전환 예정이며 별도 승인서 필수 입력은 없음.
+- 새 runtime/library binary 변경·새 simulator/device 실행·commit/push·평점 초기화·스크린샷 교체·source/객체의 공개 게시·외부 법률 packet 전송·private credentials 출력/저장은 없음. 준비된 immutable 1.1.8-39-LAW06N5K8T/ZIP/pending 기록과 원래 source/proof를 보존함. RULE06V2Q8 구현·검증 및 앱 심사 제출은 완료; PUB06V8N2R는 Apple 심사/실제 공개 출시 후속 확인만 남김.
+- App Store Connect 해당 앱 배포 페이지를 새로 읽어 UI에서도 **1.1.8 심사 대기 중 / 선택 build 39, version 1.1.8 / 자동으로 버전 출시 checked / 기존 평가 유지 checked**를 확인함. 사용자의 다른 앱 탭은 그대로 두고 이 앱 결과 탭만 deliverable로 남김. UI를 통한 제출/승인서 첨부/계약 수락은 없음. 최종 bash syntax 및 git diff --check 통과, 기존 다섯 dirty 파일에 추가된 네 개 compliance 문서/스크립트 변경만 포함하는 총 아홉 변경 파일이며 untracked 생성 파일 없이 로컬 미커밋 상태를 보존함.
+
+## LIC06P2K8T — 현재 구성의 라이선스 의무·미확인 위험 설명 (2026-10-06)
+
+- 사용자 요청은 라이선스 문제 설명임. AGENTS를 읽고 main/HEAD/origin/main=ed17d666df085bfd08df1648a07ee907d0e0e53f 및 기존 아홉 dirty 파일을 확인함. 답변 근거 기록용 temp/test만 수정하고 runtime code·gate 정책·공지·EULA·심사/출시 설정·기존 artifact를 변경하지 않음. 외부 법률승인서 필수 입력을 다시 요구하지 않음.
+- 제출된 정확한 1.1.8 (39) IPA에서 libVLC-LGPL-Notice.txt와 FFmpeg-LGPL-Decode-Bridge.txt를 unzip -p로 직접 읽음(추출 파일 생성 없음). libVLC는 LGPL 2.1-or-later / Static, FFmpeg decode bridge는 LGPL 2.1-or-later / GPL 및 nonfree 비활성 / H.265 출력은 AVAssetWriter. 둘 모두 help@taption.com으로 library source/수정사항/build script/재링크 자료를 요청하는 최소 3년 written offer와 LGPL 역공학 권리 보존 문구가 실제 포함돼 있음.
+- LGPL-2.1.txt 6항(271행 이후)을 직접 읽어 고지·license text, 고객의 개인용 수정/수정 디버깅 역공학 허용, 6a의 library corresponding source와 앱 object/source 형태 재링크 자료, 6c의 최소 3년 written offer 대안을 확인함. 이는 LGPL 사용 자체가 앱 전체 독점 source 공개를 자동 요구한다는 뜻이 아님. 정적 연결도 조건을 갖추면 가능한 대안이며 정적 연결 자체를 위법으로 표현하지 않음. GNU 공식 html 조회는 timeout, 공식 GNU search의 동일 2.1 license 본문과 실제 번들 전문으로 보완함. GPLv3의 Installation Information 조건을 LGPL2.1에 그대로 적용하지 않음.
+- 현재 bridge BUILD/config/provenance 기록을 필요한 구간만 확인함: --disable-shared/--enable-static, --enable-gpl 및 --enable-nonfree 없음. libVLC embedded FFmpeg에서도 두 enable flag 부재가 기존 provenance에 기록됨. FFmpeg 공식 https://ffmpeg.org/legal.html 의 LGPL 기본/optional GPL parts/별도 patent 문제를 읽음. FFmpeg checklist는 유일한 준수 경로가 아니라 upstream이 제안하는 쉬운 경로라고 명시하므로, dynamic linking·공개 웹 다운로드가 없다는 이유만으로 이번 written-offer/static-link 방식을 위반으로 확정하지 않음. 설정 검사는 전체 제삼자 라이선스 법률검토 완료를 뜻하지 않음.
+- 기존 LAW06N5K8T의 candidate/source verification JSON과 version-bound test 근거를 재사용함. **56 contrib source archives**, **54 in-app contrib notice entries**, **76 app objects**, 생성 upstream notice=shipped exact match. unmodified pinned library technical relink는 성공했지만 signed=false/installed=false/userModifiedLibraryTested=false임. 이것은 자료 구성/재링크 기술 검사 증거이며 실제 수정 라이브러리의 최종 signing/installation 가능성을 입증한 것이 아님. 새 library 교체·install test를 실행하지 않았으며 이를 확정된 LGPL 위반으로 표현하지 않음.
+- 실제 source request 수신 주소의 소유/운영, mailbox 수신, 이용자 요청 응답/전달 및 최소 3년 운영 가능 여부는 미검증. 이번 작업은 이메일·외부 요청을 보내지 않음. local source/relink archive 보관과 이용자에게 실질적으로 제공 가능한 운영은 구분해야 하며, 현재 가장 구체적인 후속 확인 항목은 source offer 이행 가능성임. 공개 다운로드 URL 부재만으로 written offer가 부적법하다고 판단하지 않음.
+- Apple Standard EULA https://www.apple.com/legal/internet-services/itunes/dev/stdeula/ 33행에는 open-source terms/law가 허용하는 modification/reverse engineering에 대한 예외가 존재함. 따라서 Apple 표준 EULA가 무조건 LGPL과 충돌한다거나 custom EULA가 반드시 필요하다고 주장하지 않음. LAW 준비 시 ASC custom EULA data=null 기록과 당시 검토 질문을 재사용하되 이번에 새 ASC 조회/설정 변경 또는 법적 sufficiency 결론을 내리지 않음.
+- HEVC/H.264 등의 codec patent license는 library copyright license와 별도임. FFmpeg patent mini-FAQ 및 HEVC patent pool의 https://accessadvance.com/topic-what-do-we-license/ 를 확인함. 후자는 pool 운영자의 encoder/decoder/device/software/cloud 범위 설명이지 Taption의 침해·별도 license료를 확정하는 판결/계약 증거가 아님. Apple-native encoder 사용만으로 모든 별도 배포 국가/사업모델 patent 문제의 면제를 확정하지 않으며, 이번 확인으로 Taption의 fee/license 필요 또는 불필요를 단정하지 않음.
+- 제한: 이번 bounded 기술·문서 대조에서 확정된 위반이라고 단정할 증거는 확인하지 못했으며, 포괄적 법률 승인/모든 권리 clearance 또는 모든 위험 부재로 확대하지 않음. 내부 외부승인서 의무 규칙 변경과 실제 LGPL/third-party/patent 의무는 별개임. runtime/release 변경·새 simulator/build/test·업로드/심사 취소/외부 packet 전송·commit/push 없음. 기존 공개 출시 및 실제 기기 Files UI 후속 항목은 보존함.
+
+## AUT0908A36 — Taption Down Shorts 활용 코덱·실행 경계 감사 (2026-10-06)
+
+### 결론
+
+- 이 저장소에는 Shorts 생성·업로드용 CLI나 서버 export target이 없다. Xcode app target의 iOS `TaptionVideoCore`/`AVFoundationHEVCEncoderService`가 실제 실행 경계이며, 출력 계약은 H.265/HEVC와 MP4/MOV로 고정되어 있다. `Shorts`, YouTube, 자막 burn-in, 9:16 crop/pad, Shorts duration 정책은 scoped source에서 확인되지 않았다.
+- Down이 직접 재사용할 수 있는 완성 알고리즘은 확인되지 않았다. 아래 3개는 iOS 앱 내부에서 실제 연결된 코덱 경로 또는 좁은 통합 후보이며, 소스 존재를 Down 연동 완료로 해석하지 않는다.
+
+### 후보 1 — Apple native HEVC writer (가장 낮은 배포 위험)
+
+- 근거: `TaptionEncoder/Core/Codecs/HW_AppleHEVCCodecAlgorithm.swift:93-170,232-269`가 AVAssetExportSession의 HEVC preset을 고르고 MP4/MOV writer를 구성한다. performance 조건에서는 H.264/HEVC/ProRes의 AVAssetReader/AVAssetWriter fast path를 먼저 시도하며 실패 시 native export로 돌아간다.
+- 입력/출력: Apple이 읽을 수 있는 소스 → H.265/HEVC MP4 또는 MOV; resize, frame rate, rotation, 색상, 오디오 보존 옵션은 `TaptionCodecTranscodeRequest`를 통해 전달된다.
+- Down 통합 계획: Down이 iOS 기기에서 최종 파일을 만들 때만 `TaptionVideoCore.prepareSingleAssetHEVCJob(sourceURL:temporaryOutputURL:)` 후 `encodePreparedJob(_:progress:)`를 호출한다(`TaptionEncoder/Core/VideoCore/TaptionVideoCore.swift:45-125,128-210`). 서버/컨테이너에서 Swift/AVFoundation을 실행하는 경로는 존재하지 않으므로 Down 서버로의 직접 이식이 아니다.
+
+### 후보 2 — SwiftVLC decode → AVAssetWriter HEVC (현재 broad iOS software path)
+
+- 근거: `TaptionEncoder/Core/Codecs/AV1/SW_AV1HEVCCodecAlgorithm.swift:307-325,1625-1785`가 AV1/H.264/HEVC/VP 계열과 다수 legacy route를 software descriptor로 등록하고, `TaptionEncoder/Core/Codecs/AV1/SW_AV1HEVCTranscodePipeline.swift:1-8`에서 `CLibVLC`와 AVFoundation writer를 결합한다. 영상은 decoded pixel buffer, 오디오는 packed S16 PCM을 AAC/Apple-native output으로 writer에 넣는다.
+- 실행 경계: `TaptionEncoder/App/AppEnvironment.swift:77`의 `AVFoundationHEVCEncoderService`가 production service로 등록되고, `EncoderService.swift:345-397`가 registry 또는 software command path를 선택한 뒤 output verifier를 실행한다.
+- Down 통합 계획: 이 경로의 정책만 Down의 별도 worker로 포팅하려면 `source probe → decode frames/audio → Shorts용 9:16 framing/scene/subtitle 단계 → HEVC MP4/MOV writer → output verification`을 새 서비스로 구현해야 한다. 현재 저장소에는 framing/subtitle/upload 계약이 없으므로 후보 2만으로 Shorts 생성 완료를 주장할 수 없다.
+
+### 후보 3 — source-built FFmpeg decode bridge → Apple HEVC writer (VC-1/Y41P/ProRes RAW 한정)
+
+- 근거: `TaptionEncoder/Core/Codecs/CodecAlgorithm.swift:359-399`와 `CodecTranscodingRegistry.swift:34-128`은 VC-1, Y41P, ProRes RAW route를 bundled bridge descriptor로 연결한다. `SW_FFmpegDecodeBridgeFallbackTranscoder`는 `SW_FFmpegCommandExecutor.swift:830-875`에서 입력을 probe하고 bridge runner로 decoded video/audio를 받아 HEVC output을 확인한다. bridge C API는 `Vendor/FFmpegLGPLDecodeBridge/Sources/TaptionFFmpegDecodeBridge.h:96-138`의 video/audio probe·decode 함수와 `SW_FFmpegCommandExecutor.swift:1075-1147,1329-1447`의 NV12/BGRA/PCM writer 연결로 구성된다.
+- 범위: 일반 Shorts용 범용 encoder가 아니라 선택된 legacy/RAW decode 보완책이다. notice는 FFmpeg 8.1.1, GPL/nonfree 비활성, CLI executable 미번들, HEVC MP4/MOV 출력은 AVAssetWriter라고 명시한다(`TaptionEncoder/OpenSourceNotices/FFmpeg-LGPL-Decode-Bridge.txt:3-31`).
+- 재현 명령(이번 감사에서는 실행하지 않음):
+
+```sh
+OUTPUT_XCFRAMEWORK=/tmp/TaptionFFmpegDecodeBridge.xcframework \
+WORK_DIR=/tmp/taption-ffmpeg-decode-bridge \
+MIN_IOS_VERSION=18.0 \
+bash Vendor/FFmpegLGPLDecodeBridge/build_ffmpeg_lgpl_decode_bridge.sh
+```
+
+  이 명령은 고정 FFmpeg 8.1.1 archive를 다운로드·SHA-256 검증하고 iPhoneOS/arm64 및 arm64 simulator XCFramework를 만드는 무거운 재빌드 경로다(`Vendor/FFmpegLGPLDecodeBridge/build_ffmpeg_lgpl_decode_bridge.sh:9-13,50-63,87-137`). 실제 앱 프로젝트에는 `TaptionFFmpegDecodeBridge.xcframework`가 Frameworks phase에 연결되어 있다(`TaptionEncoder.xcodeproj/project.pbxproj:58-63,195,234-244`).
+
+### FFmpeg-family command/export 경계와 제약
+
+- `SW_FFmpegCodecCommandPlanner`는 `ffmpeg` 실행 파일명과 `-i`, `-map`, `-c:v libx265`, `-movflags +faststart` 등의 argument 배열을 만들 뿐이다(`TaptionEncoder/Core/Codecs/SW_FFmpegCodecCommandPlanner.swift:95-205,550-634`). `SW_FFmpegCommandExecutor.execute`는 readiness gate가 모두 닫히지 않으면 실패하고 runner가 없으면 `runnerUnavailable`을 반환한다(`TaptionEncoder/Core/Codecs/SW_FFmpegCommandExecutor.swift:75-117`). 현재 `SW_UniversalCodecTranscodeAlgorithm.transcode`도 backend가 번들되지 않으면 `backendNotBundled`를 던진다(`TaptionEncoder/Core/Codecs/SW_UniversalCodecTranscodeAlgorithm.swift:79-90`). 따라서 command plan은 runnable CLI나 Down worker가 아니다.
+- broad FFmpeg 후보의 기본 readiness는 `isBundledInCurrentBuild=false`, gate 미충족으로 생성된다(`TaptionEncoder/Core/Codecs/SW_SoftwareCodecBackendRegistry.swift:729-750`). 특히 command plan의 `libx265`/`libx264` 계열은 LGPL decode bridge와 별도의 license/patent 검토 대상이며, `Vendor/OpenSourceCompliance/README.md:7-11,28-41` 및 `legal-approval.pending.json:1-16`은 기술 검사와 법적 승인·특허 검토를 분리한다.
+- SwiftVLC는 `Package.resolved`에서 0.10.1 revision `58d1f3a8...`로 고정되어 있고, bundled notice는 LGPL-2.1-or-later/static 및 54 runtime/header input의 technical inventory만 보장한다(`TaptionEncoder.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved:15-25`, `TaptionEncoder/OpenSourceNotices/libVLC-LGPL-Notice.txt:3-24`). 이는 Down 배포에 대한 법률 승인이나 특허 clearance가 아니다.
+
+### 검증 경계
+
+- 이번 항목은 read-only 소스·프로젝트·notice·manifest 대조만 수행했다. 새 build, test, simulator/device 실행, FFmpeg archive 다운로드, bridge 재빌드, 외부 API/브라우저/credentials 사용은 하지 않았다.
+- 실제 runnable app path는 후보 1·2와 후보 3의 bundled bridge에 한정해 정리했으며, broad FFmpeg command path는 planning-only로 분리했다. Down 연동을 닫으려면 별도 worker/CLI target, Shorts framing·subtitle·duration 계약, output/upload proof, 그리고 각 bundled dependency의 release·license·performance 검증이 추가로 필요하다.
+
+## COPY06M2Q8 — 지원 메일 정정 및 간결한 동영상 변환 설명 (2026-10-06)
+
+- 사용자 지정 메일은 builday365@gmail.com이며 help@taption.com이 아님. 코덱·포맷 목록과 encoder 용어를 마케팅 설명에서 빼고 ‘쉽고 빠른 동영상 변환’ 중심으로 정리하라는 요청을 반영함. 앱 이름 taption encoder, bundle com.taption.encoder 및 실제 출력 정책은 바꾸지 않음. 요청한 짧고 직접적인 문체에 맞춰 설명을 작성하고 한국어·영어 모두 반영함.
+- 시작 시 AGENTS 전체, git 상태 및 main/HEAD/origin/main=ed17d666df085bfd08df1648a07ee907d0e0e53f를 확인하고 기존 아홉 dirty 파일을 보존함. 원본 영상/자료·기존 출시 packet·private signing credentials를 수정하거나 삭제하지 않음.
+- ASC live GET(22:25:05/22:26 KST): app 6780777838/com.taption.encoder, version 0649aa64-cc2d-4e5c-b95c-129053c487ad=1.1.8, build 39/141b3cb7-e2ca-4584-a8f4-4c8fb875cbcb, WAITING_FOR_REVIEW / AFTER_APPROVAL. 기존 locale은 ko와 en-US 두 개. App Review 연락처 ee58c91e-41ab-4fb8-a2fc-abb8dfe64766의 contactEmail은 이미 builday365@gmail.com이어서 불필요한 PATCH를 하지 않음.
+- App Store version localization en-US 27c823c2-eec6-4613-9352-e7bc8c96618c 및 ko 808c7353-6b4b-4c62-b738-d9a55ac98ac0에 description·keywords를 PATCH하고 GET으로 정확히 일치함을 검증함. ko 키워드 52자, en-US 키워드 82자로 100자 제한 이내. 설명·부제·키워드에 encoder/encoding/codec/format, 인코더/인코딩/코덱/포맷, HEVC/H.264/H.265/MP4/MOV 등의 기술 목록이 없는지 확인함. supportUrl·marketingUrl·promotionalText·whatsNew·locale 등 다른 attributes는 모두 불변.
+- 심사 중 candidate appInfo 0864a04b-3e26-45e8-85d7-56ad055fa2a2의 ko localization 94d726b8-4df2-4e54-9cef-cc3c5320c909 subtitle은 ‘쉽고 빠른 동영상 변환’(12자), en-US d704dfb4-2a6b-43d9-8fae-d11e84d3ec99는 ‘Easy, fast video conversion’(27자)으로 PATCH/GET 검증 통과. 두 부제 모두 30자 제한 이내. name·privacy URL 등 다른 attributes 불변. 기존 공개 AppInfo는 변경하지 않음.
+- 저장된 한국어 description(133자):
+
+```text
+쉽고 빠른 동영상 변환
+
+사진이나 파일에서 영상을 선택하고 간편하게 변환해 보세요.
+여러 영상도 한 번에 변환하고, 원하는 위치에 저장할 수 있습니다.
+아이폰과 아이패드에서 편하게 사용하세요.
+
+문의: builday365@gmail.com
+```
+
+- 저장된 영어 description(244자):
+
+```text
+Easy, fast video conversion
+
+Choose videos from Photos or Files and convert them in a few simple steps.
+Convert multiple videos in one go and save them where you want.
+Enjoy a simple experience on iPhone and iPad.
+
+Support: builday365@gmail.com
+```
+
+- 저장된 ko keywords: 동영상,영상,변환,동영상변환,영상변환,압축,용량줄이기,일괄변환,사진,파일,재생,아이폰,아이패드. en-US keywords: video,converter,conversion,compress,batch,photos,files,player,playback,iphone,ipad.
+- 로컬 TaptionEncoder/OpenSourceNotices/libVLC-LGPL-Notice.txt:30 및 FFmpeg-LGPL-Decode-Bridge.txt:39에서 메일 한 곳씩만 builday365@gmail.com으로 교체함. 각 HEAD 원본에 단 한 번의 email byte replacement를 적용한 결과가 현재 파일과 완전히 동일함을 검사함. libVLC 현재 SHA256=b58ab9816222c854d2ad02deea791bbbaa81c94834657e1b4245c6431f81501f, FFmpeg 현재 SHA256=af0dc5a8f85e11b82a913a5cb4ba15206b6b032200c957864adffd4ecc5181e2. LGPL 전문, third-party notices, 재링크/최소 3년 source offer 및 역공학 권리 문구는 보존함. git diff --check 통과.
+- 최종 독립 GET(22:28:30 KST): 설명·키워드·candidate 부제 일치 PASS, 동일 version 1.1.8/build 39, submission f0a2e763-efe5-4396-bb34-429a8d90ba0b WAITING_FOR_REVIEW, submittedDate=2026-10-06T12:54:54.382Z(21:54:54 KST), AFTER_APPROVAL 유지. ko/en-US 수정사항 문구는 이전과 정확히 동일함. 심사 취소, 재제출, build 선택 변경 및 자동 출시 설정 변경 없음.
+- 제한/남은 결정: 이전 LIC06P2K8T에서 직접 확인한 제출 IPA와 LAW06N5K8T의 정확한 version/digest-bound record에는 여전히 help@taption.com이 포함됨. 설명·로컬 소스 편집은 그 바이너리를 변경하지 않음. 이번 제출의 앱 내부 메일까지 반영하려면 사용자가 심사 취소 및 새 빌드 제출을 승인해야 하며, 기존 정확한 자료를 덮어쓰지 않고 별도 새 출시 자료를 만들어야 함. 새 clean build/archive/runtime regression·업로드/commit/push·외부 이메일/packet 전송은 수행하지 않음. mailbox 소유·수신·장기 운영 가능성을 실제 메일 송신으로 검증한 것은 아님. 관련 의무 고지를 삭제하거나 법률 승인을 주장하지 않음.
+
+## NAME06Y2K8 — YYY Encoder 변경·홈 제목 제거·새 제출 준비 (2026-10-06)
+
+- 사용자는 앱 이름을 정확히 `YYY Encoder`로 변경하고 사진에도 반영하도록 요청했다. 이후 구조화 질문에서 **심사 취소 후 새 빌드·이미지로 재제출**을 승인했고, 홈 화면의 앱 이름 텍스트는 삭제하도록 추가 지시했다. source/main/origin/main은 ed17d66이며 기존 사용자 변경을 보존했다. commit/push는 요청되지 않아 실행하지 않는다.
+- 같은 앱 6780777838/com.taption.encoder의 candidate appInfo 0864a04b-3e26-45e8-85d7-56ad055fa2a2 ko/en-US 이름을 PATCH→YYY Encoder 후 22:35:40 KST GET 검증했다. 간결한 동영상 변환 설명·부제·지원 메일을 유지했다. 공개 1.1.5의 이름 변경/새 공개 출시 완료를 주장하지 않는다.
+- 22:51:10 KST 기존 review f0a2e763-efe5-4396-bb34-429a8d90ba0b에 canceled=true를 PATCH했다. CANCELING→22:51:23 COMPLETE, version DEVELOPER_REJECTED를 확인했다. 22:52:20 KST 기존 build 39 선택을 해제하고 같은 version resource 0649aa64-cc2d-4e5c-b95c-129053c487ad를 **1.1.9 / PREPARE_FOR_SUBMISSION / AFTER_APPROVAL / selectedBuild=null**로 변경·재조회했다. 기존 locale/screenshot IDs와 과거 정확한 출시 자료를 보존했다.
+- 앱 CFBundleDisplayName/default appName 및 사용자 노출 안내·Live Activity 이름을 수정했다. 홈 header의 제목 Text와 사용하지 않는 subtitle property를 제거했고 Menu·film.stack·별 배지는 유지했다. bundle ID/target/scheme/내부 실행 파일/기존 `Taption Encoder Outputs` 저장 폴더와 HEVC·MP4/MOV 출력 정책은 변경하지 않았다.
+- plist lint 및 git diff --check 통과. 새 전용 scratch에서 고정 SwiftPM GoogleMobileAds 13.5.0/UMP 3.1.0/SwiftVLC 0.10.1 resolve, generic iOS Debug clean build, Release clean archive 및 일반 app-store-connect export 모두 exit 0이다. 신규 산출물은 소스 밖 `/Users/u_mo_c/Documents/TaptionEncoderReleases/1.1.9-40-NAME06Y2K8`에 생성했다. 기존 1.1.8-39-LAW06N5K8T를 덮어쓰지 않았다.
+- iPhone 18 Pro Max/iOS 27 신규 전용 simulator **6081A497-D25A-43E4-A68D-F1F5B138E718**: focused XCTest **12 passed / 0 failed / 0 skipped**를 xcresult summary에서 직접 확인했다. 신규 이름/홈 제목 부재 계약, 기존 저장·출력 정책, 파일 탐색/일괄 저장/Live Activity/배포 hardening을 포함한다. iPad 전용 simulator ABB3AE94-752E-485C-A353-26951343D42F의 같은 테스트는 이어 실행 중이다. 다른 프로젝트의 simulator/device/runtime는 변경하지 않는다.
+- 실제 새 배포 IPA ZIP 검사와 plist 확인: **1.1.9 (40) / displayName=YYY Encoder / bundleId=com.taption.encoder**, 내부 실행 파일은 의도적으로 Taption Encoder다. IPA **23,346,557 bytes**, SHA256 **9613464b9be9c345b56635db417801a8e1b6658194be9c4637511aec32bdc566**. 두 shipped notice는 현재 소스와 byte 일치하고 builday365@gmail.com을 포함하며 help@taption.com을 포함하지 않는다. libVLC notice SHA256=b7978098d613dee11b50de0ef4cfd120b1bfb0807108e10fe25aa2291b7baa78, FFmpeg notice=d0bb8725135b2ec9031a4321ab02cbdae50ee5f031330bd89a3d677e7f3e694d. 이 로컬 export 검사는 Apple validation/upload/processing/submission과 별도 증거다.
+- 실제 Release xcactivitylog로 Mach-O 앱 객체 **76개**를 수집한 relink bundle SHA256 **451faa88114962ca260f093c996c5253d7dab16fadd217ec37e2c479eeb26d52**를 생성했다. 첫 시도에 일반 archive 텍스트를 xcactivitylog 대신 지정해 fail-closed 사용자 경로 오류가 발생했고, 실제 archive activitylog로 다시 실행해 통과했다. 정규화 검사 조건/앱 소스를 변경하지 않았다. 대응 소스와 같은 archive의 크기 보고서, 기술 gate/Apple upload는 후속 검증 중이다.
+- ASC 기존 PNG 총 30개를 원래 순서·이름·규격과 함께 original-manifest.json으로 고정하여 `/Users/u_mo_c/Documents/YYYEncoderAppStoreScreenshots-NAME06Y2K8/originals`에 복구했다. 두 imagegen 초안은 해상도/UI/글자 가장자리 변경 때문에 최종 이미지로 채택하지 않았다. 원본의 이름/홈 제목 영역만 native 정밀 편집하는 방식의 사용자 선택을 요청했으며, 원본 이미지 및 ASC 등록 사진은 아직 변경하지 않았다. Apple 업로드·재제출·공개 승인 완료는 아직 주장하지 않는다.
+- 후속 로컬 검증: iPad xcresult summary도 **12 passed / 0 failed / 0 skipped**, 총 24건 통과를 확인했다. iPhone/iPad 앱 runtime screenshot에서 home header의 앱 이름 텍스트 부재, 메뉴·영상 아이콘·별 표시 보존을 육안 확인했다. iPadOS 상태바가 자체 표시하는 YYY Encoder는 앱의 home header와 별개이며 OS 표시를 삭제했다고 주장하지 않는다. Simulator UI 접근이 불가해 새 가로 회전 screenshot은 수집하지 않았다.
+- 같은 archive의 Xcode App Thinning report(기기 20.9 MB compressed/43.5 MB uncompressed, universal 23.3 MB/46 MB)와 대응 소스/재링크를 입력한 **배포 기술 gate exit 0/PASS**. LEGAL_REVIEW_STATUS=NOT_VERIFIED 유지. source SHA256=0bf092133e0e9ebe669b9b12d7c9cafe35efe31374e34a3e84a34ab98ce9b290, relink=451faa88114962ca260f093c996c5253d7dab16fadd217ec37e2c479eeb26d52, size report=12ee95b095482438669c690dc25cb58cc0fe786e0483a8322d6c82c5c5514d68, IPA=9613464b9be9c345b56635db417801a8e1b6658194be9c4637511aec32bdc566. 원래 수정하지 않은 라이브러리로 normalized link command 실행 exit 0/unsigned arm64 executable을 확인했다. modified-library 설치/법적 승인으로 확대하지 않는다.
+- 앱/두 extension archive 서명과 dSYM UUID는 각각 main 5870AFB6-7AFE-3877-82BC-F9568D228133, Live Activity 3573F938-5AC6-3839-BFE7-73846242CCD7, Thumbnail 66FE1043-B167-30EC-9FBC-ECB27DF6BF09로 모두 일치했다. BaseSource-ed17d66.tar.gz+Candidate-1.1.9-40.patch를 새 scratch에 적용하여 구성 파일 **119개**를 현재 소스와 byte 비교 PASS했다. 처음 absolute /tmp 경로 방식은 macOS /tmp symbolic link 때문에 git apply가 차단했고, 실제 /private/tmp stage directory에서 적용해 검증했다. 사용자 소스/브랜치를 초기화하지 않았다.
+- 23:14:06 KST upload 전 독립 ASC GET: 정확한 1.1.9/PREPARE_FOR_SUBMISSION/AFTER_APPROVAL, existing build40 count=0. 위 IPA의 Apple altool validation을 시작했으며 완료 결과와 upload/processing은 별도 후속 증거로 남긴다. 이 단계에서 사진 교체와 재제출은 아직 하지 않았다.
+- Apple altool 27.0.5 validation **23:17:02 KST / exit 0 / VERIFY SUCCEEDED with no errors**를 확인했고, 동일 IPA upload도 **exit 0 / UPLOAD SUCCEEDED with no errors**. 새 delivery UUID **44ea1608-1531-462c-8345-121ee09a8d45**, 전송 bytes=23,346,557로 로컬 IPA와 일치한다. processingState/APP_STORE_ELIGIBLE와 App Review 재제출은 아직 별도 확인이 필요하다.
+- 새 1.1.9 ko/en-US whatsNew를 앱 이름 변경·홈 화면 정리·일부 영상 재생 불가 개선·동영상 변환/파일 처리 안정화의 네 짧은 문장으로 수정했다. 23:19:19 KST PATCH 후 GET에서 두 locale 모두 정확한 문구를 확인했고 description/keywords/URL/promotionalText 등 **다른 localization attributes는 전부 불변**이다. 한국어: `앱 이름을 YYY Encoder로 변경했습니다.` / `홈 화면을 간결하게 정리했습니다.` / `일부 영상이 재생되지 않는 문제를 개선했습니다.` / `동영상 변환과 파일 처리의 안정성을 개선했습니다.` 영어: `Renamed the app to YYY Encoder.` / `Simplified the home screen.` / `Fixed an issue that prevented some videos from playing.` / `Improved video conversion and file handling stability.` AFTER_APPROVAL 보존, 사진 교체/새 심사 제출은 아직 하지 않았다.
+- Upload 완료 시각은 **23:19:34 KST**이며 altool processing **exit 0/VALID/APP_STORE_ELIGIBLE/is-on-app-store-connect=true**를 확인했다. 23:23:05 KST 공식 API 독립 GET에서 delivery와 같은 build ID 44ea1608-1531-462c-8345-121ee09a8d45, build 40, expired=false 및 preReleaseVersion **2475fa5c-0855-4d2f-99b3-fea089d24302 / 1.1.9 / IOS**를 확인한 뒤 같은 App Store version에 선택했다. 현재 **1.1.9/PREPARE_FOR_SUBMISSION/AFTER_APPROVAL/selectedBuild=40**이며 새 WAITING_FOR_REVIEW로 확대하지 않는다.
+- 23:24:08 KST 최종 checkpoint: **active iOS review 0건**, old canceled review COMPLETE, App Review contact builday365@gmail.com/demoAccountRequired=false, 네 screenshot set 5+10+10+5=30장의 원래 ID·순서 유지 및 delivery COMPLETE. 공개 심사 재제출·새 이미지 업로드/삭제는 실행하지 않았다. 원본 PNG 30장의 native dimensions와 SHA256/MD5 baseline도 모두 고정했다(총 45,652,243 bytes). 기존 비디오·기기 프레임·언어별 텍스트를 바꾸지 않는 native 정밀 편집 방식의 사용자 답변을 기다리는 단계이며 NAME06Y2K8는 temp.md에 미완료로 유지한다. 홈 이름 제거와 실제 새 바이너리/이메일 수정·업로드까지는 완료다.
+- 최종 plist lint/git diff --check 통과. 새 파일/로그/이미지는 전부 소스 밖이며 23개 tracked dirty 파일을 보존하고 commit/push하지 않았다. 이전 1.1.8 record/ZIP/pending legal record/기존 사용자 동영상/다른 프로젝트 시뮬레이터를 삭제하거나 변경하지 않았다. archive/IPA/dSYMs/대응 소스/76개 재링크 객체와 compact proof는 새 exact-release record에 보존했다. 로컬 전용 simulator와 scratch는 아직 보존돼 있고 새 release 후속이 끝난 뒤 그 정확한 신규 생성 대상만 정리할 수 있다.
+
+### NAME06Y2K8 재개 — 정밀 편집 및 심사 재제출 (2026-10-07)
+
+- 사용자는 ‘정밀편집해서 마무리하고 제출까지 마무리해’로 원본 영역만 native 편집하는 방식을 명시 승인했다. 이전 imagegen 초안을 채택하지 않고 non-bundled `Scripts/precise_app_store_branding.swift`의 CoreGraphics/CoreText 픽셀 처리와 별도 `Scripts/verify_app_store_artwork.swift` 검증을 사용했다. 실제 앱 코드·구성 119개 및 1.1.9 (40) IPA SHA256가 기존 검증 결과와 동일함을 다시 확인했다. 이번 이미지 작업으로 앱 바이너리가 바뀌었다고 주장하지 않으며 앞서 통과한 iPhone/iPad 24개 테스트와 배포 기술/Apple 검증을 재사용한다.
+- 최종 PNG **30/30 PASS**: ko/en-US 각 iPhone 5장(1242×2688), iPad 세로 5장(2064×2752), 가로 5장(2752×2064). 원래 파일명·폴더 구조·해상도를 유지했고 모두 비손상 8-bit RGB/무알파 PNG다. 원본 30개 SHA256 불변, 저장 후 lossless 픽셀 일치, 별도 비교에서도 **편집 허용 영역 밖 변경 픽셀 0**이다. 변경 영역은 상단 브랜드 글자와 홈 제목/영상 아이콘 재정렬 영역뿐이며 영상·버튼·기기 프레임·다른 설명 문구·언어별 UI는 그대로다.
+- 상단 30개 wordmark의 Vision OCR 결과가 모두 **YYY Encoder**, 전체 OCR에서 이전 Taption 이름 검출 0건이다. 홈 제목이 있는 26장 모두 삭제했고, 나머지 4장은 원래 홈 헤더가 없는 전체 화면 picker/player다. OCR이 건너뛴 흐린 iPad modal 배경 8장을 육안 검수에서 발견해 같은 기기군의 확정 geometry로 처리했다. 최초 단일 색상/아이콘 탐색은 흐린 배경의 미세한 수직 gradient에서 fail-closed했고, 행별 배경색 복원과 원본 아이콘 픽셀 복사로 해결했다. 최종 연락처 시트 및 흐린 iPad master 검수에서 이전 이름·사각형 번짐·테두리·이음새가 보이지 않는다.
+- 최종 ko/en-US PREVIEW 2개를 업로드 전에 이미지/링크로 제공했다. `open_in_codex`는 queued이므로 패널 표시 완료를 별도로 주장하지 않는다. 원본/미리보기/정밀 diff·OCR·체크섬은 `/Users/u_mo_c/Documents/YYYEncoderAppStoreScreenshots-NAME06Y2K8`에 보존하며 compact QA는 새 exact-release의 `Evidence/artwork-qa-summary.json`에 보존했다.
+- 00:28:23 KST 공식 ASC GET에서 **1.1.9/PREPARE_FOR_SUBMISSION/AFTER_APPROVAL/build40**, active iOS review 0건 및 원래 30개 ID·순서·체크섬/COMPLETE를 재확인했다. 같은 앱의 4개 screenshot set에서 원본 백업이 있는 해당 파일만 하나씩 교체하고 완료·체크섬·native dimensions·순서를 확인한 뒤 다음 파일로 진행한다. 초기 version GET의 build linkage 미포함 검사는 외부 수정 전 종료됐고 `include=build`를 명시해 해결했다.
+- 최초 이미지 교체에서 19장은 모든 검사를 완료했다. 두 resource는 COMPLETE가 체크섬 metadata보다 먼저 반영되어 `NoneType` 검사에서 해당 set 진행이 멈췄다. 기존 새 ID를 공식 GET으로 재조회해 정확한 로컬 MD5/해상도가 반영된 것을 확인하고 재업로드 없이 순서를 복구했다. 이후 polling은 COMPLETE뿐 아니라 checksum/image metadata도 준비될 때까지 확인한다. 기존 원본을 대량 삭제하거나 새 POST를 중복하지 않았다. 00:38:03 KST 기준 26장 완료, 남은 영어 iPad 가로 이미지와 최종 심사 제출은 별도 후속 기록으로 확정한다.
+- 00:31:40 KST metadata GET: ko/en-US 이름 YYY Encoder, 부제·간결한 동영상 변환 설명·builday365@gmail.com 및 짧은 수정사항 정상, build40 VALID/APP_STORE_ELIGIBLE/expired=false를 확인했다. 00:33:30 KST 실제 IPA의 version/build/displayName/bundle ID와 두 bundled source-offer 고지의 올바른 메일·SHA256도 다시 확인했다. 기존 1.1.8 (39) 자료·사용자 파일·시뮬레이터 데이터는 변경/삭제하지 않으며 commit/push 및 공개 승인 완료는 아직 수행/주장하지 않는다.
+- 이미지 교체 최종 결과 **30/30 COMPLETE**, 네 set의 5+10+5+10개 순서 및 각 원본 파일명·새 로컬 MD5·native dimensions·파일 크기 일치. `screenshot-upload-progress.json`은 COMPLETE/failures=[]이며 초기 transient metadata 오류와 재업로드 없는 복구 이력을 보존한다. Apple에 등록된 이전 screenshot resource 30개는 요청한 새 이미지로 교체됐고, 삭제한 이전 PNG의 로컬 원본 30개와 과거 출시 자료는 그대로 보존되어 복구할 수 있다.
+- 최초 제출 명령이 사용자에 의해 중단됐다. 재개 지시 ‘ㄱㄱ’ 후 **00:41:33 KST** 공식 read-only GET에서 version PREPARE_FOR_SUBMISSION/AFTER_APPROVAL/build40, active review 0건 및 제출 receipt 부재를 확인했다. 중단된 명령을 성공으로 취급하거나 기존 제출을 중복 생성하지 않았다.
+- 제출 전 독립 GET으로 30개 새 이미지의 COMPLETE·MD5·규격·순서를 다시 검사하고, 이름·부제·간결한 ko/en-US 설명/수정사항/지원 메일이 직전 확정 metadata와 동일한지 확인했다. 앱/구성 119개 source hash와 정확한 IPA SHA256도 일치했다. build40 VALID/APP_STORE_ELIGIBLE/expired=false 및 preReleaseVersion 1.1.9/IOS, AFTER_APPROVAL을 확인한 뒤 새 review **eb30a21b-6226-4d21-882e-2a99797e27af**를 생성하고 해당 version 한 건만 연결했다.
+- **2026-10-07 00:42:55.710 KST** submitted=true 완료. **00:43:56 KST** 별도 GET에서 review 및 App Store version 모두 **WAITING_FOR_REVIEW**, 1.1.9 (40), build 44ea1608-1531-462c-8345-121ee09a8d45 및 **AFTER_APPROVAL**을 확인했다. 제출 item이 정확한 version resource 0649aa64-cc2d-4e5c-b95c-129053c487ad에 연결된 것도 확인했다. 제출 이후 30개 새 이미지의 체크섬·해상도·순서/COMPLETE와 ko/en-US 이름 YYY Encoder를 재확인했다. Apple 승인·실제 공개 출시 완료를 주장하지 않는다.
+- 정확한 기록은 새 release `Evidence/asc-resume-after-interruption.json`, `asc-screenshots-final-readback.json`, `asc-resubmission-receipt.json`, `asc-resubmission-final-readback.json`에 보존했다. NAME06Y2K8 구현·정밀 이미지 교체·심사 재제출 및 COPY06M2Q8 실제 새 바이너리 메일 확인은 완료되어 temp.md에서 제거한다. PUB06V8N2R는 새 submission에 결속한 Apple 심사/실제 공개 출시 후속 확인만 남긴다. FIX06P3M7Q의 사용자 기기 기본 연결 미확인 상태는 유지한다. 이번 재개에서 새 빌드·시뮬레이터 실행/삭제·commit/push·외부 법률 승인서 조작은 수행하지 않았다.
+- 최종 AGENTS.md/RELEASE_MANIFEST 상태를 실제 새 제출에 맞춰 갱신하고 기존 immutable 바이너리/소스/재링크와 새 증거를 포함한 SHA256SUMS를 재생성했다. **17/17 checksum OK**, `git diff --check` PASS. 완료 ID 두 개만 temp.md에서 제거했고 관련 없는 FIX06P3M7Q 내용은 byte 그대로 보존했다.
+
+## CLN07M4Q9B — main 커밋·푸시 및 소스 중심 정리 (2026-10-07)
+
+- 사용자는 워크트리 clean, main 커밋·push, 소스 외 관련 파일 삭제 및 새 채팅용 프롬프트를 요청했다. main/origin/main을 fetch 후 확인했고 시작 HEAD는 둘 다 ed17d666df085bfd08df1648a07ee907d0e0e53f다. Git worktree는 주 checkout 한 개뿐이며 앱에 연결된 별도 managed artifact/worktree는 없다. 별도 브랜치 삭제·이력 초기화는 하지 않는다.
+- 23개 tracked 변경과 정밀 이미지 Swift 도구 2개를 범위별로 확인했다. 실제 submitted candidate의 119개 앱/구성 파일 SHA256가 current source와 일치하며 IPA SHA256=9613464b9be9c345b56635db417801a8e1b6658194be9c4637511aec32bdc566도 재확인했다. plist lint/배포 shell 두 파일 bash -n/git diff --check 통과. 새 도구의 private-key/Bearer/password/token 패턴은 발견하지 않았다. 기존 iPhone/iPad focused 24 tests 및 동일 Release/Apple 검증을 재사용하며 새 runtime 테스트를 수행했다고 주장하지 않는다.
+- source 밖 삭제 후보는 /private/tmp/YYYEncoder-NAME06Y2K8.UPtGou 약 3.1 GiB, /Users/u_mo_c/Documents/YYYEncoderAppStoreScreenshots-NAME06Y2K8 약 91 MiB 및 전용 simulator 6081A497-D25A-43E4-A68D-F1F5B138E718 / ABB3AE94-752E-485C-A353-26951343D42F의 데이터다. 공용 ~/Library/Developer/Xcode/DerivedData 폴더는 현재 없다. 다른 프로젝트 시뮬레이터/공용 runtime·원본 사용자 동영상·인증 키·필수 vendor/resources/licenses는 삭제 대상이 아니다.
+- TaptionEncoderReleases 약 1.3 GiB는 현재 심사 중 정확한 archive/IPA/dSYM/출시 증빙 및 LGPL 대응 소스/재링크를 포함하므로 보존 지침과 충돌하는 삭제 범위를 사용자에게 질문했다. 정확한 symbols/원본 artifact는 소스 재빌드로 복구를 보장할 수 없음을 안내했다. 소스 commit/push 및 재생성 가능한 정리는 독립적으로 진행하되 이 보존 자료의 실제 삭제/보존 선택은 후속 결과로 기록한다.

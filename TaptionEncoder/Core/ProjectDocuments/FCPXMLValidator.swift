@@ -82,7 +82,7 @@ private final class FCPXMLStructureValidationDelegate: NSObject, XMLParserDelega
             return .invalid(reason: "FCPXML spine section is missing.")
         }
         guard hasEmbeddedMetadata else {
-            return .invalid(reason: "Taption Encoder project metadata is missing.")
+            return .invalid(reason: "YYY Encoder project metadata is missing.")
         }
         guard hasAssetClips else {
             return .invalid(reason: "FCPXML contains no asset clips.")

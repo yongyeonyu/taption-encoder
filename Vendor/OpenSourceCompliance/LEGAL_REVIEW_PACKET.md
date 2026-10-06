@@ -1,10 +1,15 @@
 # Taption Encoder Public-Distribution Legal Review
 
-Status: **BLOCKED - external counsel approval required**
+Status: **OPTIONAL EXTERNAL REVIEW - NOT A LEGAL APPROVAL**
 
 This packet is scoped to Taption Encoder (`com.taption.encoder`). It does not
 convert an engineering inventory, successful build, device install, archive,
 TestFlight upload, or App Store Connect record into legal approval.
+
+Under the owner's 2026-10-06 instruction, a separate external approval document
+is not a mandatory App Store upload/submission input. The technical gate still
+checks exact release materials. This packet preserves review questions and does
+not grant rights, waive license obligations, or assert that a review occurred.
 
 ## Distribution design
 
@@ -34,10 +39,11 @@ TestFlight upload, or App Store Connect record into legal approval.
   separately licensed proprietary SDK binaries.
 - H.265 / HEVC encoding is performed through Apple AVFoundation/VideoToolbox.
 
-## Required decisions
+## Questions for an optional external review
 
-Counsel must provide an approval record tied to the exact release version,
-build, corresponding-source digest, and relinking-material digest.
+If an external approval record is obtained and used with the opt-in gate mode,
+it must be tied to the exact release version, build, corresponding-source digest,
+and relinking-material digest. No reviewer or approval may be fabricated.
 
 1. Confirm whether the proposed LGPL 2.1 static-link compliance method is
    sufficient for an App Store distributed, code-signed iOS application.
@@ -64,7 +70,7 @@ build, corresponding-source digest, and relinking-material digest.
 9. Review Google SDK terms, privacy disclosures, consent flow, and the final
    App Store metadata independently of the open-source review.
 
-## Required release artifacts
+## Release artifacts to preserve
 
 - Signed release `.xcarchive` for the submitted version and build.
 - Apple Distribution-signed `app-store-connect` export IPA for that archive.
@@ -76,12 +82,12 @@ build, corresponding-source digest, and relinking-material digest.
 - Final App Store EULA selection or custom EULA text.
 - `App Thinning Size Report.txt` from an export of the same release archive.
 - Final third-party notices as included in the release app bundle.
-- External approval JSON matching the schema in `README.md`.
+- If obtained: external approval JSON matching the schema in `README.md`.
 
 Engineering can demonstrate that the captured object set relinks against the
 unmodified release libraries. That does not prove that a user-modified binary
 can be signed, installed, or distributed under Apple's platform controls, and
-does not replace counsel's sufficiency decision.
+does not establish legal sufficiency.
 
 ## Primary references
 

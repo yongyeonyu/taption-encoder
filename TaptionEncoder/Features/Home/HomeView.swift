@@ -974,11 +974,6 @@ struct HomeView: View {
                     .background(TaptionTheme.selectedSurface)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-                Text(viewModel.subtitle)
-                    .font(metrics.headerFont.weight(.semibold))
-                    .foregroundStyle(TaptionTheme.mutedText)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .center)
 

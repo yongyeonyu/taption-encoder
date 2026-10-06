@@ -11,9 +11,9 @@ enum FCPXMLProjectDocumentError: LocalizedError, Equatable {
         case .unsupportedDocumentKind(let kind):
             return "\(kind.rawValue) project documents are not writable in this build."
         case .missingEmbeddedProjectMetadata:
-            return "The FCPXML file does not contain Taption Encoder project metadata."
+            return "The FCPXML file does not contain YYY Encoder project metadata."
         case .invalidEmbeddedProjectMetadata:
-            return "The Taption Encoder project metadata in this FCPXML file could not be decoded."
+            return "The YYY Encoder project metadata in this FCPXML file could not be decoded."
         case .invalidFCPXMLRoot:
             return "The selected file is not a valid FCPXML document."
         }

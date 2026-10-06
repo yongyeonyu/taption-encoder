@@ -265,12 +265,13 @@ fi
 cat >"$STAGE_DIR/RELINK_README.txt" <<EOF
 Taption Encoder ${MARKETING_VERSION} (${BUILD_VERSION}) relinking materials
 
-Status: TECHNICAL CANDIDATE - EXTERNAL LEGAL REVIEW REQUIRED
+Status: TECHNICAL RELINK MATERIALS - NOT A LEGAL APPROVAL
 
 This package contains the Mach-O object files selected by the archived app's
 LinkFileList and a normalized form of the archived clang link command. It does
 not assert that App Store delivery, Apple code signing, or this material set
-satisfies LGPL 2.1. Counsel must decide that separately for the exact release.
+satisfies LGPL 2.1. License compliance remains the distributor's responsibility;
+any legal assessment is separate from this technical material.
 
 The package was captured with ${xcode_version}, iPhoneOS SDK ${sdk_name}, for
 arm64-apple-ios18.0. The normalized link command omits add_ast_path arguments;
@@ -294,13 +295,14 @@ To perform the technical relink:
 The original proprietary Swift source is not included. The application object
 files are provided only as the release-specific technical relinking input.
 Keep this package digest bound to the matching source bundle, distribution IPA,
-App Thinning report, and external approval record.
+App Thinning report, and release record. External approval may be recorded
+separately if an actual review is obtained; it is not a mandatory gate input.
 EOF
 
 cat >"$STAGE_DIR/relink-metadata.json" <<EOF
 {
   "schemaVersion": 1,
-  "technicalStatus": "candidate-external-legal-review-required",
+  "technicalStatus": "technical-relink-materials",
   "bundleIdentifier": "com.taption.encoder",
   "marketingVersion": "$MARKETING_VERSION",
   "buildVersion": "$BUILD_VERSION",

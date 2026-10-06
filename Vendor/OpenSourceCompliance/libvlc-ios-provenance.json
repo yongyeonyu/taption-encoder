@@ -172,10 +172,12 @@
   },
   "taptionFFmpegDecodeBridge": {
     "version": "8.1.1",
+    "binaryHashesVerifiedAt": "2026-10-06",
+    "binarySourceCommit": "94a5294c5f93d9ae670d416a1832f4cf8baaacb6",
     "sourceURL": "https://ffmpeg.org/releases/ffmpeg-8.1.1.tar.xz",
     "sourceSHA256": "b6863adde98898f42602017462871b5f6333e65aec803fdd7a6308639c52edf3",
-    "iosArm64ArchiveSHA256": "c9c70bc9726b1bef4bbadaaad36cb95e91e227cac348679469c9d332f6b4fe5e",
-    "iosSimulatorArm64ArchiveSHA256": "8ca36b01446dd0f1b54805ea638e52e7209d36072d7159df0c70c5502a8d0c8e",
+    "iosArm64ArchiveSHA256": "9ef599100adf0972f766d0ad86239db6ba705e8d27037fd67d827e4a99515704",
+    "iosSimulatorArm64ArchiveSHA256": "2ebd28e4c02c3dd730c6decb1ec83ba7a3b76c68d561c8988fb0b2ef4963df17",
     "outputPolicy": "H.265 / HEVC only in MP4 or MOV"
   },
   "gateState": {

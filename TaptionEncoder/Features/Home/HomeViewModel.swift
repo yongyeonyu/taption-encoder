@@ -169,10 +169,6 @@ final class HomeViewModel: ObservableObject {
         environment.configuration.appName
     }
 
-    var subtitle: String {
-        "Taption Encoder"
-    }
-
     var starBalanceDisplayText: String {
         starWalletSnapshot.badgeText
     }
@@ -1822,7 +1818,7 @@ final class HomeViewModel: ObservableObject {
             state = .failed(HomeErrorPresenter.error(
                 title: "Folder failed",
                 summary: "The selected folder could not be opened.",
-                recovery: "Choose the folder again from Files and keep Taption Encoder open until the queue appears.",
+                recovery: "Choose the folder again from Files and keep YYY Encoder open until the queue appears.",
                 error: error
             ))
             requestSessionEndAd(reason: .failedEncoding)
@@ -6016,7 +6012,7 @@ final class HomeViewModel: ObservableObject {
         var roots: [HomeImportBrowserFolderSnapshot] = [
             HomeImportBrowserFolderSnapshot(
                 id: documentsURL.standardizedFileURL.path,
-                folderName: "Taption Encoder Files",
+                folderName: "YYY Encoder Files",
                 detailText: "On My iPhone"
             )
         ]
@@ -6026,7 +6022,7 @@ final class HomeViewModel: ObservableObject {
             roots.append(HomeImportBrowserFolderSnapshot(
                 id: samplesURL.standardizedFileURL.path,
                 folderName: "Samples",
-                detailText: "Taption Encoder Files"
+                detailText: "YYY Encoder Files"
             ))
         }
 
@@ -6078,7 +6074,7 @@ final class HomeViewModel: ObservableObject {
             return (standardizedURL, standardizedURL.lastPathComponent)
         }
 
-        return (documentsURL, "Taption Encoder Files")
+        return (documentsURL, "YYY Encoder Files")
     }
 
     private func importBrowserDisplayName(for url: URL, fallback: String) -> String {

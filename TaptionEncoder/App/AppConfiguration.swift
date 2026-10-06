@@ -10,7 +10,7 @@ struct AppConfiguration: Equatable {
     let backgroundEncodingMinimumMajorVersion: Int
 
     init(
-        appName: String = "Taption Encoder",
+        appName: String = "YYY Encoder",
         bundleIdentifier: String = "com.taption.encoder",
         minimumOSDescription: String = "iOS/iPadOS 18.0",
         outputSuffix: String = "_taption",

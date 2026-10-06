@@ -6,6 +6,7 @@ DIST_IPA_PATH=""
 SOURCE_BUNDLE_PATH=""
 RELINK_BUNDLE_PATH=""
 LEGAL_APPROVAL_PATH=""
+LEGAL_APPROVAL_REQUIRED=false
 APP_SIZE_REPORT_PATH=""
 
 usage() {
@@ -16,9 +17,13 @@ Usage: $0 \\
   --source-bundle CorrespondingSource.tar.xz \\
   --relink-bundle RelinkMaterials.tar.xz \\
   --app-size-report "App Thinning Size Report.txt" \\
-  --legal-approval approval.json
+  [--legal-approval approval.json] [--require-legal-approval]
+
+The default gate checks technical release materials, not legal approval.
+Supplying --legal-approval enables strict, version/digest-bound approval checks.
+--require-legal-approval blocks when no approval record is supplied.
 EOF
-  exit 64
+  exit "${1:-64}"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -46,12 +51,20 @@ while [[ $# -gt 0 ]]; do
     --legal-approval)
       [[ $# -ge 2 ]] || usage
       LEGAL_APPROVAL_PATH="$2"
+      LEGAL_APPROVAL_REQUIRED=true
       shift 2
+      ;;
+    --require-legal-approval)
+      LEGAL_APPROVAL_REQUIRED=true
+      shift
       ;;
     --app-size-report)
       [[ $# -ge 2 ]] || usage
       APP_SIZE_REPORT_PATH="$2"
       shift 2
+      ;;
+    --help|-h)
+      usage 0
       ;;
     *)
       usage
@@ -70,7 +83,9 @@ fail() {
 [[ -f "$SOURCE_BUNDLE_PATH" ]] || fail "Missing corresponding-source bundle: $SOURCE_BUNDLE_PATH"
 [[ -f "$RELINK_BUNDLE_PATH" ]] || fail "Missing relinking bundle: $RELINK_BUNDLE_PATH"
 [[ -f "$APP_SIZE_REPORT_PATH" ]] || fail "Missing App Thinning Size Report: $APP_SIZE_REPORT_PATH"
-[[ -f "$LEGAL_APPROVAL_PATH" ]] || fail "Missing external legal approval record: $LEGAL_APPROVAL_PATH"
+if [[ "$LEGAL_APPROVAL_REQUIRED" == true ]]; then
+  [[ -f "$LEGAL_APPROVAL_PATH" ]] || fail "Missing external legal approval record: $LEGAL_APPROVAL_PATH"
+fi
 
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/taption-public-gate.XXXXXX")"
 trap 'rm -rf "$TEMP_DIR"' EXIT
@@ -268,9 +283,14 @@ done
 RELINK_METADATA_PATH="$RELINK_ROOT/relink-metadata.json"
 /usr/bin/plutil -convert xml1 -o /dev/null "$RELINK_METADATA_PATH" || \
   fail "Invalid relinking release metadata JSON."
-[[ "$(json_value "$RELINK_METADATA_PATH" technicalStatus)" == \
-  "candidate-external-legal-review-required" ]] || \
-  fail "Relinking metadata does not preserve the external-review status."
+case "$(json_value "$RELINK_METADATA_PATH" technicalStatus)" in
+  technical-relink-materials|candidate-external-legal-review-required)
+    # Accept preserved older packets without turning their warning into a gate.
+    ;;
+  *)
+    fail "Relinking metadata has an unknown technical status."
+    ;;
+esac
 [[ "$(json_value "$RELINK_METADATA_PATH" bundleIdentifier)" == "$BUNDLE_ID" ]] || \
   fail "Relinking bundle identifier does not match the xcarchive."
 [[ "$(json_value "$RELINK_METADATA_PATH" marketingVersion)" == "$MARKETING_VERSION" ]] || \
@@ -288,9 +308,10 @@ grep -Fq '${RELINK_ROOT}' "$RELINK_ROOT/LINK_COMMAND.txt" || \
 if grep -Fq '/Users/' "$RELINK_ROOT/LINK_COMMAND.txt"; then
   fail "Relinking command contains a packager-specific user path."
 fi
-grep -Fq 'TECHNICAL CANDIDATE - EXTERNAL LEGAL REVIEW REQUIRED' \
-  "$RELINK_ROOT/RELINK_README.txt" || \
-  fail "Relinking README does not preserve the external-review warning."
+grep -Fq 'relinking materials' "$RELINK_ROOT/RELINK_README.txt" || \
+  fail "Relinking README does not identify the technical material."
+grep -Fq 'The output is unsigned.' "$RELINK_ROOT/RELINK_README.txt" || \
+  fail "Relinking README is missing the signing/installation limitation."
 tar -tf "$RELINK_ROOT/TaptionEncoder-AppObjects.tar.xz" >"$TEMP_DIR/app-object-members.txt" || \
   fail "Could not read the application object archive."
 if ! grep -Eq '\.o$' "$TEMP_DIR/app-object-members.txt"; then
@@ -311,40 +332,49 @@ done < <(find "$TEMP_DIR/app-objects" -type f -name '*.o' -print0)
 [[ "$validated_object_count" == "$RELINK_OBJECT_COUNT" ]] || \
   fail "Validated Mach-O object count does not match relinking metadata."
 
-/usr/bin/plutil -convert xml1 -o /dev/null "$LEGAL_APPROVAL_PATH" || \
-  fail "Invalid legal approval JSON."
 SOURCE_SHA256="$(shasum -a 256 "$SOURCE_BUNDLE_PATH" | awk '{print $1}')"
 RELINK_SHA256="$(shasum -a 256 "$RELINK_BUNDLE_PATH" | awk '{print $1}')"
 APP_SIZE_REPORT_SHA256="$(shasum -a 256 "$APP_SIZE_REPORT_PATH" | awk '{print $1}')"
 DIST_IPA_SHA256="$(shasum -a 256 "$DIST_IPA_PATH" | awk '{print $1}')"
 DIST_IPA_BYTES="$(stat -f '%z' "$DIST_IPA_PATH")"
 
-[[ "$(json_value "$LEGAL_APPROVAL_PATH" status)" == "approved" ]] || fail "Legal status is not approved."
-[[ -n "$(json_value "$LEGAL_APPROVAL_PATH" approvalID)" ]] || fail "Legal approval ID is missing."
-[[ -n "$(json_value "$LEGAL_APPROVAL_PATH" reviewer)" ]] || fail "Legal reviewer is missing."
-[[ "$(json_value "$LEGAL_APPROVAL_PATH" approvedAt)" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || \
-  fail "Legal approval date must use YYYY-MM-DD."
-[[ "$(json_value "$LEGAL_APPROVAL_PATH" bundleIdentifier)" == "$BUNDLE_ID" ]] || \
-  fail "Legal approval bundle identifier does not match."
-[[ "$(json_value "$LEGAL_APPROVAL_PATH" marketingVersion)" == "$MARKETING_VERSION" ]] || \
-  fail "Legal approval marketing version does not match."
-[[ "$(json_value "$LEGAL_APPROVAL_PATH" buildVersion)" == "$BUILD_VERSION" ]] || \
-  fail "Legal approval build version does not match."
-[[ "$(json_value "$LEGAL_APPROVAL_PATH" sourceBundleSHA256)" == "$SOURCE_SHA256" ]] || \
-  fail "Legal approval source-bundle digest does not match."
-[[ "$(json_value "$LEGAL_APPROVAL_PATH" relinkBundleSHA256)" == "$RELINK_SHA256" ]] || \
-  fail "Legal approval relink-bundle digest does not match."
-[[ "$(json_value "$LEGAL_APPROVAL_PATH" appSizeReportSHA256)" == "$APP_SIZE_REPORT_SHA256" ]] || \
-  fail "Legal approval app-size-report digest does not match."
-[[ "$(json_value "$LEGAL_APPROVAL_PATH" distributionIPASHA256)" == "$DIST_IPA_SHA256" ]] || \
-  fail "Legal approval distribution-IPA digest does not match."
+if [[ "$LEGAL_APPROVAL_REQUIRED" == true ]]; then
+  /usr/bin/plutil -convert xml1 -o /dev/null "$LEGAL_APPROVAL_PATH" || \
+    fail "Invalid legal approval JSON."
+  [[ "$(json_value "$LEGAL_APPROVAL_PATH" status)" == "approved" ]] || fail "Legal status is not approved."
+  [[ -n "$(json_value "$LEGAL_APPROVAL_PATH" approvalID)" ]] || fail "Legal approval ID is missing."
+  [[ -n "$(json_value "$LEGAL_APPROVAL_PATH" reviewer)" ]] || fail "Legal reviewer is missing."
+  [[ "$(json_value "$LEGAL_APPROVAL_PATH" approvedAt)" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || \
+    fail "Legal approval date must use YYYY-MM-DD."
+  [[ "$(json_value "$LEGAL_APPROVAL_PATH" bundleIdentifier)" == "$BUNDLE_ID" ]] || \
+    fail "Legal approval bundle identifier does not match."
+  [[ "$(json_value "$LEGAL_APPROVAL_PATH" marketingVersion)" == "$MARKETING_VERSION" ]] || \
+    fail "Legal approval marketing version does not match."
+  [[ "$(json_value "$LEGAL_APPROVAL_PATH" buildVersion)" == "$BUILD_VERSION" ]] || \
+    fail "Legal approval build version does not match."
+  [[ "$(json_value "$LEGAL_APPROVAL_PATH" sourceBundleSHA256)" == "$SOURCE_SHA256" ]] || \
+    fail "Legal approval source-bundle digest does not match."
+  [[ "$(json_value "$LEGAL_APPROVAL_PATH" relinkBundleSHA256)" == "$RELINK_SHA256" ]] || \
+    fail "Legal approval relink-bundle digest does not match."
+  [[ "$(json_value "$LEGAL_APPROVAL_PATH" appSizeReportSHA256)" == "$APP_SIZE_REPORT_SHA256" ]] || \
+    fail "Legal approval app-size-report digest does not match."
+  [[ "$(json_value "$LEGAL_APPROVAL_PATH" distributionIPASHA256)" == "$DIST_IPA_SHA256" ]] || \
+    fail "Legal approval distribution-IPA digest does not match."
 
-for decision in lgplStaticLinking appStoreEULACarveout libvlcContribMap hevcDistribution; do
-  [[ "$(json_value "$LEGAL_APPROVAL_PATH" "$decision")" == "approved" ]] || \
-    fail "Legal decision is not approved: $decision"
-done
+  for decision in lgplStaticLinking appStoreEULACarveout libvlcContribMap hevcDistribution; do
+    [[ "$(json_value "$LEGAL_APPROVAL_PATH" "$decision")" == "approved" ]] || \
+      fail "Legal decision is not approved: $decision"
+  done
+fi
 
 echo "PUBLIC_DISTRIBUTION_GATE=PASS"
+echo "TECHNICAL_RELEASE_CHECKS=PASS"
+if [[ "$LEGAL_APPROVAL_REQUIRED" == true ]]; then
+  echo "EXTERNAL_LEGAL_APPROVAL=RECORD_VERIFIED"
+else
+  echo "EXTERNAL_LEGAL_APPROVAL=NOT_REQUIRED_BY_PROJECT_POLICY"
+  echo "LEGAL_REVIEW_STATUS=NOT_VERIFIED"
+fi
 echo "bundleIdentifier=$BUNDLE_ID"
 echo "marketingVersion=$MARKETING_VERSION"
 echo "buildVersion=$BUILD_VERSION"

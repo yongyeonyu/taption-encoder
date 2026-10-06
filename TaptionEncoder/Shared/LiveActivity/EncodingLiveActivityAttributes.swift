@@ -57,7 +57,7 @@ struct TaptionEncodingActivitySnapshot: Codable, Hashable {
 
     init(
         sessionID: String,
-        title: String = "Taption Encoder",
+        title: String = "YYY Encoder",
         statusText: String,
         sourceName: String,
         mode: TaptionEncodingActivityMode,
