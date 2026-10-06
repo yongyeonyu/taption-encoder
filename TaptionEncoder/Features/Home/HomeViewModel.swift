@@ -58,6 +58,8 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var rewardedAdState: AdLoadState
     @Published private(set) var isWatchingStarAd: Bool
     @Published private(set) var activePreview: QueueVideoPreview?
+    @Published private(set) var miniPlayerPreview: QueueVideoPreview?
+    @Published private(set) var isStartingEncoding = false
     @Published private(set) var importBrowserContext: HomeImportBrowserContext?
     @Published private(set) var importBrowserFolders: [HomeImportBrowserFolderSnapshot]
     @Published private(set) var importBrowserFiles: [HomeImportBrowserFileSnapshot]
@@ -65,10 +67,14 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var batteryEncodingAlert: BatteryEncodingAlert?
 
     private let environment: AppEnvironment
+    private let sourceDownloader: any VideoSourceDownloading
     private let resourceMonitor: EncodingResourceMonitoring
     private let batteryPowerMonitor: any BatteryPowerMonitoring
     private let batterySettingsProvider: () -> BatteryEncodingSettings
     private var activeTask: Task<Void, Never>?
+    private var encodingStartTask: Task<Void, Never>?
+    private var encodingStartOperationID: UUID?
+    private var preparationOperationID: UUID?
     private var resourceMonitorTask: Task<Void, Never>?
     private var latestResourceUsage: EncodingResourceUsageSnapshot?
     private var folderBatch: FolderEncodingBatch?
@@ -110,10 +116,12 @@ final class HomeViewModel: ObservableObject {
 
     init(
         environment: AppEnvironment = .phase0,
+        sourceDownloader: any VideoSourceDownloading = UbiquitousVideoDownloader(),
         batteryPowerMonitor: any BatteryPowerMonitoring = UIDeviceBatteryPowerMonitor(),
         batterySettingsProvider: @escaping () -> BatteryEncodingSettings = { BatteryEncodingSettings.load() }
     ) {
         self.environment = environment
+        self.sourceDownloader = sourceDownloader
         self.resourceMonitor = environment.resourceMonitor
         self.batteryPowerMonitor = batteryPowerMonitor
         self.batterySettingsProvider = batterySettingsProvider
@@ -170,6 +178,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     var canStartEncodingNow: Bool {
+        guard !isStartingEncoding else { return false }
         guard let review = state.preparedEncodingReview else {
             return false
         }
@@ -274,7 +283,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     var canWatchAdForStar: Bool {
-        !state.isBusy && !isWatchingStarAd
+        !state.isBusy && !isStartingEncoding && !isWatchingStarAd
     }
 
     func dismissBatteryEncodingAlert() {
@@ -1625,7 +1634,11 @@ final class HomeViewModel: ObservableObject {
             category: .fileImport,
             metadata: ["name": url.lastPathComponent]
         )
-        startFilesFlow(url: url)
+        startFilesFlow(
+            url: url,
+            autoStartAfterPrepare: false,
+            autoOpenPreviewAfterPrepare: true
+        )
     }
 
     #if DEBUG
@@ -1666,7 +1679,7 @@ final class HomeViewModel: ObservableObject {
                 "autoOpenPreview": "\(autoOpenPreviewAfterPrepare)"
             ]
         )
-        guard canStartNewSourceFlow() else {
+        guard state.canSelectSource, canStartNewSourceFlow() else {
             return
         }
         dismissPreview()
@@ -2097,15 +2110,32 @@ final class HomeViewModel: ObservableObject {
             )
         }
         activePreview = nil
+        miniPlayerPreview = nil
     }
 
-    func restorePreview(_ preview: QueueVideoPreview) {
+    func minimizePreview(_ preview: QueueVideoPreview, snapshot: QueuePreviewPlaybackSnapshot? = nil) {
+        guard activePreview?.id == preview.id else { return }
+        previewInspectionTask?.cancel()
+        previewInspectionTask = nil
+        var handoffPreview = preview
+        handoffPreview.playbackSnapshot = snapshot ?? preview.playbackSnapshot
+        activePreview = nil
+        miniPlayerPreview = handoffPreview
+    }
+
+    func dismissMiniPreview() {
+        miniPlayerPreview = nil
+    }
+
+    func restorePreview(_ preview: QueueVideoPreview, snapshot: QueuePreviewPlaybackSnapshot? = nil) {
+        guard var handoffPreview = miniPlayerPreview, handoffPreview.id == preview.id else { return }
+        handoffPreview.playbackSnapshot = snapshot ?? handoffPreview.playbackSnapshot
         AppLogger.info(
             "Queue mini player restored to full preview",
             category: .ui,
             metadata: ["name": preview.displayName]
         )
-        presentPreview(preview)
+        presentPreview(handoffPreview)
     }
 
     func openPreviousPreview() {
@@ -2173,6 +2203,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func startPreparedEncoding() {
+        guard !isStartingEncoding else { return }
         guard prepareFolderOutputDirectoryForStart() else {
             AppLogger.info(
                 "Start encoding is waiting for a folder output directory",
@@ -2219,12 +2250,7 @@ final class HomeViewModel: ObservableObject {
             return
         }
         dismissPreview()
-        Task { @MainActor [weak self] in
-            await self?.attemptEncodingStart(
-                for: review,
-                autoResumeAfterStarEarn: false
-            )
-        }
+        requestEncodingStart(for: review, autoResumeAfterStarEarn: false)
     }
 
     private func openBatchPreviewForFileCard(id: String) -> Bool {
@@ -2331,7 +2357,8 @@ final class HomeViewModel: ObservableObject {
             displayName: review.source.displayName,
             sourceURL: review.source.url,
             videoInfo: review.videoInfo,
-            displaySize: review.job.asset.videoTrack?.displaySize
+            displaySize: review.job.asset.videoTrack?.displaySize,
+            usesNativePlayback: review.job.asset.videoTrack?.codec == .hevcWithAlpha
         )
     }
 
@@ -2350,7 +2377,8 @@ final class HomeViewModel: ObservableObject {
             sourceURL: url,
             videoInfo: videoInfo,
             displaySize: item.asset?.videoTrack?.displaySize,
-            playlist: batchPreviewPlaylist(for: url, in: batch)
+            playlist: batchPreviewPlaylist(for: url, in: batch),
+            usesNativePlayback: item.asset?.videoTrack?.codec == .hevcWithAlpha
         )
     }
 
@@ -2419,6 +2447,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func presentPreview(_ preview: QueueVideoPreview) {
+        dismissMiniPreview()
         activePreview = preview
         AppLogger.info(
             "Queue preview opened",
@@ -2458,7 +2487,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     func watchAdForStar() {
-        guard !state.isBusy else {
+        guard !state.isBusy, !isStartingEncoding else {
             AppLogger.info("Watch ad ignored because state is busy", category: .ads)
             return
         }
@@ -2475,7 +2504,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func handleRewardedAdButtonTap() async {
-        guard !state.isBusy else {
+        guard !state.isBusy, !isStartingEncoding else {
             return
         }
         guard !isWatchingStarAd else {
@@ -2531,7 +2560,7 @@ final class HomeViewModel: ObservableObject {
                let review = state.preparedEncodingReview,
                canStartEncodingNow {
                 shouldAutoResumeBatchAfterStarEarn = false
-                await attemptEncodingStart(
+                requestEncodingStart(
                     for: review,
                     autoResumeAfterStarEarn: true
                 )
@@ -2814,6 +2843,8 @@ final class HomeViewModel: ObservableObject {
             return
         }
         AppLogger.info("Reset requested", category: .ui)
+        invalidateEncodingStart()
+        preparationOperationID = nil
         let pendingStatesToReset = resetPendingStates()
         dismissPreview()
         activeTask?.cancel()
@@ -2854,6 +2885,11 @@ final class HomeViewModel: ObservableObject {
     }
 
     func cancel() {
+        if isStartingEncoding {
+            invalidateEncodingStart()
+            state = .cancelled
+            return
+        }
         guard state.canCancel else {
             AppLogger.info("Cancel ignored because state cannot cancel", category: .ui)
             return
@@ -2903,6 +2939,8 @@ final class HomeViewModel: ObservableObject {
             metadata: ["message": logMessage]
         )
         dismissPreview()
+        invalidateEncodingStart()
+        preparationOperationID = nil
         activeTask?.cancel()
         activeTask = nil
         stopResourceMonitoring()
@@ -2929,6 +2967,8 @@ final class HomeViewModel: ObservableObject {
         at url: URL,
         preinspectedAsset: TaptionVideoAsset? = nil
     ) async throws -> (asset: TaptionVideoAsset, reusedCache: Bool) {
+        try await sourceDownloader.ensureLocalVideo(at: url)
+        try Task.checkCancellation()
         let fingerprint = mediaFingerprint(for: url)
         let canValidateFingerprint = fingerprint.fileSize != nil
             || fingerprint.modificationDate != nil
@@ -2958,6 +2998,7 @@ final class HomeViewModel: ObservableObject {
         }
 
         let asset = try await environment.videoCoreServices.inspector.inspectVideo(at: url)
+        try Task.checkCancellation()
         if canValidateFingerprint {
             inspectedMediaCache.store(asset, for: url)
         }
@@ -3001,6 +3042,9 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
+        invalidateEncodingStart()
+        let preparationID = UUID()
+        preparationOperationID = preparationID
         AppLogger.info(
             "Prepare encoding started",
             category: .encoding,
@@ -3024,6 +3068,11 @@ final class HomeViewModel: ObservableObject {
             guard let self else {
                 return
             }
+            defer {
+                if preparationOperationID == preparationID {
+                    preparationOperationID = nil
+                }
+            }
             let trace = TaptionEncodingPerformanceTrace(
                 name: "home_prepare_encoding",
                 category: .encoding,
@@ -3035,7 +3084,7 @@ final class HomeViewModel: ObservableObject {
             )
 
             do {
-                try Task.checkCancellation()
+                try checkPreparationOperation(preparationID)
                 markBatchItem(
                     source.url,
                     statusText: "Inspecting",
@@ -3050,6 +3099,7 @@ final class HomeViewModel: ObservableObject {
                     at: source.url,
                     preinspectedAsset: preinspectedAsset
                 )
+                try checkPreparationOperation(preparationID)
                 let asset = inspected.asset
                 trace.mark(
                     "inspection_complete",
@@ -3066,14 +3116,44 @@ final class HomeViewModel: ObservableObject {
                 let temporaryOutputURL = makeTemporaryOutputURL(for: source)
                 let core = TaptionVideoCore(services: environment.videoCoreServices)
                 let savePolicy = defaultSavePolicy(for: source)
-                var job = try await core.prepareSingleAssetJob(
-                    asset: asset,
-                    sourceURL: source.url,
-                    temporaryOutputURL: temporaryOutputURL,
-                    outputPolicy: selectedOutput.outputPolicy(for: asset),
-                    preferredMode: .automatic,
-                    savePolicy: savePolicy
-                )
+                let isPlaybackOnlyPreparation = autoOpenPreviewAfterPrepare
+                    && !autoStartAfterPrepare
+                    && isPreviewableInCurrentBuild(asset: asset)
+                var job: TaptionPreparedEncodingJob
+                if isPlaybackOnlyPreparation {
+                    let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+                        asset: asset,
+                        sourceURL: source.url,
+                        temporaryOutputURL: temporaryOutputURL,
+                        outputPolicy: selectedOutput.outputPolicy(for: asset),
+                        preferredMode: .automatic,
+                        savePolicy: savePolicy
+                    )
+                    job = TaptionPreparedEncodingJob(
+                        asset: asset,
+                        plan: plan,
+                        routeSelection: TaptionCodecRoutePlanner.selectRoute(
+                            for: asset,
+                            outputCodec: selectedOutput.videoCodec,
+                            requestedMode: .automatic
+                        ),
+                        storageRequirement: TaptionStorageRequirement(
+                            estimatedOutputBytes: plan.estimatedOutputBytes ?? 0,
+                            requiredWorkingBytes: 0
+                        )
+                    )
+                    trace.mark("playback_prepared_storage_deferred")
+                } else {
+                    job = try await core.prepareSingleAssetJob(
+                        asset: asset,
+                        sourceURL: source.url,
+                        temporaryOutputURL: temporaryOutputURL,
+                        outputPolicy: selectedOutput.outputPolicy(for: asset),
+                        preferredMode: .automatic,
+                        savePolicy: savePolicy
+                    )
+                }
+                try checkPreparationOperation(preparationID)
                 trace.mark(
                     "job_prepared",
                     metadata: [
@@ -3098,27 +3178,28 @@ final class HomeViewModel: ObservableObject {
                     ]
                 )
 
-                try Task.checkCancellation()
-                markBatchItem(
-                    source.url,
-                    statusText: "Checking Storage",
-                    detailText: "Confirming temporary and final output space.",
-                    progress: nil,
-                    isActive: true
-                )
-                state = .storageChecking(source)
-                try Task.checkCancellation()
-                trace.mark(
-                    "storage_checked",
-                    metadata: [
-                        "requiredBytes": "\(job.storageRequirement.requiredWorkingBytes)",
-                        "availableBytes": job.storageRequirement.availableBytes.map(String.init) ?? "unknown",
-                        "hasEnoughSpace": "\(job.storageRequirement.hasEnoughSpace)"
-                    ]
-                )
+                try checkPreparationOperation(preparationID)
+                if !isPlaybackOnlyPreparation {
+                    markBatchItem(
+                        source.url,
+                        statusText: "Checking Storage",
+                        detailText: "Confirming temporary and final output space.",
+                        progress: nil,
+                        isActive: true
+                    )
+                    state = .storageChecking(source)
+                    trace.mark(
+                        "storage_checked",
+                        metadata: [
+                            "requiredBytes": "\(job.storageRequirement.requiredWorkingBytes)",
+                            "availableBytes": job.storageRequirement.availableBytes.map(String.init) ?? "unknown",
+                            "hasEnoughSpace": "\(job.storageRequirement.hasEnoughSpace)"
+                        ]
+                    )
+                }
 
                 let canEncodeSelectedOutput = job.routeSelection.isEncodableNow && selectedOutput.isImplementedNow
-                guard canEncodeSelectedOutput else {
+                guard isPlaybackOnlyPreparation || canEncodeSelectedOutput else {
                     let detail = selectedOutput.isImplementedNow
                         ? job.routeSelection.reason
                         : "\(selectedOutput.implementationState.rawValue) output path is not executable in this build."
@@ -3158,7 +3239,7 @@ final class HomeViewModel: ObservableObject {
                     return
                 }
 
-                guard job.storageRequirement.hasEnoughSpace else {
+                guard isPlaybackOnlyPreparation || job.storageRequirement.hasEnoughSpace else {
                     AppLogger.error(
                         "Storage check blocked encoding",
                         category: .storage,
@@ -3200,7 +3281,8 @@ final class HomeViewModel: ObservableObject {
                     source: source,
                     job: job,
                     videoInfo: makeLoadedVideoInfo(source: source, job: job),
-                    folderQueue: folderBatch?.snapshot(currentFileName: source.displayName)
+                    folderQueue: folderBatch?.snapshot(currentFileName: source.displayName),
+                    requiresEncodingPreparation: isPlaybackOnlyPreparation
                 )
                 currentReview = review
                 AppLogger.info(
@@ -3224,9 +3306,10 @@ final class HomeViewModel: ObservableObject {
                 )
 
                 activeTask = nil
+                state = .readyToStart(review)
                 if autoStartAfterPrepare {
                     trace.finish("ready_auto_start")
-                    await attemptEncodingStart(
+                    requestEncodingStart(
                         for: review,
                         autoResumeAfterStarEarn: true
                     )
@@ -3241,6 +3324,10 @@ final class HomeViewModel: ObservableObject {
                     }
                 }
             } catch is CancellationError {
+                guard preparationOperationID == preparationID else {
+                    trace.finish("superseded")
+                    return
+                }
                 AppLogger.warning(
                     "Prepare encoding cancelled",
                     category: .encoding,
@@ -3261,6 +3348,10 @@ final class HomeViewModel: ObservableObject {
                 requestSessionEndAd(reason: .cancelledEncoding)
                 trace.finish("cancelled")
             } catch TaptionVideoCoreError.insufficientStorage(let requiredBytes, let availableBytes) {
+                guard preparationOperationID == preparationID else {
+                    trace.finish("superseded")
+                    return
+                }
                 let storageMessage = storageWarningMessage(
                     requiredBytes: requiredBytes,
                     availableBytes: availableBytes
@@ -3298,6 +3389,10 @@ final class HomeViewModel: ObservableObject {
                 trace.finish("storage_blocked", metadata: ["reason": storageMessage])
                 activeTask = nil
             } catch let error as TaptionVideoCoreError {
+                guard preparationOperationID == preparationID else {
+                    trace.finish("superseded")
+                    return
+                }
                 logCodecBenchmarkProbeTerminalIfNeeded(
                     status: "prepare_failed",
                     sourceName: source.displayName,
@@ -3339,6 +3434,10 @@ final class HomeViewModel: ObservableObject {
                 requestSessionEndAd(reason: .failedEncoding)
                 trace.finish("failed", metadata: ["error": error.localizedDescription])
             } catch {
+                guard preparationOperationID == preparationID else {
+                    trace.finish("superseded")
+                    return
+                }
                 logCodecBenchmarkProbeTerminalIfNeeded(
                     status: "prepare_failed",
                     sourceName: source.displayName,
@@ -3381,6 +3480,11 @@ final class HomeViewModel: ObservableObject {
                 trace.finish("failed", metadata: ["error": error.localizedDescription])
             }
         }
+    }
+
+    private func checkPreparationOperation(_ operationID: UUID) throws {
+        try Task.checkCancellation()
+        guard preparationOperationID == operationID else { throw CancellationError() }
     }
 
     private func startEncoding(review: PreparedEncodingReview, allowsBusyState: Bool = false) {
@@ -4493,10 +4597,81 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    private func attemptEncodingStart(
+    private func requestEncodingStart(
         for review: PreparedEncodingReview,
         autoResumeAfterStarEarn: Bool
+    ) {
+        guard encodingStartOperationID == nil,
+              state.preparedEncodingReview?.job.plan.id == review.job.plan.id else { return }
+        let operationID = UUID()
+        encodingStartOperationID = operationID
+        isStartingEncoding = true
+        encodingStartTask = Task { @MainActor [weak self] in
+            await self?.performEncodingStart(
+                for: review,
+                autoResumeAfterStarEarn: autoResumeAfterStarEarn,
+                operationID: operationID
+            )
+        }
+    }
+
+    private func invalidateEncodingStart() {
+        encodingStartOperationID = nil
+        isStartingEncoding = false
+        encodingStartTask?.cancel()
+        encodingStartTask = nil
+    }
+
+    private func finishEncodingStart(operationID: UUID) {
+        guard encodingStartOperationID == operationID else { return }
+        encodingStartOperationID = nil
+        encodingStartTask = nil
+        isStartingEncoding = false
+    }
+
+    private func isCurrentEncodingStart(_ operationID: UUID, review: PreparedEncodingReview) -> Bool {
+        !Task.isCancelled
+            && encodingStartOperationID == operationID
+            && state.preparedEncodingReview?.job.plan.id == review.job.plan.id
+    }
+
+    private func refundAbandonedEncodingStart(for review: PreparedEncodingReview) async {
+        // The debit may have committed while Reset/source replacement cancelled
+        // its caller. Compensate in a fresh, non-cancelled task; never clear the
+        // active charge or encoder handle belonging to a newer operation.
+        let wallet = environment.starWalletStore
+        let refund = Task {
+            _ = try await wallet.refundStar(source: review.source.displayName)
+            return await wallet.currentSnapshot()
+        }
+        do {
+            starWalletSnapshot = try await refund.value
+            AppLogger.info("Abandoned encoding start Star refunded", category: .encoding,
+                           metadata: ["source": review.source.displayName])
+        } catch {
+            AppLogger.error("Abandoned encoding start Star refund failed", category: .encoding,
+                            metadata: ["source": review.source.displayName,
+                                       "error": error.localizedDescription])
+        }
+    }
+
+    private func performEncodingStart(
+        for review: PreparedEncodingReview,
+        autoResumeAfterStarEarn: Bool,
+        operationID: UUID
     ) async {
+        defer { finishEncodingStart(operationID: operationID) }
+        guard isCurrentEncodingStart(operationID, review: review) else { return }
+        if review.requiresEncodingPreparation {
+            finishEncodingStart(operationID: operationID)
+            prepareEncodingFlow(
+                source: review.source,
+                autoStartAfterPrepare: true,
+                allowsBusyState: true,
+                preinspectedAsset: review.job.asset
+            )
+            return
+        }
         AppLogger.info(
             "Start encoding requested",
             category: .encoding,
@@ -4532,7 +4707,9 @@ final class HomeViewModel: ObservableObject {
         }
         #endif
 
-        starWalletSnapshot = await environment.starWalletStore.currentSnapshot()
+        let snapshot = await environment.starWalletStore.currentSnapshot()
+        guard isCurrentEncodingStart(operationID, review: review) else { return }
+        starWalletSnapshot = snapshot
         let requiredStarCount = estimatedStartStarCost(for: review)
         guard startStarShortage(
             required: requiredStarCount,
@@ -4547,9 +4724,19 @@ final class HomeViewModel: ObservableObject {
         }
 
         do {
-            starWalletSnapshot = try await environment.starWalletStore.consumeStar(
+            _ = try await environment.starWalletStore.consumeStar(
                 source: review.source.displayName
             )
+            guard isCurrentEncodingStart(operationID, review: review) else {
+                await refundAbandonedEncodingStart(for: review)
+                return
+            }
+            let chargedSnapshot = await environment.starWalletStore.currentSnapshot()
+            guard isCurrentEncodingStart(operationID, review: review) else {
+                await refundAbandonedEncodingStart(for: review)
+                return
+            }
+            starWalletSnapshot = chargedSnapshot
             activeStarCharge = ActiveStarCharge(
                 sourceURL: review.source.url,
                 sourceName: review.source.displayName
@@ -4560,8 +4747,11 @@ final class HomeViewModel: ObservableObject {
                 allowsBusyState: true
             )
         } catch let error as StarWalletError {
+            guard isCurrentEncodingStart(operationID, review: review) else { return }
             if case .insufficientStars = error {
-                starWalletSnapshot = await environment.starWalletStore.currentSnapshot()
+                let snapshot = await environment.starWalletStore.currentSnapshot()
+                guard isCurrentEncodingStart(operationID, review: review) else { return }
+                starWalletSnapshot = snapshot
                 blockEncodingStartForInsufficientStars(
                     review: review,
                     requiredStarCount: requiredStarCount,
@@ -4585,6 +4775,7 @@ final class HomeViewModel: ObservableObject {
                 error: error
             ))
         } catch {
+            guard isCurrentEncodingStart(operationID, review: review) else { return }
             AppLogger.error(
                 "Star debit failed before encoding start",
                 category: .encoding,
@@ -5352,6 +5543,12 @@ final class HomeViewModel: ObservableObject {
 
         guard !Self.currentBuildPreviewBlockedVideoCodecs.contains(videoTrack.codec) else {
             return false
+        }
+
+        // Apple's native player handles HEVC Alpha composition in QuickTime files.
+        // This preview route does not change the encoding route or alpha policy.
+        if videoTrack.codec == .hevcWithAlpha {
+            return asset.container == .mov
         }
 
         let decoder = SW_SoftwareCodecBackendRegistry.vlcSoftwareDecoder
@@ -6706,6 +6903,9 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func beginSecurityScopedAccessIfNeeded(for urls: [URL]) {
+        invalidateEncodingStart()
+        preparationOperationID = nil
+        dismissMiniPreview()
         stopSecurityScopedAccess()
         securityScopedURLs = urls.filter { $0.startAccessingSecurityScopedResource() }
         AppLogger.info(

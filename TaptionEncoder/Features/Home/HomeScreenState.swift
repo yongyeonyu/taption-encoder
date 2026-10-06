@@ -801,6 +801,22 @@ struct EncodingFileCardSnapshot: Identifiable, Equatable {
     }
 }
 
+struct QueuePreviewPlaybackSnapshot: Equatable, Sendable {
+    let seconds: Double
+    let isPlaying: Bool
+
+    init(seconds: Double, isPlaying: Bool) {
+        // Keep conversion to native millisecond/CMTime values representable.
+        self.seconds = seconds.isFinite ? min(max(0, seconds), Double(Int64.max / 2) / 1_000) : 0
+        self.isPlaying = isPlaying
+    }
+
+    func clampedSeconds(durationSeconds: Double?) -> Double {
+        guard let durationSeconds, durationSeconds.isFinite, durationSeconds > 0 else { return seconds }
+        return min(seconds, durationSeconds)
+    }
+}
+
 struct QueueVideoPreview: Identifiable, Equatable {
     var id: String
     var displayName: String
@@ -808,6 +824,8 @@ struct QueueVideoPreview: Identifiable, Equatable {
     var videoInfo: LoadedVideoInfo
     var displaySize: TaptionPixelSize?
     var playlist: QueueVideoPreviewPlaylist? = nil
+    var usesNativePlayback: Bool = false
+    var playbackSnapshot: QueuePreviewPlaybackSnapshot? = nil
 
     var codecBadge: String {
         videoInfo.inputSummary
@@ -881,17 +899,21 @@ struct PreparedEncodingReview: Equatable {
     var job: TaptionPreparedEncodingJob
     var videoInfo: LoadedVideoInfo
     var folderQueue: FolderQueueSnapshot?
+    // A playback-only review must be fully prepared before charging a Star or encoding.
+    var requiresEncodingPreparation: Bool
 
     init(
         source: HomeSelectedSource,
         job: TaptionPreparedEncodingJob,
         videoInfo: LoadedVideoInfo,
-        folderQueue: FolderQueueSnapshot? = nil
+        folderQueue: FolderQueueSnapshot? = nil,
+        requiresEncodingPreparation: Bool = false
     ) {
         self.source = source
         self.job = job
         self.videoInfo = videoInfo
         self.folderQueue = folderQueue
+        self.requiresEncodingPreparation = requiresEncodingPreparation
     }
 }
 
@@ -1198,7 +1220,18 @@ enum HomeErrorPresenter {
         recovery: String,
         error: Error
     ) -> HomeEncodingError {
-        HomeEncodingError(
+        if let downloadError = error as? VideoSourceDownloadError {
+            return HomeEncodingError(
+                title: "iCloud download failed",
+                message: message(
+                    summary: "The video is not available locally yet.",
+                    cause: downloadError.localizedDescription,
+                    recovery: downloadError.recoverySuggestion ?? recovery,
+                    diagnostic: diagnosticDescription(for: error)
+                )
+            )
+        }
+        return HomeEncodingError(
             title: title,
             message: message(
                 summary: summary,
@@ -1231,7 +1264,10 @@ enum HomeErrorPresenter {
         recovery: String,
         error: Error
     ) -> String {
-        "\(summary) \(recovery) Log: \(diagnosticDescription(for: error))"
+        if let downloadError = error as? VideoSourceDownloadError {
+            return "\(downloadError.localizedDescription) \(downloadError.recoverySuggestion ?? recovery) Log: \(diagnosticDescription(for: error))"
+        }
+        return "\(summary) \(recovery) Log: \(diagnosticDescription(for: error))"
     }
 
     static func cardDetail(

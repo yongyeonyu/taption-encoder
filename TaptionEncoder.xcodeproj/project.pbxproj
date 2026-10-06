@@ -54,6 +54,7 @@
 		4A2B3C4D5E6F701000000015 /* HomeMenuSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000115 /* HomeMenuSheetView.swift */; };
 		4A2B3C4D5E6F701000000016 /* SampleThumbnailCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000116 /* SampleThumbnailCatalog.swift */; };
 		4A2B3C4D5E6F701000000017 /* QueuePreviewViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000117 /* QueuePreviewViews.swift */; };
+		6F06A8B20000000000000010 /* NativeQueueVideoPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F06A8B20000000000000110 /* NativeQueueVideoPreviewView.swift */; };
 		5A2B3C4D5E6F701000000001 /* SwiftVLC in Frameworks */ = {isa = PBXBuildFile; productRef = 5A2B3C4D5E6F701000000102 /* SwiftVLC */; };
 		61307C1F20466F17394D6B86 /* TaptionEncoderLiveActivityExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = ACC87F4CD4CF9E262B4F4A5D /* TaptionEncoderLiveActivityExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		6A2B3C4D5E6F701000000001 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = 6A2B3C4D5E6F701000000102 /* GoogleMobileAds */; };
@@ -188,6 +189,7 @@
 		4A2B3C4D5E6F701000000115 /* HomeMenuSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeMenuSheetView.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000116 /* SampleThumbnailCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleThumbnailCatalog.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000117 /* QueuePreviewViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueuePreviewViews.swift; sourceTree = "<group>"; };
+		6F06A8B20000000000000110 /* NativeQueueVideoPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeQueueVideoPreviewView.swift; sourceTree = "<group>"; };
 		5451DA230C981A72D8E8E1BF /* VC-1 Raw.vc1 */ = {isa = PBXFileReference; includeInIndex = 1; name = "VC-1 Raw.vc1"; path = "TaptionEncoderTests/Fixtures/VC-1 Raw.vc1"; sourceTree = "<group>"; };
 		61752A4CFD225BC9A187B244 /* EncodingLiveActivityCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EncodingLiveActivityCoordinator.swift; sourceTree = "<group>"; };
 		652BF832F12A6006EB816516 /* TaptionFFmpegDecodeBridge.xcframework */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = wrapper.xcframework; name = TaptionFFmpegDecodeBridge.xcframework; path = Vendor/FFmpegLGPLDecodeBridge/TaptionFFmpegDecodeBridge.xcframework; sourceTree = "<group>"; };
@@ -515,6 +517,7 @@
 			isa = PBXGroup;
 			children = (
 				4A2B3C4D5E6F701000000117 /* QueuePreviewViews.swift */,
+				6F06A8B20000000000000110 /* NativeQueueVideoPreviewView.swift */,
 			);
 			path = Preview;
 			sourceTree = "<group>";
@@ -853,6 +856,7 @@
 				4A2B3C4D5E6F701000000015 /* HomeMenuSheetView.swift in Sources */,
 				4A2B3C4D5E6F701000000016 /* SampleThumbnailCatalog.swift in Sources */,
 				4A2B3C4D5E6F701000000017 /* QueuePreviewViews.swift in Sources */,
+				6F06A8B20000000000000010 /* NativeQueueVideoPreviewView.swift in Sources */,
 				7A2B3C4D5E6F701000000001 /* CodecAlgorithm.swift in Sources */,
 				7A2B3C4D5E6F701000000002 /* HW_AV1HEVCCodecAlgorithm.swift in Sources */,
 				7A2B3C4D5E6F701000000003 /* SW_AV1HEVCCodecAlgorithm.swift in Sources */,
@@ -1065,7 +1069,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 38;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				ENABLE_PREVIEWS = YES;
@@ -1076,7 +1080,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.5;
+				MARKETING_VERSION = 1.1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder;
 				PRODUCT_NAME = "Taption Encoder";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -1094,7 +1098,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 38;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				ENABLE_PREVIEWS = YES;
@@ -1105,7 +1109,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.5;
+				MARKETING_VERSION = 1.1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder;
 				PRODUCT_NAME = "Taption Encoder";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -1123,7 +1127,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 38;
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1134,7 +1138,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.5;
+				MARKETING_VERSION = 1.1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder.liveactivity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -1155,7 +1159,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 38;
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1166,7 +1170,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.5;
+				MARKETING_VERSION = 1.1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder.liveactivity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -1185,7 +1189,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 38;
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = TaptionEncoderTests;
@@ -1195,7 +1199,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.5;
+				MARKETING_VERSION = 1.1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -1214,7 +1218,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 38;
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = TaptionEncoderTests;
@@ -1224,7 +1228,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.5;
+				MARKETING_VERSION = 1.1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -1243,7 +1247,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 38;
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TaptionEncoderThumbnailExtension/Info.plist;
@@ -1253,7 +1257,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.5;
+				MARKETING_VERSION = 1.1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder.thumbnail;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -1271,7 +1275,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 38;
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TaptionEncoderThumbnailExtension/Info.plist;
@@ -1281,7 +1285,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.1.5;
+				MARKETING_VERSION = 1.1.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.taption.encoder.thumbnail;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

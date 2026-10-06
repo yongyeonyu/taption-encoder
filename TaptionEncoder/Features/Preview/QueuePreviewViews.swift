@@ -134,12 +134,43 @@ struct QueueVideoPreviewView: View {
     var preview: QueueVideoPreview
     var adUnitID: String
     var onClose: () -> Void
-    var onMinimize: () -> Void
+    var onMinimize: (QueuePreviewPlaybackSnapshot) -> Void
+    var onPictureInPictureActiveChanged: (Bool) -> Void
+    var onPrevious: () -> Void
+    var onNext: () -> Void
+
+    @ViewBuilder
+    var body: some View {
+        if preview.usesNativePlayback {
+            NativeQueueVideoPreviewView(
+                preview: preview, adUnitID: adUnitID,
+                onClose: onClose, onMinimize: onMinimize,
+                onPictureInPictureActiveChanged: onPictureInPictureActiveChanged,
+                onPrevious: onPrevious, onNext: onNext
+            )
+        } else {
+            VLCQueueVideoPreviewView(
+                preview: preview, adUnitID: adUnitID,
+                onClose: onClose, onMinimize: onMinimize,
+                onPictureInPictureActiveChanged: onPictureInPictureActiveChanged,
+                onPrevious: onPrevious, onNext: onNext
+            )
+        }
+    }
+}
+
+private struct VLCQueueVideoPreviewView: View {
+    var preview: QueueVideoPreview
+    var adUnitID: String
+    var onClose: () -> Void
+    var onMinimize: (QueuePreviewPlaybackSnapshot) -> Void
     var onPictureInPictureActiveChanged: (Bool) -> Void
     var onPrevious: () -> Void
     var onNext: () -> Void
 
     @State private var player = QueuePreviewPlayerFactory.makePreviewPlayer()
+    @State private var playbackLifetime = QueuePreviewPlaybackLifetime()
+    @State private var audioSessionInstanceID = UUID()
     @State private var playbackError: String?
     @State private var isLoading = true
     @State private var didRequestShutdown = false
@@ -160,6 +191,10 @@ struct QueueVideoPreviewView: View {
     #endif
 
     var body: some View {
+        vlcPreviewBody
+    }
+
+    private var vlcPreviewBody: some View {
         GeometryReader { proxy in
             ZStack {
                 Color.black
@@ -652,6 +687,7 @@ struct QueueVideoPreviewView: View {
 
     @MainActor
     private func startPlayback() async {
+        let operationID = playbackLifetime.begin()
         didRequestShutdown = false
         playbackError = nil
         isLoading = true
@@ -659,15 +695,18 @@ struct QueueVideoPreviewView: View {
             areControlsVisible = true
         }
         player.aspectRatio = .default
-        QueuePreviewAudioSessionController.activateForPreview(id: preview.id)
         configurePlayerAudioForPreview()
 
         do {
+            try await QueuePreviewAudioSessionController.activateForPreview(id: previewAudioSessionID)
+            try playbackLifetime.check(operationID)
+            if preview.playbackSnapshot != nil { player.isMuted = true }
             player.stop()
-            try? await Task.sleep(nanoseconds: 120_000_000)
-            await waitForVideoSurfaceAttachment()
-            try Task.checkCancellation()
-            let didProduceVideoOutput = try await playPreviewWithFallbacks()
+            try await Task.sleep(nanoseconds: 120_000_000)
+            try await waitForVideoSurfaceAttachment(operationID: operationID)
+            try playbackLifetime.check(operationID)
+            let didProduceVideoOutput = try await playPreviewWithFallbacks(operationID: operationID)
+            try playbackLifetime.check(operationID)
             if !didProduceVideoOutput {
                 player.stop()
                 playbackError = "Preview video output is unavailable on this device."
@@ -686,16 +725,21 @@ struct QueueVideoPreviewView: View {
                 showControls(scheduleAutoHide: false)
                 return
             }
+            try await restorePlaybackSnapshot(operationID: operationID)
             isLoading = false
             showControls(scheduleAutoHide: false)
             #if DEBUG
-            await startDebugAutoPictureInPictureIfRequested()
-            await minimizeDebugPreviewIfRequested()
+            try await startDebugAutoPictureInPictureIfRequested(operationID: operationID)
+            try await minimizeDebugPreviewIfRequested(operationID: operationID)
             #endif
         } catch is CancellationError {
+            guard playbackLifetime.isCurrent(operationID) else { return }
             isLoading = false
         } catch {
-            playbackError = "Preview failed. SwiftVLC could not decode this file."
+            guard playbackLifetime.isCurrent(operationID), !Task.isCancelled else { return }
+            player.stop()
+            playbackError = (error as? QueuePreviewPlaybackResumeError)?.errorDescription
+                ?? "Preview failed. SwiftVLC could not decode this file."
             isLoading = false
             AppLogger.error(
                 "Queue preview playback failed",
@@ -724,7 +768,34 @@ struct QueueVideoPreviewView: View {
             category: .ui,
             metadata: ["name": preview.displayName]
         )
-        onMinimize()
+        onMinimize(playbackSnapshot())
+    }
+
+    private func playbackSnapshot() -> QueuePreviewPlaybackSnapshot {
+        if isLoading, let snapshot = preview.playbackSnapshot { return snapshot }
+        return QueuePreviewPlaybackSnapshot(
+            seconds: QueuePreviewPlaybackMath.seconds(from: player.currentTime) ?? 0,
+            isPlaying: player.isPlaying
+        )
+    }
+
+    private func restorePlaybackSnapshot(operationID: UUID) async throws {
+        guard let snapshot = preview.playbackSnapshot else { return }
+        try await QueuePreviewPlaybackRestorer.restore(
+            snapshot: snapshot,
+            validate: { try playbackLifetime.check(operationID) },
+            isSeekable: { player.isSeekable },
+            durationSeconds: { QueuePreviewPlaybackMath.seconds(from: player.duration) },
+            seek: { try await QueuePreviewVLCSeek.seek(player, to: $0, pauseBeforeSeeking: !snapshot.isPlaying,
+                                                      validate: { try playbackLifetime.check(operationID) }) },
+            setPlaying: { if $0 { player.resume() } else { player.pause() } }
+        )
+        try playbackLifetime.check(operationID)
+        player.isMuted = false
+        AppLogger.info("Queue preview playback state restored", category: .ui, metadata: [
+            "seconds": "\(QueuePreviewPlaybackMath.seconds(from: player.currentTime) ?? 0)",
+            "requestedSeconds": "\(snapshot.seconds)", "playing": "\(player.isPlaying)", "mode": "full"
+        ])
     }
 
     private func beginVideoPlaybackAdSuppressionIfNeeded() {
@@ -801,7 +872,7 @@ struct QueueVideoPreviewView: View {
 
     #if DEBUG
     @MainActor
-    private func startDebugAutoPictureInPictureIfRequested() async {
+    private func startDebugAutoPictureInPictureIfRequested(operationID: UUID) async throws {
         guard !didAttemptDebugAutoPiP,
               debugAutoStartPictureInPictureRequested else {
             return
@@ -809,10 +880,11 @@ struct QueueVideoPreviewView: View {
         didAttemptDebugAutoPiP = true
 
         for _ in 0..<30 {
+            try playbackLifetime.check(operationID)
             if pipController?.isPossible == true {
                 break
             }
-            try? await Task.sleep(nanoseconds: 100_000_000)
+            try await Task.sleep(nanoseconds: 100_000_000)
         }
 
         guard let pipController else {
@@ -834,9 +906,11 @@ struct QueueVideoPreviewView: View {
             return
         }
 
+        try playbackLifetime.check(operationID)
         pipController.start()
         for _ in 0..<20 {
-            try? await Task.sleep(nanoseconds: 250_000_000)
+            try await Task.sleep(nanoseconds: 250_000_000)
+            try playbackLifetime.check(operationID)
             if pipController.isActive {
                 break
             }
@@ -881,13 +955,26 @@ struct QueueVideoPreviewView: View {
     }
 
     @MainActor
-    private func minimizeDebugPreviewIfRequested() async {
+    private func minimizeDebugPreviewIfRequested(operationID: UUID) async throws {
         guard !didAttemptDebugAutoMiniPlayer,
-              debugAutoMiniPlayerRequested else {
+              debugAutoMiniPlayerRequested, preview.playbackSnapshot == nil else {
             return
         }
         didAttemptDebugAutoMiniPlayer = true
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        try playbackLifetime.check(operationID)
+        if let snapshot = QueuePreviewDebugHandoff.requestedSnapshot {
+            try await QueuePreviewPlaybackRestorer.restore(
+                snapshot: snapshot, validate: { try playbackLifetime.check(operationID) },
+                isSeekable: { player.isSeekable },
+                durationSeconds: { QueuePreviewPlaybackMath.seconds(from: player.duration) },
+                seek: { try await QueuePreviewVLCSeek.seek(player, to: $0, pauseBeforeSeeking: !snapshot.isPlaying,
+                                                          validate: { try playbackLifetime.check(operationID) }) },
+                setPlaying: { if $0 { player.resume() } else { player.pause() } }
+            )
+            try await Task.sleep(for: .milliseconds(400))
+            try playbackLifetime.check(operationID)
+        }
         AppLogger.info(
             "Debug auto mini player requested",
             category: .ui,
@@ -1222,51 +1309,54 @@ struct QueueVideoPreviewView: View {
         return CGSize(width: width, height: width / CGFloat(aspectRatio))
     }
 
-    private func playPreviewWithFallbacks() async throws -> Bool {
+    private func playPreviewWithFallbacks(operationID: UUID) async throws -> Bool {
         let demuxModes = QueuePreviewPlayerFactory.previewDemuxModes(for: preview.sourceURL)
-        for (index, demuxMode) in demuxModes.enumerated() {
-            player.stop()
-            try? await Task.sleep(nanoseconds: index == 0 ? 80_000_000 : 180_000_000)
-
-            let media = try makePreviewMedia(demuxMode: demuxMode)
-            AppLogger.info(
-                "Queue preview playback attempt started",
-                category: .ui,
-                metadata: [
-                    "name": preview.displayName,
-                    "attempt": "\(index + 1)",
-                    "demux": demuxMode.logValue
-                ]
-            )
-            try player.play(media)
-            if await waitForVideoOutput() {
+        return try await QueuePreviewPlaybackAttempts.run(
+            demuxModes: demuxModes,
+            validate: { try playbackLifetime.check(operationID) },
+            stop: { player.stop() },
+            play: { index, demuxMode in
+                let media = try makePreviewMedia(demuxMode: demuxMode)
                 AppLogger.info(
-                    "Queue preview video output ready",
+                    "Queue preview playback attempt started",
                     category: .ui,
                     metadata: [
                         "name": preview.displayName,
                         "attempt": "\(index + 1)",
                         "demux": demuxMode.logValue,
-                        "activeVideoOutputs": "\(player.activeVideoOutputs)",
-                        "hasVideoOutput": "\(player.hasVideoOutput)"
                     ]
                 )
-                return true
+                try player.play(media)
+            },
+            waitForOutput: { try await waitForVideoOutput(operationID: operationID) },
+            didFinishAttempt: { index, demuxMode, ready in
+                if ready {
+                    AppLogger.info(
+                        "Queue preview video output ready",
+                        category: .ui,
+                        metadata: [
+                            "name": preview.displayName,
+                            "attempt": "\(index + 1)",
+                            "demux": demuxMode.logValue,
+                            "activeVideoOutputs": "\(player.activeVideoOutputs)",
+                            "hasVideoOutput": "\(player.hasVideoOutput)",
+                        ]
+                    )
+                } else {
+                    AppLogger.warning(
+                        "Queue preview playback attempt had no video output",
+                        category: .ui,
+                        metadata: [
+                            "name": preview.displayName,
+                            "attempt": "\(index + 1)",
+                            "demux": demuxMode.logValue,
+                            "activeVideoOutputs": "\(player.activeVideoOutputs)",
+                            "hasVideoOutput": "\(player.hasVideoOutput)",
+                        ]
+                    )
+                }
             }
-
-            AppLogger.warning(
-                "Queue preview playback attempt had no video output",
-                category: .ui,
-                metadata: [
-                    "name": preview.displayName,
-                    "attempt": "\(index + 1)",
-                    "demux": demuxMode.logValue,
-                    "activeVideoOutputs": "\(player.activeVideoOutputs)",
-                    "hasVideoOutput": "\(player.hasVideoOutput)"
-                ]
-            )
-        }
-        return false
+        )
     }
 
     private func makePreviewMedia(demuxMode: QueuePreviewDemuxMode) throws -> Media {
@@ -1317,16 +1407,14 @@ struct QueueVideoPreviewView: View {
     }
 
     @MainActor
-    private func waitForVideoSurfaceAttachment() async {
+    private func waitForVideoSurfaceAttachment(operationID: UUID) async throws {
         for _ in 0..<20 {
+            try playbackLifetime.check(operationID)
             if didAttachVideoSurface {
-                try? await Task.sleep(nanoseconds: 120_000_000)
+                try await Task.sleep(nanoseconds: 120_000_000)
                 return
             }
-            if Task.isCancelled {
-                return
-            }
-            try? await Task.sleep(nanoseconds: 50_000_000)
+            try await Task.sleep(nanoseconds: 50_000_000)
         }
 
         AppLogger.warning(
@@ -1337,16 +1425,15 @@ struct QueueVideoPreviewView: View {
     }
 
     @MainActor
-    private func waitForVideoOutput() async -> Bool {
+    private func waitForVideoOutput(operationID: UUID) async throws -> Bool {
         for _ in 0..<80 {
+            try playbackLifetime.check(operationID)
             if player.hasVideoOutput || player.activeVideoOutputs > 0 {
                 return true
             }
-            if Task.isCancelled {
-                return false
-            }
-            try? await Task.sleep(nanoseconds: 100_000_000)
+            try await Task.sleep(nanoseconds: 100_000_000)
         }
+        try playbackLifetime.check(operationID)
         return player.hasVideoOutput || player.activeVideoOutputs > 0
     }
 
@@ -1355,24 +1442,49 @@ struct QueueVideoPreviewView: View {
             return
         }
         didRequestShutdown = true
+        playbackLifetime.invalidate()
         gestureFeedbackTask?.cancel()
         AppOrientationController.shared.restorePortrait()
         pipController?.stop()
         endVideoPlaybackAdSuppressionIfNeeded()
-        let sessionID = preview.id
+        let sessionID = previewAudioSessionID
         Task { @MainActor in
             await player.shutdown()
             QueuePreviewAudioSessionController.deactivateAfterPreview(id: sessionID)
         }
+    }
+
+    private var previewAudioSessionID: String {
+        "\(preview.id).vlc.\(audioSessionInstanceID.uuidString)"
     }
 }
 
 struct QueueMiniPlayerView: View {
     var preview: QueueVideoPreview
     var onClose: () -> Void
-    var onExpand: () -> Void
+    var onExpand: (QueuePreviewPlaybackSnapshot) -> Void
+
+    @ViewBuilder
+    var body: some View {
+        if preview.usesNativePlayback {
+            NativeQueueVideoPreviewView(
+                preview: preview, isMiniPlayer: true,
+                onClose: onClose, onMinimize: onExpand
+            )
+        } else {
+            VLCQueueMiniPlayerView(preview: preview, onClose: onClose, onExpand: onExpand)
+        }
+    }
+}
+
+private struct VLCQueueMiniPlayerView: View {
+    var preview: QueueVideoPreview
+    var onClose: () -> Void
+    var onExpand: (QueuePreviewPlaybackSnapshot) -> Void
 
     @State private var player = QueuePreviewPlayerFactory.makePreviewPlayer()
+    @State private var playbackLifetime = QueuePreviewPlaybackLifetime()
+    @State private var audioSessionInstanceID = UUID()
     @State private var pipController: PiPController?
     @State private var isLoading = true
     @State private var playbackError: String?
@@ -1381,6 +1493,10 @@ struct QueueMiniPlayerView: View {
     @State private var didRequestShutdown = false
 
     var body: some View {
+        vlcMiniPlayerBody
+    }
+
+    private var vlcMiniPlayerBody: some View {
         VStack(spacing: 0) {
             ZStack(alignment: .topTrailing) {
                 PiPVideoView(
@@ -1434,7 +1550,7 @@ struct QueueMiniPlayerView: View {
                     .opacity(canTogglePictureInPicture ? 1 : 0.38)
                     .accessibilityLabel(isPictureInPictureActive ? "Exit Picture in Picture" : "Picture in Picture")
 
-                    Button(action: onExpand) {
+                    Button(action: expandPreview) {
                         Image(systemName: "arrow.up.left.and.arrow.down.right")
                             .font(.system(size: 13, weight: .semibold))
                             .frame(width: 30, height: 30)
@@ -1491,8 +1607,6 @@ struct QueueMiniPlayerView: View {
         .shadow(color: Color.black.opacity(0.42), radius: 16, x: 0, y: 8)
         .onAppear {
             beginVideoPlaybackAdSuppressionIfNeeded()
-            QueuePreviewAudioSessionController.activateForPreview(id: miniSessionID)
-            configurePlayerAudioForMiniPlayback()
         }
         .task(id: preview.id) {
             await startMiniPlayback()
@@ -1503,22 +1617,28 @@ struct QueueMiniPlayerView: View {
     }
 
     private var miniSessionID: String {
-        "\(preview.id).mini"
+        "\(preview.id).mini.\(audioSessionInstanceID.uuidString)"
     }
 
     @MainActor
     private func startMiniPlayback() async {
+        let operationID = playbackLifetime.begin()
         didRequestShutdown = false
         playbackError = nil
         isLoading = true
         player.aspectRatio = .default
 
         do {
+            try await QueuePreviewAudioSessionController.activateForPreview(id: miniSessionID)
+            try playbackLifetime.check(operationID)
+            configurePlayerAudioForMiniPlayback()
+            if preview.playbackSnapshot != nil { player.isMuted = true }
             player.stop()
-            try? await Task.sleep(nanoseconds: 120_000_000)
-            await waitForVideoSurfaceAttachment()
-            try Task.checkCancellation()
-            let didProduceVideoOutput = try await playMiniPreviewWithFallbacks()
+            try await Task.sleep(nanoseconds: 120_000_000)
+            try await waitForVideoSurfaceAttachment(operationID: operationID)
+            try playbackLifetime.check(operationID)
+            let didProduceVideoOutput = try await playMiniPreviewWithFallbacks(operationID: operationID)
+            try playbackLifetime.check(operationID)
             if !didProduceVideoOutput {
                 player.stop()
                 playbackError = "Preview unavailable"
@@ -1536,11 +1656,22 @@ struct QueueMiniPlayerView: View {
                 isLoading = false
                 return
             }
+            try await restoreMiniPlaybackSnapshot(operationID: operationID)
             isLoading = false
+            #if DEBUG
+            if QueuePreviewDebugHandoff.automaticallyRestoresFullPreview {
+                try await Task.sleep(for: .milliseconds(400))
+                try playbackLifetime.check(operationID)
+                expandPreview()
+            }
+            #endif
         } catch is CancellationError {
+            guard playbackLifetime.isCurrent(operationID) else { return }
             isLoading = false
         } catch {
-            playbackError = "Preview unavailable"
+            guard playbackLifetime.isCurrent(operationID), !Task.isCancelled else { return }
+            player.stop()
+            playbackError = (error as? QueuePreviewPlaybackResumeError)?.errorDescription ?? "Preview unavailable"
             isLoading = false
             AppLogger.error(
                 "Queue mini player playback failed",
@@ -1555,6 +1686,38 @@ struct QueueMiniPlayerView: View {
 
     private func togglePlayback() {
         player.togglePlayPause()
+    }
+
+    private func expandPreview() {
+        let snapshot: QueuePreviewPlaybackSnapshot
+        if isLoading, let requested = preview.playbackSnapshot {
+            snapshot = requested
+        } else {
+            snapshot = QueuePreviewPlaybackSnapshot(
+                seconds: QueuePreviewPlaybackMath.seconds(from: player.currentTime) ?? 0,
+                isPlaying: player.isPlaying
+            )
+        }
+        onExpand(snapshot)
+    }
+
+    private func restoreMiniPlaybackSnapshot(operationID: UUID) async throws {
+        guard let snapshot = preview.playbackSnapshot else { return }
+        try await QueuePreviewPlaybackRestorer.restore(
+            snapshot: snapshot,
+            validate: { try playbackLifetime.check(operationID) },
+            isSeekable: { player.isSeekable },
+            durationSeconds: { QueuePreviewPlaybackMath.seconds(from: player.duration) },
+            seek: { try await QueuePreviewVLCSeek.seek(player, to: $0, pauseBeforeSeeking: !snapshot.isPlaying,
+                                                      validate: { try playbackLifetime.check(operationID) }) },
+            setPlaying: { if $0 { player.resume() } else { player.pause() } }
+        )
+        try playbackLifetime.check(operationID)
+        player.isMuted = false
+        AppLogger.info("Queue preview playback state restored", category: .ui, metadata: [
+            "seconds": "\(QueuePreviewPlaybackMath.seconds(from: player.currentTime) ?? 0)",
+            "requestedSeconds": "\(snapshot.seconds)", "playing": "\(player.isPlaying)", "mode": "mini"
+        ])
     }
 
     private var isPictureInPictureActive: Bool {
@@ -1607,38 +1770,42 @@ struct QueueMiniPlayerView: View {
         AdMobBootstrapper.endVideoPlaybackAdSuppression(reason: "queueMiniPlayer")
     }
 
-    private func playMiniPreviewWithFallbacks() async throws -> Bool {
+    private func playMiniPreviewWithFallbacks(operationID: UUID) async throws -> Bool {
         let demuxModes = QueuePreviewPlayerFactory.previewDemuxModes(for: preview.sourceURL)
-        for (index, demuxMode) in demuxModes.enumerated() {
-            let media = try makeMiniPreviewMedia(demuxMode: demuxMode)
-            try player.play(media)
-            AppLogger.info(
-                "Queue mini player playback attempt started",
-                category: .ui,
-                metadata: [
-                    "name": preview.displayName,
-                    "attempt": "\(index + 1)",
-                    "demux": demuxMode.logValue
-                ]
-            )
-            if await waitForVideoOutput() {
+        return try await QueuePreviewPlaybackAttempts.run(
+            demuxModes: demuxModes,
+            validate: { try playbackLifetime.check(operationID) },
+            stop: { player.stop() },
+            play: { index, demuxMode in
+                let media = try makeMiniPreviewMedia(demuxMode: demuxMode)
+                try player.play(media)
                 AppLogger.info(
-                    "Queue mini player video output ready",
+                    "Queue mini player playback attempt started",
                     category: .ui,
                     metadata: [
                         "name": preview.displayName,
                         "attempt": "\(index + 1)",
                         "demux": demuxMode.logValue,
-                        "activeVideoOutputs": "\(player.activeVideoOutputs)",
-                        "hasVideoOutput": "\(player.hasVideoOutput)"
                     ]
                 )
-                return true
+            },
+            waitForOutput: { try await waitForVideoOutput(operationID: operationID) },
+            didFinishAttempt: { index, demuxMode, ready in
+                if ready {
+                    AppLogger.info(
+                        "Queue mini player video output ready",
+                        category: .ui,
+                        metadata: [
+                            "name": preview.displayName,
+                            "attempt": "\(index + 1)",
+                            "demux": demuxMode.logValue,
+                            "activeVideoOutputs": "\(player.activeVideoOutputs)",
+                            "hasVideoOutput": "\(player.hasVideoOutput)",
+                        ]
+                    )
+                }
             }
-
-            player.stop()
-        }
-        return false
+        )
     }
 
     private func makeMiniPreviewMedia(demuxMode: QueuePreviewDemuxMode) throws -> Media {
@@ -1678,30 +1845,27 @@ struct QueueMiniPlayerView: View {
     }
 
     @MainActor
-    private func waitForVideoSurfaceAttachment() async {
+    private func waitForVideoSurfaceAttachment(operationID: UUID) async throws {
         for _ in 0..<20 {
+            try playbackLifetime.check(operationID)
             if didAttachVideoSurface {
-                try? await Task.sleep(nanoseconds: 120_000_000)
+                try await Task.sleep(nanoseconds: 120_000_000)
                 return
             }
-            if Task.isCancelled {
-                return
-            }
-            try? await Task.sleep(nanoseconds: 50_000_000)
+            try await Task.sleep(nanoseconds: 50_000_000)
         }
     }
 
     @MainActor
-    private func waitForVideoOutput() async -> Bool {
+    private func waitForVideoOutput(operationID: UUID) async throws -> Bool {
         for _ in 0..<80 {
+            try playbackLifetime.check(operationID)
             if player.hasVideoOutput || player.activeVideoOutputs > 0 {
                 return true
             }
-            if Task.isCancelled {
-                return false
-            }
-            try? await Task.sleep(nanoseconds: 100_000_000)
+            try await Task.sleep(nanoseconds: 100_000_000)
         }
+        try playbackLifetime.check(operationID)
         return player.hasVideoOutput || player.activeVideoOutputs > 0
     }
 
@@ -1710,6 +1874,7 @@ struct QueueMiniPlayerView: View {
             return
         }
         didRequestShutdown = true
+        playbackLifetime.invalidate()
         pipController?.stop()
         endVideoPlaybackAdSuppressionIfNeeded()
         let sessionID = miniSessionID
@@ -1897,73 +2062,141 @@ private struct QueuePreviewSystemVolumeBridgeView: UIViewRepresentable {
 }
 
 @MainActor
-private enum QueuePreviewAudioSessionController {
-    private static var activePreviewID: String?
+enum QueuePreviewAudioSessionController {
+    private static let lifetime = QueuePreviewAudioSessionLifetime(
+        activate: { await QueuePreviewAudioSessionWorker.activate() },
+        deactivate: { await QueuePreviewAudioSessionWorker.deactivate() }
+    )
 
-    static func activateForPreview(id: String) {
-        activePreviewID = id
-        let session = AVAudioSession.sharedInstance()
-
-        do {
-            try session.setCategory(
-                .playback,
-                mode: .moviePlayback,
-                options: [.allowAirPlay, .allowBluetoothA2DP]
-            )
-            try session.setActive(true)
-            logAudioSessionActivated(session, fallback: false)
-        } catch {
-            AppLogger.warning(
-                "Queue preview preferred audio session setup failed; retrying basic playback",
-                category: .ui,
-                metadata: ["error": String(describing: error)]
-            )
-            activateBasicPlaybackSession(session)
-        }
-    }
-
-    private static func activateBasicPlaybackSession(_ session: AVAudioSession) {
-        do {
-            try session.setCategory(.playback, mode: .moviePlayback)
-            try session.setActive(true)
-            logAudioSessionActivated(session, fallback: true)
-        } catch {
-            AppLogger.error(
-                "Queue preview audio session activation failed",
-                category: .ui,
-                metadata: ["error": String(describing: error)]
-            )
-        }
-    }
-
-    private static func logAudioSessionActivated(_ session: AVAudioSession, fallback: Bool) {
-        AppLogger.info(
-            "Queue preview audio session activated",
-            category: .ui,
-            metadata: [
-                "category": session.category.rawValue,
-                "fallback": "\(fallback)",
-                "mode": session.mode.rawValue,
-                "outputVolume": String(format: "%.2f", session.outputVolume)
-            ]
-        )
+    static func activateForPreview(id: String) async throws {
+        try await lifetime.activate(id: id)
     }
 
     static func deactivateAfterPreview(id: String) {
-        guard activePreviewID == id else {
+        lifetime.deactivate(id: id)
+    }
+}
+
+// Session requests are serialized across full/mini and native/VLC transitions.
+// An old player's delayed shutdown must not deactivate a newer player's audio.
+@MainActor
+final class QueuePreviewAudioSessionLifetime {
+    private(set) var ownerID: String?
+    private var requestID = UUID()
+    private var lastOperation: Task<Void, Never>?
+    private let activateBody: @MainActor () async -> Void
+    private let deactivateBody: @MainActor () async -> Void
+
+    init(activate: @escaping @MainActor () async -> Void, deactivate: @escaping @MainActor () async -> Void) {
+        activateBody = activate
+        deactivateBody = deactivate
+    }
+
+    func activate(id: String) async throws {
+        try Task.checkCancellation()
+        let request = UUID()
+        requestID = request
+        ownerID = id
+        let previous = lastOperation
+        let operation = Task { @MainActor in
+            await previous?.value
+            guard self.requestID == request, self.ownerID == id else { return }
+            await self.activateBody()
+        }
+        lastOperation = operation
+        await operation.value
+        try Task.checkCancellation()
+        guard requestID == request, ownerID == id else { throw CancellationError() }
+    }
+
+    func deactivate(id: String) {
+        guard ownerID == id else { return }
+        ownerID = nil
+        let request = UUID()
+        requestID = request
+        let previous = lastOperation
+        lastOperation = Task { @MainActor in
+            await previous?.value
+            guard self.requestID == request, self.ownerID == nil else { return }
+            await self.deactivateBody()
+        }
+    }
+
+    func waitForPendingOperations() async { await lastOperation?.value }
+}
+
+private enum QueuePreviewAudioSessionWorker {
+    private static let queue = DispatchQueue(label: "com.taption.encoder.preview-audio", qos: .userInitiated)
+
+    static func activate() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            queue.async {
+                let session = AVAudioSession.sharedInstance()
+                do {
+                    // Output-only playback already supports AirPlay and Bluetooth A2DP.
+                    // allowAirPlay is only valid with playAndRecord (SDK category contract).
+                    try session.setCategory(.playback, mode: .moviePlayback, options: [])
+                    if #available(iOS 27.0, *) {
+                        session.activate(options: []) { activated, error in
+                            logActivation(session, activated: activated, error: error, api: "asynchronous")
+                            continuation.resume()
+                        }
+                    } else {
+                        try session.setActive(true)
+                        logActivation(session, activated: true, error: nil, api: "background")
+                        continuation.resume()
+                    }
+                } catch {
+                    logActivation(session, activated: false, error: error, api: "configuration")
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
+    static func deactivate() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            queue.async {
+                let session = AVAudioSession.sharedInstance()
+                if #available(iOS 27.0, *) {
+                    session.deactivate(options: .notifyOthersOnDeactivation) { deactivated, error in
+                        logDeactivation(deactivated: deactivated, error: error)
+                        continuation.resume()
+                    }
+                } else {
+                    do {
+                        try session.setActive(false, options: .notifyOthersOnDeactivation)
+                        logDeactivation(deactivated: true, error: nil)
+                    } catch {
+                        logDeactivation(deactivated: false, error: error)
+                    }
+                    continuation.resume()
+                }
+            }
+        }
+    }
+
+    private static func logActivation(_ session: AVAudioSession, activated: Bool, error: Error?, api: String) {
+        if !activated || error != nil {
+            AppLogger.error("Queue preview audio session activation failed", category: .ui, metadata: [
+                "error": error?.localizedDescription ?? "Session did not activate", "api": api
+            ])
             return
         }
-        activePreviewID = nil
+        AppLogger.info("Queue preview audio session activated", category: .ui, metadata: [
+            "category": session.category.rawValue, "mode": session.mode.rawValue,
+            "outputVolume": String(format: "%.2f", session.outputVolume),
+            "api": api, "fallback": "false"
+        ])
+    }
 
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    private static func logDeactivation(deactivated: Bool, error: Error?) {
+        if !deactivated || error != nil {
+            AppLogger.warning("Queue preview audio session deactivation failed", category: .ui, metadata: [
+                "error": error?.localizedDescription ?? "Session did not deactivate"
+            ])
+        } else {
             AppLogger.info("Queue preview audio session deactivated", category: .ui)
-        } catch {
-            AppLogger.warning(
-                "Queue preview audio session deactivation failed",
-                category: .ui,
-                metadata: ["error": String(describing: error)]
-            )
         }
     }
 }
@@ -1981,6 +2214,264 @@ enum QueuePreviewDemuxMode: Equatable {
         }
     }
 }
+
+@MainActor
+final class QueuePreviewPlaybackLifetime {
+    private var operationID: UUID?
+
+    func begin() -> UUID {
+        let id = UUID()
+        operationID = id
+        return id
+    }
+
+    func isCurrent(_ id: UUID) -> Bool { operationID == id }
+    func invalidate() { operationID = nil }
+
+    func check(_ id: UUID) throws {
+        try Task.checkCancellation()
+        guard isCurrent(id) else { throw CancellationError() }
+    }
+}
+
+@MainActor
+enum QueuePreviewPlaybackAttempts {
+    static func run(
+        demuxModes: [QueuePreviewDemuxMode],
+        validate: () throws -> Void,
+        stop: () -> Void,
+        play: (Int, QueuePreviewDemuxMode) throws -> Void,
+        waitForOutput: () async throws -> Bool,
+        didFinishAttempt: (Int, QueuePreviewDemuxMode, Bool) -> Void
+    ) async throws -> Bool {
+        for (index, mode) in demuxModes.enumerated() {
+            try validate()
+            stop()
+            try await Task.sleep(nanoseconds: index == 0 ? 80_000_000 : 180_000_000)
+            try validate()
+            try play(index, mode)
+            let ready = try await waitForOutput()
+            try validate()
+            didFinishAttempt(index, mode, ready)
+            if ready { return true }
+        }
+        return false
+    }
+}
+
+enum QueuePreviewPlaybackResumeError: LocalizedError {
+    case notSeekable
+    case seekNotCompleted
+
+    var errorDescription: String? {
+        "Playback position could not be restored. Close and open the video again."
+    }
+}
+
+@MainActor
+enum QueuePreviewSeekCompletion {
+    static func confirmPausedSeek(
+        validate: () throws -> Void,
+        waitForOutput: () async throws -> Void,
+        retryWhilePlaying: () async throws -> Void
+    ) async throws {
+        try validate()
+        do {
+            try await waitForOutput()
+        } catch QueuePreviewPlaybackResumeError.seekNotCompleted {
+            try validate()
+            try await retryWhilePlaying()
+        }
+        try validate()
+    }
+
+    static func waitUntilReady(
+        isPlaying: () -> Bool,
+        reportedSeconds: () -> Double?,
+        validate: () throws -> Void,
+        maxPolls: Int = 100
+    ) async throws {
+        // A vout and seekable flag can precede a stable input/audio clock.
+        // Seeking during that opening window may be accepted but ignored.
+        for _ in 0..<maxPolls {
+            try validate()
+            if isPlaying(), let seconds = reportedSeconds(), seconds.isFinite, seconds > 0 { return }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try validate()
+        throw QueuePreviewPlaybackResumeError.seekNotCompleted
+    }
+
+    static func wait(
+        targetSeconds: Double,
+        reportedSeconds: () -> Double?,
+        validate: () throws -> Void,
+        didDisplayFrame: () -> Bool = { false },
+        maxPolls: Int = 250
+    ) async throws {
+        // SwiftVLC's currentTime is optimistic after seek(). Only a native
+        // time/position event can confirm that the asynchronous seek landed.
+        for _ in 0..<maxPolls {
+            try validate()
+            if let seconds = reportedSeconds(), seconds.isFinite,
+               abs(seconds - targetSeconds) <= 0.35 { return }
+            // Paused libVLC seeks do not always emit timeline events.
+            // A new displayed video frame is an independent output ack.
+            if didDisplayFrame() { return }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try validate()
+        throw QueuePreviewPlaybackResumeError.seekNotCompleted
+    }
+}
+
+@MainActor
+enum QueuePreviewVLCSeek {
+    private final class NativeClock { var seconds: Double? }
+
+    static func seek(
+        _ player: Player, to seconds: Double, pauseBeforeSeeking: Bool, validate: () throws -> Void
+    ) async throws {
+        try validate()
+        let clock = NativeClock()
+        let events = player.events(policy: .newest(8), filter: {
+            if case .timeChanged = $0 { return true }
+            if case .positionChanged = $0 { return true }
+            return false
+        })
+        let observer = Task { @MainActor in
+            for await event in events {
+                guard !Task.isCancelled else { return }
+                if case .timeChanged(let time) = event {
+                    clock.seconds = QueuePreviewPlaybackMath.seconds(from: time)
+                } else if case .positionChanged(let position) = event,
+                          let duration = QueuePreviewPlaybackMath.seconds(from: player.duration), duration > 0 {
+                    // A paused seek may only publish a native position event.
+                    clock.seconds = position * duration
+                }
+            }
+        }
+        defer { observer.cancel() }
+        // Warm the input clock before pausing or seeking. For paused handoffs,
+        // seek only after pause is acknowledged to avoid timeline drift.
+        player.resume()
+        try await QueuePreviewSeekCompletion.waitUntilReady(
+            isPlaying: { player.state == .playing }, reportedSeconds: { clock.seconds }, validate: validate
+        )
+        AppLogger.info("Queue preview seek ready", category: .ui, metadata: [
+            "targetSeconds": "\(seconds)", "nativeSeconds": "\(clock.seconds ?? 0)"
+        ])
+        if pauseBeforeSeeking {
+            player.pause()
+            try await waitForPause(player, validate: validate)
+            try await Task.sleep(for: .milliseconds(50))
+            try validate()
+        }
+        let displayedPictures = pauseBeforeSeeking ? player.statistics?.displayedPictures : nil
+        clock.seconds = nil
+        try player.seek(to: .seconds(seconds))
+        if pauseBeforeSeeking {
+            try await QueuePreviewSeekCompletion.confirmPausedSeek(
+                validate: validate,
+                waitForOutput: {
+                    #if DEBUG
+                    if ProcessInfo.processInfo.environment["TAPTION_FORCE_PAUSED_SEEK_RETRY"] == "1" {
+                        throw QueuePreviewPlaybackResumeError.seekNotCompleted
+                    }
+                    #endif
+                    try await QueuePreviewSeekCompletion.wait(
+                        targetSeconds: seconds, reportedSeconds: { clock.seconds }, validate: validate,
+                        didDisplayFrame: {
+                            guard let displayedPictures, let current = player.statistics?.displayedPictures else { return false }
+                            return current > displayedPictures
+                        }, maxPolls: 25
+                    )
+                },
+                retryWhilePlaying: {
+                    AppLogger.info("Queue preview paused seek retried while muted", category: .ui, metadata: [
+                        "targetSeconds": "\(seconds)"
+                    ])
+                    let wasMuted = player.isMuted
+                    player.isMuted = true
+                    defer {
+                        if (try? validate()) != nil { player.isMuted = wasMuted }
+                    }
+                    player.resume()
+                    clock.seconds = nil
+                    try player.seek(to: .seconds(seconds))
+                    try await QueuePreviewSeekCompletion.wait(
+                        targetSeconds: seconds, reportedSeconds: { clock.seconds }, validate: validate
+                    )
+                    try validate()
+                    player.pause()
+                    try await waitForPause(player, validate: validate)
+                }
+            )
+        } else {
+            try await QueuePreviewSeekCompletion.wait(
+                targetSeconds: seconds, reportedSeconds: { clock.seconds }, validate: validate
+            )
+        }
+        AppLogger.info("Queue preview seek completed", category: .ui, metadata: [
+            "targetSeconds": "\(seconds)", "nativeSeconds": clock.seconds.map(String.init(describing:)) ?? "none",
+            "paused": "\(pauseBeforeSeeking)",
+            "displayedPictures": player.statistics.map { "\($0.displayedPictures)" } ?? "unavailable"
+        ])
+    }
+
+    private static func waitForPause(_ player: Player, validate: () throws -> Void) async throws {
+        for _ in 0..<100 {
+            try validate()
+            if player.state == .paused { return }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try validate()
+        throw QueuePreviewPlaybackResumeError.seekNotCompleted
+    }
+}
+
+@MainActor
+enum QueuePreviewPlaybackRestorer {
+    static func restore(
+        snapshot: QueuePreviewPlaybackSnapshot,
+        validate: () throws -> Void,
+        isSeekable: () -> Bool,
+        durationSeconds: () -> Double?,
+        seek: (Double) async throws -> Void,
+        setPlaying: (Bool) -> Void
+    ) async throws {
+        try validate()
+        if snapshot.seconds > 0 {
+            for _ in 0..<100 {
+                try validate()
+                if isSeekable() { break }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            try validate()
+            guard isSeekable() else { throw QueuePreviewPlaybackResumeError.notSeekable }
+            try await seek(snapshot.clampedSeconds(durationSeconds: durationSeconds()))
+        }
+        try validate()
+        setPlaying(snapshot.isPlaying)
+    }
+}
+
+#if DEBUG
+enum QueuePreviewDebugHandoff {
+    static var automaticallyRestoresFullPreview: Bool {
+        ProcessInfo.processInfo.environment["TAPTION_AUTO_RESTORE_PREVIEW"] == "1"
+    }
+
+    static var requestedSnapshot: QueuePreviewPlaybackSnapshot? {
+        guard let rawSeconds = ProcessInfo.processInfo.environment["TAPTION_HANDOFF_SEEK_SECONDS"],
+              let seconds = Double(rawSeconds), seconds.isFinite, seconds >= 0 else { return nil }
+        return QueuePreviewPlaybackSnapshot(
+            seconds: seconds,
+            isPlaying: ProcessInfo.processInfo.environment["TAPTION_HANDOFF_PAUSED"] != "1"
+        )
+    }
+}
+#endif
 
 enum QueuePreviewPlayerFactory {
     static let softwareDecodeInstance = makeSoftwareDecodeInstance(applicationName: "Taption Encoder Preview")

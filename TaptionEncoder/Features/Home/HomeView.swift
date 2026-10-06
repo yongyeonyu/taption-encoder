@@ -154,7 +154,6 @@ struct HomeView: View {
     @State private var activeMenuSheet: HomeMenuSheet?
     @State private var isOutputSizePopoverPresented = false
     @State private var outputSizeDraftMB: Double?
-    @State private var miniPlayerPreview: QueueVideoPreview?
     @State private var isPreviewPictureInPictureActive = false
     @State private var lastExternalVideoOpenURL: URL?
     @State private var lastExternalVideoOpenDate: Date?
@@ -191,7 +190,7 @@ struct HomeView: View {
                         showsPlaybackActions: !isFullScreenVideoPlaybackActive
                     )
 
-                    if let preview = miniPlayerPreview {
+                    if let preview = viewModel.miniPlayerPreview {
                         miniPlayerOverlay(
                             preview: preview,
                             containerSize: geometry.size,
@@ -328,12 +327,12 @@ struct HomeView: View {
                 isPreviewPictureInPictureActive = false
                 viewModel.dismissPreview()
             },
-            onMinimize: {
+            onMinimize: { snapshot in
                 isPreviewPictureInPictureActive = false
-                miniPlayerPreview = preview
-                viewModel.dismissPreview()
+                viewModel.minimizePreview(preview, snapshot: snapshot)
             },
             onPictureInPictureActiveChanged: { isActive in
+                guard viewModel.activePreview?.id == preview.id else { return }
                 isPreviewPictureInPictureActive = isActive
             },
             onPrevious: { viewModel.openPreviousPreview() },
@@ -549,7 +548,7 @@ struct HomeView: View {
     }
 
     private func clearMiniPlayerForNewSource(reason: String) {
-        guard let miniPlayerPreview else {
+        guard let miniPlayerPreview = viewModel.miniPlayerPreview else {
             return
         }
         AppLogger.info(
@@ -560,7 +559,7 @@ struct HomeView: View {
                 "reason": reason
             ]
         )
-        self.miniPlayerPreview = nil
+        viewModel.dismissMiniPreview()
     }
 
     private func handleImportBrowserDismiss() {
@@ -596,7 +595,6 @@ struct HomeView: View {
 
     private func resetHome() {
         AppLogger.info("Reset button tapped", category: .ui)
-        miniPlayerPreview = nil
         viewModel.reset()
     }
 
@@ -927,11 +925,10 @@ struct HomeView: View {
                 QueueMiniPlayerView(
                     preview: preview,
                     onClose: {
-                        miniPlayerPreview = nil
+                        viewModel.dismissMiniPreview()
                     },
-                    onExpand: {
-                        miniPlayerPreview = nil
-                        viewModel.restorePreview(preview)
+                    onExpand: { snapshot in
+                        viewModel.restorePreview(preview, snapshot: snapshot)
                     }
                 )
                 .frame(width: max(210, width))

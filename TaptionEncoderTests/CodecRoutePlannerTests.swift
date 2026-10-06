@@ -4411,7 +4411,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(previewText.contains("onPictureInPictureActiveChanged(isActive)"))
         XCTAssertFalse(previewText.contains("onPictureInPictureHome"))
         XCTAssertFalse(previewText.contains("Queue preview Picture in Picture home requested"))
-        XCTAssertTrue(previewText.contains("startDebugAutoPictureInPictureIfRequested()"))
+        XCTAssertTrue(previewText.contains("startDebugAutoPictureInPictureIfRequested(operationID:"))
         XCTAssertTrue(previewText.contains("TAPTION_AUTO_START_PIP"))
         XCTAssertTrue(previewText.contains("nativeValidationProbe"))
         XCTAssertTrue(previewText.contains("TAPTION_PIP_PROBE_ID"))
@@ -4478,7 +4478,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         let viewModelText = try String(contentsOf: viewModelURL, encoding: .utf8)
         let progressViewText = try String(contentsOf: progressViewURL, encoding: .utf8)
 
-        XCTAssertTrue(homeViewText.contains("@State private var miniPlayerPreview: QueueVideoPreview?"))
+        XCTAssertTrue(homeViewText.contains("viewModel.miniPlayerPreview"))
+        XCTAssertTrue(viewModelText.contains("@Published private(set) var miniPlayerPreview: QueueVideoPreview?"))
+        XCTAssertTrue(homeViewText.contains("viewModel.minimizePreview(preview, snapshot: snapshot)"))
         XCTAssertTrue(homeViewText.contains("@State private var isPreviewPictureInPictureActive = false"))
         XCTAssertFalse(homeViewText.contains("autoStartMiniPlayerPiPPreviewID"))
         XCTAssertTrue(homeViewText.contains("QueueMiniPlayerView("))
@@ -4493,7 +4495,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(previewViewText.contains("Image(systemName: \"arrow.down.right.and.arrow.up.left\")"))
         XCTAssertTrue(previewViewText.contains("TAPTION_AUTO_MINIMIZE_PREVIEW"))
         XCTAssertTrue(previewViewText.contains("Debug auto mini player requested"))
-        XCTAssertTrue(previewViewText.contains("Button(action: onExpand)"))
+        XCTAssertTrue(previewViewText.contains("Button(action: expandPreview)"))
         XCTAssertTrue(previewViewText.contains("Button(action: togglePictureInPicture)"))
         XCTAssertTrue(previewViewText.contains("Queue mini player PiP requested"))
         XCTAssertTrue(previewViewText.contains("Queue mini player PiP exit requested"))
@@ -4509,7 +4511,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains(".zIndex(isPreviewPictureInPictureActive ? 30 : 0)"))
         XCTAssertTrue(homeViewText.contains("queueVideoPreviewOverlay(preview: preview)"))
         XCTAssertTrue(homeViewText.contains(".zIndex(20)"))
-        XCTAssertTrue(homeViewText.contains("viewModel.restorePreview(preview)"))
+        XCTAssertTrue(homeViewText.contains("viewModel.restorePreview(preview, snapshot: snapshot)"))
         XCTAssertTrue(previewViewText.contains("queueMiniPlayer"))
         XCTAssertTrue(homeViewText.contains("viewModel.activePreview != nil && !isPreviewPictureInPictureActive"))
         XCTAssertTrue(homeViewText.contains("showsPlaybackActions: !isFullScreenVideoPlaybackActive"))
@@ -4517,7 +4519,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("showsWatchAdAction: showsPlaybackActions"))
         XCTAssertTrue(previewViewText.contains("beginVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(previewViewText.contains("endVideoPlaybackAdSuppressionIfNeeded()"))
-        XCTAssertTrue(viewModelText.contains("func restorePreview(_ preview: QueueVideoPreview)"))
+        XCTAssertTrue(viewModelText.contains("func restorePreview(_ preview: QueueVideoPreview, snapshot:"))
         XCTAssertTrue(progressViewText.contains("var showsWorkAction: Bool = true"))
         XCTAssertTrue(progressViewText.contains("var showsWatchAdAction: Bool = true"))
         XCTAssertTrue(progressViewText.contains("showsWorkAction\n            && (resolvedCanStartEncoding"))
@@ -10512,6 +10514,811 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
+    func testEncodingStartIsReservedSynchronouslyAndDebitsOnce() async throws {
+        for balance in [1, 3] {
+            let fixture = try await makeStartRaceFixture(balance: balance)
+            defer { try? FileManager.default.removeItem(at: fixture.directoryURL) }
+            await fixture.wallet.holdSnapshots()
+            fixture.viewModel.startPreparedEncoding()
+            XCTAssertTrue(fixture.viewModel.isStartingEncoding)
+            XCTAssertFalse(fixture.viewModel.canStartEncodingNow)
+            fixture.viewModel.startPreparedEncoding()
+            try await waitForAsyncCondition { await fixture.wallet.pendingSnapshotCount() == 1 }
+            await fixture.wallet.releaseSnapshots()
+            try await waitForCompletedSave(in: fixture.viewModel, timeout: 10)
+            let calls = await fixture.wallet.debitCount()
+            let encoderCalls = await fixture.encoder.callCount()
+            XCTAssertEqual(calls, 1)
+            XCTAssertEqual(encoderCalls, 1)
+            XCTAssertEqual(fixture.viewModel.starWalletSnapshot.balance, balance - 1)
+            XCTAssertFalse(fixture.viewModel.isStartingEncoding)
+        }
+    }
+
+    @MainActor
+    func testResetWhileStartSnapshotIsPendingPreventsDebitAndEncoding() async throws {
+        let fixture = try await makeStartRaceFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directoryURL) }
+        await fixture.wallet.holdSnapshots()
+        fixture.viewModel.startPreparedEncoding()
+        try await waitForAsyncCondition { await fixture.wallet.pendingSnapshotCount() == 1 }
+        fixture.viewModel.reset()
+        XCTAssertEqual(fixture.viewModel.state, .idle)
+        await fixture.wallet.releaseSnapshots()
+        try await Task.sleep(for: .milliseconds(80))
+        let calls = await fixture.wallet.debitCount()
+        let encoderCalls = await fixture.encoder.callCount()
+        XCTAssertEqual(calls, 0)
+        XCTAssertEqual(encoderCalls, 0)
+        XCTAssertEqual(fixture.viewModel.state, .idle)
+        XCTAssertFalse(fixture.viewModel.isStartingEncoding)
+    }
+
+    @MainActor
+    func testResetAfterDebitCommitRefundsAbandonedStartWithoutEncoding() async throws {
+        let fixture = try await makeStartRaceFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directoryURL) }
+        await fixture.wallet.holdDebits()
+        fixture.viewModel.startPreparedEncoding()
+        try await waitForAsyncCondition { await fixture.wallet.pendingDebitCount() == 1 }
+        fixture.viewModel.reset()
+        await fixture.wallet.releaseOldestDebit()
+        try await waitForAsyncCondition { await fixture.wallet.refundCount() == 1 }
+        let encoderCalls = await fixture.encoder.callCount()
+        let balance = await fixture.wallet.balance()
+        let cancelledRefund = await fixture.wallet.refundWasCancelled()
+        XCTAssertEqual(encoderCalls, 0)
+        XCTAssertEqual(balance, 3)
+        XCTAssertFalse(cancelledRefund)
+        XCTAssertEqual(fixture.viewModel.state, .idle)
+    }
+
+    @MainActor
+    func testSourceReplacementDuringDebitDoesNotClearNewerEncodingStart() async throws {
+        let fixture = try await makeStartRaceFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directoryURL) }
+        await fixture.wallet.holdDebits()
+        fixture.viewModel.startPreparedEncoding()
+        try await waitForAsyncCondition { await fixture.wallet.pendingDebitCount() == 1 }
+        fixture.viewModel.startFilesFlow(url: fixture.secondURL)
+        try await waitForReadyToStartState(in: fixture.viewModel, timeout: 10)
+        fixture.viewModel.startPreparedEncoding()
+        try await waitForAsyncCondition { await fixture.wallet.pendingDebitCount() == 2 }
+        await fixture.wallet.releaseOldestDebit()
+        try await waitForAsyncCondition { await fixture.wallet.refundCount() == 1 }
+        XCTAssertTrue(fixture.viewModel.isStartingEncoding)
+        await fixture.wallet.releaseOldestDebit()
+        try await waitForCompletedSave(in: fixture.viewModel, timeout: 10)
+        let encoderCalls = await fixture.encoder.callCount()
+        let sources = await fixture.encoder.sourceURLs()
+        let balance = await fixture.wallet.balance()
+        XCTAssertEqual(encoderCalls, 1)
+        XCTAssertEqual(sources, [fixture.secondURL])
+        XCTAssertEqual(balance, 2)
+        XCTAssertEqual(fixture.viewModel.starWalletSnapshot.balance, 2)
+    }
+
+    @MainActor
+    func testExternalPreviewRepeatedStartPreparesAndDebitsOnce() async throws {
+        let fixture = try await makeStartRaceFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directoryURL) }
+        fixture.viewModel.openExternalPlayerFile(url: fixture.firstURL)
+        try await waitForReadyToStartState(in: fixture.viewModel, timeout: 10)
+        XCTAssertEqual(fixture.viewModel.state.preparedEncodingReview?.requiresEncodingPreparation, true)
+        fixture.viewModel.startPreparedEncoding()
+        fixture.viewModel.startPreparedEncoding()
+        try await waitForCompletedSave(in: fixture.viewModel, timeout: 10)
+        let calls = await fixture.wallet.debitCount()
+        let encoderCalls = await fixture.encoder.callCount()
+        XCTAssertEqual(calls, 1)
+        XCTAssertEqual(encoderCalls, 1)
+    }
+
+    @MainActor
+    func testMiniPlayerClosesForFilesPhotosResetAndEncodingStart() async throws {
+        let fixture = try await makeStartRaceFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directoryURL) }
+        let model = fixture.viewModel
+        model.openPreviewForFileCard(id: fixture.firstURL.lastPathComponent)
+        model.minimizePreview(try XCTUnwrap(model.activePreview))
+        XCTAssertNil(model.activePreview)
+        XCTAssertEqual(model.miniPlayerPreview?.sourceURL, fixture.firstURL)
+        model.startFilesFlow(url: fixture.secondURL)
+        XCTAssertNil(model.miniPlayerPreview)
+        try await waitForReadyToStartState(in: model, timeout: 10)
+        model.openPreviewForFileCard(id: fixture.secondURL.lastPathComponent)
+        model.minimizePreview(try XCTUnwrap(model.activePreview))
+        model.startPhotosFlow(url: fixture.firstURL, displayName: "photo.mp4")
+        XCTAssertNil(model.miniPlayerPreview)
+        try await waitForReadyToStartState(in: model, timeout: 10)
+        model.openPreviewForFileCard(id: "photo.mp4")
+        model.minimizePreview(try XCTUnwrap(model.activePreview))
+        model.reset()
+        XCTAssertNil(model.miniPlayerPreview)
+        model.startFilesFlow(url: fixture.firstURL)
+        try await waitForReadyToStartState(in: model, timeout: 10)
+        model.openPreviewForFileCard(id: fixture.firstURL.lastPathComponent)
+        model.minimizePreview(try XCTUnwrap(model.activePreview))
+        model.startPreparedEncoding()
+        XCTAssertNil(model.miniPlayerPreview)
+        try await waitForCompletedSave(in: model, timeout: 10)
+    }
+
+    @MainActor
+    func testOpeningFullPreviewClearsMiniPlaybackSession() async throws {
+        let fixture = try await makeStartRaceFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directoryURL) }
+        fixture.viewModel.openPreviewForFileCard(id: fixture.firstURL.lastPathComponent)
+        let preview = try XCTUnwrap(fixture.viewModel.activePreview)
+        fixture.viewModel.minimizePreview(preview)
+        fixture.viewModel.restorePreview(preview)
+        XCTAssertNil(fixture.viewModel.miniPlayerPreview)
+        XCTAssertEqual(fixture.viewModel.activePreview?.id, preview.id)
+        fixture.viewModel.dismissPreview()
+    }
+
+    @MainActor
+    func testPreviewFallbackCancellationNeverPlaysAnotherAttempt() async throws {
+        let lifetime = QueuePreviewPlaybackLifetime()
+        let operationID = lifetime.begin()
+        var playCount = 0
+        var resultCount = 0
+        let task = Task { @MainActor in
+            try await QueuePreviewPlaybackAttempts.run(
+                demuxModes: [.automatic, .avformat],
+                validate: { try lifetime.check(operationID) },
+                stop: {}, play: { _, _ in playCount += 1 },
+                waitForOutput: { try await Task.sleep(for: .seconds(10)); return false },
+                didFinishAttempt: { _, _, _ in resultCount += 1 }
+            )
+        }
+        try await waitForCondition(timeout: 2) { playCount == 1 }
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("Cancelled fallback must propagate CancellationError")
+        } catch is CancellationError {}
+        XCTAssertEqual(playCount, 1)
+        XCTAssertEqual(resultCount, 0)
+    }
+
+    @MainActor
+    func testPreviewFallbackGenerationReplacementStopsOldAttempt() async throws {
+        let lifetime = QueuePreviewPlaybackLifetime()
+        let operationID = lifetime.begin()
+        let gate = PreviewOutputGate()
+        var playCount = 0
+        let task = Task { @MainActor in
+            try await QueuePreviewPlaybackAttempts.run(
+                demuxModes: [.automatic, .avformat],
+                validate: { try lifetime.check(operationID) },
+                stop: {}, play: { _, _ in playCount += 1 },
+                waitForOutput: { await gate.wait() }, didFinishAttempt: { _, _, _ in }
+            )
+        }
+        try await waitForCondition(timeout: 2) { gate.isWaiting }
+        let newOperationID = lifetime.begin()
+        gate.release()
+        do {
+            _ = try await task.value
+            XCTFail("Superseded playback must not retry")
+        } catch is CancellationError {}
+        XCTAssertEqual(playCount, 1)
+        XCTAssertTrue(lifetime.isCurrent(newOperationID))
+        lifetime.invalidate()
+        XCTAssertThrowsError(try lifetime.check(newOperationID))
+    }
+
+    @MainActor
+    func testPreviewFallbackStillTriesSecondDemuxWhenNotCancelled() async throws {
+        let lifetime = QueuePreviewPlaybackLifetime()
+        let operationID = lifetime.begin()
+        var modes: [QueuePreviewDemuxMode] = []
+        let ready = try await QueuePreviewPlaybackAttempts.run(
+            demuxModes: [.automatic, .avformat], validate: { try lifetime.check(operationID) },
+            stop: {}, play: { _, mode in modes.append(mode) },
+            waitForOutput: { modes.count == 2 }, didFinishAttempt: { _, _, _ in }
+        )
+        XCTAssertTrue(ready)
+        XCTAssertEqual(modes, [.automatic, .avformat])
+    }
+
+    func testNativePreviewWrappersDoNotConstructVLCPlayers() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let text = try String(contentsOf: root.appendingPathComponent("TaptionEncoder/Features/Preview/QueuePreviewViews.swift"), encoding: .utf8)
+        for (wrapper, implementation) in [("struct QueueVideoPreviewView: View", "private struct VLCQueueVideoPreviewView: View"),
+                                          ("struct QueueMiniPlayerView: View", "private struct VLCQueueMiniPlayerView: View")] {
+            let begin = try XCTUnwrap(text.range(of: wrapper))
+            let end = try XCTUnwrap(text.range(of: implementation))
+            let wrapperText = String(text[begin.lowerBound..<end.lowerBound])
+            XCTAssertTrue(wrapperText.contains("NativeQueueVideoPreviewView("))
+            XCTAssertFalse(wrapperText.contains("makePreviewPlayer()"))
+        }
+    }
+
+    @MainActor
+    func testPreviewHandoffPreservesPositionAndPauseAcrossRoundTrip() async throws {
+        let fixture = try await makeStartRaceFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directoryURL) }
+        let model = fixture.viewModel
+        model.openPreviewForFileCard(id: fixture.firstURL.lastPathComponent)
+        let full = try XCTUnwrap(model.activePreview)
+        let paused = QueuePreviewPlaybackSnapshot(seconds: 6.25, isPlaying: false)
+        model.minimizePreview(full, snapshot: paused)
+        let mini = try XCTUnwrap(model.miniPlayerPreview)
+        XCTAssertEqual(mini.playbackSnapshot, paused)
+        XCTAssertEqual(mini.id, full.id)
+        let later = QueuePreviewPlaybackSnapshot(seconds: 9.5, isPlaying: false)
+        model.restorePreview(mini, snapshot: later)
+        XCTAssertEqual(model.activePreview?.playbackSnapshot, later)
+        XCTAssertNil(model.miniPlayerPreview)
+        XCTAssertEqual(model.activePreview?.sourceURL, fixture.firstURL)
+    }
+
+    @MainActor
+    func testPreviewHandoffPreservesPlaybackIntentAcrossRoundTrip() async throws {
+        let fixture = try await makeStartRaceFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directoryURL) }
+        let model = fixture.viewModel
+        model.openPreviewForFileCard(id: fixture.firstURL.lastPathComponent)
+        let full = try XCTUnwrap(model.activePreview)
+        let playing = QueuePreviewPlaybackSnapshot(seconds: 12.1, isPlaying: true)
+        model.minimizePreview(full, snapshot: playing)
+        let mini = try XCTUnwrap(model.miniPlayerPreview)
+        model.restorePreview(mini)
+        XCTAssertEqual(model.activePreview?.playbackSnapshot, playing)
+    }
+
+    @MainActor
+    func testPreviewHandoffRejectsCallbacksFromDismissedOrReplacedPreview() async throws {
+        let fixture = try await makeStartRaceFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directoryURL) }
+        let model = fixture.viewModel
+        model.openPreviewForFileCard(id: fixture.firstURL.lastPathComponent)
+        let old = try XCTUnwrap(model.activePreview)
+        model.minimizePreview(old, snapshot: QueuePreviewPlaybackSnapshot(seconds: 4, isPlaying: false))
+        model.startFilesFlow(url: fixture.secondURL)
+        try await waitForReadyToStartState(in: model, timeout: 10)
+        model.openPreviewForFileCard(id: fixture.secondURL.lastPathComponent)
+        let current = try XCTUnwrap(model.activePreview)
+        model.restorePreview(old)
+        model.minimizePreview(old)
+        XCTAssertEqual(model.activePreview?.id, current.id)
+        XCTAssertNil(model.activePreview?.playbackSnapshot)
+        XCTAssertNil(model.miniPlayerPreview)
+        model.dismissPreview()
+        model.restorePreview(current)
+        XCTAssertNil(model.activePreview)
+    }
+
+    func testPreviewSnapshotSanitizesAndClampsTime() {
+        for invalid in [-3.0, Double.nan, Double.infinity, -Double.infinity] {
+            XCTAssertEqual(QueuePreviewPlaybackSnapshot(seconds: invalid, isPlaying: false).seconds, 0)
+        }
+        let snapshot = QueuePreviewPlaybackSnapshot(seconds: 100, isPlaying: true)
+        XCTAssertEqual(snapshot.clampedSeconds(durationSeconds: 10), 10)
+        XCTAssertEqual(snapshot.clampedSeconds(durationSeconds: nil), 100)
+        XCTAssertEqual(snapshot.clampedSeconds(durationSeconds: .nan), 100)
+        XCTAssertLessThan(QueuePreviewPlaybackSnapshot(seconds: .greatestFiniteMagnitude, isPlaying: true).seconds,
+                          Double(Int64.max) / 1_000)
+    }
+
+    @MainActor
+    func testPreviewRestorerSeeksBeforeRestoringPause() async throws {
+        var events: [String] = []
+        try await QueuePreviewPlaybackRestorer.restore(
+            snapshot: QueuePreviewPlaybackSnapshot(seconds: 6.25, isPlaying: false), validate: {},
+            isSeekable: { true }, durationSeconds: { 20 },
+            seek: { events.append("seek:\($0)") }, setPlaying: { events.append("playing:\($0)") }
+        )
+        XCTAssertEqual(events, ["seek:6.25", "playing:false"])
+    }
+
+    @MainActor
+    func testPreviewRestorerWaitsForSeekabilityAndRestoresPlay() async throws {
+        var polls = 0
+        var events: [String] = []
+        try await QueuePreviewPlaybackRestorer.restore(
+            snapshot: QueuePreviewPlaybackSnapshot(seconds: 100, isPlaying: true), validate: {},
+            isSeekable: { polls += 1; return polls >= 3 }, durationSeconds: { 20 },
+            seek: { events.append("seek:\($0)") }, setPlaying: { events.append("playing:\($0)") }
+        )
+        XCTAssertGreaterThanOrEqual(polls, 3)
+        XCTAssertEqual(events, ["seek:20.0", "playing:true"])
+    }
+
+    @MainActor
+    func testPreviewRestorerCancellationDoesNotSeekOrResume() async throws {
+        let lifetime = QueuePreviewPlaybackLifetime()
+        let id = lifetime.begin()
+        var polls = 0
+        var changes = 0
+        let task = Task { @MainActor in
+            try await QueuePreviewPlaybackRestorer.restore(
+                snapshot: QueuePreviewPlaybackSnapshot(seconds: 6, isPlaying: true),
+                validate: { try lifetime.check(id) }, isSeekable: { polls += 1; return false },
+                durationSeconds: { 20 }, seek: { _ in changes += 1 }, setPlaying: { _ in changes += 1 }
+            )
+        }
+        try await waitForCondition(timeout: 5) { polls > 0 }
+        task.cancel()
+        do { try await task.value; XCTFail("Expected cancellation") } catch is CancellationError {}
+        XCTAssertEqual(changes, 0)
+    }
+
+    @MainActor
+    func testPreviewRestorerRejectsSupersededGeneration() async throws {
+        let lifetime = QueuePreviewPlaybackLifetime()
+        let id = lifetime.begin()
+        var polls = 0
+        var changes = 0
+        let task = Task { @MainActor in
+            try await QueuePreviewPlaybackRestorer.restore(
+                snapshot: QueuePreviewPlaybackSnapshot(seconds: 6, isPlaying: false),
+                validate: { try lifetime.check(id) }, isSeekable: { polls += 1; return false },
+                durationSeconds: { 20 }, seek: { _ in changes += 1 }, setPlaying: { _ in changes += 1 }
+            )
+        }
+        try await waitForCondition(timeout: 5) { polls > 0 }
+        _ = lifetime.begin()
+        do { try await task.value; XCTFail("Expected stale request cancellation") } catch is CancellationError {}
+        XCTAssertEqual(changes, 0)
+    }
+
+    @MainActor
+    func testPreviewRestorerSeekFailureDoesNotResume() async throws {
+        var resumed = false
+        do {
+            try await QueuePreviewPlaybackRestorer.restore(
+                snapshot: QueuePreviewPlaybackSnapshot(seconds: 6, isPlaying: true), validate: {},
+                isSeekable: { true }, durationSeconds: { 20 },
+                seek: { _ in throw NSError(domain: "Test.Seek", code: 71) }, setPlaying: { resumed = $0 }
+            )
+            XCTFail("Expected seek failure")
+        } catch {
+            XCTAssertEqual((error as NSError).domain, "Test.Seek")
+        }
+        XCTAssertFalse(resumed)
+    }
+
+    @MainActor
+    func testPreviewRestorerAwaitsSeekBeforePause() async throws {
+        let gate = PreviewAudioOperationGate()
+        var events: [String] = []
+        let task = Task { @MainActor in
+            try await QueuePreviewPlaybackRestorer.restore(
+                snapshot: QueuePreviewPlaybackSnapshot(seconds: 6, isPlaying: false), validate: {},
+                isSeekable: { true }, durationSeconds: { 20 },
+                seek: { _ in events.append("seekRequested"); await gate.wait(); events.append("seekCompleted") },
+                setPlaying: { events.append("playing:\($0)") }
+            )
+        }
+        try await waitForCondition(timeout: 5) { gate.isWaiting }
+        XCTAssertEqual(events, ["seekRequested"])
+        gate.release()
+        try await task.value
+        XCTAssertEqual(events, ["seekRequested", "seekCompleted", "playing:false"])
+    }
+
+    @MainActor
+    func testPreviewRestorerCancellationAfterSeekDoesNotResume() async throws {
+        let lifetime = QueuePreviewPlaybackLifetime()
+        let id = lifetime.begin()
+        var changedPlayback = false
+        do {
+            try await QueuePreviewPlaybackRestorer.restore(
+                snapshot: QueuePreviewPlaybackSnapshot(seconds: 6, isPlaying: true),
+                validate: { try lifetime.check(id) }, isSeekable: { true }, durationSeconds: { 20 },
+                seek: { _ in lifetime.invalidate() }, setPlaying: { _ in changedPlayback = true }
+            )
+            XCTFail("Expected cancellation after the old seek finishes")
+        } catch is CancellationError {}
+        XCTAssertFalse(changedPlayback)
+    }
+
+    @MainActor
+    func testPreviewSeekCompletionWaitsForNativeClock() async throws {
+        var polls = 0
+        try await QueuePreviewSeekCompletion.wait(
+            targetSeconds: 6,
+            reportedSeconds: { polls += 1; return polls < 3 ? nil : 6.05 }, validate: {}
+        )
+        XCTAssertEqual(polls, 3)
+    }
+
+    @MainActor
+    func testPreviewSeekCompletionRejectsOldAndUnrelatedTimes() async throws {
+        var polls = 0
+        try await QueuePreviewSeekCompletion.wait(
+            targetSeconds: 6,
+            reportedSeconds: {
+                polls += 1
+                if polls == 1 { return 0.41 }
+                if polls == 2 { return 7 }
+                return 6.1
+            }, validate: {}
+        )
+        XCTAssertEqual(polls, 3)
+    }
+
+    @MainActor
+    func testPreviewSeekCompletionTimeoutIsActionable() async throws {
+        do {
+            try await QueuePreviewSeekCompletion.wait(
+                targetSeconds: 6, reportedSeconds: { 0.41 }, validate: {}, maxPolls: 2
+            )
+            XCTFail("A stale native clock must not count as a completed seek")
+        } catch QueuePreviewPlaybackResumeError.seekNotCompleted {
+            XCTAssertEqual(QueuePreviewPlaybackResumeError.seekNotCompleted.errorDescription,
+                           "Playback position could not be restored. Close and open the video again.")
+        }
+    }
+
+    @MainActor
+    func testPreviewPausedSeekCompletionWaitsForDisplayedFrame() async throws {
+        var polls = 0
+        try await QueuePreviewSeekCompletion.wait(
+            targetSeconds: 6, reportedSeconds: { nil }, validate: {},
+            didDisplayFrame: { polls += 1; return polls >= 3 }
+        )
+        XCTAssertEqual(polls, 3)
+    }
+
+    @MainActor
+    func testPreviewPausedSeekRetriesMissingOutputWhilePlaying() async throws {
+        var events: [String] = []
+        try await QueuePreviewSeekCompletion.confirmPausedSeek(
+            validate: {},
+            waitForOutput: { events.append("pausedSeek"); throw QueuePreviewPlaybackResumeError.seekNotCompleted },
+            retryWhilePlaying: { events.append("mutedRetry") }
+        )
+        XCTAssertEqual(events, ["pausedSeek", "mutedRetry"])
+    }
+
+    @MainActor
+    func testPreviewPausedSeekCancellationDoesNotRetry() async throws {
+        var retried = false
+        do {
+            try await QueuePreviewSeekCompletion.confirmPausedSeek(
+                validate: {}, waitForOutput: { throw CancellationError() },
+                retryWhilePlaying: { retried = true }
+            )
+            XCTFail("Cancelled seek must not resume the player for a retry")
+        } catch is CancellationError {}
+        XCTAssertFalse(retried)
+    }
+
+    @MainActor
+    func testPreviewPausedSeekRejectsStaleRetry() async throws {
+        let lifetime = QueuePreviewPlaybackLifetime()
+        let id = lifetime.begin()
+        var retried = false
+        do {
+            try await QueuePreviewSeekCompletion.confirmPausedSeek(
+                validate: { try lifetime.check(id) },
+                waitForOutput: { lifetime.invalidate(); throw QueuePreviewPlaybackResumeError.seekNotCompleted },
+                retryWhilePlaying: { retried = true }
+            )
+            XCTFail("An old player must not retry after being dismissed")
+        } catch is CancellationError {}
+        XCTAssertFalse(retried)
+    }
+
+    @MainActor
+    func testPreviewSeekCompletionPropagatesCancellation() async throws {
+        var polls = 0
+        let task = Task { @MainActor in
+            try await QueuePreviewSeekCompletion.wait(
+                targetSeconds: 6, reportedSeconds: { polls += 1; return nil }, validate: {}
+            )
+        }
+        try await waitForCondition(timeout: 5) { polls > 0 }
+        task.cancel()
+        do { try await task.value; XCTFail("Expected cancelled seek wait") } catch is CancellationError {}
+    }
+
+    @MainActor
+    func testPreviewSeekReadinessRequiresPlayingAndNativeTimestamp() async throws {
+        var polls = 0
+        try await QueuePreviewSeekCompletion.waitUntilReady(
+            isPlaying: { polls += 1; return polls > 1 },
+            reportedSeconds: { polls < 3 ? 0 : 0.1 }, validate: {}
+        )
+        XCTAssertEqual(polls, 3)
+    }
+
+    @MainActor
+    func testPreviewSeekReadinessTimeoutRejectsUnstartedClock() async throws {
+        do {
+            try await QueuePreviewSeekCompletion.waitUntilReady(
+                isPlaying: { true }, reportedSeconds: { 0 }, validate: {}, maxPolls: 2
+            )
+            XCTFail("Video output readiness must not imply that the input clock is ready")
+        } catch QueuePreviewPlaybackResumeError.seekNotCompleted {}
+    }
+
+    @MainActor
+    func testPreviewSeekReadinessPropagatesCancellation() async throws {
+        var polls = 0
+        let task = Task { @MainActor in
+            try await QueuePreviewSeekCompletion.waitUntilReady(
+                isPlaying: { polls += 1; return false }, reportedSeconds: { nil }, validate: {}
+            )
+        }
+        try await waitForCondition(timeout: 5) { polls > 0 }
+        task.cancel()
+        do { try await task.value; XCTFail("Expected cancelled input readiness wait") } catch is CancellationError {}
+    }
+
+    @MainActor
+    func testPreviewAudioLifetimeSerializesPendingActivationAndClose() async throws {
+        let gate = PreviewAudioOperationGate()
+        var events: [String] = []
+        let lifetime = QueuePreviewAudioSessionLifetime(
+            activate: { events.append("activate"); await gate.wait() },
+            deactivate: { events.append("deactivate") }
+        )
+        let opening = Task { try await lifetime.activate(id: "full") }
+        try await waitForCondition(timeout: 5) { gate.isWaiting }
+        lifetime.deactivate(id: "full")
+        XCTAssertEqual(events, ["activate"])
+        gate.release()
+        do { try await opening.value; XCTFail("Expected closed session") } catch is CancellationError {}
+        await lifetime.waitForPendingOperations()
+        XCTAssertEqual(events, ["activate", "deactivate"])
+    }
+
+    @MainActor
+    func testPreviewAudioLifetimeOldShutdownDoesNotDeactivateNewPreview() async throws {
+        var activations = 0
+        var deactivations = 0
+        let lifetime = QueuePreviewAudioSessionLifetime(
+            activate: { activations += 1 }, deactivate: { deactivations += 1 }
+        )
+        try await lifetime.activate(id: "full")
+        try await lifetime.activate(id: "mini")
+        lifetime.deactivate(id: "full")
+        await lifetime.waitForPendingOperations()
+        XCTAssertEqual(activations, 2)
+        XCTAssertEqual(deactivations, 0)
+        lifetime.deactivate(id: "mini")
+        await lifetime.waitForPendingOperations()
+        XCTAssertEqual(deactivations, 1)
+    }
+
+    @MainActor
+    func testPreviewAudioRoundTripRejectsFirstFullPlayersDelayedShutdown() async throws {
+        var deactivations = 0
+        let lifetime = QueuePreviewAudioSessionLifetime(activate: {}, deactivate: { deactivations += 1 })
+        try await lifetime.activate(id: "same-file.full.1")
+        try await lifetime.activate(id: "same-file.mini.1")
+        try await lifetime.activate(id: "same-file.full.2")
+        lifetime.deactivate(id: "same-file.full.1")
+        lifetime.deactivate(id: "same-file.mini.1")
+        await lifetime.waitForPendingOperations()
+        XCTAssertEqual(deactivations, 0)
+        lifetime.deactivate(id: "same-file.full.2")
+        await lifetime.waitForPendingOperations()
+        XCTAssertEqual(deactivations, 1)
+    }
+
+    @MainActor
+    func testPreviewAudioLifetimeSkipsSupersededRequests() async throws {
+        let gate = PreviewAudioOperationGate()
+        var activations = 0
+        var deactivations = 0
+        let lifetime = QueuePreviewAudioSessionLifetime(
+            activate: { activations += 1; if activations == 1 { await gate.wait() } },
+            deactivate: { deactivations += 1 }
+        )
+        let first = Task { try await lifetime.activate(id: "A") }
+        try await waitForCondition(timeout: 5) { gate.isWaiting }
+        let second = Task { try await lifetime.activate(id: "B") }
+        try await waitForCondition(timeout: 5) { lifetime.ownerID == "B" }
+        lifetime.deactivate(id: "B")
+        let current = Task { try await lifetime.activate(id: "C") }
+        try await waitForCondition(timeout: 5) { lifetime.ownerID == "C" }
+        gate.release()
+        do { try await first.value; XCTFail("Expected first request to be superseded") } catch is CancellationError {}
+        do { try await second.value; XCTFail("Expected second request to be superseded") } catch is CancellationError {}
+        try await current.value
+        XCTAssertEqual(activations, 2)
+        XCTAssertEqual(deactivations, 0)
+        lifetime.deactivate(id: "C")
+        await lifetime.waitForPendingOperations()
+        XCTAssertEqual(deactivations, 1)
+    }
+
+    func testPreviewAudioUsesOffMainWorkerAndCompatibleOptions() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+        let text = try String(contentsOf: root.appendingPathComponent("TaptionEncoder/Features/Preview/QueuePreviewViews.swift"), encoding: .utf8)
+        let worker = try XCTUnwrap(text.range(of: "private enum QueuePreviewAudioSessionWorker"))
+        let end = try XCTUnwrap(text.range(of: "enum QueuePreviewDemuxMode"))
+        let body = String(text[worker.lowerBound..<end.lowerBound])
+        XCTAssertTrue(body.contains("DispatchQueue(label:"))
+        XCTAssertTrue(body.contains("try session.setCategory(.playback, mode: .moviePlayback, options: [])"))
+        XCTAssertFalse(body.contains(".allowAirPlay"))
+        XCTAssertFalse(body.contains(".allowBluetoothA2DP"))
+        XCTAssertTrue(body.contains("if #available(iOS 27.0, *)"))
+        XCTAssertTrue(body.contains("session.activate(options:"))
+        XCTAssertTrue(body.contains("session.deactivate(options:"))
+        XCTAssertTrue(body.contains("try session.setActive(true)"))
+        XCTAssertTrue(text.contains("@State private var audioSessionInstanceID = UUID()"))
+        XCTAssertTrue(text.contains("let sessionID = previewAudioSessionID"))
+    }
+
+    @MainActor
+    func testCloudSourceReplacementCancelsDownloadAndAllowsRetry() async throws {
+        let directory = temporaryDirectoryURL()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let first = directory.appendingPathComponent("cloud.mp4")
+        let second = directory.appendingPathComponent("other.mp4")
+        try Data("source".utf8).write(to: first)
+        try Data("source".utf8).write(to: second)
+        let downloader = CancelableSourceDownloader(heldURL: first)
+        let inspector = CountingMediaInspector(asset: makeAsset(sourceCodec: .h264))
+        let model = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: FakePendingSaveStore(), mediaInspector: inspector),
+            sourceDownloader: downloader
+        )
+        model.openExternalPlayerFile(url: first)
+        try await waitForAsyncCondition { await downloader.started }
+        XCTAssertEqual(inspector.inspectionCount, 0)
+        // Source replacement is intentionally blocked while inspection is busy.
+        // Cancel the active download before selecting another file or retrying.
+        XCTAssertTrue(model.state.canCancel)
+        model.cancel()
+        try await waitForCondition(timeout: 10) { model.state == .cancelled }
+        try await waitForAsyncCondition { await downloader.wasCancelled }
+        model.openExternalPlayerFile(url: second)
+        try await waitForReadyToStartState(in: model, timeout: 10)
+        try await waitForAsyncCondition { await downloader.wasCancelled }
+        XCTAssertEqual(model.activePreview?.sourceURL, second)
+        XCTAssertEqual(inspector.inspectionCount, 1)
+        model.openExternalPlayerFile(url: first)
+        try await waitForReadyToStartState(in: model, timeout: 10)
+        XCTAssertEqual(model.activePreview?.sourceURL, first)
+        XCTAssertEqual(inspector.inspectionCount, 2)
+    }
+
+    @MainActor
+    private final class PreviewAudioOperationGate {
+        private var continuation: CheckedContinuation<Void, Never>?
+        var isWaiting: Bool { continuation != nil }
+        func wait() async { await withCheckedContinuation { continuation = $0 } }
+        func release() { continuation?.resume(); continuation = nil }
+    }
+
+    private actor CancelableSourceDownloader: VideoSourceDownloading {
+        let heldURL: URL
+        var started = false
+        var wasCancelled = false
+        private var holdsFirstRequest = true
+        init(heldURL: URL) { self.heldURL = heldURL }
+        func ensureLocalVideo(at url: URL) async throws {
+            guard url == heldURL, holdsFirstRequest else { return }
+            started = true
+            do { try await Task.sleep(for: .seconds(30)) }
+            catch {
+                wasCancelled = error is CancellationError
+                holdsFirstRequest = false
+                throw error
+            }
+        }
+    }
+
+    @MainActor
+    private struct StartRaceFixture {
+        var directoryURL: URL
+        var firstURL: URL
+        var secondURL: URL
+        var viewModel: HomeViewModel
+        var wallet: SuspendedStartStarWalletStore
+        var encoder: RecordingStartEncoder
+    }
+
+    @MainActor
+    private func makeStartRaceFixture(balance: Int = 3) async throws -> StartRaceFixture {
+        let directoryURL = temporaryDirectoryURL()
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let firstURL = directoryURL.appendingPathComponent("first.mp4")
+        let secondURL = directoryURL.appendingPathComponent("second.mp4")
+        try Data("source".utf8).write(to: firstURL)
+        try Data("source".utf8).write(to: secondURL)
+        let wallet = SuspendedStartStarWalletStore(snapshot: makeStarWalletSnapshot(balance: balance))
+        let encoder = RecordingStartEncoder()
+        let model = HomeViewModel(environment: makeHomeViewModelTestEnvironment(
+            pendingSaveStore: FakePendingSaveStore(),
+            mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264)),
+            encoderService: encoder, starWalletStore: wallet
+        ))
+        await model.refreshStarsIfNeeded()
+        model.startFilesFlow(url: firstURL)
+        try await waitForReadyToStartState(in: model, timeout: 10)
+        return StartRaceFixture(directoryURL: directoryURL, firstURL: firstURL, secondURL: secondURL,
+                                viewModel: model, wallet: wallet, encoder: encoder)
+    }
+
+    @MainActor
+    private func waitForAsyncCondition(_ condition: @MainActor () async -> Bool) async throws {
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline {
+            if await condition() { return }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTFail("Timed out waiting for controlled asynchronous state")
+        throw NSError(domain: "CodecRoutePlannerTests.Wait", code: 1)
+    }
+
+    private actor SuspendedStartStarWalletStore: StarWalletManaging {
+        let store: FakeStarWalletStore
+        var snapshotsHeld = false
+        var debitsHeld = false
+        var snapshotWaiters: [CheckedContinuation<Void, Never>] = []
+        var debitWaiters: [CheckedContinuation<Void, Never>] = []
+        var debits = 0
+        var refunds = 0
+        var wasRefundCancelled = false
+        init(snapshot: StarWalletSnapshot) { store = FakeStarWalletStore(snapshot: snapshot) }
+        func currentSnapshot() async -> StarWalletSnapshot {
+            if snapshotsHeld { await withCheckedContinuation { snapshotWaiters.append($0) } }
+            return await store.currentSnapshot()
+        }
+        func consumeStar(source: String) async throws -> StarWalletSnapshot {
+            debits += 1
+            let snapshot = try await store.consumeStar(source: source)
+            if debitsHeld { await withCheckedContinuation { debitWaiters.append($0) } }
+            return snapshot
+        }
+        func earnStar(source: String) async throws -> StarWalletSnapshot { try await store.earnStar(source: source) }
+        func refundStar(source: String) async throws -> StarWalletSnapshot {
+            wasRefundCancelled = Task.isCancelled
+            let snapshot = try await store.refundStar(source: source)
+            refunds += 1
+            return snapshot
+        }
+        func holdSnapshots() { snapshotsHeld = true }
+        func holdDebits() { debitsHeld = true }
+        func releaseSnapshots() {
+            snapshotsHeld = false
+            let waiters = snapshotWaiters
+            snapshotWaiters.removeAll()
+            for waiter in waiters { waiter.resume() }
+        }
+        func releaseOldestDebit() {
+            guard !debitWaiters.isEmpty else { return }
+            debitWaiters.removeFirst().resume()
+        }
+        func pendingSnapshotCount() -> Int { snapshotWaiters.count }
+        func pendingDebitCount() -> Int { debitWaiters.count }
+        func debitCount() -> Int { debits }
+        func refundCount() -> Int { refunds }
+        func balance() async -> Int { await store.currentSnapshot().balance }
+        func refundWasCancelled() -> Bool { wasRefundCancelled }
+    }
+
+    private actor RecordingStartEncoder: EncoderServicing {
+        var sources: [URL] = []
+        func encode(plan: TaptionEncodingPlan, progress: @escaping (TaptionEncodingProgress) -> Void) async throws -> TaptionEncodingResult {
+            guard let sourceURL = plan.sourceURL else { throw TaptionVideoCoreError.missingSourceURL }
+            sources.append(sourceURL)
+            return try await ImmediateEncoderService(outputData: Data("encoded".utf8)).encode(plan: plan, progress: progress)
+        }
+        func cancelEncoding(planID: UUID) async {}
+        func callCount() -> Int { sources.count }
+        func sourceURLs() -> [URL] { sources }
+    }
+
+    @MainActor
+    private final class PreviewOutputGate {
+        var continuation: CheckedContinuation<Bool, Never>?
+        var isWaiting: Bool { continuation != nil }
+        func wait() async -> Bool { await withCheckedContinuation { continuation = $0 } }
+        func release() { continuation?.resume(returning: false); continuation = nil }
+    }
+
+    @MainActor
     func testMultiFileStartPromptsBeforeEncodingAndMergeChoiceShowsUnavailableAlert() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
@@ -12300,7 +13107,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         viewModel.startPhotosFlow(url: sourceURL, displayName: "Album Clip.mov")
-        try await waitForReadyToStartState(in: viewModel)
+        // The first hardware capability probe on a fresh simulator can take several seconds.
+        try await waitForReadyToStartState(in: viewModel, timeout: 10)
 
         XCTAssertNil(viewModel.activePreview)
         XCTAssertEqual(viewModel.fileCardSnapshots.count, 1)
@@ -12318,7 +13126,7 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testExternalFileOpenQueuesWithoutAutoOpeningPreview() async throws {
+    func testExternalFileOpenAutomaticallyOpensPreview() async throws {
         let directoryURL = temporaryDirectoryURL()
         defer {
             try? FileManager.default.removeItem(at: directoryURL)
@@ -12337,7 +13145,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         viewModel.openExternalPlayerFile(url: sourceURL)
         try await waitForReadyToStartState(in: viewModel)
 
-        XCTAssertNil(viewModel.activePreview)
+        XCTAssertEqual(viewModel.activePreview?.sourceURL, sourceURL)
+        XCTAssertEqual(viewModel.state.preparedEncodingReview?.requiresEncodingPreparation, true)
         XCTAssertEqual(viewModel.fileCardSnapshots.count, 1)
         XCTAssertEqual(viewModel.fileCardSnapshots.first?.fileName, "external.avi")
         XCTAssertEqual(viewModel.fileCardSnapshots.first?.sourceKind, .files)
@@ -12350,6 +13159,249 @@ final class CodecRoutePlannerTests: XCTestCase {
         }
         XCTAssertEqual(viewModel.activePreview?.sourceURL, sourceURL)
         XCTAssertEqual(viewModel.activePreview?.displayName, "external.avi")
+    }
+
+    @MainActor
+    func testExternalPreviewDefersStorageCheckAndDoesNotChargeStarWhenEncodingIsBlocked() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let sourceURL = directoryURL.appendingPathComponent("low-space.mp4")
+        try Data("source".utf8).write(to: sourceURL)
+        let storageChecker = RecordingStorageChecker(requirement: TaptionStorageRequirement(
+            estimatedOutputBytes: 1_000,
+            requiredWorkingBytes: 1_024,
+            availableBytes: 0
+        ))
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 3))
+        let viewModel = HomeViewModel(environment: makeHomeViewModelTestEnvironment(
+            pendingSaveStore: FakePendingSaveStore(),
+            mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264)),
+            storageChecker: storageChecker,
+            starWalletStore: walletStore
+        ))
+        await viewModel.refreshStarsIfNeeded()
+
+        viewModel.openExternalPlayerFile(url: sourceURL)
+        try await waitForReadyToStartState(in: viewModel)
+        XCTAssertEqual(viewModel.activePreview?.sourceURL, sourceURL)
+        XCTAssertEqual(storageChecker.checkCount, 0)
+        XCTAssertEqual(viewModel.state.preparedEncodingReview?.requiresEncodingPreparation, true)
+
+        viewModel.startPreparedEncoding()
+        try await waitForStorageBlockedState(in: viewModel)
+        XCTAssertEqual(storageChecker.checkCount, 1)
+        let wallet = await walletStore.currentSnapshot()
+        XCTAssertEqual(wallet.balance, 3)
+    }
+
+    @MainActor
+    func testExternalPreviewIsRepreparedBeforeEncodingStarts() async throws {
+        let directoryURL = temporaryDirectoryURL()
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        let sourceURL = directoryURL.appendingPathComponent("encode-after-preview.mp4")
+        try Data("source".utf8).write(to: sourceURL)
+        let storageChecker = RecordingStorageChecker(requirement: TaptionStorageRequirement(
+            estimatedOutputBytes: 1_000,
+            requiredWorkingBytes: 1_024,
+            availableBytes: 1_000_000
+        ))
+        let walletStore = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 3))
+        let viewModel = HomeViewModel(environment: makeHomeViewModelTestEnvironment(
+            pendingSaveStore: FakePendingSaveStore(),
+            mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264)),
+            encoderService: CancellableEncoderService(),
+            storageChecker: storageChecker,
+            starWalletStore: walletStore
+        ))
+        await viewModel.refreshStarsIfNeeded()
+        viewModel.openExternalPlayerFile(url: sourceURL)
+        try await waitForReadyToStartState(in: viewModel)
+
+        viewModel.startPreparedEncoding()
+        try await waitForCondition(timeout: 2) {
+            if case .encoding = viewModel.state { return true }
+            return false
+        }
+        XCTAssertEqual(storageChecker.checkCount, 1)
+        XCTAssertNil(viewModel.activePreview)
+        let wallet = await walletStore.currentSnapshot()
+        XCTAssertEqual(wallet.balance, 2)
+        viewModel.openExternalPlayerFile(url: directoryURL.appendingPathComponent("replacement.mp4"))
+        XCTAssertEqual(viewModel.fileCardSnapshots.first?.fileName, sourceURL.lastPathComponent)
+        XCTAssertEqual(storageChecker.checkCount, 1)
+        viewModel.cancel()
+        try await waitForCondition(timeout: 2) { viewModel.state == .cancelled }
+    }
+
+    @MainActor
+    func testExternalPreviewDoesNotRequireImplementedEncodingOutput() async throws {
+        let sourceURL = URL(fileURLWithPath: "/tmp/playback-only.mp4")
+        let storageChecker = RecordingStorageChecker(requirement: TaptionStorageRequirement(
+            estimatedOutputBytes: 1_000,
+            requiredWorkingBytes: 1_024,
+            availableBytes: 0
+        ))
+        let viewModel = HomeViewModel(environment: makeHomeViewModelTestEnvironment(
+            pendingSaveStore: FakePendingSaveStore(),
+            mediaInspector: StubMediaInspector(asset: makeAsset(sourceCodec: .h264)),
+            storageChecker: storageChecker
+        ))
+        viewModel.selectOutputAudioCodec(.opus)
+        XCTAssertFalse(viewModel.selectedOutput.isImplementedNow)
+        viewModel.openExternalPlayerFile(url: sourceURL)
+        try await waitForReadyToStartState(in: viewModel)
+
+        XCTAssertEqual(viewModel.activePreview?.sourceURL, sourceURL)
+        XCTAssertEqual(storageChecker.checkCount, 0)
+    }
+
+    @MainActor
+    func testCloudDownloadFailureIsActionableAndPreventsInspection() async throws {
+        let inspector = CountingMediaInspector(asset: makeAsset(sourceCodec: .h264))
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(
+                pendingSaveStore: FakePendingSaveStore(), mediaInspector: inspector
+            ),
+            sourceDownloader: FailingVideoSourceDownloader(error: VideoSourceDownloadError.timedOut)
+        )
+        viewModel.openExternalPlayerFile(url: URL(fileURLWithPath: "/tmp/cloud.mp4"))
+        try await waitForCondition(timeout: 2) {
+            if case .failed = viewModel.state { return true }
+            return false
+        }
+        guard case .failed(let failure) = viewModel.state else {
+            return XCTFail("Expected an iCloud download failure")
+        }
+        XCTAssertEqual(failure.title, "iCloud download failed")
+        XCTAssertTrue(failure.message.contains("open Files, download the video"))
+        XCTAssertEqual(inspector.inspectionCount, 0)
+        XCTAssertNil(viewModel.activePreview)
+    }
+
+    @MainActor
+    func testExternalHEVCAlphaSubtitleOpensPreview() async throws {
+        let sourceURL = URL(fileURLWithPath: "/tmp/subtitles.mov")
+        var asset = makeAsset(sourceCodec: .hevcWithAlpha,
+                              displaySize: TaptionPixelSize(width: 720, height: 720))
+        asset.container = .mov
+        asset.audioTracks = []
+        let storageChecker = RecordingStorageChecker(requirement: TaptionStorageRequirement(
+            estimatedOutputBytes: 1_000,
+            requiredWorkingBytes: 1_024,
+            availableBytes: 0
+        ))
+        let viewModel = HomeViewModel(environment: makeHomeViewModelTestEnvironment(
+            pendingSaveStore: FakePendingSaveStore(),
+            mediaInspector: StubMediaInspector(asset: asset),
+            storageChecker: storageChecker
+        ))
+        viewModel.openExternalPlayerFile(url: sourceURL)
+        try await waitForReadyToStartState(in: viewModel)
+
+        XCTAssertEqual(viewModel.activePreview?.sourceURL, sourceURL)
+        XCTAssertEqual(viewModel.activePreview?.videoInfo.audio, "No audio")
+        XCTAssertEqual(viewModel.activePreview?.usesNativePlayback, true)
+        XCTAssertEqual(viewModel.activePreview?.displaySize, TaptionPixelSize(width: 720, height: 720))
+        XCTAssertEqual(storageChecker.checkCount, 0)
+    }
+
+    @MainActor
+    func testCloudDownloadCancellationDoesNotShowEncodingFailure() async throws {
+        let viewModel = HomeViewModel(
+            environment: makeHomeViewModelTestEnvironment(pendingSaveStore: FakePendingSaveStore()),
+            sourceDownloader: FailingVideoSourceDownloader(error: CancellationError())
+        )
+        viewModel.openExternalPlayerFile(url: URL(fileURLWithPath: "/tmp/cloud.mp4"))
+        try await waitForCondition(timeout: 2) { viewModel.state == .cancelled }
+        XCTAssertNil(viewModel.activePreview)
+    }
+
+    func testCloudDownloaderAcceptsCurrentAndDownloadedWithoutRequestingDownload() async throws {
+        for status in [URLUbiquitousItemDownloadingStatus.current, .downloaded] {
+            var downloadRequests = 0
+            let downloader = UbiquitousVideoDownloader(
+                readState: { _ in UbiquitousVideoDownloadState(isUbiquitous: true, status: status) },
+                requestDownload: { _ in downloadRequests += 1 }
+            )
+            try await downloader.ensureLocalVideo(at: URL(fileURLWithPath: "/tmp/cloud.mp4"))
+            XCTAssertEqual(downloadRequests, 0)
+        }
+    }
+
+    func testCloudDownloaderAcceptsCurrentAtFinalPoll() async throws {
+        var downloadRequests = 0
+        var sleeps = 0
+        let downloader = UbiquitousVideoDownloader(
+            readState: { _ in UbiquitousVideoDownloadState(
+                isUbiquitous: true, status: sleeps == 2 ? .current : .notDownloaded
+            ) },
+            requestDownload: { _ in downloadRequests += 1 },
+            sleep: { _ in sleeps += 1 },
+            pollAttempts: 2
+        )
+        try await downloader.ensureLocalVideo(at: URL(fileURLWithPath: "/tmp/cloud.mp4"))
+        XCTAssertEqual(downloadRequests, 1)
+        XCTAssertEqual(sleeps, 2)
+    }
+
+    func testCloudDownloaderReportsTimeout() async throws {
+        let downloader = UbiquitousVideoDownloader(
+            readState: { _ in UbiquitousVideoDownloadState(isUbiquitous: true, status: .notDownloaded) },
+            requestDownload: { _ in }, sleep: { _ in }, pollAttempts: 2
+        )
+        do {
+            try await downloader.ensureLocalVideo(at: URL(fileURLWithPath: "/tmp/cloud.mp4"))
+            XCTFail("Expected a download timeout")
+        } catch VideoSourceDownloadError.timedOut {
+            // The timeout stays distinct from provider and encoding failures.
+        }
+    }
+
+    func testCloudDownloaderPreservesProviderError() async throws {
+        let providerError = NSError(domain: NSURLErrorDomain, code: NSURLErrorNotConnectedToInternet)
+        let downloader = UbiquitousVideoDownloader(
+            readState: { _ in UbiquitousVideoDownloadState(
+                isUbiquitous: true, status: .notDownloaded, error: providerError
+            ) },
+            requestDownload: { _ in }
+        )
+        do {
+            try await downloader.ensureLocalVideo(at: URL(fileURLWithPath: "/tmp/cloud.mp4"))
+            XCTFail("Expected a provider error")
+        } catch VideoSourceDownloadError.unavailable(let error) {
+            XCTAssertEqual((error as NSError).code, NSURLErrorNotConnectedToInternet)
+        }
+    }
+
+    func testCloudDownloaderPropagatesCancellation() async throws {
+        let downloader = UbiquitousVideoDownloader(
+            readState: { _ in UbiquitousVideoDownloadState(isUbiquitous: true, status: .notDownloaded) },
+            requestDownload: { _ in }, sleep: { _ in throw CancellationError() }
+        )
+        do {
+            try await downloader.ensureLocalVideo(at: URL(fileURLWithPath: "/tmp/cloud.mp4"))
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Cancellation must not become an iCloud or encoding error.
+        }
+    }
+
+    func testCloudDownloaderSkipsNonUbiquitousAndRemoteURLs() async throws {
+        var reads = 0
+        var requests = 0
+        let downloader = UbiquitousVideoDownloader(
+            readState: { _ in
+                reads += 1
+                return UbiquitousVideoDownloadState(isUbiquitous: false)
+            },
+            requestDownload: { _ in requests += 1 }
+        )
+        try await downloader.ensureLocalVideo(at: URL(fileURLWithPath: "/tmp/local.mp4"))
+        try await downloader.ensureLocalVideo(at: URL(string: "https://example.com/video.mp4")!)
+        XCTAssertEqual(reads, 1)
+        XCTAssertEqual(requests, 0)
     }
 
     @MainActor
@@ -13143,6 +14195,25 @@ final class CodecRoutePlannerTests: XCTestCase {
         func storageRequirement(for plan: TaptionEncodingPlan) async throws -> TaptionStorageRequirement {
             requirement
         }
+    }
+
+    private final class RecordingStorageChecker: StorageChecking {
+        private let queue = DispatchQueue(label: "com.taption.encoder.tests.storage-checker")
+        private let requirement: TaptionStorageRequirement
+        private var count = 0
+
+        init(requirement: TaptionStorageRequirement) { self.requirement = requirement }
+        var checkCount: Int { queue.sync { count } }
+
+        func storageRequirement(for plan: TaptionEncodingPlan) async throws -> TaptionStorageRequirement {
+            queue.sync { count += 1 }
+            return requirement
+        }
+    }
+
+    private struct FailingVideoSourceDownloader: VideoSourceDownloading {
+        var error: Error
+        func ensureLocalVideo(at url: URL) async throws { throw error }
     }
 
     private struct StubMediaInspector: MediaInspecting {

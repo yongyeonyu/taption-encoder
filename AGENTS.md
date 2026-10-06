@@ -7,8 +7,9 @@
 - Xcode project: `TaptionEncoder.xcodeproj`
 - Scheme: `TaptionEncoder`
 - Bundle id: `com.taption.encoder`
-- Current release source: `1.1.3 (34)`
-- Release code commit: `a04dab782555dac8472c92b3b6fe823146206fc3`
+- Current release source: `1.1.7 (38)` (TestFlight preparation)
+- Latest verified published version: `1.1.5` (App Store Connect readback on 2026-10-06)
+- Historical `1.1.3 (34)` code commit: `a04dab782555dac8472c92b3b6fe823146206fc3`
 
 ## Maintenance Status
 
@@ -16,9 +17,10 @@
   maintenance mode.
 - Make changes only for App Review responses, critical defects, security,
   platform compatibility, or an explicit request to resume development.
-- The owner reported that `1.1.3 (34)` was submitted to App Review and is under
-  review. Treat this as owner-reported release state and verify the live App
-  Store Connect state before acting on it.
+- On 2026-10-06, App Store Connect reported `1.1.5` as `READY_FOR_SALE`
+  and TestFlight `1.1.6 (37)` as `VALID / APP_STORE_ELIGIBLE`.
+  The preview/audio fixes were local-only at that readback. Verify live state
+  before any further release action; see `test.md` for version-bound evidence.
 - Do not treat App Store upload, review, or approval as legal clearance for the
   bundled codec dependencies.
 
@@ -51,6 +53,8 @@
 - It contains the verified archive ZIP, App Store IPA, App Thinning report,
   relink materials, export options, and `RELEASE_MANIFEST.txt`.
 - Do not delete this record while App Review or legal follow-up is active.
+- On 2026-10-06, the exact record path was not present on this host. Do not
+  claim it is still available locally or reconstruct it from another version.
 - The local public-distribution gate remains blocked because the exact-release
   corresponding-source bundle and external legal approval are missing.
 - `Vendor/OpenSourceCompliance/legal-approval.pending.json` is intentionally
