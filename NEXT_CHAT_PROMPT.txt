@@ -1,0 +1,54 @@
+YYY Encoder 작업 이어서 ㄱㄱ.
+
+프로젝트: /Users/u_mo_c/Documents/taption_encoder
+GitHub: https://github.com/yongyeonyu/taption-encoder
+브랜치: main. 앱 변경 source commit은 71d9f67e18e6e6c7f061004599ed143982ee98ae.
+최신 정리/기록 commit은 git log, git status, origin/main으로 확인해.
+먼저 AGENTS.md와 temp.md 읽고, test.md는 관련 요청 ID 구간만 읽어.
+
+현재 출시 상태:
+- YYY Encoder 1.1.9 (40), 심사 대기 / 승인 후 자동 출시.
+- App ID 6780777838, bundle ID com.taption.encoder.
+- version ID 0649aa64-cc2d-4e5c-b95c-129053c487ad.
+- build ID 44ea1608-1531-462c-8345-121ee09a8d45.
+- review ID eb30a21b-6226-4d21-882e-2a99797e27af.
+- 제출 시각 2026-10-07 00:42:55 KST. 승인/실제 공개 출시는 아직 미확인.
+- 마지막 공식 조회 2026-10-07 00:59:24 KST도 WAITING_FOR_REVIEW / AFTER_APPROVAL.
+
+완료된 변경:
+- 앱 표시 이름 YYY Encoder, 앱 자체 홈 화면 이름 텍스트 삭제.
+- 지원 메일 builday365@gmail.com.
+- 한/영 앱 설명은 쉽고 빠른 동영상 변환 중심. 상세 코덱/포맷 목록 없음.
+- 일부 영상 재생 불가 개선 및 변환/파일 처리 안정화 수정사항 등록.
+- 한/영 iPhone 10장, iPad 세로 10장, 가로 10장, 총 30장 정밀 편집·업로드.
+- 수정 영역 밖 픽셀 변경 0, 26개 홈 제목 삭제, Apple COMPLETE/체크섬/규격/순서 검증.
+- iPhone/iPad focused 테스트 각 12개/총 24개 통과. Release/배포 기술 gate/Apple 업로드 검증 통과.
+- 실제 제출 소스 119개 hash와 main의 앱/구성 파일이 일치함을 확인한 뒤 커밋·push.
+
+정리 상태:
+- 전용 /private/tmp/YYYEncoder-NAME06Y2K8.UPtGou 빌드·package cache·raw log 삭제.
+- 전용 simulator 6081A497-D25A-43E4-A68D-F1F5B138E718와 ABB3AE94-752E-485C-A353-26951343D42F 및 로그 삭제.
+- 다른 프로젝트의 12개 simulator와 공용 runtime, 사용자 원본 영상, 인증 키는 보존.
+- source/resources/필수 vendor/licenses/설정/테스트/소스 도구와 compact 기록은 Git에 보존.
+- 정확한 출시·심사 자료 약 1.3 GiB와 이미지 약 91 MiB는 아직 보존 중.
+  /Users/u_mo_c/Documents/TaptionEncoderReleases
+  /Users/u_mo_c/Documents/YYYEncoderAppStoreScreenshots-NAME06Y2K8
+- CLN07M4Q9B: 위 보존 자료까지 삭제할지 질문했고 답변은 아직 없음. 현재 파일을 삭제 완료로 취급하지 말 것.
+  삭제하면 정확한 IPA/archive/dSYM/원본 증빙의 복구를 보장할 수 없음. 사용자 선택 후 해당 정확한 대상만 처리해.
+
+다음 확인:
+1. 현재 App Store Connect 심사/출시 상태를 읽기 전용으로 확인. 기존 심사를 중복 제출하거나 취소하지 마.
+2. PUB06V8N2R: Apple 승인 및 실제 공개 출시 확인은 제출/AFTER_APPROVAL 설정과 별도.
+3. FIX06P3M7Q: 사용자 기기의 파일 앱 기본 연결 설정은 아직 미확인. 앱 코드의 파일 열기/플레이어 진입 수정과 구분해.
+4. 새 빌드는 패키지 재조회와 재컴파일이 필요함. 옛 simulator/archive가 남아 있다고 가정하지 마.
+
+지킬 것:
+- /Users/u_mo_c/Documents/taption 프로젝트는 건드리지 마.
+- 내부 target/scheme TaptionEncoder, bundle ID, 기존 저장 경로는 유지.
+- 앱 내부 UI 문자열은 영어. 출력은 HEVC 및 MP4/MOV 유지.
+- 새 업로드는 marketing version/build 모두 올려. 재제출/metadata 수정/외부 전송/삭제는 새 지시 없이 하지 마.
+- 외부 법률승인서는 opt-in이고 필수 내부 차단 조건 아님. 기술 PASS/Apple 심사를 법적 승인으로 표현하지 마.
+- 사용자 자료·다른 프로젝트·공용 cache/runtime를 광범위하게 삭제하지 마.
+- 작업을 10자리 ID로 temp.md에 기록하고 검증은 test.md에 남겨. 완료 항목만 temp.md에서 제거.
+
+내가 다음 작업을 지정하면 이 상태를 기준으로 바로 이어서 진행해.

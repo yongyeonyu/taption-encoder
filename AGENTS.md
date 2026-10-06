@@ -7,7 +7,7 @@
 - Xcode project: `TaptionEncoder.xcodeproj`
 - Scheme: `TaptionEncoder`
 - Bundle id: `com.taption.encoder`
-- Current release candidate: `1.1.9 (40)` (`WAITING_FOR_REVIEW / AFTER_APPROVAL`, verified 2026-10-07 00:43:56 KST). Branding/configuration/tooling and compact proof are being recorded on main under CLN07M4Q9B. Review ID: `eb30a21b-6226-4d21-882e-2a99797e27af`. The owner-authorized replacement canceled the prior `1.1.8 (39)` review under NAME06Y2K8.
+- Current release candidate: `1.1.9 (40)` (`WAITING_FOR_REVIEW / AFTER_APPROVAL`, verified 2026-10-07 00:59:24 KST). Branding/configuration/tooling and compact proof were committed and pushed on main at `71d9f67e18e6e6c7f061004599ed143982ee98ae` under CLN07M4Q9B. Review ID: `eb30a21b-6226-4d21-882e-2a99797e27af`. The owner-authorized replacement canceled the prior `1.1.8 (39)` review under NAME06Y2K8.
 - Last verified internal TestFlight group build: `1.1.7 (38)` (internal-only)
 - TestFlight source commit: `c5e5e8fb832fee4ed06dd86576f81dd9dcbb1e93`
 - Latest verified published version: `1.1.5` (App Store Connect readback on 2026-10-06)
@@ -108,7 +108,9 @@
 - Base source `ed17d666df085bfd08df1648a07ee907d0e0e53f` plus the version patch and
   a non-bundled provenance-only patch reconstructs the 119 candidate source files.
   Runtime code and library binaries are unchanged from the main source. The
-  candidate configuration and provenance updates are not yet committed or pushed.
+  candidate configuration/provenance were uncommitted at capture. The later
+  1.1.9 (40) state is now committed/pushed on main; this historical 39 snapshot
+  has not been rewritten to match that newer version.
 - Original-library technical relink, app/extension signatures, dSYM UUIDs,
   source checksums and exact shipped notice comparison passed. Under RULE06V2Q8,
   technical gate, Apple validation/upload/processing and App Review submission
@@ -177,6 +179,15 @@
   derived artifacts from scratch.
 - Keep new generated samples, archives, logs, and proof files outside the
   working tree.
+- On 2026-10-07, CLN07M4Q9B committed/pushed the verified 1.1.9 (40) source
+  and removed its 3.1 GiB dedicated /private/tmp build/package/test scratch,
+  both NAME06Y2K8 simulators and their logs. Twelve unrelated simulators and
+  shared runtimes, user videos, credentials and required vendor/resources
+  were preserved. No extra Git worktree existed. The owner was asked whether
+  to also delete the 1.3 GiB exact release/review records and 91 MiB screenshot
+  originals/proofs; no answer has been received, so those remain preserved.
+  CLN07M4Q9B remains pending only for that scope decision. Do not claim all
+  non-source materials were deleted. See NEXT_CHAT_PROMPT.txt for handoff.
 
 ## Resume Checklist
 

@@ -6,7 +6,9 @@
 
 원인: 1.1.9 (40) 심사 제출까지 완료된 이름/메일/홈 화면/배포 정책 변경과 정밀 이미지 도구가 아직 로컬 변경이다. 전용 빌드 cache·시뮬레이터·이미지와 정확한 출시 자료가 소스 밖에 남아 있다.
 
-해결 계획: main/origin 및 diff·기존 검증과 source hash를 확인하고 source-only 대상과 삭제 대상을 정확한 경로/소유 simulator ID로 분리한다. archive/IPA/dSYM/심사 증빙 삭제는 현재 보존 지침과 복구 불가 위험을 안내하여 사용자 선택을 받는다. 원래 사용자 동영상·다른 프로젝트/시뮬레이터·인증 키·필수 vendor/resources/notices는 보존한다. compact proof와 이어가기 프롬프트를 소스에 남기고 커밋·원격 main 정합성 및 정리 후 상태를 확인한다.
+완료 결과: 검증된 앱 변경을 71d9f67e18e6e6c7f061004599ed143982ee98ae로 main에 commit/push하고 원격 hash 일치를 확인했다. 전용 /private/tmp/YYYEncoder-NAME06Y2K8.UPtGou 약 3.1 GiB와 owned simulator 두 대 및 로그를 삭제·부재 확인했다. 다른 simulator 12대, 사용자 원본 영상·인증 키·필수 vendor/resources/notices는 보존했다. NEXT_CHAT_PROMPT.txt를 작성했다.
+
+남은 결정: archive/IPA/dSYM/심사 증빙까지 삭제할지 비동기 질문했으며 답변은 아직 없다. TaptionEncoderReleases 약 1.3 GiB와 YYYEncoderAppStoreScreenshots-NAME06Y2K8 약 91 MiB는 보존 중이다. 보존 지침 및 정확한 symbols/증빙 복구 불가 위험이 있으므로 사용자 선택 후 정확한 해당 파일만 처리한다. 새 심사 제출/취소는 하지 않는다.
 
 검증 기준: git diff --check, 현재 119개 앱/구성 source hash 및 shipped IPA hash 정합성, main=origin/main 및 clean status, 정확한 삭제 대상 부재/보존 대상 존재 확인, 새 대화 프롬프트에 심사 대기/자동 출시와 삭제로 인한 제한을 구분한다. test.md CLN07M4Q9B에 기록한다.
 
