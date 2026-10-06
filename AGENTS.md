@@ -7,7 +7,8 @@
 - Xcode project: `TaptionEncoder.xcodeproj`
 - Scheme: `TaptionEncoder`
 - Bundle id: `com.taption.encoder`
-- Current release source: `1.1.7 (38)` (TestFlight preparation)
+- Current release source: `1.1.7 (38)` (verified internal TestFlight)
+- TestFlight source commit: `c5e5e8fb832fee4ed06dd86576f81dd9dcbb1e93`
 - Latest verified published version: `1.1.5` (App Store Connect readback on 2026-10-06)
 - Historical `1.1.3 (34)` code commit: `a04dab782555dac8472c92b3b6fe823146206fc3`
 
@@ -18,9 +19,11 @@
 - Make changes only for App Review responses, critical defects, security,
   platform compatibility, or an explicit request to resume development.
 - On 2026-10-06, App Store Connect reported `1.1.5` as `READY_FOR_SALE`
-  and TestFlight `1.1.6 (37)` as `VALID / APP_STORE_ELIGIBLE`.
-  The preview/audio fixes were local-only at that readback. Verify live state
-  before any further release action; see `test.md` for version-bound evidence.
+  and the newly uploaded TestFlight `1.1.7 (38)` as `VALID / INTERNAL_ONLY`
+  with `IN_BETA_TESTING` in `Taption Encoder Internal`. This build includes the
+  preview/audio fixes and cannot be used for external testing or App Store
+  submission. Verify live state before any further release action; see
+  `test.md` (REL06T7M9C) for version-bound evidence.
 - Do not treat App Store upload, review, or approval as legal clearance for the
   bundled codec dependencies.
 
@@ -34,6 +37,18 @@
 - Keep proof surfaces separate: local build/test, archive/export, App Store Connect/TestFlight, App Review, device install, and runtime logs are different evidence classes.
 
 ## Latest Release Snapshot
+
+- `1.1.7 (38)` was clean-archived, distribution-exported, Apple-validated,
+  uploaded, and confirmed available to the existing internal TestFlight group
+  on 2026-10-06. Delivery UUID: `30e114f0-e77e-48c4-b2e2-8d35c7255fdd`.
+- Valid prior simulator regression (75 tests and 28 new tests repeated three
+  times) was reused after confirming source hashes. This release did not run
+  a new physical-device regression or submit a new App Review version.
+- Generated archives, IPA, dSYMs and raw proof were permanently deleted at
+  the owner's explicit source-only cleanup request. Exact uploaded-build
+  symbols are not guaranteed recoverable; the compact proof remains in Git.
+
+## Historical Release Snapshot — 1.1.3 (34)
 
 - `1.1.3 (34)` introduced the Cool Slate UI palette, aligned the Exit and
   Watch Ad control widths, removed the Privacy & Ads menu item, and improved
@@ -68,6 +83,11 @@
 - On 2026-07-17, Taption Encoder DerivedData, codec build directories, simulator
   test copies, temporary logs, and shared regenerable development caches were
   removed to minimize local storage.
+- On 2026-10-06, Encoder-specific old/new archives, IPA, dSYMs, DerivedData,
+  package checkouts, test copies, logs and simulator app/data were permanently
+  removed after TestFlight verification. Required vendor/resources/licenses,
+  compact tracked proof, original user videos and other projects' simulator
+  devices/runtimes/data were preserved.
 - The first future build may need to resolve Swift packages and rebuild all
   derived artifacts from scratch.
 - Keep new generated samples, archives, logs, and proof files outside the

@@ -321,3 +321,31 @@
 - 저장 공간이 약 3GB로 줄어 이전 완료 FIX06A8V2N/FIX06C9H4S/FIX06P3M7Q/FIX06R8K2A/REV06D4N8Q의 테스트·스크린샷·로그 폴더를 사용자 요청에 따라 먼저 삭제함. 상세 결과는 위 기록에 보존했지만 원래 /tmp 증거 링크는 이후 열리지 않을 수 있다. 이 생성물 삭제는 휴지통 이동이 아닌 영구 삭제이며 Git 소스·원본 iCloud 영상은 삭제하지 않는다.
 - AGENTS의 보존 `1.1.3 (34)` release record는 이 작업 시작 시 정확한 경로에 존재하지 않았음. 이 작업으로 삭제하지 않았으며 이전 법적 승인 pending/source-offer gate를 승인으로 변경하지 않는다. 필수 vendor/framework, 앱 assets, codec fixtures, 라이선스/릴리스 스크립트는 재현 가능한 source 구성으로 유지한다.
 - 이번 임시 증거/빌드 경로: `/tmp/TaptionEncoder-REL06T7M9C.wTXaLS`. 진행 결과는 아래에 이어 기록하고 사용자 요청에 따라 업로드 확인 후 생성물을 삭제한다.
+
+### main 커밋·새 archive/export·Apple 전달
+
+- 구현 및 버전 변경 커밋: `c5e5e8fb832fee4ed06dd86576f81dd9dcbb1e93` (`Fix video preview playback and audio session stability for 1.1.7`). `main`에서 생성해 `origin/main`에 push 성공했고, 이 정확한 코드 상태로 아래 배포본을 생성함. 이후 완료 기록 커밋은 AGENTS.md/temp.md/test.md만 변경하며 앱 소스는 변경하지 않음.
+- 새 전용 DerivedData에서 generic iOS / Release `clean archive` 수행: `archive.log`의 **CLEAN SUCCEEDED / ARCHIVE SUCCEEDED**, exit 0. `TaptionEncoder-1.1.7-38.xcarchive`의 main app은 arm64 / `com.taption.encoder` / `1.1.7 (38)`이며 `codesign --verify --deep --strict` 통과.
+- SwiftPM 고정 버전: GoogleMobileAds `13.5.0`, GoogleUserMessagingPlatform `3.1.0`, SwiftVLC `0.10.1`. 기존 75개 및 신규 28개×3회 회귀 증거를 재사용했고 이번 릴리스 작업 중 다시 실행한 테스트라고 주장하지 않음. 출력 HEVC / MP4·MOV, encoder backend 및 geometry는 변경하지 않음.
+- `xcodebuild -exportArchive` **EXPORT SUCCEEDED**, exit 0. export는 `method=app-store-connect`, automatic signing, team `4FWG8XXYM7`, `manageAppVersionAndBuildNumber=false`, **`testFlightInternalTestingOnly=true`**. App Store 심사 제출이나 외부 TestFlight 배포용 빌드가 아님.
+- IPA `Taption Encoder.ipa`: **26,840,799 bytes**, SHA-256 **`917692ad10043114cfc0b8185c2cfdccc385af00b90f4ce1a719e7e2e3b17c91`**. Apple Distribution 서명 및 deep/strict 서명 검사 통과. main app과 두 extension 모두 `1.1.7 (38)` 일치. Release 실행 파일에 native preview 로그 문자열이 있고 DEBUG 전용 강제 seek/retry 환경 변수 문자열 두 개는 없음.
+- Apple `altool` validation: `validate.log`의 **VERIFY SUCCEEDED with no errors**, exit 0. upload: `upload.log`의 **UPLOAD SUCCEEDED with no errors**, exit 0. Delivery UUID / ASC build ID **`30e114f0-e77e-48c4-b2e2-8d35c7255fdd`**, 업로드 반영 시각 **2026-10-06 18:52:56 KST**.
+- `altool --build-status --delivery-id … --wait` exit 0: **processingState=VALID**, build/import status=VALID, audience=INTERNAL_ONLY, is-on-app-store-connect=true, uses-non-exempt-encryption=false. 업로드 receipt와 처리 완료를 별도 확인함.
+
+### App Store Connect / 내부 TestFlight readback
+
+- 공식 API `GET /v1/builds?filter[app]=6780777838&filter[version]=38`에서 한 빌드를 조회함: `version=38`, preReleaseVersion=`1.1.7`, platform=IOS, **processingState=VALID**, **buildAudienceType=INTERNAL_ONLY**, expired=false.
+- 같은 build의 buildBetaDetail: **internalBuildState=IN_BETA_TESTING**, externalBuildState=NOT_APPLICABLE, autoNotifyEnabled=true. 자동 알림 설정을 확인한 것이며 테스터의 실제 알림 수신/설치 완료 증거는 아님.
+- 기존 내부 그룹 **`Taption Encoder Internal`** (`10a4640f-864b-4952-bb94-cd2ea87a96c0`, hasAccessToAllBuilds=true)의 `GET /v1/betaGroups/<id>/builds` 목록에 위 build 38 / 동일 UUID / VALID / INTERNAL_ONLY가 포함됨. 새 테스터를 초대하거나 다른 앱·그룹을 변경하지 않음.
+- 이번 범위는 내부 TestFlight 전달 완료까지임. App Review 제출/공개 릴리스, 사용자 실기기 설치·재생·시스템 PiP/가청 background audio 및 법적 승인 완료로 확대 해석하지 않음. `legal-approval.pending.json`과 public distribution gate는 그대로 비승인 상태임.
+
+### source-only 정리·보존 확인
+
+- 사용자 요청에 따라 이전 proof 디렉터리 `/tmp/TaptionEncoder-FIX06A8V2N.jutZsc`, `FIX06C9H4S.Y7zSDf`, `FIX06P3M7Q.iuynqE`, `FIX06R8K2A.qsicl6`, `REV06D4N8Q.phqhn9`를 영구 삭제함. 위 과거 작업의 원래 screenshot/xcresult/log는 더 이상 로컬에 보존되지 않으며, 남은 기기 기본 연결 UI 요청 FIX06P3M7Q 자체는 완료로 처리하지 않음.
+- 이전 `/tmp/TaptionEncoder-TF29M8Q4L1` 약 1.5GB의 archive/export/패키지 체크아웃과 동일 ID의 flat export-options/log/API 생성 파일, `/Users/u_mo_c/Library/Developer/Xcode/DerivedData/TaptionEncoder-cppuipnwyznujvabarpyvzevtqvq`, 작업 트리의 ignored `.DS_Store`를 영구 삭제함. private API key·서명 인증서·프로비저닝 및 다른 프로젝트의 공유 캐시는 삭제하지 않음.
+- 기존 iPhone 17e (`DBF0A437-57FB-44A4-BDCC-80A0C2A74CF8`)의 **`com.taption.encoder`만 uninstall** exit 0, 이후 get_app_container는 No such file or directory / exit 2. 전체 available simulator의 bounded bundle/data plist inventory에서 `com.taption.encoder`, `.tests`, `.liveactivity`, `.thumbnail`에 일치하는 항목은 최종 **[]**. 다른 앱이 사용하는 generic simulator 또는 OS runtime은 erase/delete하지 않음.
+- 원본 iCloud 자막 MOV를 삭제·수정하지 않았고 최종 SHA-256을 다시 확인함: **`797c8cf12f1a4de7565ccecdd7e189aa88e762d348f1998f9cf2b99d4b02004b`**, FIX06C9H4S 기록과 동일. Git source, 필수 vendor/framework/assets/fixtures/licenses 및 compact 검증 기록은 보존함.
+- 처리 완료와 그룹 연결을 확인한 뒤 이번 `/tmp/TaptionEncoder-REL06T7M9C.wTXaLS` 약 555MB 전체(새 DerivedData/archive/IPA/dSYMs/추출 앱/업로드 임시물/API·테스트 요약·로그)를 **영구 삭제**, `rm -r` exit 0. `com.taption.encoder`가 포함된 배포 로그로 확인한 `/var/folders/q1/0p9tcvnx7yx5l12y55zm4tdm0000gn/T/TaptionEncoder_2026-10-06_13-16-45.289.xcdistributionlogs` 및 `TaptionEncoder_2026-10-06_18-45-47.948.xcdistributionlogs`도 같은 방식으로 삭제함.
+- 위 새/이전 증거·패키지·DerivedData·배포 로그의 정확한 경로는 모두 최종 **ABSENT**. `/tmp`, 해당 macOS 임시 폴더, Xcode DerivedData/Archives, Downloads, Trash의 Encoder 이름 한정 목록에서도 추가 일치 항목이 없음. `git ls-files --others --ignored --exclude-standard` 결과도 빈 목록임. 공유 simulator OS 자체를 모두 삭제했다는 뜻은 아님.
+- 삭제한 raw proof/IPA/archive/dSYMs는 휴지통에서 복구할 수 없음. 소스는 GitHub/main으로 보존되지만 동일 업로드 빌드의 디버그 심볼 재생성·복구는 보장하지 않음. 다음 빌드는 패키지 resolve와 derived 산출물 재생성이 필요함.
+- 완료 기록 전 `git diff --check` 통과, build source 커밋 이후 차이는 기록 파일뿐임. 추가 worktree는 없고 유일한 worktree는 프로젝트의 main checkout. 이번 REL06T7M9C만 temp.md에서 제거하며 별도 미확인인 FIX06P3M7Q는 유지함.
