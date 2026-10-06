@@ -13,6 +13,22 @@
 - Latest verified published version: `1.1.5` (App Store Connect readback on 2026-10-06)
 - Historical `1.1.3 (34)` code commit: `a04dab782555dac8472c92b3b6fe823146206fc3`
 
+## Current Artifact Availability — 2026-10-07
+
+- Under CLN07M4Q9B, the owner explicitly answered “삭제” after being informed
+  that exact archives, IPA and dSYMs are not guaranteed recoverable. This
+  overrides the prior preservation instructions for the named release records.
+- `/Users/u_mo_c/Documents/TaptionEncoderReleases` and
+  `/Users/u_mo_c/Documents/YYYEncoderAppStoreScreenshots-NAME06Y2K8` are deleted.
+  Exact 1.1.8 (39)/1.1.9 (40) archives, IPA, dSYMs, corresponding-source copies,
+  relink objects, review packets, screenshots and raw evidence are unavailable
+  locally. Historical paths below describe past captures, not available files.
+- Canonical source, required vendor/resources/licenses, provenance and rebuild
+  tooling, compact Git evidence, credentials and user originals remain intact.
+  All 121 tracked non-document files matched their pre-deletion SHA256 hashes.
+  Deletion does not waive source-offer obligations or guarantee reconstruction.
+  App Store Connect review and uploaded assets were not changed by cleanup.
+
 ## Maintenance Status
 
 - Feature development ended on 2026-07-17. Keep the project in minimal
@@ -40,9 +56,9 @@
   review before a single new submission was created at 00:42:55 KST.
   Review eb30a21b-6226-4d21-882e-2a99797e27af and version 1.1.9 (40) were
   independently confirmed WAITING_FOR_REVIEW / AFTER_APPROVAL at 00:43:56 KST.
-  Approval/public release is not yet verified. Preserve the exact release
-  and screenshot originals/proofs while that follow-up is active; see
-  test.md NAME06Y2K8 and PUB06V8N2R.
+  Approval/public release is not yet verified. The owner subsequently deleted
+  the local exact release and screenshot records under CLN07M4Q9B; compact
+  historical evidence remains in test.md NAME06Y2K8 and PUB06V8N2R.
 - On 2026-10-06, App Store Connect reported `1.1.5` as `READY_FOR_SALE`
   and the newly uploaded TestFlight `1.1.7 (38)` as `VALID / INTERNAL_ONLY`
   with `IN_BETA_TESTING` in `Taption Encoder Internal`. This build includes the
@@ -67,17 +83,19 @@
   descriptions, subtitles and keywords to simple video-conversion copy and
   the owner-confirmed contact builday365@gmail.com. Local libVLC/FFmpeg
   source-offer notices now use that address, but the already-submitted build
-  `1.1.8 (39)` and its preserved exact-release record still contain the old
+  `1.1.8 (39)` and its then-preserved exact-release record contained the old
   address. Do not claim a metadata/source edit changed that binary or cancel
   review/upload a replacement without the owner's direction.
 - COPY06M2Q8 replacement verification completed under NAME06Y2K8: the actual
   1.1.9 (40) IPA's two source-offer notices contain builday365@gmail.com and
-  not help@taption.com; that exact build is now submitted. The preserved old
-  1.1.8 (39) materials are unchanged and are not evidence of the new email.
+  not help@taption.com; that exact build is now submitted. The old
+  1.1.8 (39) materials were not evidence of the new email and are now deleted.
 - A separate external counsel approval record is optional, not a mandatory
   App Store upload/submission input under the owner's 2026-10-06 instruction.
-  Preserve notices, corresponding sources, relink materials, checksums and
-  signing/size/version checks. Never fabricate approval or alter pending records.
+  Preserve canonical notices, source provenance and compliance/rebuild tooling;
+  retain corresponding sources and relink materials for future releases.
+  Historical artifact deletion is explicitly recorded above and does not waive
+  compliance responsibilities. Never fabricate approval or alter pending records.
 
 ## Scope Rules
 
@@ -100,10 +118,10 @@
   the owner's explicit source-only cleanup request. Exact uploaded-build
   symbols are not guaranteed recoverable; the compact proof remains in Git.
 
-## Preserved Canceled Review Release — 1.1.8 (39)
+## Historical Canceled Review Release — 1.1.8 (39)
 
 - Local Release clean archive, ordinary `app-store-connect` export, corresponding
-  sources (56 contrib archives), and relink materials (76 app objects) are kept at
+  sources (56 contrib archives), and relink materials (76 app objects) were kept at
   `/Users/u_mo_c/Documents/TaptionEncoderReleases/1.1.8-39-LAW06N5K8T`.
 - Base source `ed17d666df085bfd08df1648a07ee907d0e0e53f` plus the version patch and
   a non-bundled provenance-only patch reconstructs the 119 candidate source files.
@@ -118,14 +136,14 @@
   modified-library install test or external review-packet transfer was performed
   for build 39; the release uses the prior verified unchanged runtime source.
 - The version/digest-bound approval template is intentionally pending and is
-  preserved as an unapproved historical record. The old mandatory approval mode
+  captured as an unapproved historical record (now deleted). The old mandatory approval mode
   reached `Legal status is not approved.`. The owner changed external approval
   to an opt-in check under RULE06V2Q8; technical verification and source-offer
   responsibilities remain separate from any legal assessment. The new default
   technical gate passed; `LEGAL_REVIEW_STATUS=NOT_VERIFIED` remains explicit.
-- Preserve this requested exact-release review record, including archive, IPA,
-  dSYMs, source and relink objects, while review/release follow-up is active. It is
-  not a regenerable cache. See `test.md` (LAW06N5K8T) for current evidence.
+- This exact-release record was not a regenerable cache. The owner explicitly
+  authorized its deletion under CLN07M4Q9B. See `test.md` (LAW06N5K8T and
+  CLN07M4Q9B) for historical checks and current availability limitations.
 - A local handoff ZIP was verified against all 104 packet-file checksums. The
   LAW06N5K8T-only 2.4 GiB scratch/package/DerivedData/document caches and its two
   export-log directories were then deleted; the exact candidate materials and
@@ -147,17 +165,17 @@
 
 ## Release Artifacts
 
-- Preserve the compact release record at
+- Historical compact release record path:
   `/Users/u_mo_c/Documents/TaptionEncoderReleases/1.1.3-34-a04dab7`.
-- It contains the verified archive ZIP, App Store IPA, App Thinning report,
+- It contained the verified archive ZIP, App Store IPA, App Thinning report,
   relink materials, export options, and `RELEASE_MANIFEST.txt`.
-- Do not delete this record while App Review or legal follow-up is active.
 - On 2026-10-06, the exact record path was not present on this host. Do not
   claim it is still available locally or reconstruct it from another version.
 - The historical mandatory gate was blocked by missing external legal approval;
   that extra project requirement is no longer mandatory under RULE06V2Q8.
   Exact-release candidate materials for `1.1.8 (39)`
-  are now preserved separately under LAW06N5K8T; they are not a reconstruction
+  were captured separately under LAW06N5K8T and owner-deleted under CLN07M4Q9B;
+  they were not a reconstruction
   of the absent `1.1.3 (34)` record.
 - `Vendor/OpenSourceCompliance/legal-approval.pending.json` is intentionally
   non-passing and must not be presented as approval.
@@ -183,11 +201,12 @@
   and removed its 3.1 GiB dedicated /private/tmp build/package/test scratch,
   both NAME06Y2K8 simulators and their logs. Twelve unrelated simulators and
   shared runtimes, user videos, credentials and required vendor/resources
-  were preserved. No extra Git worktree existed. The owner was asked whether
-  to also delete the 1.3 GiB exact release/review records and 91 MiB screenshot
-  originals/proofs; no answer has been received, so those remain preserved.
-  CLN07M4Q9B remains pending only for that scope decision. Do not claim all
-  non-source materials were deleted. See NEXT_CHAT_PROMPT.txt for handoff.
+  were preserved. No extra Git worktree existed. After the recovery-risk notice,
+  the owner explicitly authorized deleting the 1.3 GiB exact release/review
+  records and 91 MiB screenshot originals/proofs. Both validated roots are now
+  absent; all 121 tracked non-document file hashes are unchanged. CLN07M4Q9B
+  is complete. Source includes required binary dependencies/resources and compact
+  records, not generated release artifacts. See NEXT_CHAT_PROMPT.txt for handoff.
 
 ## Resume Checklist
 
@@ -199,5 +218,5 @@
 5. For codec or geometry changes, rerun the focused tests and the full physical
    sample regression rather than relying on the historical result above.
 6. Increment both marketing version and build number for any new upload.
-7. Create new release artifacts without overwriting the preserved `1.1.3 (34)`
-   record.
+7. Create new version/build-specific release artifacts; do not assume deleted
+   historical archives, symbols or raw evidence are available.
