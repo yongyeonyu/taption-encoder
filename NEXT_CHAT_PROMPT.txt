@@ -1,57 +1,47 @@
-YYY Encoder 작업 이어서 ㄱㄱ.
+BOKKI Encoder 작업을 이어서 진행해 주세요. 확정된 이름은 대문자 BOKKI Encoder입니다.
 
 프로젝트: /Users/u_mo_c/Documents/taption_encoder
 GitHub: https://github.com/yongyeonyu/taption-encoder
-브랜치: main. 앱 변경 source commit은 71d9f67e18e6e6c7f061004599ed143982ee98ae.
-최신 정리/기록 commit은 git log, git status, origin/main으로 확인해.
-먼저 AGENTS.md와 temp.md 읽고, test.md는 관련 요청 ID 구간만 읽어.
+main / origin/main: 35d858a12e4d310a725c100cb67de1ed4c4fc697
+이후 UIX/PRQ/PLY/TRS/EML/BNM/BKR 소스·문서·아이콘·버전 변경은 미커밋 상태입니다. commit/push/branch/tag는 요청되지 않아 수행하지 않았습니다. 사용자 WebsiteDrafts 자료도 보존합니다.
+먼저 AGENTS.md, temp.md, git status --short --branch를 확인하고 test.md는 관련 10자리 요청 ID 구간만 읽어 주세요.
 
-현재 출시 상태:
-- YYY Encoder 1.1.9 (40), 심사 대기 / 승인 후 자동 출시.
-- App ID 6780777838, bundle ID com.taption.encoder.
-- version ID 0649aa64-cc2d-4e5c-b95c-129053c487ad.
-- build ID 44ea1608-1531-462c-8345-121ee09a8d45.
-- review ID eb30a21b-6226-4d21-882e-2a99797e27af.
-- 제출 시각 2026-10-07 00:42:55 KST. 승인/실제 공개 출시는 아직 미확인.
-- 마지막 공식 조회 2026-10-07 00:59:24 KST도 WAITING_FOR_REVIEW / AFTER_APPROVAL.
+BKR08N6Q2M 완료 — 대문자 이름 변경과 새 심사 제출 (2026-10-08)
 
-완료된 변경:
-- 앱 표시 이름 YYY Encoder, 앱 자체 홈 화면 이름 텍스트 삭제.
-- 지원 메일 builday365@gmail.com.
-- 한/영 앱 설명은 쉽고 빠른 동영상 변환 중심. 상세 코덱/포맷 목록 없음.
-- 일부 영상 재생 불가 개선 및 변환/파일 처리 안정화 수정사항 등록.
-- 한/영 iPhone 10장, iPad 세로 10장, 가로 10장, 총 30장 정밀 편집·업로드.
-- 수정 영역 밖 픽셀 변경 0, 26개 홈 제목 삭제, Apple COMPLETE/체크섬/규격/순서 검증.
-- iPhone/iPad focused 테스트 각 12개/총 24개 통과. Release/배포 기술 gate/Apple 업로드 검증 통과.
-- 실제 제출 소스 119개 hash와 main의 앱/구성 파일이 일치함을 확인한 뒤 커밋·push.
+BOKKI Encoder 1.1.12 (43), App ID 6780777838, bundle com.taption.encoder.
+제출 시각: 2026-10-08 13:48:35.340 KST
+독립 확인: 13:50:41 KST, version/review WAITING_FOR_REVIEW / AFTER_APPROVAL
+Version ID: bf3874fc-ebb5-497e-bb49-9a1b88854615
+Build/delivery ID: 0eaa4e92-f6d7-4ffa-bc79-f97fccfd4b95
+Review ID: 60182eba-12c3-4f3a-aeb8-925804cc9d02
+정확한 한 version/build/item과 active review 1개를 확인했습니다. 승인·공개 출시는 별도 후속 확인입니다.
 
-정리 상태:
-- 전용 /private/tmp/YYYEncoder-NAME06Y2K8.UPtGou 빌드·package cache·raw log 삭제.
-- 전용 simulator 6081A497-D25A-43E4-A68D-F1F5B138E718와 ABB3AE94-752E-485C-A353-26951343D42F 및 로그 삭제.
-- 다른 프로젝트의 12개 simulator와 공용 runtime, 사용자 원본 영상, 인증 키는 보존.
-- source/resources/필수 vendor/licenses/설정/테스트/소스 도구와 compact 기록은 Git에 보존.
-- 복구 제한 안내 후 내가 ‘삭제’로 승인해 출시·심사 자료 약 1.3 GiB와 이미지 약 91 MiB까지 삭제 완료.
-  /Users/u_mo_c/Documents/TaptionEncoderReleases
-  /Users/u_mo_c/Documents/YYYEncoderAppStoreScreenshots-NAME06Y2K8
-- 위 두 폴더는 이제 없음. 1.1.8 (39)/1.1.9 (40) archive/IPA/dSYM, 대응 소스 사본,
-  재링크 객체, 심사 패킷, 스크린샷 원본/수정본/미리보기와 raw 증빙 모두 삭제됨.
-- CLN07M4Q9B 완료. 소스·필수 vendor/resources/도구 등 121개 파일 SHA256 불변 확인.
-  정확한 바이너리·심볼·원본 증빙 복구는 보장되지 않음. Git의 compact 기록은 남아 있음.
-  대응 소스 제공 의무가 사라진 것은 아니며 pinned provenance/재빌드 도구는 소스에 유지.
+- 기존 BNM final에서 이름 literal Bokki→BOKKI 14개 파일과 project의 모든 target/config version/build만 바꿨습니다. 121개 중 나머지 106개 hashes를 유지하고 상속한 기능 수정은 모두 보존했습니다. internal product/scheme/Taption storage/output suffix/Stars/HEVC/MP4/MOV 동작은 그대로입니다.
+- main 35d858a + retained patch로 후보 소스 121개를 복원해 동일성을 확인했습니다. 새 경로의 clean Release archive, 일반 App Store export, developer all-variant size export, 56 contrib와 3 primary source archive 재검증, 새 76-object relink의 동일 __TEXT sections, 세 binary/dSYM UUID 및 technical distribution gate가 통과했습니다. 대응 소스·고지·offer·rebuild 재료를 보존하세요. 외부 법률 검토는 opt-in이며 검토/승인했다고 주장하지 마세요.
+- Focused 15 + 실제 iPhone UI 2 + iPad UI 2 = 19 accepted checks, 실패/skip 0. Help→Safari 8개 실제 이동 확인. 기존 PLY 60/TRS 5는 runtime logic 보존 확인 후 재사용했습니다. 초기 scheme/0-Star 선택 기대/아트워크 입력/omitted API item relationship 오류는 별도 보존되어 final PASS와 섞이지 않습니다. 실제 잔액 0을 유지하고 wallet 초기화·가짜 잔액·Star 차감은 하지 않았습니다.
+- 현재 실제 UI raw 15장으로 ko/en-US iPhone 5·iPad portrait 5·landscape 5씩 총 30장 소개 사진을 만들었습니다. Previous/Next, 체크된 Add List, 용량, X, 초기 무컨트롤/탭 제어 화면을 담습니다. opaque RGB/규격/방향/OCR/시각 검사와 Apple 30/30 COMPLETE의 checksum/name/order 검증 완료. UI·파일 정보·Stars를 합성하지 않았고 DEBUG 광고 요청 정지 flag는 Release binary에 없습니다.
+- ko/en-US App Store 이름은 BOKKI Encoder, 설명은 936/1701자이며 이메일을 넣지 않았습니다. 새 release/review notes, contact support@bokkiyaw.com, 새 marketing/support/privacy URL을 반영하고 독립 GET으로 확인했습니다.
+- Apple validation/upload no errors, uploaded bytes 28,307,403, build 43 VALID / APP_STORE_ELIGIBLE. IPA SHA256: 4a08c918b8160eaacf60e9c662293b3d651f90bcb37b30d85fba46a10365842f.
 
-다음 확인:
-1. 현재 App Store Connect 심사/출시 상태를 읽기 전용으로 확인. 기존 심사를 중복 제출하거나 취소하지 마.
-2. PUB06V8N2R: Apple 승인 및 실제 공개 출시 확인은 제출/AFTER_APPROVAL 설정과 별도.
-3. FIX06P3M7Q: 사용자 기기의 파일 앱 기본 연결 설정은 아직 미확인. 앱 코드의 파일 열기/플레이어 진입 수정과 구분해.
-4. 새 빌드는 패키지 재조회와 재컴파일이 필요함. 옛 simulator/archive가 남아 있다고 가정하지 마.
+정확한 43 기록: /Users/u_mo_c/Documents/TaptionEncoderReleases/1.1.12-43-BKR08N6Q2M/RELEASE_MANIFEST.json
+먼저 manifest를 읽으세요. CandidateSource, SourceBase.tar/patch/identity, TaptionEncoder-Candidate.xcarchive, CandidateExport IPA, CorrespondingSource.tar.xz, RelinkMaterials.tar.xz, Developer app, Screenshots, Proof, Tools를 보존합니다. 과거 기록을 새 버전으로 rewrite하지 마세요.
 
-지킬 것:
-- /Users/u_mo_c/Documents/taption 프로젝트는 건드리지 마.
-- 내부 target/scheme TaptionEncoder, bundle ID, 기존 저장 경로는 유지.
-- 앱 내부 UI 문자열은 영어. 출력은 HEVC 및 MP4/MOV 유지.
-- 새 업로드는 marketing version/build 모두 올려. 재제출/metadata 수정/외부 전송/삭제는 새 지시 없이 하지 마.
-- 외부 법률승인서는 opt-in이고 필수 내부 차단 조건 아님. 기술 PASS/Apple 심사를 법적 승인으로 표현하지 마.
-- 사용자 자료·다른 프로젝트·공용 cache/runtime를 광범위하게 삭제하지 마.
-- 작업을 10자리 ID로 temp.md에 기록하고 검증은 test.md에 남겨. 완료 항목만 temp.md에서 제거.
+실기기: iPhone 18 Pro Max에 같은 bundle의 Release-derived developer 43을 설치하고 BOKKI Encoder/1.1.12/43을 독립 조회했습니다. 실행/PID/물리 UI/codec 및 App Store-client install은 수행하지 않았습니다. iPhone 11 Pro는 pre-install 조회부터 locked/not unlocked recently로 거부되어 이번 설치를 하지 않았습니다. 마지막 확인 설치본은 BNM의 Bokki Encoder 1.1.11 (42)이며 이번 live 앱 상태는 조회하지 못했습니다. 11 Pro의 설치 완료 기준을 유지하며 임의 실행/잠금 해제 요구를 하지 마세요. uninstall/reset/사용자 파일·Stars 삭제는 없지만 실제 데이터 내용의 해시 보존은 따로 검증하지 않았습니다.
 
-내가 다음 작업을 지정하면 이 상태를 기준으로 바로 이어서 진행해.
+현재 공개 앱은 YYY Encoder 1.1.11 (42)입니다. ASC READY_FOR_SALE / READY_FOR_DISTRIBUTION, review 65201cdd COMPLETE, KR lookup 1.1.11을 13:50:41 KST 확인했습니다. 공개 timestamp는 2026-10-08 07:28:47 KST입니다. 이미 출시되어 이번에는 심사를 취소하지 않고 새 version resource를 만들었습니다. 1.1.10 (41)은 취소/COMPLETE 이력 그대로이며 승인됐다고 말하지 마세요. exact 41/42 IPA hashes와 별도 기록은 보존했습니다. owner가 삭제한 39/40 및 더 이전 archive/IPA/dSYMs가 복구됐다고 주장하지 마세요.
+
+확정된 연결 주소:
+- 제품 https://bokkiyaw.com/products/encoder/
+- 지원 https://bokkiyaw.com/support/encoder/
+- 개인정보 https://bokkiyaw.com/privacy/encoder/
+- 라이선스 https://bokkiyaw.com/licenses/
+- 광고 https://bokkiyaw.com/app-ads.txt
+공개 HTTPS 200, support@bokkiyaw.com, pub-9754025737691277 일치를 확인했습니다. AdMob console crawl 완료는 미확인입니다. 홈페이지 소스는 별도 채팅 소유라 편집·게시하지 않았습니다. 새 고지 두 파일과 출시/심사 상태·실제 사진 전달 내용은 43 record WebsiteHandoff/WEBSITE_HANDOFF.txt에 있습니다. 43의 새 기능을 이미 공개 출시된 것으로 표시하지 마세요.
+
+남은 temp.md 항목:
+1. PUB08K7N4M: 요청받으면 같은 IDs의 심사 및 실제 공개 출시를 읽기 전용으로 확인합니다. 자동 감시 요청이 없어 automation은 없습니다. 임의 재업로드/취소/재제출/버전/Git/cleanup 금지.
+2. EML08K3P9R: 옛 Notion support/privacy의 support@taption.app text/mailto만 새 주소로 교체하는 작업. 최근 두 connector fetch는 UNAUTHORIZED였으며 새 사이트 게시를 재인증 완료로 간주하지 마세요. 새 앱/ASC 연결은 완료됐고 옛 페이지 수정만 남았습니다.
+3. FIX06P3M7Q: Files 기본 연결 앱의 실기기 설정은 별도 미검증입니다. 이전 미러링 timeout으로 owner 직접 설정/연결이 필요했습니다. 앱 코드·Info 등록 검증과 실제 기기 설정을 구별하세요.
+
+BNM/WEB의 이름·binary·스토어 URL 범위는 새 43으로 완료했고 옛 Notion은 EML에만 유지했습니다. 이전 PUB07은 공개 42 확인으로 완료했습니다.
+이전 상세 이어가기 문서는 43 record RecordsBefore/NEXT_CHAT_PROMPT.txt와 dated test.md에 보존했습니다. 관련 ID로만 읽고 ~/.codex/DerivedData/보관물 전체를 재귀 검색하지 마세요.

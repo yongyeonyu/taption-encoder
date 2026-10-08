@@ -1,6 +1,7 @@
 import AVFoundation
 import AVKit
 import SwiftUI
+import UIKit
 
 // HEVC with Alpha needs Apple's compositor. VLC can report a video output
 // without displaying sparse transparent subtitle frames correctly.
@@ -8,6 +9,9 @@ struct NativeQueueVideoPreviewView: View {
     var preview: QueueVideoPreview
     var adUnitID: String = ""
     var isMiniPlayer = false
+    var isAddedToList = false
+    var canAddToList = false
+    var onAddToList: () -> Void = {}
     var onClose: () -> Void
     var onMinimize: (QueuePreviewPlaybackSnapshot) -> Void
     var onPictureInPictureActiveChanged: (Bool) -> Void = { _ in }
@@ -16,6 +20,9 @@ struct NativeQueueVideoPreviewView: View {
 
     @StateObject private var playback = NativeQueuePreviewPlayback()
     @State private var didBeginAdSuppression = false
+    @State private var areControlsVisible = false
+    @State private var isScrubbing = false
+    @State private var scrubSeconds = 0.0
 
     var body: some View {
         Group {
@@ -34,7 +41,7 @@ struct NativeQueueVideoPreviewView: View {
                 }
                 .background(.black)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.16)))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.16)).allowsHitTesting(false))
             } else {
                 GeometryReader { proxy in
                     ZStack(alignment: .top) {
@@ -42,43 +49,49 @@ struct NativeQueueVideoPreviewView: View {
                             .frame(width: proxy.size.width, height: proxy.size.height)
                             .ignoresSafeArea()
                             .zIndex(0)
-                        VStack(spacing: 12) {
-                            AdMobBannerSlotView(adUnitID: adUnitID, displayScale: 1)
-                            HStack(alignment: .top, spacing: 8) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(preview.displayName)
-                                        .font(.headline)
-                                        .lineLimit(2)
-                                        .truncationMode(.middle)
-                                    Text("\(preview.codecBadge) · \(preview.videoInfo.resolution)")
-                                        .font(.caption)
-                                        .foregroundStyle(.white.opacity(0.7))
+                        if areControlsVisible {
+                            VStack(spacing: 12) {
+                                AdMobBannerSlotView(adUnitID: adUnitID, displayScale: 1)
+                                HStack(alignment: .top, spacing: 8) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(preview.displayName)
+                                            .font(.headline)
+                                            .lineLimit(2)
+                                            .truncationMode(.middle)
+                                        Text("\(preview.codecBadge) · \(preview.videoInfo.resolution)")
+                                            .font(.caption)
+                                            .foregroundStyle(.white.opacity(0.7))
+                                        Text("File size: \(preview.videoInfo.fileSize)")
+                                            .font(.caption)
+                                            .foregroundStyle(.white.opacity(0.7))
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    headerButtons
                                 }
+                                QueuePreviewAddListButton(
+                                    isAdded: isAddedToList,
+                                    isEnabled: canAddToList && !playback.isLoading,
+                                    action: onAddToList
+                                )
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                if let playlist = preview.playlist {
-                                    Button(action: onPrevious) {
-                                        Image(systemName: "backward.end.fill")
-                                    }
-                                    .disabled(!playlist.hasPrevious)
-                                    .accessibilityLabel("Previous video")
-                                    Button(action: onNext) {
-                                        Image(systemName: "forward.end.fill")
-                                    }
-                                    .disabled(!playlist.hasNext)
-                                    .accessibilityLabel("Next video")
-                                }
-                                headerButtons
                             }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.top, max(proxy.safeAreaInsets.top, 8))
+                            .padding(.bottom, 12)
+                            .background(LinearGradient(
+                                colors: [.black.opacity(0.85), .clear],
+                                startPoint: .top, endPoint: .bottom
+                            ))
+                            .zIndex(1)
+                            .transition(.opacity)
+                            playbackControls
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                                .padding(.horizontal, 16)
+                                .padding(.bottom, max(proxy.safeAreaInsets.bottom, 16))
+                                .zIndex(1)
+                                .transition(.opacity)
                         }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.top, max(proxy.safeAreaInsets.top, 8))
-                        .padding(.bottom, 12)
-                        .background(LinearGradient(
-                            colors: [.black.opacity(0.85), .clear],
-                            startPoint: .top, endPoint: .bottom
-                        ))
-                        .zIndex(1)
                     }
                 }
                 .background(.black)
@@ -94,6 +107,9 @@ struct NativeQueueVideoPreviewView: View {
             }
         }
         .task(id: preview.id) {
+            areControlsVisible = false
+            isScrubbing = false
+            scrubSeconds = 0
             await playback.start(preview: preview, isMiniPlayer: isMiniPlayer)
             #if DEBUG
             await debugHandoffIfRequested()
@@ -115,7 +131,9 @@ struct NativeQueueVideoPreviewView: View {
     private var videoSurface: some View {
         NativeQueuePlayerController(
             playback: playback,
-            startsPictureInPictureAutomatically: !isMiniPlayer,
+            startsPictureInPictureAutomatically: false,
+            showsPlaybackControls: isMiniPlayer,
+            onVideoTap: toggleControls,
             onPictureInPictureActiveChanged: onPictureInPictureActiveChanged
         )
         .background(.black)
@@ -131,21 +149,105 @@ struct NativeQueueVideoPreviewView: View {
                 ProgressView().tint(.white).allowsHitTesting(false)
             }
         }
+        .accessibilityAction(named: Text("Show playback controls")) {
+            areControlsVisible = true
+        }
+    }
+
+    private func toggleControls() {
+        guard !isMiniPlayer, !isScrubbing else { return }
+        withAnimation(.easeInOut(duration: 0.18)) {
+            if playback.errorMessage != nil {
+                areControlsVisible = true
+            } else {
+                areControlsVisible.toggle()
+            }
+        }
+    }
+
+    private var playbackControls: some View {
+        TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+            let rawDuration = playback.player.currentItem?.duration.seconds ?? 0
+            let duration = rawDuration.isFinite ? max(rawDuration, 0) : 0
+            let rawSeconds = playback.player.currentTime().seconds
+            let seconds = rawSeconds.isFinite ? min(max(rawSeconds, 0), duration) : 0
+            let isPlaying = playback.player.rate > 0
+            VStack(spacing: 12) {
+                QueuePreviewFileNavigation(
+                    playlist: preview.playlist, isEnabled: !playback.isLoading,
+                    onPrevious: onPrevious, onNext: onNext
+                )
+                Slider(value: Binding(
+                    get: { isScrubbing ? scrubSeconds : seconds },
+                    set: {
+                        scrubSeconds = $0
+                        isScrubbing = true
+                    }
+                ), in: 0...max(duration, 1), onEditingChanged: { editing in
+                    if editing {
+                        if !isScrubbing { scrubSeconds = seconds }
+                        isScrubbing = true
+                    } else {
+                        seek(to: scrubSeconds, duration: duration)
+                        isScrubbing = false
+                    }
+                })
+                .disabled(duration <= 0 || playback.isLoading)
+                .accessibilityLabel("Playback position")
+                HStack(spacing: 24) {
+                    Button { seek(to: seconds - 10, duration: duration) } label: {
+                        Image(systemName: "gobackward.10").frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("Back 10 seconds")
+                    Button {
+                        if isPlaying { playback.player.pause() } else { playback.player.play() }
+                    } label: {
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                            .frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel(isPlaying ? "Pause" : "Play")
+                    Button { seek(to: seconds + 10, duration: duration) } label: {
+                        Image(systemName: "goforward.10").frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("Forward 10 seconds")
+                    Spacer(minLength: 0)
+                    Text("\(QueuePreviewPlaybackMath.formattedSeconds(isScrubbing ? scrubSeconds : seconds)) / \(QueuePreviewPlaybackMath.formattedSeconds(duration))")
+                        .font(.caption.monospacedDigit())
+                }
+                .disabled(playback.isLoading || playback.errorMessage != nil)
+            }
+            .tint(.white)
+            .buttonStyle(.plain)
+            .font(.title2)
+            .foregroundStyle(.white)
+            .padding(16)
+            .background(.black.opacity(0.68), in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    private func seek(to seconds: Double, duration: Double) {
+        guard duration > 0, seconds.isFinite else { return }
+        playback.player.seek(to: CMTime(seconds: min(max(seconds, 0), duration), preferredTimescale: 600),
+                             toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
     private var headerButtons: some View {
         HStack(spacing: 4) {
-            Button { onMinimize(playback.snapshot()) } label: {
-                Image(systemName: isMiniPlayer
-                      ? "arrow.up.left.and.arrow.down.right"
-                      : "arrow.down.right.and.arrow.up.left")
-                    .frame(width: 36, height: 36)
+            if isMiniPlayer {
+                Button { onMinimize(playback.snapshot()) } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("Expand")
+                .accessibilityIdentifier("preview.mini.expand")
             }
-            .accessibilityLabel(isMiniPlayer ? "Expand" : "Minimize")
             Button(action: onClose) {
-                Image(systemName: "xmark").frame(width: 36, height: 36)
+                Image(systemName: "xmark").frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .accessibilityLabel("Close")
+            .accessibilityIdentifier(isMiniPlayer ? "preview.mini.close" : "preview.close")
         }
         .buttonStyle(.plain)
         .foregroundStyle(.white)
@@ -329,10 +431,13 @@ private final class NativeQueuePreviewPlayback: ObservableObject {
 private struct NativeQueuePlayerController: UIViewControllerRepresentable {
     var playback: NativeQueuePreviewPlayback
     var startsPictureInPictureAutomatically: Bool
+    var showsPlaybackControls: Bool
+    var onVideoTap: () -> Void
     var onPictureInPictureActiveChanged: (Bool) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(playback: playback, onPictureInPictureActiveChanged: onPictureInPictureActiveChanged)
+        Coordinator(playback: playback, showsPlaybackControls: showsPlaybackControls, onVideoTap: onVideoTap,
+                    onPictureInPictureActiveChanged: onPictureInPictureActiveChanged)
     }
 
     func makeUIViewController(context: Context) -> AVPlayerViewController {
@@ -340,10 +445,15 @@ private struct NativeQueuePlayerController: UIViewControllerRepresentable {
         controller.player = playback.player
         controller.videoGravity = .resizeAspect
         controller.view.backgroundColor = .black
-        controller.showsPlaybackControls = true
+        controller.showsPlaybackControls = showsPlaybackControls
         controller.allowsPictureInPicturePlayback = true
         controller.canStartPictureInPictureAutomaticallyFromInline = startsPictureInPictureAutomatically
         controller.delegate = context.coordinator
+        let videoTap = UITapGestureRecognizer(target: context.coordinator,
+                                              action: #selector(Coordinator.didTapVideo(_:)))
+        videoTap.cancelsTouchesInView = false
+        videoTap.delegate = context.coordinator
+        controller.view.addGestureRecognizer(videoTap)
         context.coordinator.readyObservation = controller.observe(\.isReadyForDisplay, options: [.initial, .new]) {
             [weak playback] controller, _ in
             guard controller.isReadyForDisplay else { return }
@@ -365,6 +475,9 @@ private struct NativeQueuePlayerController: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
         context.coordinator.onPictureInPictureActiveChanged = onPictureInPictureActiveChanged
+        context.coordinator.onVideoTap = onVideoTap
+        context.coordinator.showsPlaybackControls = showsPlaybackControls
+        controller.showsPlaybackControls = showsPlaybackControls
     }
 
     static func dismantleUIViewController(_ controller: AVPlayerViewController, coordinator: Coordinator) {
@@ -374,14 +487,42 @@ private struct NativeQueuePlayerController: UIViewControllerRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, AVPlayerViewControllerDelegate {
+    final class Coordinator: NSObject, AVPlayerViewControllerDelegate, UIGestureRecognizerDelegate {
         var readyObservation: NSKeyValueObservation?
+        var onVideoTap: () -> Void
+        var showsPlaybackControls: Bool
         var onPictureInPictureActiveChanged: (Bool) -> Void
         weak var playback: NativeQueuePreviewPlayback?
 
-        init(playback: NativeQueuePreviewPlayback, onPictureInPictureActiveChanged: @escaping (Bool) -> Void) {
+        init(playback: NativeQueuePreviewPlayback, showsPlaybackControls: Bool, onVideoTap: @escaping () -> Void,
+             onPictureInPictureActiveChanged: @escaping (Bool) -> Void) {
             self.playback = playback
+            self.onVideoTap = onVideoTap
+            self.showsPlaybackControls = showsPlaybackControls
             self.onPictureInPictureActiveChanged = onPictureInPictureActiveChanged
+        }
+
+        @objc func didTapVideo(_ recognizer: UITapGestureRecognizer) {
+            if recognizer.state == .ended { onVideoTap() }
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            guard showsPlaybackControls else { return true }
+            // Transport buttons and the scrubber keep their own gestures.
+            var view = touch.view
+            while let candidate = view {
+                if candidate === gestureRecognizer.view { break }
+                if candidate is UIControl || candidate.accessibilityTraits.contains(.adjustable) {
+                    return false
+                }
+                view = candidate.superview
+            }
+            return true
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            true
         }
 
         nonisolated func playerViewControllerDidStartPictureInPicture(_ playerViewController: AVPlayerViewController) {

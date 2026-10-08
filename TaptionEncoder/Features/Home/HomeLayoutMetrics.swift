@@ -5,6 +5,7 @@ struct HomeLayoutMetrics {
     var canvasWidth: CGFloat
     var canvasHeight: CGFloat
     var usesPadLandscapeColumns: Bool
+    var usesScrollableLayout: Bool
     var columnSpacing: CGFloat
     var columnWidth: CGFloat
     var contentScale: CGFloat
@@ -41,6 +42,7 @@ struct HomeLayoutMetrics {
         let availableHeight = max(1, size.height)
         let portraitWidth = min(size.width, size.height)
         usesPadLandscapeColumns = isPad && availableWidth > availableHeight
+        usesScrollableLayout = !isPad && availableHeight < 500
 
         if usesPadLandscapeColumns {
             canvasWidth = min(availableWidth, 1_180)
@@ -70,7 +72,7 @@ struct HomeLayoutMetrics {
         verticalSpacing = compactHeightPressure ? max(4, 7 * contentScale) : max(5, 9 * contentScale)
         horizontalPadding = isPad ? max(28, 40 * widthScale) : max(12, 20 * widthScale)
         verticalPadding = compactHeightPressure ? max(4, 8 * contentScale) : max(5, 10 * contentScale)
-        controlHeight = max(32, 42 * contentScale)
+        controlHeight = max(44, 42 * contentScale)
         footerExitButtonHeight = max(32, 40 * contentScale)
         headerIconSize = max(17, 23 * contentScale)
         headerFont = contentScale < 0.84 ? .subheadline : .title3
@@ -81,18 +83,19 @@ struct HomeLayoutMetrics {
             : max(1, canvasWidth - (horizontalPadding * 2))
 
         let bannerHeight = 50 * bannerScale
-        let headerHeight = 34 * contentScale
-        let sourceActionHeight = (controlHeight * 2) + 10
-        let outputSelectorHeight = max(controlHeight, 52 * contentScale)
-        let codecSummaryHeight = max(66, 78 * contentScale)
+        let headerHeight = max(44, 34 * contentScale)
+        let sourceActionHeight = controlHeight
+        let queueHeadingHeight: CGFloat = 48
+        let outputSelectorHeight = max(74, 82 * contentScale)
         footerAdSeparationHeight = max(8, 12 * contentScale)
         let progressCardHeight = reservesFailureLogArea
             ? max(150, 188 * contentScale)
-            : max(92, 116 * contentScale)
-        let visibleSpacingCount: CGFloat = reservesFailureLogArea ? 8 : 9
+            : max(50, 58 * contentScale)
+        let visibleSpacingCount: CGFloat = 8
         if usesPadLandscapeColumns {
             let sharedHeight = (bannerHeight * 2)
                 + headerHeight
+                + sourceActionHeight
                 + footerAdSeparationHeight
                 + (verticalSpacing * 3)
                 + (verticalPadding * 2)
@@ -102,15 +105,14 @@ struct HomeLayoutMetrics {
             let fixedComponentHeight = (bannerHeight * 2)
                 + headerHeight
                 + sourceActionHeight
+                + queueHeadingHeight
                 + outputSelectorHeight
-                + codecSummaryHeight
                 + progressCardHeight
-                + footerExitButtonHeight
                 + footerAdSeparationHeight
                 + (verticalSpacing * visibleSpacingCount)
                 + (verticalPadding * 2)
             let remainingHeight = canvasHeight - fixedComponentHeight
-            filePanelHeight = max(0, remainingHeight)
+            filePanelHeight = max(usesScrollableLayout ? 180 : 80, remainingHeight)
         }
     }
 }

@@ -150,7 +150,7 @@ struct TaptionVideoCore {
                     await services.backgroundCoordinator?.updateBackgroundEncoding(
                         planID: job.plan.id,
                         snapshot: TaptionBackgroundEncodingSnapshot(
-                            title: "YYY Encoder",
+                            title: "BOKKI Encoder",
                             subtitle: job.asset.displayName,
                             fractionCompleted: encodingProgress.fractionCompleted
                         )

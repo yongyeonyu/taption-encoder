@@ -2,21 +2,18 @@ import SwiftUI
 
 struct SourceActionBar: View {
     var canSelectSource: Bool
-    var canReset: Bool
     var onFiles: () -> Void
     var onFolder: () -> Void
     var onPhotos: () -> Void
-    var onReset: () -> Void
     var controlHeight: CGFloat = 44
     var buttonFont: Font = .body
 
     var body: some View {
-        VStack(spacing: 10) {
             HStack(spacing: 10) {
                 PrimaryActionButton(
                     title: "File",
                     systemImage: "doc",
-                    isProminent: true,
+                    isProminent: false,
                     isEnabled: canSelectSource,
                     height: controlHeight,
                     font: buttonFont,
@@ -26,7 +23,7 @@ struct SourceActionBar: View {
                 PrimaryActionButton(
                     title: "Album",
                     systemImage: "photo.on.rectangle",
-                    isProminent: true,
+                    isProminent: false,
                     isEnabled: canSelectSource,
                     height: controlHeight,
                     font: buttonFont,
@@ -36,7 +33,7 @@ struct SourceActionBar: View {
                 PrimaryActionButton(
                     title: "Folder",
                     systemImage: "folder",
-                    isProminent: true,
+                    isProminent: false,
                     isEnabled: canSelectSource,
                     height: controlHeight,
                     font: buttonFont,
@@ -44,15 +41,5 @@ struct SourceActionBar: View {
                 )
             }
 
-            PrimaryActionButton(
-                title: "Reset",
-                systemImage: "arrow.counterclockwise",
-                isProminent: true,
-                isEnabled: canReset,
-                height: controlHeight,
-                font: buttonFont,
-                action: onReset
-            )
-        }
     }
 }

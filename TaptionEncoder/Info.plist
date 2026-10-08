@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>YYY Encoder</string>
+	<string>BOKKI Encoder</string>
 	<key>CFBundleIconName</key>
 	<string>AppIcon</string>
 	<key>CFBundleExecutable</key>
@@ -96,9 +96,9 @@
 		<key>UISupportsDocumentBrowser</key>
 		<true/>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>YYY Encoder needs access to selected videos for local conversion.</string>
+		<string>BOKKI Encoder needs access to selected videos for local conversion.</string>
 		<key>NSPhotoLibraryAddUsageDescription</key>
-		<string>YYY Encoder saves converted H.265 videos as new Photos assets.</string>
+		<string>BOKKI Encoder saves converted H.265 videos as new Photos assets.</string>
 		<key>NSSupportsLiveActivities</key>
 		<true/>
 	<key>SKAdNetworkItems</key>

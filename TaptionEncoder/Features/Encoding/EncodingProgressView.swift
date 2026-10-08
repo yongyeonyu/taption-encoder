@@ -20,8 +20,8 @@ struct EncodingProgressView: View {
     var onCancel: () -> Void
 
     var body: some View {
-        ProgressCard {
-            VStack(alignment: .leading, spacing: 10 * contentScale) {
+        VStack(alignment: .leading, spacing: 10 * contentScale) {
+            if showsStatusDetails {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(state.title)
@@ -32,28 +32,34 @@ struct EncodingProgressView: View {
                     }
                     Spacer(minLength: 0)
                 }
+            }
 
-                if let resourceUsage = state.progress?.resourceUsage,
+            if let resourceUsage = state.progress?.resourceUsage,
                    state.canCancel {
                     EncodingResourceUsageWidget(
                         resourceUsage: resourceUsage,
                         contentScale: contentScale
                     )
-                }
+            }
 
-                VStack(spacing: 8 * contentScale) {
+            VStack(spacing: 8 * contentScale) {
                     if showsPrimaryAction {
                         actionButton
                     }
                     if showsWatchAdAction {
                         watchAdButton
                     }
-                }
             }
-            .frame(maxHeight: usesExpandedFailureLog ? .infinity : nil, alignment: .top)
         }
         .frame(maxHeight: usesExpandedFailureLog ? .infinity : nil, alignment: .top)
         .layoutPriority(usesExpandedFailureLog ? 1 : 0)
+    }
+
+    private var showsStatusDetails: Bool {
+        switch state {
+        case .idle, .readyToStart: return false
+        default: return true
+        }
     }
 
     @ViewBuilder
@@ -120,7 +126,7 @@ struct EncodingProgressView: View {
 
     private var showsPrimaryAction: Bool {
         showsWorkAction
-            && (resolvedCanStartEncoding
+            && (!state.isBusy
             || showsSaveAction
             || state.preparedEncodingReview != nil
             || state.canCancel)
@@ -132,11 +138,11 @@ struct EncodingProgressView: View {
             Button {
                 onStart()
             } label: {
-                Label(startActionTitle, systemImage: "play.fill")
+                Label(startActionTitle, systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
                     .font(contentScale < 0.9 ? .caption.weight(.semibold) : .body.weight(.semibold))
                     .foregroundStyle(TaptionTheme.accentButtonText)
                     .frame(maxWidth: .infinity)
-                    .frame(height: controlHeight)
+                    .frame(height: max(50, controlHeight))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             }
@@ -164,25 +170,25 @@ struct EncodingProgressView: View {
                     .stroke(TaptionTheme.accent.opacity(0.65), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        } else if state.preparedEncodingReview != nil {
+        } else if !state.isBusy {
             Button {} label: {
-                Label(startActionTitle, systemImage: "play.fill")
+                Label(startActionTitle, systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
                     .font(contentScale < 0.9 ? .caption.weight(.semibold) : .body.weight(.semibold))
                     .foregroundStyle(TaptionTheme.disabledText)
                     .frame(maxWidth: .infinity)
-                    .frame(height: controlHeight)
+                    .frame(height: max(50, controlHeight))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
             }
             .buttonStyle(.plain)
-            .background(TaptionTheme.elevatedSurface)
+            .background(TaptionTheme.accent.opacity(0.35))
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .stroke(Color.white.opacity(0.06), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .disabled(true)
-            .opacity(0.48)
+            .opacity(0.8)
         } else {
             Button {
                 onCancel()

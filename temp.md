@@ -1,16 +1,40 @@
 # 진행 중 작업
 
-# PUB06V8N2R
+# CLN08P6M2Q
 
-남은 요청: YYY Encoder 1.1.9 (40)의 Apple 심사 결과 및 실제 공개 출시 후속 확인. NAME06Y2K8의 이름/홈 제목/메일 수정·정밀 이미지 30장 교체·심사 재제출은 완료됐다.
+요청: “워크트리 클린 메인 커밋 푸쉬 후 불필요한 파일 전부 삭제. 소스만 빼고 다 지워”. 최신 앱/아이콘/버전/홈페이지·지원메일 소스를 main에 커밋·푸시한 후 이 프로젝트의 출시·검증·디자인 출력물과 종료된 빌드 임시 파일을 정리한다.
 
-현재 검증 결과(2026-10-07 00:43:56 KST): 앱 6780777838/com.taption.encoder, version 0649aa64-cc2d-4e5c-b95c-129053c487ad / 1.1.9, build 40 / 44ea1608-1531-462c-8345-121ee09a8d45. 새 review eb30a21b-6226-4d21-882e-2a99797e27af / submittedDate 2026-10-07 00:42:55.710 KST. Review/version 모두 WAITING_FOR_REVIEW / AFTER_APPROVAL. ko/en-US 이름·간결한 설명·지원 메일·수정사항과 새 screenshot 30개의 COMPLETE·체크섬·해상도·순서 검증 완료. 이전 1.1.8 (39) 제출은 취소된 역사적 증거로 보존한다.
+원인: 현재 main/origin/main은35d858a이고 검증·제출된 최신43 및 후속 변경33개 파일이 미커밋이다. 프로젝트 밖 출시·검증·빌드 자료도 중복 보관되어 있다.
 
-원인: 심사 제출과 승인 후 자동 출시 설정은 실제 Apple 승인/공개 출시 완료와 별개다. 이전 외부 법률승인서 필수 내부 규칙은 사용자 지시에 따라 opt-in으로 변경됐으며 기술 gate는 통과했다. Apple 승인을 법적 clearance로 해석하지 않는다.
+해결 범위: 소스·편집 가능한 홈페이지 원본·필수 리소스/의존성/라이선스/재빌드 도구·인증 키·Git 및 사용자 원본을 보존한다. 삭제 경로/용량과 실행 중 프로세스·열린 파일을 확인하고 완료된 검증/제출의 작은 식별자·해시 기록을 test.md에 유지한다. 사용자의 이번 명시적 삭제 요청은 Encoder 전용41/42/43 출시 산출물의 이전 보존 지시를 대체한다. IPA/archive/dSYM·원시 검증 산출물 삭제 후 정확한 복구는 보장하지 않는다. Apple 심사/업로드 자산·실제 iPhone 앱/사용자 데이터·다른 프로젝트는 변경하지 않는다.
 
-남은 해결: 사용자가 후속 확인을 요청하면 동일 version/build/submission의 live ASC 상태 및 심사 메시지를 확인한다. AFTER_APPROVAL을 보존하고 새 업로드/심사 취소/metadata 변경/외부 자료 전송을 임의 실행하지 않는다. 자동 감시 automation은 요청되지 않아 생성하지 않는다.
+검증 기준: 원격main과 로컬HEAD 일치, 최종git status clean, 기존121개 canonical source SHA256 동일성, 필수 vendor/resources/licenses/인증 키 보존, 정확한 삭제 경로 부재와 전후 용량 확인. 이미 통과한 BKR19/PLY60/TRS5 검증을 재사용하고 앱 소스를 바꾸거나 새 build/upload/review를 수행하지 않는다. 실제 삭제 완료 기록을 main에 추가 커밋·푸시하고 이 완료 항목만 제거한다.
 
-검증 기준: 위 새 1.1.9 (40)/review의 Apple review 결과와 READY_FOR_SALE/READY_FOR_DISTRIBUTION 및 실제 공개 배포 상태를 별도로 확인한다. 근거는 Git의 test.md NAME06Y2K8/CLN07M4Q9B와 공식 live ASC 조회다. 사용자의 명시 승인으로 exact-release/이미지/raw JSON은 삭제되어 로컬에 없다. 정확한 바이너리·심볼·원본 증거 복구를 보장하지 않는다.
+# PUB08K7N4M
+
+남은 요청: BOKKI Encoder 1.1.12 (43)의 Apple 심사 결과 및 승인 후 실제 공개 출시 확인. BKR08N6Q2M의 대문자 이름·최신 로컬 기능·새 홈페이지/지원 이메일·실제 UI 소개 사진·새 배포/단일 심사 제출은 완료했다.
+
+원인: 심사 제출 및 AFTER_APPROVAL 설정은 실제 승인·공개 출시와 별개다.
+
+최종 독립 readback: 2026-10-08 13:50:41 KST. App 6780777838/com.taption.encoder, version bf3874fc-ebb5-497e-bb49-9a1b88854615 / 1.1.12, build/delivery 0eaa4e92-f6d7-4ffa-bc79-f97fccfd4b95 / 43 / VALID / APP_STORE_ELIGIBLE, review 60182eba-12c3-4f3a-aeb8-925804cc9d02 / WAITING_FOR_REVIEW, version WAITING_FOR_REVIEW / AFTER_APPROVAL. 제출 시각 13:48:35.340 KST. 정확한 한 version/build/item, ko/en-US BOKKI Encoder·새 marketing/support/privacy URL·메일 없는 설명936/1701자·새 노트/contact support@bokkiyaw.com 및30장 COMPLETE·checksum/규격/이름/순서를 확인했다. KR public lookup은 아직 YYY Encoder1.1.11. 이전42 review는 COMPLETE이고1.1.11 공개 출시를 확인했다(PUB07P4N8R 완료); 이번에는 심사를 취소하지 않았다.
+
+검증·후속 기준: 사용자가 결과 확인을 요청하면 같은 IDs의 live ASC와 public KR lookup을 읽기 전용으로 검증하고 test.md에 남긴다. 새 review/upload/metadata/버전/Git publication/cleanup을 임의 수행하지 않는다. 자동 감시는 요청되지 않아 automation을 만들지 않았다.
+
+보존: exact43 기록 /Users/u_mo_c/Documents/TaptionEncoderReleases/1.1.12-43-BKR08N6Q2M/RELEASE_MANIFEST.json부터 읽는다. 이전41/42 기록과 새 source/relink/IPA를 섞거나 rewrite하지 않는다. 현재main/origin/main35d858a와 미커밋 source patch를 보존한다. iPhone18ProMax에 Release-derived developer43 설치/독립 이름·버전 확인 완료(실행/물리UI/codec검증 아님), iPhone11Pro는 최근 잠금 해제 없음으로 pre-install read가 거부돼 이번 설치를 수행하지 않았다(마지막 확인 설치본은 BNM의 Bokki1.1.11(42), 이번 live 앱 상태 조회 불가).11 Pro 설치-only 선호 유지. 사용자 source/Stars/data 초기화나 삭제를 하지 않았다. BNM/WEB의 앱·스토어 이전은 새43에서 완료됐고 옛Notion 이메일만 EML08K3P9R로 별도 유지한다.
+
+# EML08K3P9R
+
+남은 요청: Notion 공개 지원 페이지(3835583c1e20813cb611e96411180eda)와 개인정보 페이지(3835583c1e208186a727d1f377539fa8)의 support@taption.app 텍스트 및 mailto 링크를 사용자가 지정한 support@bokkiyaw.com으로 변경한다.
+
+완료: 로컬 고지 두 곳의 이메일만 교체, 나머지 119 source hash 보존, 실제 signed 앱 번들 확인, 두 iPhone 설치/독립 readback과 18 Pro Max 실행 완료. ASC 현행 App Review contactEmail도 교체/독립 GET 통과. 2026-10-08 01:14:56 KST 1.1.11/42 WAITING_FOR_REVIEW / AFTER_APPROVAL, build/review/items/설명 보존. 빈 beta 이메일은 채우지 않았다. test.md EML08K3P9R 및 /Users/u_mo_c/Documents/YYYEncoderValidation/EML08K3P9R/VALIDATION_MANIFEST.json 참고.
+
+원인: Notion connector 인증 만료(UNAUTHORIZED). BNM8C2R5D7에서 fresh fetch 두 건과 public reload를 다시 실행해 두 페이지의 이전 이름/이메일·mailto 및 편집 권한 부재를 재확인했다. 재연결 요청에 사용자는 ‘지금 만들고 있어’라고 답했으며 인증 완료는 확인하지 않았다.
+
+추가 지시: 사용자는 홈페이지 주소도 변경할 예정이며 새 도메인 구매·사이트 제작 중이라고 밝혔다(WEB08D6K2R). 새 사이트 URL이 준비되면 홈페이지 이전과 함께 지원/개인정보/연락처 링크를 확인한다. 이를 Notion 재인증 완료로 간주하지 않는다.
+
+남은 해결·검증 기준: 사용자의 준비/재연결이 완료되면 두 페이지를 fetch하고 정확한 이메일 텍스트와 mailto만 교체한다. 공개 페이지 readback으로 새 주소와 나머지 내용 보존을 검증한다. 새 제목/정책 문구·날짜·공유 권한은 바꾸지 않는다. 완료 전 이 항목을 지우지 않는다.
+
+범위: 정확한 제출 42와 과거 기록은 고치지 않는다. Apple 심사 취소/신규 binary 업로드/재제출, 메일 송신/메일 계정 생성, commit·push/자료 삭제는 요청되지 않았다. 메일 수신/소유 확인은 수행하지 않았다.
 
 # FIX06P3M7Q
 

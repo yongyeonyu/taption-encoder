@@ -63,7 +63,14 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var importBrowserContext: HomeImportBrowserContext?
     @Published private(set) var importBrowserFolders: [HomeImportBrowserFolderSnapshot]
     @Published private(set) var importBrowserFiles: [HomeImportBrowserFileSnapshot]
-    @Published private(set) var folderPreviewContext: FolderPreviewContext?
+    @Published private(set) var folderPreviewContext: FolderPreviewContext? {
+        didSet {
+            if oldValue?.id != folderPreviewContext?.id {
+                previewAddedToListURLs.removeAll()
+            }
+        }
+    }
+    @Published private var previewAddedToListURLs: [URL] = []
     @Published private(set) var batteryEncodingAlert: BatteryEncodingAlert?
 
     private let environment: AppEnvironment
@@ -251,6 +258,14 @@ final class HomeViewModel: ObservableObject {
             return "Start"
         }
         return "Start (\(formattedStarDelta(-starCost)))"
+    }
+
+    var convertActionTitle: String {
+        let cost = estimatedStartStarCost
+        guard cost > 0 else { return "Convert" }
+        let videos = cost == 1 ? "1 video" : "\(cost) videos"
+        let stars = cost == 1 ? "1 Star" : "\(cost) Stars"
+        return "Convert \(videos) · \(stars)"
     }
 
     var watchAdButtonTitle: String {
@@ -1818,7 +1833,7 @@ final class HomeViewModel: ObservableObject {
             state = .failed(HomeErrorPresenter.error(
                 title: "Folder failed",
                 summary: "The selected folder could not be opened.",
-                recovery: "Choose the folder again from Files and keep YYY Encoder open until the queue appears.",
+                recovery: "Choose the folder again from Files and keep BOKKI Encoder open until the queue appears.",
                 error: error
             ))
             requestSessionEndAd(reason: .failedEncoding)
@@ -2109,6 +2124,65 @@ final class HomeViewModel: ObservableObject {
         miniPlayerPreview = nil
     }
 
+    func isPreviewAddedToList(_ preview: QueueVideoPreview) -> Bool {
+        if folderPreviewContext != nil {
+            return previewAddedToListURLs.contains(preview.sourceURL)
+        }
+        if let batch = folderBatch {
+            return batch.fileURLs.contains(preview.sourceURL)
+        }
+        return (currentReview ?? state.preparedEncodingReview)?.source.url == preview.sourceURL
+    }
+
+    func canAddPreviewToList(_ preview: QueueVideoPreview) -> Bool {
+        guard activePreview?.id == preview.id,
+              activePreview?.sourceURL == preview.sourceURL,
+              !state.isBusy, state.canSelectSource,
+              folderPreviewContext != nil,
+              !isPreviewAddedToList(preview) else { return false }
+        return folderBatch?.fileURLs.contains(preview.sourceURL) == true
+    }
+
+    @discardableResult
+    func addPreviewToList(_ preview: QueueVideoPreview) -> Bool {
+        guard canAddPreviewToList(preview) else { return false }
+        // Keep the browser and player alive. Membership changes must never
+        // replace the current preview, seek, pause or prepare an encoding job.
+        previewAddedToListURLs.append(preview.sourceURL)
+        AppLogger.info("Preview added to conversion list", category: .ui,
+                       metadata: ["name": preview.displayName])
+        return true
+    }
+
+    func closePreviewFromPlayer() {
+        guard activePreview != nil else { return }
+        let browserBatch = folderPreviewContext == nil ? nil : folderBatch
+        let addedURLs = previewAddedToListURLs
+        dismissPreview()
+        guard let batch = browserBatch, !addedURLs.isEmpty else { return }
+
+        var queuedBatch = FolderEncodingBatch(
+            folderURL: batch.folderURL,
+            folderName: batch.folderName,
+            sourceKind: batch.sourceKind,
+            fileURLs: addedURLs
+        )
+        for url in addedURLs { queuedBatch.itemStates[url] = batch.itemStates[url] }
+        selectionInspectionTask?.cancel()
+        selectionInspectionTask = nil
+        folderBatch = queuedBatch
+        folderPreviewContext = nil
+        currentReview = nil
+        resetMultiFileEncodingDecision()
+        guard let firstURL = queuedBatch.currentFileURL else { return }
+        prepareEncodingFlow(
+            source: HomeSelectedSource(kind: batch.sourceKind,
+                                       displayName: firstURL.lastPathComponent, url: firstURL),
+            deferEncodingPreparationUntilStart: true,
+            preinspectedAsset: queuedBatch.itemStates[firstURL]?.asset
+        )
+    }
+
     func minimizePreview(_ preview: QueueVideoPreview, snapshot: QueuePreviewPlaybackSnapshot? = nil) {
         guard activePreview?.id == preview.id else { return }
         previewInspectionTask?.cancel()
@@ -2120,6 +2194,10 @@ final class HomeViewModel: ObservableObject {
     }
 
     func dismissMiniPreview() {
+        if let preview = miniPlayerPreview {
+            AppLogger.info("Queue mini player closed", category: .ui,
+                           metadata: ["name": preview.displayName])
+        }
         miniPlayerPreview = nil
     }
 
@@ -2249,7 +2327,7 @@ final class HomeViewModel: ObservableObject {
         requestEncodingStart(for: review, autoResumeAfterStarEarn: false)
     }
 
-    private func openBatchPreviewForFileCard(id: String) -> Bool {
+    private func openBatchPreviewForFileCard(id: String, navigationOffset: Int? = nil) -> Bool {
         guard var batch = folderBatch,
               let selectedURL = batch.fileURLs.first(where: { $0.absoluteString == id }) else {
             return false
@@ -2304,11 +2382,18 @@ final class HomeViewModel: ObservableObject {
                 return
             }
             await self.inspectSelectedBatchItemInfo(url: selectedURL)
-            guard !Task.isCancelled,
-                  let preview = self.batchPreview(for: selectedURL) else {
-                return
+            guard !Task.isCancelled else { return }
+            if let preview = self.batchPreview(for: selectedURL) {
+                self.presentPreview(preview)
+            } else if let navigationOffset {
+                // Uninspected browser files are candidates. If one cannot play,
+                // keep the current player and advance past the failed candidate.
+                if var current = self.activePreview, let batch = self.folderBatch {
+                    current.playlist = self.batchPreviewPlaylist(for: current.sourceURL, in: batch)
+                    self.activePreview = current
+                }
+                self.openAdjacentPreview(offset: navigationOffset)
             }
-            self.presentPreview(preview)
         }
         return true
     }
@@ -2336,7 +2421,7 @@ final class HomeViewModel: ObservableObject {
                 "to": targetURL.lastPathComponent
             ]
         )
-        _ = openBatchPreviewForFileCard(id: targetURL.absoluteString)
+        _ = openBatchPreviewForFileCard(id: targetURL.absoluteString, navigationOffset: offset)
     }
 
     private func currentReviewPreview(for id: String) -> QueueVideoPreview? {
@@ -2427,7 +2512,10 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func isQueuePreviewNavigationCandidate(_ item: BatchItemRuntime) -> Bool {
-        item.isPreviewable
+        if folderPreviewContext != nil, item.videoInfo == nil, item.isEnabled {
+            return true
+        }
+        return item.isPreviewable
             && item.videoInfo != nil
             && item.asset?.videoTrack != nil
     }
@@ -3022,6 +3110,7 @@ final class HomeViewModel: ObservableObject {
         source: HomeSelectedSource,
         autoStartAfterPrepare: Bool = false,
         autoOpenPreviewAfterPrepare: Bool = false,
+        deferEncodingPreparationUntilStart: Bool = false,
         allowsBusyState: Bool = false,
         preinspectedAsset: TaptionVideoAsset? = nil
     ) {
@@ -3112,7 +3201,7 @@ final class HomeViewModel: ObservableObject {
                 let temporaryOutputURL = makeTemporaryOutputURL(for: source)
                 let core = TaptionVideoCore(services: environment.videoCoreServices)
                 let savePolicy = defaultSavePolicy(for: source)
-                let isPlaybackOnlyPreparation = autoOpenPreviewAfterPrepare
+                let isPlaybackOnlyPreparation = (autoOpenPreviewAfterPrepare || deferEncodingPreparationUntilStart)
                     && !autoStartAfterPrepare
                     && isPreviewableInCurrentBuild(asset: asset)
                 var job: TaptionPreparedEncodingJob
@@ -6012,7 +6101,7 @@ final class HomeViewModel: ObservableObject {
         var roots: [HomeImportBrowserFolderSnapshot] = [
             HomeImportBrowserFolderSnapshot(
                 id: documentsURL.standardizedFileURL.path,
-                folderName: "YYY Encoder Files",
+                folderName: "BOKKI Encoder Files",
                 detailText: "On My iPhone"
             )
         ]
@@ -6022,7 +6111,7 @@ final class HomeViewModel: ObservableObject {
             roots.append(HomeImportBrowserFolderSnapshot(
                 id: samplesURL.standardizedFileURL.path,
                 folderName: "Samples",
-                detailText: "YYY Encoder Files"
+                detailText: "BOKKI Encoder Files"
             ))
         }
 
@@ -6074,7 +6163,7 @@ final class HomeViewModel: ObservableObject {
             return (standardizedURL, standardizedURL.lastPathComponent)
         }
 
-        return (documentsURL, "YYY Encoder Files")
+        return (documentsURL, "BOKKI Encoder Files")
     }
 
     private func importBrowserDisplayName(for url: URL, fallback: String) -> String {

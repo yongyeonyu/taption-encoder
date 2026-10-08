@@ -82,11 +82,11 @@ done
 }
 
 mkdir -p "$(dirname "$OUTPUT_PATH")"
-OUTPUT_PATH="$(cd "$(dirname "$OUTPUT_PATH")" && pwd)/$(basename "$OUTPUT_PATH")"
-OBJECTS_DIR="$(cd "$OBJECTS_DIR" && pwd)"
-LINK_FILE_LIST="$(cd "$(dirname "$LINK_FILE_LIST")" && pwd)/$(basename "$LINK_FILE_LIST")"
-DEPENDENCY_INFO_PATH="$(cd "$(dirname "$DEPENDENCY_INFO_PATH")" && pwd)/$(basename "$DEPENDENCY_INFO_PATH")"
-ACTIVITY_LOG_PATH="$(cd "$(dirname "$ACTIVITY_LOG_PATH")" && pwd)/$(basename "$ACTIVITY_LOG_PATH")"
+OUTPUT_PATH="$(cd "$(dirname "$OUTPUT_PATH")" && pwd -P)/$(basename "$OUTPUT_PATH")"
+OBJECTS_DIR="$(cd "$OBJECTS_DIR" && pwd -P)"
+LINK_FILE_LIST="$(cd "$(dirname "$LINK_FILE_LIST")" && pwd -P)/$(basename "$LINK_FILE_LIST")"
+DEPENDENCY_INFO_PATH="$(cd "$(dirname "$DEPENDENCY_INFO_PATH")" && pwd -P)/$(basename "$DEPENDENCY_INFO_PATH")"
+ACTIVITY_LOG_PATH="$(cd "$(dirname "$ACTIVITY_LOG_PATH")" && pwd -P)/$(basename "$ACTIVITY_LOG_PATH")"
 
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/taption-relink-materials.XXXXXX")"
 trap 'rm -rf "$TEMP_DIR"' EXIT
@@ -184,6 +184,7 @@ perl -MText::ParseWords=shellwords -0777 -ne '
     next if $tokens[$index] =~ /^\@.*\.resp$/;
 
     my $token = $tokens[$index];
+    $token =~ s{^/tmp/}{/private/tmp/};
     if ($token eq $ENV{toolchain_clang}) {
       push @result, q{"${TOOLCHAIN_CLANG}"};
     } elsif ($token eq $ENV{sdk_path}) {
@@ -203,7 +204,7 @@ perl -MText::ParseWords=shellwords -0777 -ne '
       push @result, "-$1\"\${PACKAGE_FRAMEWORKS_DIR}\"";
     } elsif ($token =~ m{^-([LF])(.*/ArchiveIntermediates/TaptionEncoder)/BuildProductsPath/Release-iphoneos$}) {
       push @result, "-$1\"\${BUILD_PRODUCTS_DIR}\"";
-    } elsif (index($token, "/Users/") >= 0) {
+    } elsif (index($token, "/Users/") >= 0 || index($token, "/private/tmp/") >= 0) {
       die "Unnormalized user-specific path in link command: $token\n";
     } else {
       $token =~ s/\x27/\x27\"\x27\"\x27/g;

@@ -1,0 +1,65 @@
+CLN08P6M2Q source-only cleanup (2026-10-08): editable source, copy and required rendering inputs are retained. Generated Finished/PublicAssets/Evidence and handoff manifests are scheduled for deletion after main publication. Release/validation paths below describe historical evidence, not a guarantee of local availability. Current source and release status are documented in AGENTS.md, temp.md and test.md.
+
+BIM8F4K2Q6 — Bokki Encoder English feature images
+
+FINISHED FILES
+
+01 — Import your way.
+Caption: Photos, Files or a folder. Start with the videos you choose.
+Finished/BokkiEncoder-01-import-1206x2622.png
+Finished/BokkiEncoder-01-import-web.png
+Finished/BokkiEncoder-01-import-web.jpg
+Editable/BokkiEncoder-01-import.svg
+
+02 — Convert to H.265.
+Caption: Choose MP4 or MOV. Set resolution and target size.
+Finished/BokkiEncoder-02-hevc-output-1206x2622.png
+Finished/BokkiEncoder-02-hevc-output-web.png
+Finished/BokkiEncoder-02-hevc-output-web.jpg
+Editable/BokkiEncoder-02-hevc-output.svg
+
+Full images: 1206 x 2622 pixels, 8-bit RGB PNG, no alpha channel.
+Web images: 603 x 1311 pixels, opaque RGB PNG and JPEG.
+Editable SVGs contain the original release-image bytes and editable marketing text, color, backdrop and frame geometry.
+layout.json and render.swift are the reproducible raster-layout sources. Run `swift render.swift` from this folder to rebuild.
+
+ASSET CLASSIFICATION
+
+Finished marketing compositions using genuine public release 1.1.9 UI imagery. These are not freshly captured raw device screenshots and were not uploaded to App Store Connect.
+
+The published App Store marketing screenshots were retrieved from the exact same Apple-hosted source assets at a larger size (1242 x 2688). No app UI was generated or redrawn. The app screen is cropped and scaled without rewriting UI text or recoloring app controls. The new Bokki Encoder name, English feature copy, white/deep-green/mint background, and device frame are marketing layout elements outside the actual app UI.
+
+The current published app name at source verification is YYY Encoder 1.1.9. Bokki Encoder is the website name supplied by the company brief. Any future store submission should use the final approved store name and verify that the public app UI still matches the release being submitted. If a submission requires a newly captured full raw device screenshot, capture it separately; these files do not establish that provenance.
+
+No AI-generated photography, illustrations or reconstructed UI are used. The small Travel_4K.mp4 landscape preview in image 02 is already present in the published 1.1.9 App Store source screen; it was not inserted or changed in this work. No personal identity, private image, precise personal location or account details are visible.
+
+FEATURE EVIDENCE
+
+Released source: commit 71d9f67e18e6e6c7f061004599ed143982ee98ae.
+Import from Photos, Files and folder; output controls and sequential conversion:
+git show 71d9f67:TaptionEncoder/Features/Home/HomeViewModel.swift
+Default H.265 output and MP4/MOV configuration:
+git show 71d9f67:TaptionEncoder/App/AppConfiguration.swift
+Public release/version/price/platform evidence and image URLs:
+/Users/u_mo_c/Documents/taption_encoder/WebsiteDrafts/BKI7H2D9P6/Evidence/public-app-store-lookup.json
+Research request and policy/source distinctions: test.md BKI7H2D9P6.
+
+SOURCE IMAGES
+
+01 original published source:
+https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/44/d3/06/44d306b4-8737-eef7-727c-1ba89a9ddd07/01-import.png/1242x2688bb.png
+
+02 original published source:
+https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/46/5d/50/465d5087-3a8f-ea62-b955-a0bc54ec8e31/04-resolution-size.png/1242x2688bb.png
+
+The source asset IDs come from Apple's previously verified official lookup response, not a local pending-build screenshot. Evidence/asset-provenance.json preserves the original public thumbnail URLs, larger-size URLs, download times, dimensions and hashes.
+
+VALIDATION
+
+Both source files are 1242 x 2688 opaque PNG. Actual UI crop: x=126, y=542, width=990, height=2146. UI target: x=205, y=852, width=796, height=1725.875. The underlying UI image is only cropped/scaled; the SVG embeds the untouched complete source PNG.
+
+Both full-resolution files and web JPGs were visually inspected. The original-resolution inspection confirms all import buttons, resolution/size fields, and H.265/HEVC labeling are present. A resized tool preview appeared to omit portions of image 02, so the final result was verified at original resolution and against the separate actual-UI crop.
+
+The initial three-channel AppKit bitmap drawing context was unsupported and failed before creating an image. The final renderer uses a CoreGraphics RGB context with an unused fourth storage byte and exports true opaque RGB PNG. All final image headers and sips readbacks are recorded in Evidence/image-validation.json.
+
+No app source, builds, signing, App Store submissions, metadata, installed devices or user data were changed. No website upload, message to another chat, commit, push or cleanup was performed.

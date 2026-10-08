@@ -712,6 +712,13 @@ final class AdMobConsentManager {
 #endif
 
 enum AdMobBootstrapper {
+    #if DEBUG
+    // Keep native screenshot captures in the real unloaded-banner state.
+    // Release builds always use the normal consent and ad request flow.
+    static var isLocalCaptureAdRequestPaused: Bool {
+        ProcessInfo.processInfo.environment["TAPTION_PAUSE_CAPTURE_AD_REQUESTS"] == "1"
+    }
+    #endif
     @MainActor
     private static var appOpenAdSuppressedUntil: Date?
     @MainActor
@@ -865,6 +872,9 @@ enum AdMobBootstrapper {
     #if canImport(GoogleMobileAds)
     @MainActor
     static func ensureReadyForAds(timeoutSeconds: TimeInterval = 6.0) async -> Bool {
+        #if DEBUG
+        if isLocalCaptureAdRequestPaused { return false }
+        #endif
         AdMobConsentManager.shared.refreshConsentStatusIfNeeded()
         let isReady = await AdMobConsentManager.shared.waitForMobileAdsStartup(
             timeoutSeconds: timeoutSeconds
@@ -927,40 +937,12 @@ struct AdMobBannerSlotView: View {
     }
 
     private var bannerSlotPlaceholder: some View {
-        #if canImport(GoogleMobileAds)
-        HStack(spacing: 8) {
-            Text("Ad")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(Color.white)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(Color.black.opacity(0.72))
-                .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
-
-            Text("Loading")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.black.opacity(0.74))
-
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 12)
-        .frame(width: 320, height: 50)
-        .background(Color.white.opacity(0.96))
-        .overlay(
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .stroke(TaptionTheme.accent.opacity(0.45), lineWidth: 1)
-        )
-        #else
-        Text("Ad loading")
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(Color.black.opacity(0.74))
+        Text("Advertisement")
+            .font(.footnote)
+            .foregroundStyle(TaptionTheme.mutedText)
             .frame(width: 320, height: 50)
-            .background(Color.white.opacity(0.96))
-            .overlay(
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .stroke(TaptionTheme.accent.opacity(0.45), lineWidth: 1)
-            )
-        #endif
+            .background(TaptionTheme.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
@@ -1110,6 +1092,9 @@ private struct AdMobBannerRepresentable: UIViewRepresentable {
         private var isWaitingForFillRetry = false
 
         func loadIfPossible(_ banner: BannerView, adUnitID: String) {
+            #if DEBUG
+            if AdMobBootstrapper.isLocalCaptureAdRequestPaused { return }
+            #endif
             banner.rootViewController = AdMobRootViewControllerProvider.topViewController()
 
             guard !adUnitID.isEmpty else {

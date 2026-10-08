@@ -150,13 +150,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         "testQuickLookThumbnailExtensionCoversDocumentBrowserVideoTypes",
         "testReleaseConfigurationAndDistributionGateKeepBinaryHardening",
         "testStarBadgeRunsRewardedAdFlowWithoutPurchaseSheet",
-        "testTaptionThemeUsesCoolSlateTokyoNightPalette"
+        "testTaptionThemeUsesBlueGreenSlateAndIcePalette"
     ]
 
-    func testAppConfigurationUsesYYYEncoderWithoutChangingStorageOrOutputPolicy() {
+    func testAppConfigurationUsesBokkiEncoderWithoutChangingStorageOrOutputPolicy() {
         let configuration = AppConfiguration()
 
-        XCTAssertEqual(configuration.appName, "YYY Encoder")
+        XCTAssertEqual(configuration.appName, "BOKKI Encoder")
         XCTAssertEqual(configuration.bundleIdentifier, "com.taption.encoder")
         XCTAssertEqual(configuration.outputSuffix, "_taption")
         XCTAssertEqual(configuration.defaultOutputContainer, .mp4)
@@ -183,7 +183,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(headerText.contains("viewModel.subtitle"))
         XCTAssertFalse(headerText.contains("viewModel.appName"))
         XCTAssertFalse(headerText.contains("Taption Encoder"))
-        XCTAssertFalse(headerText.contains("YYY Encoder"))
+        XCTAssertFalse(headerText.contains("BOKKI Encoder"))
         XCTAssertTrue(headerText.contains("line.3.horizontal"))
         XCTAssertTrue(headerText.contains("film.stack"))
         XCTAssertTrue(headerText.contains("starBadge(metrics: metrics)"))
@@ -196,7 +196,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             liveActivitiesEnabled: false
         )
 
-        XCTAssertTrue(message.contains("Keep YYY Encoder open"))
+        XCTAssertTrue(message.contains("Keep BOKKI Encoder open"))
         XCTAssertTrue(message.contains("iOS/iPadOS 18-25"))
         XCTAssertTrue(message.contains("pause the job"))
     }
@@ -350,7 +350,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(menuText.contains("AdPrivacyActionHandler"))
     }
 
-    func testTaptionThemeUsesCoolSlateTokyoNightPalette() throws {
+    func testTaptionThemeUsesBlueGreenSlateAndIcePalette() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -375,14 +375,14 @@ final class CodecRoutePlannerTests: XCTestCase {
             encoding: .utf8
         )
 
-        XCTAssertTrue(themeText.contains("0x1A1B26"))
-        XCTAssertTrue(themeText.contains("0x1F2335"))
-        XCTAssertTrue(themeText.contains("0x24283B"))
-        XCTAssertTrue(themeText.contains("0x292E42"))
-        XCTAssertTrue(themeText.contains("0x7AA2F7"))
-        XCTAssertTrue(themeText.contains("0xFF9E64"))
-        XCTAssertTrue(themeText.contains("0x9ECE6A"))
-        XCTAssertTrue(themeText.contains("0xE0AF68"))
+        XCTAssertTrue(themeText.contains("0x0F191E"))
+        XCTAssertTrue(themeText.contains("0x182931"))
+        XCTAssertTrue(themeText.contains("0x1D333D"))
+        XCTAssertTrue(themeText.contains("0x203E48"))
+        XCTAssertTrue(themeText.contains("0x6DD0E5"))
+        XCTAssertTrue(themeText.contains("0xEBA58B"))
+        XCTAssertTrue(themeText.contains("0x91CBB6"))
+        XCTAssertTrue(themeText.contains("0xE5C184"))
         XCTAssertTrue(primaryButtonText.contains("TaptionTheme.accentButtonText"))
         XCTAssertTrue(homeText.contains(".foregroundStyle(TaptionTheme.reward)"))
         XCTAssertTrue(homeText.contains(".background(TaptionTheme.coral)"))
@@ -4337,77 +4337,27 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
     }
 
-    func testQueuePreviewBackgroundTapHidesControlsOnlyDuringPlayback() {
-        XCTAssertTrue(
-            QueuePreviewControlsVisibilityPolicy.shouldHideOnBackgroundTap(
-                isLoading: false,
-                hasPlaybackError: false,
-                areControlsVisible: true,
-                isPlaying: true,
-                isScrubbing: false,
-                isDragging: false
+    func testQueuePreviewBackgroundTapHidesControlsWhenReadyAndIdle() {
+        let cases: [(loading: Bool, error: Bool, visible: Bool, scrubbing: Bool, dragging: Bool, hides: Bool)] = [
+            (false, false, true, false, false, true),
+            (false, false, false, false, false, false),
+            (true, false, true, false, false, false),
+            (false, true, true, false, false, false),
+            (false, false, true, true, false, false),
+            (false, false, true, false, true, false)
+        ]
+        for scenario in cases {
+            XCTAssertEqual(
+                QueuePreviewControlsVisibilityPolicy.shouldHideOnBackgroundTap(
+                    isLoading: scenario.loading,
+                    hasPlaybackError: scenario.error,
+                    areControlsVisible: scenario.visible,
+                    isScrubbing: scenario.scrubbing,
+                    isDragging: scenario.dragging
+                ),
+                scenario.hides
             )
-        )
-        XCTAssertFalse(
-            QueuePreviewControlsVisibilityPolicy.shouldHideOnBackgroundTap(
-                isLoading: false,
-                hasPlaybackError: false,
-                areControlsVisible: false,
-                isPlaying: true,
-                isScrubbing: false,
-                isDragging: false
-            )
-        )
-        XCTAssertFalse(
-            QueuePreviewControlsVisibilityPolicy.shouldHideOnBackgroundTap(
-                isLoading: false,
-                hasPlaybackError: false,
-                areControlsVisible: true,
-                isPlaying: false,
-                isScrubbing: false,
-                isDragging: false
-            )
-        )
-        XCTAssertFalse(
-            QueuePreviewControlsVisibilityPolicy.shouldHideOnBackgroundTap(
-                isLoading: true,
-                hasPlaybackError: false,
-                areControlsVisible: true,
-                isPlaying: true,
-                isScrubbing: false,
-                isDragging: false
-            )
-        )
-        XCTAssertFalse(
-            QueuePreviewControlsVisibilityPolicy.shouldHideOnBackgroundTap(
-                isLoading: false,
-                hasPlaybackError: true,
-                areControlsVisible: true,
-                isPlaying: true,
-                isScrubbing: false,
-                isDragging: false
-            )
-        )
-        XCTAssertFalse(
-            QueuePreviewControlsVisibilityPolicy.shouldHideOnBackgroundTap(
-                isLoading: false,
-                hasPlaybackError: false,
-                areControlsVisible: true,
-                isPlaying: true,
-                isScrubbing: true,
-                isDragging: false
-            )
-        )
-        XCTAssertFalse(
-            QueuePreviewControlsVisibilityPolicy.shouldHideOnBackgroundTap(
-                isLoading: false,
-                hasPlaybackError: false,
-                areControlsVisible: true,
-                isPlaying: true,
-                isScrubbing: false,
-                isDragging: true
-            )
-        )
+        }
     }
 
     func testOutputSummaryKeepsCodecLabelsSmall() throws {
@@ -4433,15 +4383,15 @@ final class CodecRoutePlannerTests: XCTestCase {
             previewViewText.range(of: "struct QueueVideoPreviewView: View")
         )
         let previewEnd = try XCTUnwrap(
-            previewViewText.range(of: "private struct PreviewBadgeFlowLayout")
+            previewViewText.range(of: "struct QueueMiniPlayerView: View")
         )
         let previewText = String(previewViewText[previewStart.lowerBound..<previewEnd.lowerBound])
 
         XCTAssertTrue(previewText.contains("PiPVideoView("))
         XCTAssertTrue(previewText.contains("controller: $pipController"))
-        XCTAssertTrue(previewText.contains("startsAutomaticallyFromInline: true"))
+        XCTAssertTrue(previewText.contains("startsAutomaticallyFromInline: false"))
         XCTAssertTrue(previewText.contains("managesAudioSession: false"))
-        XCTAssertTrue(previewText.contains("Button(action: togglePictureInPicture)"))
+        XCTAssertFalse(previewText.contains("Button(action: togglePictureInPicture)"))
         XCTAssertTrue(previewText.contains("pipController.start()"))
         XCTAssertTrue(previewText.contains("Queue preview Picture in Picture requested on current player"))
         XCTAssertTrue(previewText.contains(".onChange(of: pipController?.isActive)"))
@@ -4529,7 +4479,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(previewViewText.contains("Queue preview minimized to floating player"))
         XCTAssertTrue(previewViewText.contains("Queue preview Picture in Picture requested on current player"))
         XCTAssertFalse(previewViewText.contains("Queue preview Picture in Picture home requested"))
-        XCTAssertTrue(previewViewText.contains("Image(systemName: \"arrow.down.right.and.arrow.up.left\")"))
+        XCTAssertFalse(previewViewText.contains("Image(systemName: \"arrow.down.right.and.arrow.up.left\")"))
         XCTAssertTrue(previewViewText.contains("TAPTION_AUTO_MINIMIZE_PREVIEW"))
         XCTAssertTrue(previewViewText.contains("Debug auto mini player requested"))
         XCTAssertTrue(previewViewText.contains("Button(action: expandPreview)"))
@@ -4542,7 +4492,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(previewViewText.contains("autoStartPictureInPicture"))
         XCTAssertFalse(previewViewText.contains("onAutoPictureInPictureHandled"))
         XCTAssertTrue(previewViewText.contains(".onChange(of: preview.id)"))
-        XCTAssertTrue(previewViewText.contains("keepControlsVisibleForPreviewSwitch()"))
+        XCTAssertTrue(previewViewText.contains("resetControlsForPreviewSwitch()"))
         XCTAssertFalse(homeViewText.contains(".id(preview.id)"))
         XCTAssertFalse(homeViewText.contains(".fullScreenCover("))
         XCTAssertTrue(homeViewText.contains(".zIndex(isPreviewPictureInPictureActive ? 30 : 0)"))
@@ -4553,13 +4503,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("viewModel.activePreview != nil && !isPreviewPictureInPictureActive"))
         XCTAssertTrue(homeViewText.contains("showsPlaybackActions: !isFullScreenVideoPlaybackActive"))
         XCTAssertTrue(homeViewText.contains("showsWorkAction: showsPlaybackActions"))
-        XCTAssertTrue(homeViewText.contains("showsWatchAdAction: showsPlaybackActions"))
+        XCTAssertTrue(homeViewText.contains("showsWatchAdAction: false"))
         XCTAssertTrue(previewViewText.contains("beginVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(previewViewText.contains("endVideoPlaybackAdSuppressionIfNeeded()"))
         XCTAssertTrue(viewModelText.contains("func restorePreview(_ preview: QueueVideoPreview, snapshot:"))
         XCTAssertTrue(progressViewText.contains("var showsWorkAction: Bool = true"))
         XCTAssertTrue(progressViewText.contains("var showsWatchAdAction: Bool = true"))
-        XCTAssertTrue(progressViewText.contains("showsWorkAction\n            && (resolvedCanStartEncoding"))
+        XCTAssertTrue(progressViewText.contains("showsWorkAction\n            && (!state.isBusy"))
         XCTAssertTrue(progressViewText.contains("if showsWatchAdAction {\n                        watchAdButton"))
     }
 
@@ -4627,10 +4577,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(sourceBarText.contains("activeSystemDocumentPicker = .folder"))
         XCTAssertFalse(sourceActionBarText.contains("var onSamples"))
         XCTAssertFalse(sourceActionBarText.contains("title: \"Sample\""))
-        XCTAssertTrue(sourceActionBarText.contains("title: \"Reset\""))
-        let resetButtonStart = try XCTUnwrap(sourceActionBarText.range(of: "title: \"Reset\""))
-        let resetButtonText = String(sourceActionBarText[resetButtonStart.lowerBound...])
-        XCTAssertTrue(resetButtonText.contains("isProminent: true"))
+        XCTAssertFalse(sourceActionBarText.contains("title: \"Reset\""))
+        XCTAssertTrue(homeViewText.contains("Label(\"Reset\", systemImage: \"arrow.counterclockwise\")"))
+        XCTAssertTrue(homeViewText.contains("Button(\"Clear All\", action: resetHome)"))
         XCTAssertTrue(homeViewText.contains("HomeImportBrowserView("))
         XCTAssertFalse(homeViewText.contains("onRequestLocationAccess:"))
         XCTAssertFalse(homeViewText.contains("requestImportBrowserLocationAccess(for:"))
@@ -4651,11 +4600,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         let homeContentStart = try XCTUnwrap(homeViewText.range(of: "private func homeContent("))
         let homeContentEnd = try XCTUnwrap(homeViewText[homeContentStart.lowerBound...].range(of: "\n    private func sourceControls"))
         let homeContentText = String(homeViewText[homeContentStart.lowerBound..<homeContentEnd.lowerBound])
-        let footerExitRange = try XCTUnwrap(homeContentText.range(of: "exitButton(metrics: metrics)"))
-        let footerBannerRange = try XCTUnwrap(
-            homeContentText[footerExitRange.upperBound...].range(of: "AdMobBannerSlotView(")
-        )
-        XCTAssertLessThan(footerExitRange.lowerBound, footerBannerRange.lowerBound)
+        XCTAssertFalse(homeContentText.contains("exitButton(metrics: metrics)"))
+        XCTAssertTrue(homeViewText.contains("Label(\"Exit\", systemImage: \"xmark.circle\")"))
         XCTAssertFalse(projectText.contains("VideoDocumentPicker.swift"))
         XCTAssertTrue(homeViewText.contains("viewModel.navigateImportBrowserIntoFolder(id: $0)"))
         XCTAssertTrue(homeViewText.contains("onBack: { viewModel.navigateImportBrowserUp() }"))
@@ -10496,6 +10442,7 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertFalse(viewModel.canStartEncodingNow)
         XCTAssertEqual(viewModel.startActionTitle, "Start (-1 Star)")
+        XCTAssertEqual(viewModel.convertActionTitle, "Convert 1 video · 1 Star")
         XCTAssertEqual(viewModel.starWalletSnapshot.balance, 0)
         XCTAssertEqual(viewModel.fileCardSnapshots.first?.statusText, "Ready")
 
@@ -10976,6 +10923,28 @@ final class CodecRoutePlannerTests: XCTestCase {
             }, validate: {}
         )
         XCTAssertEqual(polls, 3)
+    }
+
+    @MainActor
+    func testPreviewSeekCompletionAcceptsDelayedNativeClockWithinHalfSecond() async throws {
+        var polls = 0
+        try await QueuePreviewSeekCompletion.wait(
+            targetSeconds: 22.24,
+            reportedSeconds: { polls += 1; return polls == 1 ? 0.4 : 22.655 },
+            validate: {}
+        )
+        XCTAssertEqual(polls, 2)
+    }
+
+    @MainActor
+    func testPreviewSeekCompletionRejectsTimestampPastHalfSecondTolerance() async throws {
+        var polls = 0
+        try await QueuePreviewSeekCompletion.wait(
+            targetSeconds: 6,
+            reportedSeconds: { polls += 1; return polls == 1 ? 6.55 : 6.1 },
+            validate: {}
+        )
+        XCTAssertEqual(polls, 2)
     }
 
     @MainActor
@@ -11649,6 +11618,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         try await waitForReadyToStartState(in: viewModel)
 
         XCTAssertEqual(viewModel.startActionTitle, "Start (-2 Stars)")
+        XCTAssertEqual(viewModel.convertActionTitle, "Convert 2 videos · 2 Stars")
         XCTAssertTrue(viewModel.canStartEncodingNow)
         XCTAssertEqual(viewModel.fileCardSnapshots.map(\.fileName), ["a.mp4", "b.mp4", "c.mp4"])
         XCTAssertEqual(viewModel.fileCardSnapshots.map(\.isEnabled), [true, true, false])
@@ -12339,7 +12309,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(viewModel.importBrowserContext?.canGoBack, false)
         XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, false)
         XCTAssertTrue(viewModel.importBrowserFolders.contains {
-            $0.folderName == "YYY Encoder Files"
+            $0.folderName == "BOKKI Encoder Files"
         })
         XCTAssertTrue(viewModel.importBrowserFiles.isEmpty)
 
@@ -12518,14 +12488,14 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         viewModel.openImportBrowserRoot(url: childURL, mode: .files)
 
-        XCTAssertEqual(viewModel.importBrowserContext?.rootFolderName, "YYY Encoder Files")
-        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "YYY Encoder Files/\(childName)")
+        XCTAssertEqual(viewModel.importBrowserContext?.rootFolderName, "BOKKI Encoder Files")
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "BOKKI Encoder Files/\(childName)")
         XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, true)
         XCTAssertEqual(viewModel.importBrowserFiles.map(\.fileName), ["child.mp4"])
 
         viewModel.navigateImportBrowserUp()
 
-        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "YYY Encoder Files")
+        XCTAssertEqual(viewModel.importBrowserContext?.pathText, "BOKKI Encoder Files")
         XCTAssertEqual(viewModel.importBrowserContext?.canGoUp, true)
         XCTAssertTrue(viewModel.importBrowserFolders.contains { $0.folderName == childName })
 
@@ -12866,7 +12836,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(loadedFilesPanelText.contains("var onPlay: (String) -> Void"))
         XCTAssertTrue(loadedFilesPanelText.contains("var onPlay: () -> Void"))
         XCTAssertFalse(loadedFilesPanelText.contains("Image(systemName: leadingIconName)"))
-        XCTAssertFalse(loadedFilesPanelText.contains("line.3.horizontal"))
+        XCTAssertTrue(loadedFilesPanelText.contains("line.3.horizontal"))
         XCTAssertFalse(loadedFilesPanelText.contains("private var dragHandle"))
         XCTAssertFalse(loadedFilesPanelText.contains("private var dragHandleIcon"))
         XCTAssertFalse(loadedFilesPanelText.contains("private var leadingIconName"))
@@ -12930,8 +12900,8 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(loadedFilesPanelText.contains("Date().timeIntervalSince(lastPointerMovementAt) > 0.35"))
         XCTAssertTrue(loadedFilesPanelText.contains("hasMeaningfulPointerMovement(value.translation)"))
         XCTAssertTrue(loadedFilesPanelText.contains("onPlay: onPlay"))
-        XCTAssertTrue(loadedFilesPanelText.contains(".onTapGesture(count: 2)"))
-        XCTAssertTrue(loadedFilesPanelText.contains(".accessibilityLabel(canAttemptThumbnail && onPlay != nil ? \"Double tap to play preview\" : \"Video thumbnail\")"))
+        XCTAssertTrue(loadedFilesPanelText.contains(".onTapGesture(count: usesListLayout ? 1 : 2)"))
+        XCTAssertTrue(loadedFilesPanelText.contains("usesListLayout ? \"Play preview\" : \"Double tap to play preview\""))
         XCTAssertTrue(loadedFilesPanelText.contains(".accessibilityAction {"))
         XCTAssertTrue(loadedFilesPanelText.contains(".background(TaptionTheme.accent)"))
         XCTAssertFalse(loadedFilesPanelText.contains("Button(action: onPlay)"))
@@ -12958,19 +12928,20 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeLayoutMetricsText.contains("let heightScale = min(max(availableHeight / referenceHeight, minimumScale), maximumScale)"))
         XCTAssertFalse(homeLayoutMetricsText.contains("showsNativeAdSlot"))
         XCTAssertTrue(homeLayoutMetricsText.contains("footerAdSeparationHeight = max(8, 12 * contentScale)"))
-        XCTAssertTrue(homeLayoutMetricsText.contains("filePanelHeight = max(0, remainingHeight)"))
+        XCTAssertTrue(homeLayoutMetricsText.contains("filePanelHeight = max(usesScrollableLayout ? 180 : 80, remainingHeight)"))
         XCTAssertFalse(homeLayoutMetricsText.contains("filePanelHeight = max(remainingHeight, minimumFilePanelHeight)"))
     }
 
     func testHomeLayoutMetricsShrinksQueuePanelUnderVerticalPressure() {
-        let portraitMetrics = HomeLayoutMetrics(size: CGSize(width: 393, height: 852))
-        let compactLandscapeMetrics = HomeLayoutMetrics(size: CGSize(width: 852, height: 393))
+        let portraitMetrics = HomeLayoutMetrics(size: CGSize(width: 393, height: 852), reservesFailureLogArea: false, userInterfaceIdiom: .phone)
+        let compactLandscapeMetrics = HomeLayoutMetrics(size: CGSize(width: 852, height: 393), reservesFailureLogArea: false, userInterfaceIdiom: .phone)
 
         XCTAssertEqual(compactLandscapeMetrics.canvasHeight, 393, accuracy: 0.1)
         XCTAssertLessThanOrEqual(compactLandscapeMetrics.contentScale, portraitMetrics.contentScale)
         XCTAssertLessThan(compactLandscapeMetrics.filePanelHeight, portraitMetrics.filePanelHeight)
-        XCTAssertLessThanOrEqual(compactLandscapeMetrics.filePanelHeight, 1)
-        XCTAssertGreaterThanOrEqual(compactLandscapeMetrics.filePanelHeight, 0)
+        XCTAssertGreaterThanOrEqual(compactLandscapeMetrics.filePanelHeight, 180)
+        XCTAssertTrue(compactLandscapeMetrics.usesScrollableLayout)
+        XCTAssertFalse(portraitMetrics.usesScrollableLayout)
     }
 
     func testHomeLayoutMetricsUsesTwoColumnsOnlyForIPadLandscape() {
@@ -13007,7 +12978,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(phoneLandscape.usesPadLandscapeColumns)
     }
 
-    func testIPadLandscapePlacesEncodingProgressAboveExitInLeftColumn() throws {
+    func testIPadLandscapeKeepsQueueInLeftColumnAndOutputActionsInRightColumn() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -13016,14 +12987,12 @@ final class CodecRoutePlannerTests: XCTestCase {
         let landscapeStart = try XCTUnwrap(homeViewText.range(of: "private func padLandscapeHomeContent("))
         let landscapeEnd = try XCTUnwrap(homeViewText[landscapeStart.upperBound...].range(of: "\n    private func topBanner"))
         let landscapeText = String(homeViewText[landscapeStart.lowerBound..<landscapeEnd.lowerBound])
-        let spacerRange = try XCTUnwrap(landscapeText.range(of: "Spacer(minLength: 0)"))
         let encodingRange = try XCTUnwrap(landscapeText.range(of: "encodingControls("))
-        let exitRange = try XCTUnwrap(landscapeText.range(of: "exitButton(metrics: metrics)"))
         let loadedRange = try XCTUnwrap(landscapeText.range(of: "loadedFilesPanel(metrics: metrics)"))
-
-        XCTAssertLessThan(spacerRange.lowerBound, encodingRange.lowerBound)
-        XCTAssertLessThan(encodingRange.lowerBound, exitRange.lowerBound)
-        XCTAssertLessThan(exitRange.lowerBound, loadedRange.lowerBound)
+        let outputRange = try XCTUnwrap(landscapeText.range(of: "outputDisclosure(metrics: metrics)"))
+        XCTAssertLessThan(loadedRange.lowerBound, outputRange.lowerBound)
+        XCTAssertLessThan(outputRange.lowerBound, encodingRange.lowerBound)
+        XCTAssertFalse(landscapeText.contains("exitButton(metrics: metrics)"))
     }
 
     func testHomeLayoutMetricsDoesNotReserveMiddleNativeAdSlot() throws {
@@ -13089,6 +13058,352 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewModelText.contains("openDebugFileAndAutoOpenPreview"))
         XCTAssertTrue(homeViewModelText.contains("Debug benchmark encoding start bypassed Star charge"))
         XCTAssertTrue(homeViewModelText.contains("Codec benchmark probe completed"))
+    }
+
+    @MainActor
+    private func makePreviewQueueBrowserFixture(
+        codec: TaptionVideoCodec = .h264,
+        availableBytes: Int64 = 1_000_000
+    ) async throws -> (directory: URL, urls: [URL], model: HomeViewModel,
+                       inspector: CountingMediaInspector, wallet: FakeStarWalletStore,
+                       encoder: RecordingStartEncoder) {
+        let directory = temporaryDirectoryURL()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let suffix = codec == .hevcWithAlpha ? "mov" : "mp4"
+        let urls = ["a", "b", "c"].map { directory.appendingPathComponent("\($0).\(suffix)") }
+        for url in urls { try Data("source".utf8).write(to: url) }
+        var asset = makeAsset(sourceCodec: codec)
+        if codec == .hevcWithAlpha { asset.container = .mov }
+        let inspector = CountingMediaInspector(asset: asset)
+        let wallet = FakeStarWalletStore(snapshot: makeStarWalletSnapshot(balance: 3))
+        let encoder = RecordingStartEncoder()
+        let model = HomeViewModel(environment: makeHomeViewModelTestEnvironment(
+            pendingSaveStore: FakePendingSaveStore(), mediaInspector: inspector,
+            encoderService: encoder,
+            storageChecker: RecordingStorageChecker(requirement: TaptionStorageRequirement(
+                estimatedOutputBytes: 1_000, requiredWorkingBytes: 1_024, availableBytes: availableBytes
+            )),
+            starWalletStore: wallet
+        ))
+        await model.refreshStarsIfNeeded()
+        return (directory, urls, model, inspector, wallet, encoder)
+    }
+
+    @MainActor
+    func testPreviewListAddKeepsSelectedFilePlayingUntilClose() async throws {
+        let fixture = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let model = fixture.model
+        model.openFilesPreviewBrowser(urls: fixture.urls)
+        model.selectFolderPreviewFile(id: fixture.urls[1].absoluteString)
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == fixture.urls[1] }
+        let preview = try XCTUnwrap(model.activePreview)
+        let inspections = fixture.inspector.inspectionCount
+        XCTAssertFalse(model.isPreviewAddedToList(preview))
+        XCTAssertTrue(model.canAddPreviewToList(preview))
+        XCTAssertTrue(model.addPreviewToList(preview))
+        XCTAssertTrue(model.isPreviewAddedToList(preview))
+        XCTAssertFalse(model.canAddPreviewToList(preview))
+        XCTAssertFalse(model.addPreviewToList(preview))
+        XCTAssertEqual(model.activePreview, preview)
+        XCTAssertNil(model.miniPlayerPreview)
+        XCTAssertNotNil(model.folderPreviewContext)
+        XCTAssertEqual(model.folderPreviewFileSnapshots.count, 3)
+        XCTAssertNil(model.state.preparedEncodingReview)
+        XCTAssertEqual(fixture.inspector.inspectionCount, inspections)
+        model.closePreviewFromPlayer()
+        try await waitForReadyToStartState(in: model, timeout: 10)
+        XCTAssertNil(model.activePreview)
+        XCTAssertNil(model.folderPreviewContext)
+        XCTAssertEqual(model.fileCardSnapshots.map(\.id), [fixture.urls[1].absoluteString])
+        XCTAssertEqual(model.fileCardSnapshots.first?.sourceKind, .files)
+        XCTAssertEqual(model.fileCardSnapshots.first?.videoInfo?.fileSize, preview.videoInfo.fileSize)
+        XCTAssertEqual(model.state.preparedEncodingReview?.source.url, fixture.urls[1])
+        let wallet = await fixture.wallet.currentSnapshot()
+        let encodeCalls = await fixture.encoder.callCount()
+        XCTAssertEqual(wallet.balance, 3)
+        XCTAssertEqual(encodeCalls, 0)
+        model.openPreviewForFileCard(id: fixture.urls[1].absoluteString)
+        XCTAssertTrue(model.isPreviewAddedToList(try XCTUnwrap(model.activePreview)))
+        XCTAssertFalse(model.addPreviewToList(try XCTUnwrap(model.activePreview)))
+        XCTAssertEqual(model.fileCardSnapshots.count, 1)
+        model.closePreviewFromPlayer()
+    }
+
+    @MainActor
+    func testPreviewListNativeFolderVideoKeepsPlayerAndGeometryUntilClose() async throws {
+        let fixture = try await makePreviewQueueBrowserFixture(codec: .hevcWithAlpha)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let model = fixture.model
+        model.startFolderFlow(url: fixture.directory)
+        model.selectFolderPreviewFile(id: fixture.urls[2].absoluteString)
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == fixture.urls[2] }
+        let preview = try XCTUnwrap(model.activePreview)
+        XCTAssertTrue(preview.usesNativePlayback)
+        XCTAssertTrue(model.addPreviewToList(preview))
+        XCTAssertEqual(model.activePreview, preview)
+        XCTAssertTrue(model.isPreviewAddedToList(preview))
+        XCTAssertNil(model.miniPlayerPreview)
+        model.closePreviewFromPlayer()
+        try await waitForReadyToStartState(in: model, timeout: 10)
+        XCTAssertNil(model.folderPreviewContext)
+        XCTAssertEqual(model.fileCardSnapshots.map(\.id), [fixture.urls[2].absoluteString])
+        XCTAssertEqual(model.fileCardSnapshots.first?.sourceKind, .folder)
+        model.openPreviewForFileCard(id: fixture.urls[2].absoluteString)
+        XCTAssertEqual(model.activePreview?.usesNativePlayback, true)
+        XCTAssertEqual(model.activePreview?.displaySize, preview.displaySize)
+        XCTAssertTrue(model.isPreviewAddedToList(try XCTUnwrap(model.activePreview)))
+        let wallet = await fixture.wallet.currentSnapshot()
+        let encodeCalls = await fixture.encoder.callCount()
+        XCTAssertEqual(wallet.balance, 3)
+        XCTAssertEqual(encodeCalls, 0)
+        model.closePreviewFromPlayer()
+    }
+
+    @MainActor
+    func testPreviewListExistingBatchIsCheckedAndCannotDuplicateOrExit() async throws {
+        let fixture = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let model = fixture.model
+        model.startFilesFlow(urls: fixture.urls)
+        try await waitForReadyToStartState(in: model, timeout: 10)
+        model.toggleQueueFileSelection(id: fixture.urls[0].absoluteString)
+        model.openPreviewForFileCard(id: fixture.urls[2].absoluteString)
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == fixture.urls[2] }
+        let cards = model.fileCardSnapshots
+        let planID = model.state.preparedEncodingReview?.job.plan.id
+        let preview = try XCTUnwrap(model.activePreview)
+        XCTAssertTrue(model.isPreviewAddedToList(preview))
+        XCTAssertFalse(model.canAddPreviewToList(preview))
+        XCTAssertFalse(model.addPreviewToList(preview))
+        XCTAssertEqual(model.activePreview, preview)
+        XCTAssertNil(model.miniPlayerPreview)
+        XCTAssertEqual(model.fileCardSnapshots, cards)
+        XCTAssertEqual(model.state.preparedEncodingReview?.job.plan.id, planID)
+        let wallet = await fixture.wallet.currentSnapshot()
+        XCTAssertEqual(wallet.balance, 3)
+        model.closePreviewFromPlayer()
+        XCTAssertNil(model.activePreview)
+        XCTAssertEqual(model.fileCardSnapshots, cards)
+    }
+
+    @MainActor
+    func testPreviewListExternalVideoIsCheckedWithoutPreparingOrChargingStars() async throws {
+        let fixture = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let model = fixture.model
+        model.openExternalPlayerFile(url: fixture.urls[0])
+        try await waitForReadyToStartState(in: model, timeout: 10)
+        let review = try XCTUnwrap(model.state.preparedEncodingReview)
+        let preview = try XCTUnwrap(model.activePreview)
+        XCTAssertTrue(model.isPreviewAddedToList(preview))
+        XCTAssertFalse(model.addPreviewToList(preview))
+        XCTAssertEqual(model.activePreview, preview)
+        XCTAssertEqual(model.fileCardSnapshots.count, 1)
+        XCTAssertEqual(model.state.preparedEncodingReview, review)
+        XCTAssertEqual(model.state.preparedEncodingReview?.requiresEncodingPreparation, true)
+        XCTAssertNil(model.miniPlayerPreview)
+        let wallet = await fixture.wallet.currentSnapshot()
+        let encodeCalls = await fixture.encoder.callCount()
+        XCTAssertEqual(wallet.balance, 3)
+        XCTAssertEqual(encodeCalls, 0)
+        model.closePreviewFromPlayer()
+    }
+
+    @MainActor
+    func testPreviewListRejectsDismissedReplacedAndMismatchedCallbacks() async throws {
+        let fixture = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let model = fixture.model
+        model.openFilesPreviewBrowser(urls: fixture.urls)
+        model.selectFolderPreviewFile(id: fixture.urls[0].absoluteString)
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == fixture.urls[0] }
+        let old = try XCTUnwrap(model.activePreview)
+        model.openNextPreview()
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == fixture.urls[1] }
+        let current = try XCTUnwrap(model.activePreview)
+        XCTAssertTrue(model.canAddPreviewToList(current))
+        XCTAssertFalse(model.addPreviewToList(old))
+        var mismatched = current
+        mismatched.sourceURL = fixture.urls[0]
+        XCTAssertFalse(model.addPreviewToList(mismatched))
+        XCTAssertEqual(model.activePreview, current)
+        XCTAssertFalse(model.isPreviewAddedToList(old))
+        model.closePreviewFromPlayer()
+        XCTAssertFalse(model.addPreviewToList(current))
+        XCTAssertFalse(model.isPreviewAddedToList(current))
+        model.dismissFolderPreviewBrowser()
+    }
+
+    @MainActor
+    func testPreviewListUnimplementedOutputRemainsBlockedOnConvert() async throws {
+        let fixture = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let model = fixture.model
+        model.selectOutputAudioCodec(.opus)
+        model.openFilesPreviewBrowser(urls: fixture.urls)
+        model.selectFolderPreviewFile(id: fixture.urls[1].absoluteString)
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == fixture.urls[1] }
+        let preview = try XCTUnwrap(model.activePreview)
+        XCTAssertTrue(model.addPreviewToList(preview))
+        XCTAssertEqual(model.activePreview, preview)
+        model.closePreviewFromPlayer()
+        try await waitForReadyToStartState(in: model, timeout: 10)
+        XCTAssertFalse(model.selectedOutput.isImplementedNow)
+        XCTAssertEqual(model.fileCardSnapshots.map(\.id), [fixture.urls[1].absoluteString])
+        XCTAssertEqual(model.state.preparedEncodingReview?.requiresEncodingPreparation, true)
+        model.startPreparedEncoding()
+        try await waitForCondition(timeout: 10) {
+            if case .completed = model.state { return true }
+            return false
+        }
+        XCTAssertEqual(model.fileCardSnapshots.first?.statusText, "Blocked")
+        let wallet = await fixture.wallet.currentSnapshot()
+        let encodeCalls = await fixture.encoder.callCount()
+        XCTAssertEqual(wallet.balance, 3)
+        XCTAssertEqual(encodeCalls, 0)
+    }
+
+    @MainActor
+    func testPreviewListDefersStorageBlockUntilConvertWithoutChargingStars() async throws {
+        let fixture = try await makePreviewQueueBrowserFixture(availableBytes: 0)
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let model = fixture.model
+        model.openFilesPreviewBrowser(urls: fixture.urls)
+        model.selectFolderPreviewFile(id: fixture.urls[2].absoluteString)
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == fixture.urls[2] }
+        let preview = try XCTUnwrap(model.activePreview)
+        XCTAssertTrue(model.addPreviewToList(preview))
+        XCTAssertEqual(model.activePreview, preview)
+        XCTAssertNil(model.state.preparedEncodingReview)
+        model.closePreviewFromPlayer()
+        try await waitForReadyToStartState(in: model, timeout: 10)
+        XCTAssertEqual(model.state.preparedEncodingReview?.requiresEncodingPreparation, true)
+        XCTAssertEqual(model.fileCardSnapshots.map(\.id), [fixture.urls[2].absoluteString])
+        model.startPreparedEncoding()
+        try await waitForCondition(timeout: 10) {
+            if case .completed = model.state { return true }
+            return false
+        }
+        XCTAssertEqual(model.fileCardSnapshots.first?.statusText, "Blocked")
+        XCTAssertTrue(model.fileCardSnapshots.first?.detailText?.contains("Low space") == true)
+        let wallet = await fixture.wallet.currentSnapshot()
+        let encodeCalls = await fixture.encoder.callCount()
+        XCTAssertEqual(wallet.balance, 3)
+        XCTAssertEqual(encodeCalls, 0)
+    }
+
+    @MainActor
+    func testPreviewListConvertsOnlyAddedSourceWithOneStar() async throws {
+        let fixture = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let model = fixture.model
+        model.openFilesPreviewBrowser(urls: fixture.urls)
+        model.selectFolderPreviewFile(id: fixture.urls[1].absoluteString)
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == fixture.urls[1] }
+        XCTAssertTrue(model.addPreviewToList(try XCTUnwrap(model.activePreview)))
+        model.closePreviewFromPlayer()
+        try await waitForReadyToStartState(in: model, timeout: 10)
+        model.startPreparedEncoding()
+        try await waitForAsyncCondition { await fixture.encoder.callCount() == 1 }
+        let sources = await fixture.encoder.sourceURLs()
+        let wallet = await fixture.wallet.currentSnapshot()
+        XCTAssertEqual(sources, [fixture.urls[1]])
+        XCTAssertEqual(wallet.balance, 2)
+        XCTAssertNil(model.activePreview)
+        XCTAssertNil(model.miniPlayerPreview)
+    }
+
+    @MainActor
+    func testPreviewListNavigatesUninspectedFilesAndKeepsAddedStateInBothDirections() async throws {
+        let fixture = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let model = fixture.model
+        model.openFilesPreviewBrowser(urls: fixture.urls)
+        model.selectFolderPreviewFile(id: fixture.urls[1].absoluteString)
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == fixture.urls[1] }
+        let second = try XCTUnwrap(model.activePreview)
+        XCTAssertEqual(second.playlist?.positionText, "2 / 3")
+        XCTAssertTrue(second.playlist?.hasPrevious == true)
+        XCTAssertTrue(second.playlist?.hasNext == true)
+        XCTAssertTrue(model.addPreviewToList(second))
+        model.openNextPreview()
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == fixture.urls[2] }
+        let third = try XCTUnwrap(model.activePreview)
+        XCTAssertFalse(third.playlist?.hasNext == true)
+        XCTAssertFalse(model.isPreviewAddedToList(third))
+        XCTAssertTrue(model.addPreviewToList(third))
+        model.openPreviousPreview()
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == fixture.urls[1] }
+        XCTAssertTrue(model.isPreviewAddedToList(try XCTUnwrap(model.activePreview)))
+        XCTAssertFalse(model.addPreviewToList(try XCTUnwrap(model.activePreview)))
+        model.openPreviousPreview()
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == fixture.urls[0] }
+        let first = try XCTUnwrap(model.activePreview)
+        XCTAssertFalse(first.playlist?.hasPrevious == true)
+        XCTAssertFalse(model.isPreviewAddedToList(first))
+        XCTAssertTrue(model.addPreviewToList(first))
+        XCTAssertNotNil(model.folderPreviewContext)
+        XCTAssertNil(model.state.preparedEncodingReview)
+        model.closePreviewFromPlayer()
+        try await waitForReadyToStartState(in: model, timeout: 10)
+        XCTAssertEqual(model.fileCardSnapshots.map(\.id), [fixture.urls[1], fixture.urls[2], fixture.urls[0]].map(\.absoluteString))
+        XCTAssertEqual(model.state.preparedEncodingReview?.source.url, fixture.urls[1])
+        XCTAssertNil(model.miniPlayerPreview)
+        let wallet = await fixture.wallet.currentSnapshot()
+        XCTAssertEqual(wallet.balance, 3)
+    }
+
+    @MainActor
+    func testPreviewListCloseWithoutAddingReturnsToBrowserAndClearsCancelledMembership() async throws {
+        let fixture = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let model = fixture.model
+        model.openFilesPreviewBrowser(urls: fixture.urls)
+        model.selectFolderPreviewFile(id: fixture.urls[0].absoluteString)
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == fixture.urls[0] }
+        model.closePreviewFromPlayer()
+        XCTAssertNil(model.activePreview)
+        XCTAssertNotNil(model.folderPreviewContext)
+        XCTAssertNil(model.state.preparedEncodingReview)
+        model.selectFolderPreviewFile(id: fixture.urls[0].absoluteString)
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == fixture.urls[0] }
+        XCTAssertTrue(model.addPreviewToList(try XCTUnwrap(model.activePreview)))
+        model.dismissPreview()
+        model.dismissFolderPreviewBrowser()
+        model.openFilesPreviewBrowser(urls: fixture.urls)
+        model.selectFolderPreviewFile(id: fixture.urls[0].absoluteString)
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == fixture.urls[0] }
+        XCTAssertFalse(model.isPreviewAddedToList(try XCTUnwrap(model.activePreview)))
+        model.closePreviewFromPlayer()
+        model.dismissFolderPreviewBrowser()
+    }
+
+    @MainActor
+    func testPreviewListNavigationSkipsNewlyInspectedUnplayableFile() async throws {
+        let directory = temporaryDirectoryURL()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let urls = ["a.mp4", "b.mp4", "c.mp4"].map { directory.appendingPathComponent($0) }
+        for url in urls { try Data("source".utf8).write(to: url) }
+        let model = HomeViewModel(environment: makeHomeViewModelTestEnvironment(
+            pendingSaveStore: FakePendingSaveStore(),
+            mediaInspector: URLMappedMediaInspector(assetsByLastPathComponent: [
+                "a.mp4": makeAsset(sourceCodec: .h264),
+                "b.mp4": makeAsset(sourceCodec: .unknown),
+                "c.mp4": makeAsset(sourceCodec: .h264)
+            ], fallbackAsset: makeAsset(sourceCodec: .h264))
+        ))
+        model.openFilesPreviewBrowser(urls: urls)
+        model.selectFolderPreviewFile(id: urls[0].absoluteString)
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == urls[0] }
+        XCTAssertEqual(model.activePreview?.playlist?.nextID, urls[1].absoluteString)
+        model.openNextPreview()
+        try await waitForCondition(timeout: 5) { model.activePreview?.sourceURL == urls[2] }
+        XCTAssertEqual(model.activePreview?.playlist?.previousID, urls[0].absoluteString)
+        XCTAssertEqual(model.activePreview?.playlist?.positionText, "2 / 2")
+        model.closePreviewFromPlayer()
+        model.dismissFolderPreviewBrowser()
     }
 
     @MainActor

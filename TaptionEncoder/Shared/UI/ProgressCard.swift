@@ -11,20 +11,20 @@ private extension Color {
 }
 
 enum TaptionTheme {
-    static let appBackground = Color(taptionHex: 0x1A1B26)
-    static let surface = Color(taptionHex: 0x1F2335)
-    static let elevatedSurface = Color(taptionHex: 0x24283B)
-    static let selectedSurface = Color(taptionHex: 0x292E42)
-    static let border = Color(taptionHex: 0x3B4261)
-    static let strongBorder = Color(taptionHex: 0x565F89)
-    static let primaryText = Color(taptionHex: 0xC0CAF5)
-    static let mutedText = Color(taptionHex: 0xA9B1D6).opacity(0.78)
-    static let disabledText = Color(taptionHex: 0x565F89)
-    static let accent = Color(taptionHex: 0x7AA2F7)
-    static let accentButtonText = Color(taptionHex: 0x16161E)
-    static let coral = Color(taptionHex: 0xFF9E64)
-    static let success = Color(taptionHex: 0x9ECE6A)
-    static let reward = Color(taptionHex: 0xE0AF68)
+    static let appBackground = Color(taptionHex: 0x0F191E)
+    static let surface = Color(taptionHex: 0x182931)
+    static let elevatedSurface = Color(taptionHex: 0x1D333D)
+    static let selectedSurface = Color(taptionHex: 0x203E48)
+    static let border = Color(taptionHex: 0x2F4650)
+    static let strongBorder = Color(taptionHex: 0x526E7A)
+    static let primaryText = Color(taptionHex: 0xE8F3F7)
+    static let mutedText = Color(taptionHex: 0x9AAFBA)
+    static let disabledText = Color(taptionHex: 0x78909B)
+    static let accent = Color(taptionHex: 0x6DD0E5)
+    static let accentButtonText = Color(taptionHex: 0x0B1B21)
+    static let coral = Color(taptionHex: 0xEBA58B)
+    static let success = Color(taptionHex: 0x91CBB6)
+    static let reward = Color(taptionHex: 0xE5C184)
     static let cardContentPadding: CGFloat = 12
 }
 

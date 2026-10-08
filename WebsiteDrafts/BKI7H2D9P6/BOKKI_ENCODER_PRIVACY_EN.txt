@@ -1,0 +1,96 @@
+BKI7H2D9P6
+APP PRIVACY POLICY DRAFT — not yet published
+
+Editorial publication note
+Use the actual publication date below. This policy covers the mobile app and support communications. Website analytics, cookies, contact forms, or newsletter services must be described according to the final website implementation; this draft does not assert how the new company website handles visitor data.
+
+PUBLIC POLICY BODY
+
+Bokki Encoder Privacy Policy
+Effective date: [publication date]
+
+Bokkiyaw operates Bokki Encoder, the product currently listed on the App Store as YYY Encoder and previously known as Taption Encoder. This policy explains how information is handled when you use the iPhone and iPad app or contact us for support.
+
+1. Videos and on-device processing
+
+The app does not require a Bokkiyaw account. Videos you select are inspected, converted, and prepared for saving on your device. Bokkiyaw does not operate an app server that receives your source or converted videos, and we do not sell those video files.
+
+If you open or save files through iCloud or another storage provider, that provider's services and policies may apply. Device-based conversion does not mean that advertising or cloud file access works without a network connection.
+
+2. Photos and Files permissions
+
+The app uses the files and videos you choose to open. It may request Photos access to read selected media or permission to save converted videos as new Photos assets. You can choose which media to provide and manage Photos permissions in iOS or iPadOS Settings.
+
+3. Local app data
+
+The app stores settings, conversion state, pending-save recovery information, Star balance and transaction history, and operational diagnostics locally. This information supports conversion, saving, recovery, and the Stars system.
+
+Some Star wallet security and recovery records are stored in the iOS Keychain. These records may remain available after reinstalling the app; deleting the app does not necessarily remove every Keychain record. Videos saved to Photos or an external folder remain under your control and are not removed simply by deleting the app.
+
+4. Advertising and consent
+
+The app uses Google Mobile Ads and Google User Messaging Platform. It may display banner, rewarded, interstitial, and app-open ads. These services support advertising delivery, measurement, diagnostics, consent handling, and fraud prevention.
+
+Google and its partners may process IP addresses and approximate location inferred from them, device or app identifiers permitted by the operating system and your choices, performance and crash information, and interactions with ads or the app. The information processed depends on SDK configuration, device settings, and applicable consent choices. This advertising information is distinct from your source and converted video files.
+
+Consent prompts may be presented through Google User Messaging Platform where applicable. You can use available consent controls and system privacy settings. Google's advertising practices are described at https://policies.google.com/technologies/ads and its privacy policy at https://policies.google.com/privacy.
+
+5. Stars and payments
+
+The current app is free to download and ad-supported. Conversions use Stars, which can be earned through rewarded ads when available. The current release does not provide a paid Stars purchase flow. Downloading the app is handled by Apple's App Store; Bokkiyaw does not receive payment card information through this app.
+
+If a future version introduces paid features, the relevant transaction handling and policy will be updated for that version.
+
+6. Support communications
+
+If you email support@bokkiyaw.com, we receive the information you choose to provide, such as your email address, device and operating-system details, app version, screenshots, error messages, and a description of the problem. We use it to respond to your request and understand reported issues.
+
+You do not need to send private source videos for an initial support request. If media is needed to investigate an issue, we will discuss an appropriate transfer method with you first.
+
+7. Service providers and other disclosures
+
+Information may be processed by Apple for system, Photos, Files, and App Store services; Google and its partners for advertising and consent services; and email providers for support communications. Their own policies apply to their processing. We may also disclose information where legally required or necessary to protect users and the security of our services.
+
+8. Retention and your choices
+
+You control which videos to open and where to save the results. You can manage permissions and delete files using Photos, Files, or your chosen storage provider. Local app-container data is generally removed when you delete the app, subject to operating-system and backup behavior; Keychain recovery records may persist as described above.
+
+Support messages may be retained for as long as reasonably necessary to resolve the request, maintain relevant records, and meet applicable legal obligations. To request access, correction, or deletion of information you provided in a support message, email support@bokkiyaw.com. We will consider the request subject to applicable requirements. We do not have a central copy of your locally processed videos to retrieve or delete for you.
+
+9. Children and international processing
+
+The app is not directed to children under 13. We do not knowingly solicit personal information from children under 13 through support. Contact us if you believe such information was provided so we can review and, where appropriate, delete it.
+
+Advertising and support providers may process information in countries outside your own. Their processing and safeguards are subject to their policies and applicable requirements.
+
+10. Changes and contact
+
+When this policy changes materially, we will update its effective date and make the revised policy available through the app's public listing or support website.
+
+For privacy or support questions, contact support@bokkiyaw.com.
+
+END OF PUBLIC POLICY BODY
+
+FACTS AND SOURCES FOR THE WEBSITE EDITOR
+
+Original public policy
+https://umoc.notion.site/Taption-Encoder-Privacy-Policy-3835583c1e208186a727d1f377539fa8
+Original effective date: June 19, 2026. Existing public page still uses the old Taption name and support@taption.app. It has not been changed by this draft.
+
+Current-release implementation evidence
+git show 71d9f67:TaptionEncoder/Info.plist — Photos usage and save permissions
+git show 71d9f67:TaptionEncoder/App/Stars.swift — locally stored wallet, Keychain recovery, ad-earned Stars
+git show 71d9f67:TaptionEncoder/Features/Home/HomeViewModel.swift — conversion and save state, Star charging
+git show 71d9f67:TaptionEncoder/Core/Ads/AdProviders.swift — Google Mobile Ads and UMP consent calls
+git show 71d9f67:TaptionEncoder.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved — Google Mobile Ads 13.5.0 and UMP 3.1.0
+No StoreKit product/purchase/restore entry points were found in the current released canonical app source. The retained purchase-related ledger enum is not evidence of a paid purchase feature.
+
+Official Google SDK disclosure
+https://developers.google.com/admob/ios/privacy/data-disclosure
+
+Apple Developer Technical Support on Keychain deletion behavior
+https://developer.apple.com/forums/thread/36442
+Persistence after app deletion is implementation behavior, not a documented lifetime guarantee. The draft therefore says Keychain records may persist, rather than promising deletion or indefinite preservation.
+
+Update scope
+This is a new website draft using the Bokki Encoder/Bokkiyaw names and owner-specified support address. It does not change the app's embedded notices, the existing public policy, App Store privacy disclosures, or App Store metadata. The published binary still has its historical contact strings until a replacement app version is released.

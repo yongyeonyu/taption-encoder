@@ -179,7 +179,7 @@ enum EncodingRuntimeWarningEvaluator {
                 kind: .memory,
                 severity: .critical,
                 title: "App Memory Very High",
-                message: "YYY Encoder is using most available memory. Close other apps or reduce the batch before starting another long encode."
+                message: "BOKKI Encoder is using most available memory. Close other apps or reduce the batch before starting another long encode."
             ))
         } else if memoryPercent >= 75 {
             warnings.append(EncodingRuntimeWarning(

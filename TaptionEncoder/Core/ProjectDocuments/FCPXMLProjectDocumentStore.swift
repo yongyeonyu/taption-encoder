@@ -11,9 +11,9 @@ enum FCPXMLProjectDocumentError: LocalizedError, Equatable {
         case .unsupportedDocumentKind(let kind):
             return "\(kind.rawValue) project documents are not writable in this build."
         case .missingEmbeddedProjectMetadata:
-            return "The FCPXML file does not contain YYY Encoder project metadata."
+            return "The FCPXML file does not contain BOKKI Encoder project metadata."
         case .invalidEmbeddedProjectMetadata:
-            return "The YYY Encoder project metadata in this FCPXML file could not be decoded."
+            return "The BOKKI Encoder project metadata in this FCPXML file could not be decoded."
         case .invalidFCPXMLRoot:
             return "The selected file is not a valid FCPXML document."
         }
@@ -94,7 +94,7 @@ struct TaptionFCPXMLProjectSerializer {
             "<!DOCTYPE fcpxml>",
             "<fcpxml version=\"\(xmlEscaped(version))\">",
             "  <resources>",
-            "    <format id=\"\(formatID)\" name=\"Taption Encoder Canvas\" \(formatAttributes(for: project.timeline.canvasSize))/>"
+            "    <format id=\"\(formatID)\" name=\"BOKKI Encoder Canvas\" \(formatAttributes(for: project.timeline.canvasSize))/>"
         ]
 
         for (index, asset) in project.assets.enumerated() {
@@ -104,7 +104,7 @@ struct TaptionFCPXMLProjectSerializer {
         lines += [
             "  </resources>",
             "  <library>",
-            "    <event name=\"Taption Encoder\">",
+            "    <event name=\"BOKKI Encoder\">",
             "      <project name=\"\(projectName)\">",
             "        <metadata>",
             "          <md key=\"\(Self.embeddedProjectMetadataKey)\" value=\"\(embeddedProject)\"/>",

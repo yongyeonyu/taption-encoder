@@ -23,6 +23,7 @@ struct PrimaryActionButton: View {
                 .minimumScaleFactor(0.85)
                 .frame(maxWidth: .infinity)
                 .frame(height: height)
+                .contentShape(Rectangle())
         }
         .background(backgroundColor)
         .overlay(
@@ -45,7 +46,7 @@ struct PrimaryActionButton: View {
         if !isEnabled {
             return TaptionTheme.disabledText
         }
-        return isProminent ? TaptionTheme.accentButtonText : TaptionTheme.accent
+        return isProminent ? TaptionTheme.accentButtonText : TaptionTheme.primaryText
     }
 
     private var borderColor: Color {

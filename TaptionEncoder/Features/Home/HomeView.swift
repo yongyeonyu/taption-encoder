@@ -153,6 +153,7 @@ struct HomeView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var activeMenuSheet: HomeMenuSheet?
     @State private var isOutputSizePopoverPresented = false
+    @State private var isOutputSettingsPresented = false
     @State private var outputSizeDraftMB: Double?
     @State private var isPreviewPictureInPictureActive = false
     @State private var lastExternalVideoOpenURL: URL?
@@ -202,7 +203,7 @@ struct HomeView: View {
                 }
                 .zIndex(isPreviewPictureInPictureActive ? 30 : 0)
 
-                if let preview = viewModel.activePreview {
+                if let preview = viewModel.activePreview, viewModel.folderPreviewContext == nil {
                     queueVideoPreviewOverlay(preview: preview)
                         .ignoresSafeArea()
                         .zIndex(20)
@@ -245,14 +246,26 @@ struct HomeView: View {
                 onImportAll: { viewModel.importFolderPreviewBatch() },
                 onClose: { viewModel.dismissFolderPreviewBrowser() }
             )
+            .overlay {
+                // A presented browser sheet sits above the home overlay. Keep
+                // browser playback on this surface so its queue action is reachable.
+                if let preview = viewModel.activePreview {
+                    queueVideoPreviewOverlay(preview: preview)
+                        .ignoresSafeArea()
+                }
+            }
             .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
+            .presentationDragIndicator(viewModel.activePreview == nil ? .visible : .hidden)
+            .interactiveDismissDisabled(viewModel.activePreview != nil)
         }
         .sheet(item: $activeMenuSheet) { sheet in
             HomeMenuSheetView(
                 sheet: sheet,
                 onOptimizationProfileChanged: { viewModel.selectEncodingOptimizationProfile($0) }
             )
+        }
+        .sheet(isPresented: $isOutputSettingsPresented) {
+            outputSettingsSheet
         }
         .alert(
             item: Binding(
@@ -323,9 +336,12 @@ struct HomeView: View {
         QueueVideoPreviewView(
             preview: preview,
             adUnitID: viewModel.bannerAdUnitID,
+            isAddedToList: viewModel.isPreviewAddedToList(preview),
+            canAddToList: viewModel.canAddPreviewToList(preview),
+            onAddToList: { viewModel.addPreviewToList(preview) },
             onClose: {
                 isPreviewPictureInPictureActive = false
-                viewModel.dismissPreview()
+                viewModel.closePreviewFromPlayer()
             },
             onMinimize: { snapshot in
                 isPreviewPictureInPictureActive = false
@@ -353,6 +369,15 @@ struct HomeView: View {
                     reservesFailureLogArea: reservesFailureLogArea,
                     showsPlaybackActions: showsPlaybackActions
                 )
+            } else if metrics.usesScrollableLayout {
+                ScrollView {
+                    singleColumnHomeContent(
+                        metrics: metrics,
+                        reservesFailureLogArea: reservesFailureLogArea,
+                        showsPlaybackActions: showsPlaybackActions
+                    )
+                    .frame(minHeight: metrics.canvasHeight - metrics.verticalPadding * 2)
+                }
             } else {
                 singleColumnHomeContent(
                     metrics: metrics,
@@ -374,23 +399,20 @@ struct HomeView: View {
         showsPlaybackActions: Bool
     ) -> some View {
         VStack(spacing: metrics.verticalSpacing) {
-            topBanner(metrics: metrics)
             header(metrics: metrics)
+            topBanner(metrics: metrics)
             sourceControls(metrics: metrics)
-            outputSelector(metrics: metrics)
-            outputSummary(metrics: metrics)
+            queueHeading(metrics: metrics)
             loadedFilesPanel(metrics: metrics)
+            outputDisclosure(metrics: metrics)
+            if !reservesFailureLogArea {
+                Spacer(minLength: 0)
+            }
             encodingControls(
                 metrics: metrics,
                 reservesFailureLogArea: reservesFailureLogArea,
                 showsPlaybackActions: showsPlaybackActions
             )
-
-            if !reservesFailureLogArea {
-                Spacer(minLength: 0)
-            }
-
-            exitButton(metrics: metrics)
             bottomBanner(metrics: metrics)
         }
     }
@@ -401,27 +423,26 @@ struct HomeView: View {
         showsPlaybackActions: Bool
     ) -> some View {
         VStack(spacing: metrics.verticalSpacing) {
-            topBanner(metrics: metrics)
             header(metrics: metrics)
+            topBanner(metrics: metrics)
+            sourceControls(metrics: metrics)
 
             HStack(alignment: .top, spacing: metrics.columnSpacing) {
                 VStack(spacing: metrics.verticalSpacing) {
-                    sourceControls(metrics: metrics)
-                    outputSelector(metrics: metrics)
-                    outputSummary(metrics: metrics)
+                    queueHeading(metrics: metrics)
+                    loadedFilesPanel(metrics: metrics)
+                }
+                .frame(width: metrics.columnWidth)
+                .frame(maxHeight: .infinity, alignment: .top)
+
+                VStack(spacing: metrics.verticalSpacing) {
+                    outputDisclosure(metrics: metrics)
                     Spacer(minLength: 0)
                     encodingControls(
                         metrics: metrics,
                         reservesFailureLogArea: reservesFailureLogArea,
                         showsPlaybackActions: showsPlaybackActions
                     )
-                    exitButton(metrics: metrics)
-                }
-                .frame(width: metrics.columnWidth)
-                .frame(maxHeight: .infinity, alignment: .top)
-
-                VStack(spacing: metrics.verticalSpacing) {
-                    loadedFilesPanel(metrics: metrics)
                 }
                 .frame(width: metrics.columnWidth)
                 .frame(maxHeight: .infinity, alignment: .top)
@@ -450,14 +471,29 @@ struct HomeView: View {
     private func sourceControls(metrics: HomeLayoutMetrics) -> some View {
         SourceActionBar(
             canSelectSource: viewModel.state.canSelectSource,
-            canReset: viewModel.state.canReset,
             onFiles: openFilesImportBrowser,
             onFolder: openFolderImportBrowser,
             onPhotos: presentPhotosPicker,
-            onReset: resetHome,
             controlHeight: metrics.controlHeight,
             buttonFont: metrics.buttonFont
         )
+    }
+
+    private func queueHeading(metrics: HomeLayoutMetrics) -> some View {
+        let count = viewModel.fileCardSnapshots.count
+        return HStack {
+            Text(count == 1 ? "1 video" : "\(count) videos")
+                .font(.system(size: 20 * metrics.contentScale, weight: .semibold))
+                .foregroundStyle(TaptionTheme.primaryText)
+            Spacer()
+            Button("Clear All", action: resetHome)
+                .font(.system(size: 14 * metrics.contentScale))
+                .foregroundStyle(TaptionTheme.mutedText)
+                .disabled(!viewModel.state.canReset)
+                .accessibilityIdentifier("queue.clearAll")
+                .frame(minWidth: 60, minHeight: 44)
+        }
+        .padding(.top, 4 * metrics.contentScale)
     }
 
     private func outputSummary(metrics: HomeLayoutMetrics) -> some View {
@@ -472,7 +508,12 @@ struct HomeView: View {
         LoadedFilesPanelView(
             files: viewModel.fileCardSnapshots,
             contentScale: metrics.contentScale,
-            panelHeight: metrics.filePanelHeight,
+            panelHeight: min(
+                metrics.filePanelHeight,
+                viewModel.fileCardSnapshots.isEmpty
+                    ? 180 * metrics.contentScale
+                    : CGFloat(viewModel.fileCardSnapshots.count) * 86 * metrics.contentScale
+            ),
             onSelect: { viewModel.selectFileCard(id: $0) },
             onPlay: { viewModel.openPreviewForFileCard(id: $0) },
             onToggleSelection: { viewModel.toggleQueueFileSelection(id: $0) },
@@ -493,12 +534,12 @@ struct HomeView: View {
             state: viewModel.state,
             displayDetail: viewModel.progressDetailText,
             canStartEncoding: viewModel.canStartEncodingNow,
-            startActionTitle: viewModel.startActionTitle,
+            startActionTitle: viewModel.convertActionTitle,
             showsSaveAction: viewModel.showsSaveAction,
             saveActionTitle: viewModel.saveActionTitle,
             showsWorkAction: showsPlaybackActions,
             watchAdButtonTitle: viewModel.watchAdButtonTitle,
-            showsWatchAdAction: showsPlaybackActions,
+            showsWatchAdAction: false,
             canWatchAd: viewModel.canWatchAdForStar,
             controlHeight: metrics.controlHeight,
             contentScale: metrics.contentScale,
@@ -952,17 +993,22 @@ struct HomeView: View {
                 } label: {
                     Label("Battery Settings", systemImage: "battery.100percent")
                 }
+                Divider()
+                Button(action: resetHome) {
+                    Label("Reset", systemImage: "arrow.counterclockwise")
+                }
+                .disabled(!viewModel.state.canReset)
+                Button {
+                    AppLogger.info("Exit menu tapped", category: .ui)
+                    EncoderAppExitController.requestExit()
+                } label: {
+                    Label("Exit", systemImage: "xmark.circle")
+                }
             } label: {
                 Image(systemName: "line.3.horizontal")
                     .font(.system(size: metrics.headerIconSize, weight: .semibold))
                     .foregroundStyle(TaptionTheme.primaryText)
-                    .frame(width: 34 * metrics.contentScale, height: 34 * metrics.contentScale)
-                    .background(TaptionTheme.elevatedSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(TaptionTheme.border, lineWidth: 1)
-                    )
+                    .frame(width: max(44, 34 * metrics.contentScale), height: max(44, 34 * metrics.contentScale))
             }
             .accessibilityLabel("Menu")
 
@@ -971,8 +1017,6 @@ struct HomeView: View {
                     .font(.system(size: metrics.headerIconSize, weight: .semibold))
                     .foregroundStyle(TaptionTheme.accent)
                     .frame(width: 34 * metrics.contentScale, height: 34 * metrics.contentScale)
-                    .background(TaptionTheme.selectedSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             }
             .frame(maxWidth: .infinity, alignment: .center)
@@ -996,11 +1040,21 @@ struct HomeView: View {
                     .foregroundStyle(Color.white.opacity(0.92))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
+                Rectangle()
+                    .fill(TaptionTheme.strongBorder)
+                    .frame(width: 1, height: 24 * metrics.contentScale)
+                Text(viewModel.watchAdButtonTitle == "Watch Ad (+1 Star)" ? "Watch Ad\n(+1 Star)" : viewModel.watchAdButtonTitle)
+                    .font(.system(size: 11 * metrics.contentScale, weight: .medium))
+                    .foregroundStyle(TaptionTheme.accent)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
             }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 10 * metrics.contentScale)
-        .frame(height: 34 * metrics.contentScale)
+        .frame(height: max(44, 34 * metrics.contentScale))
         .background(TaptionTheme.elevatedSurface)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
@@ -1008,6 +1062,97 @@ struct HomeView: View {
                 .stroke(TaptionTheme.border, lineWidth: 1)
         )
         .accessibilityLabel("Watch Ad for Star. Balance \(viewModel.starBalanceDisplayText)")
+    }
+
+    private func outputDisclosure(metrics: HomeLayoutMetrics) -> some View {
+        Button {
+            isOutputSettingsPresented = true
+        } label: {
+            HStack(spacing: 14 * metrics.contentScale) {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 25 * metrics.contentScale))
+                VStack(alignment: .leading, spacing: 4 * metrics.contentScale) {
+                    Text("Output")
+                        .font(.system(size: 12 * metrics.contentScale))
+                        .foregroundStyle(TaptionTheme.mutedText)
+                    Text("\(viewModel.selectedOutput.resolutionPreset.menuTitle) · \(viewModel.outputSizeDisplayText) · \(viewModel.selectedOutput.container.rawValue.uppercased())")
+                        .font(.system(size: 16 * metrics.contentScale, weight: .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                    Text("H.265 / HEVC · \(viewModel.selectedOutput.audioCodec.displayName)")
+                        .font(.system(size: 12 * metrics.contentScale))
+                        .foregroundStyle(TaptionTheme.mutedText)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(TaptionTheme.mutedText)
+            }
+            .foregroundStyle(TaptionTheme.primaryText)
+            .padding(.vertical, 10 * metrics.contentScale)
+            .padding(.horizontal, 6 * metrics.contentScale)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!viewModel.canChangeOutputSelection)
+        .accessibilityIdentifier("output.settings")
+    }
+
+    private var outputSettingsSheet: some View {
+        NavigationStack {
+            GeometryReader { geometry in
+                let metrics = HomeLayoutMetrics(size: geometry.size)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 24) {
+                        Text("Resolution & Size")
+                            .font(.headline)
+                        outputSelector(metrics: metrics)
+                        Text("Format & Audio")
+                            .font(.headline)
+                        HStack(spacing: 10) {
+                            outputMenu(
+                                title: "Format", value: viewModel.selectedOutput.container.rawValue.uppercased(),
+                                systemImage: "film", isEnabled: viewModel.canChangeOutputSelection,
+                                metrics: metrics
+                            ) {
+                                ForEach(viewModel.outputContainerOptions, id: \.self) { container in
+                                    Button(container.rawValue.uppercased()) { viewModel.selectOutputContainer(container) }
+                                }
+                            }
+                            outputMenu(
+                                title: "Audio", value: viewModel.selectedOutput.audioCodec.displayName,
+                                systemImage: "waveform", isEnabled: viewModel.canChangeOutputSelection,
+                                metrics: metrics
+                            ) {
+                                ForEach(viewModel.outputAudioCodecOptions, id: \.self) { codec in
+                                    Button(codec.displayName) { viewModel.selectOutputAudioCodec(codec) }
+                                }
+                            }
+                        }
+                        outputSummary(metrics: metrics)
+                        Text("Target size is an estimate. The final file size depends on the video and selected settings.")
+                            .font(.footnote)
+                            .foregroundStyle(TaptionTheme.mutedText)
+                    }
+                    .padding(24)
+                    .frame(maxWidth: 640)
+                    .frame(maxWidth: .infinity)
+                }
+                .background(TaptionTheme.appBackground)
+            }
+            .foregroundStyle(TaptionTheme.primaryText)
+            .navigationTitle("Output Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { isOutputSettingsPresented = false }
+                        .tint(TaptionTheme.accent)
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
     private func exitButton(metrics: HomeLayoutMetrics) -> some View {

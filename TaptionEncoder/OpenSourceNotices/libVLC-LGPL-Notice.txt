@@ -24,15 +24,16 @@ preserved in the corresponding-source package. This technical inventory is
 not patent clearance or formal legal approval.
 
 Corresponding source and relinking materials:
+Notices and materials requests: https://bokkiyaw.com/licenses/
 To request the complete corresponding source, local changes, build scripts,
 third-party contrib source and license map, and materials needed to relink this
-YYY Encoder release with a modified LGPL library, contact
-builday365@gmail.com. This written offer is valid for at least three years from
+BOKKI Encoder release with a modified LGPL library, contact
+support@bokkiyaw.com. This written offer is valid for at least three years from
 the date this application version is distributed. Any charge will be no more
 than the reasonable cost of physically providing the materials.
 
 The LGPL permits reverse engineering when needed to debug modifications to
-the LGPL-covered library. Nothing in YYY Encoder's terms is intended to
+the LGPL-covered library. Nothing in BOKKI Encoder's terms is intended to
 restrict rights granted by the applicable open-source licenses.
 
 The complete GNU Lesser General Public License version 2.1 text follows this

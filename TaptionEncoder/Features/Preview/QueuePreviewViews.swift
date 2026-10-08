@@ -104,14 +104,12 @@ enum QueuePreviewControlsVisibilityPolicy {
         isLoading: Bool,
         hasPlaybackError: Bool,
         areControlsVisible: Bool,
-        isPlaying: Bool,
         isScrubbing: Bool,
         isDragging: Bool
     ) -> Bool {
         !isLoading
             && !hasPlaybackError
             && areControlsVisible
-            && isPlaying
             && !isScrubbing
             && !isDragging
     }
@@ -133,6 +131,9 @@ private struct QueuePreviewGestureFeedback: Equatable {
 struct QueueVideoPreviewView: View {
     var preview: QueueVideoPreview
     var adUnitID: String
+    var isAddedToList: Bool
+    var canAddToList: Bool
+    var onAddToList: () -> Void
     var onClose: () -> Void
     var onMinimize: (QueuePreviewPlaybackSnapshot) -> Void
     var onPictureInPictureActiveChanged: (Bool) -> Void
@@ -144,6 +145,8 @@ struct QueueVideoPreviewView: View {
         if preview.usesNativePlayback {
             NativeQueueVideoPreviewView(
                 preview: preview, adUnitID: adUnitID,
+                isAddedToList: isAddedToList, canAddToList: canAddToList,
+                onAddToList: onAddToList,
                 onClose: onClose, onMinimize: onMinimize,
                 onPictureInPictureActiveChanged: onPictureInPictureActiveChanged,
                 onPrevious: onPrevious, onNext: onNext
@@ -151,6 +154,8 @@ struct QueueVideoPreviewView: View {
         } else {
             VLCQueueVideoPreviewView(
                 preview: preview, adUnitID: adUnitID,
+                isAddedToList: isAddedToList, canAddToList: canAddToList,
+                onAddToList: onAddToList,
                 onClose: onClose, onMinimize: onMinimize,
                 onPictureInPictureActiveChanged: onPictureInPictureActiveChanged,
                 onPrevious: onPrevious, onNext: onNext
@@ -159,9 +164,77 @@ struct QueueVideoPreviewView: View {
     }
 }
 
+struct QueuePreviewAddListButton: View {
+    var isAdded: Bool
+    var isEnabled: Bool
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label("Add List", systemImage: isAdded ? "checkmark.square.fill" : "square")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(isAdded ? TaptionTheme.accent : .white)
+                .padding(.horizontal, 14)
+                .frame(minHeight: 44)
+                .background(.white.opacity(0.16), in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled || isAdded)
+        .opacity(isEnabled || isAdded ? 1 : 0.5)
+        .accessibilityIdentifier("preview.queue")
+        .accessibilityLabel("Add List")
+        .accessibilityValue(isAdded ? "Added" : "Not added")
+        .accessibilityHint(isAdded ? "This video is in the conversion list." : "Add this video without leaving playback.")
+    }
+}
+
+struct QueuePreviewFileNavigation: View {
+    var playlist: QueueVideoPreviewPlaylist?
+    var isEnabled: Bool
+    var onPrevious: () -> Void
+    var onNext: () -> Void
+
+    var body: some View {
+        if let playlist {
+            HStack(spacing: 12) {
+                Button(action: onPrevious) {
+                    Label("Previous", systemImage: "backward.end.fill")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .disabled(!isEnabled || !playlist.hasPrevious)
+                .accessibilityLabel("Previous file")
+                .accessibilityIdentifier("preview.previous")
+                .accessibilityHint(playlist.previousName ?? "First video")
+
+                Text(playlist.positionText)
+                    .font(.caption.monospacedDigit())
+                    .accessibilityIdentifier("preview.position")
+
+                Button(action: onNext) {
+                    Label("Next", systemImage: "forward.end.fill")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .disabled(!isEnabled || !playlist.hasNext)
+                .accessibilityLabel("Next file")
+                .accessibilityIdentifier("preview.next")
+                .accessibilityHint(playlist.nextName ?? "Last video")
+            }
+            .font(.subheadline.weight(.semibold))
+            .buttonStyle(.plain)
+            .foregroundStyle(.white)
+        }
+    }
+}
+
 private struct VLCQueueVideoPreviewView: View {
     var preview: QueueVideoPreview
     var adUnitID: String
+    var isAddedToList: Bool
+    var canAddToList: Bool
+    var onAddToList: () -> Void
     var onClose: () -> Void
     var onMinimize: (QueuePreviewPlaybackSnapshot) -> Void
     var onPictureInPictureActiveChanged: (Bool) -> Void
@@ -174,7 +247,7 @@ private struct VLCQueueVideoPreviewView: View {
     @State private var playbackError: String?
     @State private var isLoading = true
     @State private var didRequestShutdown = false
-    @State private var areControlsVisible = true
+    @State private var areControlsVisible = false
     @State private var isScrubbing = false
     @State private var scrubberPosition = 0.0
     @State private var dragMode: QueuePreviewDragMode?
@@ -206,14 +279,14 @@ private struct VLCQueueVideoPreviewView: View {
 
                 videoGestureLayer(containerSize: proxy.size)
 
-                previewTopBanner(
-                    containerSize: proxy.size,
-                    safeAreaInsets: proxy.safeAreaInsets
-                )
-
                 if areControlsVisible {
                     controlsBackdrop
                         .transition(.opacity)
+
+                    previewTopBanner(
+                        containerSize: proxy.size,
+                        safeAreaInsets: proxy.safeAreaInsets
+                    )
 
                     controlsOverlay(
                         containerSize: proxy.size,
@@ -245,18 +318,15 @@ private struct VLCQueueVideoPreviewView: View {
         .onAppear {
             beginVideoPlaybackAdSuppressionIfNeeded()
             AppOrientationController.shared.activatePreviewOrientations()
-            showControls(scheduleAutoHide: false)
         }
         .task(id: preview.id) {
             await startPlayback()
         }
         .onChange(of: preview.id) { _, _ in
-            keepControlsVisibleForPreviewSwitch()
+            resetControlsForPreviewSwitch()
         }
-        .onChange(of: player.isPlaying) { _, isPlaying in
-            if isPlaying {
-                showControls(scheduleAutoHide: false)
-            } else {
+        .onChange(of: playbackError) { _, error in
+            if error != nil {
                 showControls(scheduleAutoHide: false)
             }
         }
@@ -275,7 +345,7 @@ private struct VLCQueueVideoPreviewView: View {
         PiPVideoView(
             player,
             controller: $pipController,
-            startsAutomaticallyFromInline: true,
+            startsAutomaticallyFromInline: false,
             managesAudioSession: false
         )
         .frame(
@@ -397,33 +467,34 @@ private struct VLCQueueVideoPreviewView: View {
                     previewBadge(systemImage: "point.3.connected.trianglepath.dotted", text: preview.pathBadge)
                     previewBadge(systemImage: "aspectratio", text: preview.videoInfo.resolution)
                     previewBadge(systemImage: "speaker.wave.2", text: preview.videoInfo.audio)
+                    previewBadge(systemImage: "externaldrive", text: preview.videoInfo.fileSize)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel("File size: \(preview.videoInfo.fileSize)")
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                QueuePreviewAddListButton(
+                    isAdded: isAddedToList,
+                    isEnabled: canAddToList && !isLoading,
+                    action: onAddToList
+                )
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .layoutPriority(1)
 
             Spacer(minLength: 4)
 
-            Button(action: minimizePreview) {
-                Image(systemName: "arrow.down.right.and.arrow.up.left")
-                    .font(.system(size: 24, weight: .semibold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Color.white.opacity(0.94))
-                    .frame(width: 40, height: 40)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Minimize")
-
             Button(action: closePreview) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: 28, weight: .semibold))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(Color.white.opacity(0.94))
-                    .frame(width: 40, height: 40)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Close")
+            .accessibilityIdentifier("preview.close")
         }
     }
 
@@ -451,7 +522,10 @@ private struct VLCQueueVideoPreviewView: View {
 
     private var transportControls: some View {
         VStack(spacing: 9) {
-            playlistContextRow
+            QueuePreviewFileNavigation(
+                playlist: preview.playlist, isEnabled: !isLoading,
+                onPrevious: previousItem, onNext: nextItem
+            )
 
             Slider(
                 value: Binding(
@@ -487,16 +561,7 @@ private struct VLCQueueVideoPreviewView: View {
                 }
                 .accessibilityLabel("Rewind 10 seconds")
 
-                if preview.playlist != nil {
-                    Button(action: previousItem) {
-                        Image(systemName: "backward.end.fill")
-                            .font(.system(size: 19, weight: .semibold))
-                            .frame(width: 34, height: 36)
-                    }
-                    .disabled(preview.playlist?.hasPrevious != true)
-                    .opacity(preview.playlist?.hasPrevious == true ? 1 : 0.36)
-                    .accessibilityLabel("Previous file")
-                }
+
 
                 Button(action: togglePlayback) {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
@@ -505,16 +570,7 @@ private struct VLCQueueVideoPreviewView: View {
                 }
                 .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
-                if preview.playlist != nil {
-                    Button(action: nextItem) {
-                        Image(systemName: "forward.end.fill")
-                            .font(.system(size: 19, weight: .semibold))
-                            .frame(width: 34, height: 36)
-                    }
-                    .disabled(preview.playlist?.hasNext != true)
-                    .opacity(preview.playlist?.hasNext == true ? 1 : 0.36)
-                    .accessibilityLabel("Next file")
-                }
+
 
                 Button(action: skipForward) {
                     Image(systemName: "goforward.10")
@@ -522,15 +578,6 @@ private struct VLCQueueVideoPreviewView: View {
                         .frame(width: 34, height: 36)
                 }
                 .accessibilityLabel("Forward 10 seconds")
-
-                Button(action: togglePictureInPicture) {
-                    Image(systemName: isPictureInPictureActive ? "pip.exit" : "pip.enter")
-                        .font(.system(size: 19, weight: .semibold))
-                        .frame(width: 34, height: 36)
-                }
-                .disabled(!canTogglePictureInPicture)
-                .opacity(canTogglePictureInPicture ? 1 : 0.36)
-                .accessibilityLabel(isPictureInPictureActive ? "Exit Picture in Picture" : "Picture in Picture")
 
                 Text("\(displayedCurrentTimeText) / \(durationText)")
                     .font(.caption.monospacedDigit().weight(.semibold))
@@ -552,28 +599,6 @@ private struct VLCQueueVideoPreviewView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
         )
-    }
-
-    @ViewBuilder
-    private var playlistContextRow: some View {
-        if let playlist = preview.playlist {
-            HStack(spacing: 10) {
-                Text(playlist.positionText)
-                    .font(.caption.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.82))
-                    .lineLimit(1)
-
-                Spacer(minLength: 8)
-
-                if let nextName = playlist.nextName {
-                    Label(nextName, systemImage: "forward.end.fill")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.white.opacity(0.78))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                }
-            }
-        }
     }
 
     @ViewBuilder
@@ -691,8 +716,8 @@ private struct VLCQueueVideoPreviewView: View {
         didRequestShutdown = false
         playbackError = nil
         isLoading = true
-        withAnimation(.easeInOut(duration: 0.12)) {
-            areControlsVisible = true
+        withTransaction(Transaction(animation: nil)) {
+            areControlsVisible = false
         }
         player.aspectRatio = .default
         configurePlayerAudioForPreview()
@@ -727,7 +752,6 @@ private struct VLCQueueVideoPreviewView: View {
             }
             try await restorePlaybackSnapshot(operationID: operationID)
             isLoading = false
-            showControls(scheduleAutoHide: false)
             #if DEBUG
             try await startDebugAutoPictureInPictureIfRequested(operationID: operationID)
             try await minimizeDebugPreviewIfRequested(operationID: operationID)
@@ -772,7 +796,7 @@ private struct VLCQueueVideoPreviewView: View {
     }
 
     private func playbackSnapshot() -> QueuePreviewPlaybackSnapshot {
-        if isLoading, let snapshot = preview.playbackSnapshot { return snapshot }
+        if isLoading || playbackError != nil, let snapshot = preview.playbackSnapshot { return snapshot }
         return QueuePreviewPlaybackSnapshot(
             seconds: QueuePreviewPlaybackMath.seconds(from: player.currentTime) ?? 0,
             isPlaying: player.isPlaying
@@ -1003,7 +1027,7 @@ private struct VLCQueueVideoPreviewView: View {
         guard preview.playlist?.hasPrevious == true else {
             return
         }
-        keepControlsVisibleForPreviewSwitch()
+        resetControlsForPreviewSwitch()
         onPrevious()
     }
 
@@ -1011,7 +1035,7 @@ private struct VLCQueueVideoPreviewView: View {
         guard preview.playlist?.hasNext == true else {
             return
         }
-        keepControlsVisibleForPreviewSwitch()
+        resetControlsForPreviewSwitch()
         onNext()
     }
 
@@ -1226,7 +1250,6 @@ private struct VLCQueueVideoPreviewView: View {
             isLoading: isLoading,
             hasPlaybackError: playbackError != nil,
             areControlsVisible: areControlsVisible,
-            isPlaying: player.isPlaying,
             isScrubbing: isScrubbing,
             isDragging: dragMode != nil
         ) {
@@ -1252,7 +1275,7 @@ private struct VLCQueueVideoPreviewView: View {
         }
     }
 
-    private func keepControlsVisibleForPreviewSwitch() {
+    private func resetControlsForPreviewSwitch() {
         isScrubbing = false
         dragMode = nil
         dragSeekPreviewPosition = nil
@@ -1260,7 +1283,7 @@ private struct VLCQueueVideoPreviewView: View {
         gestureFeedbackTask?.cancel()
         gestureFeedbackTask = nil
         withTransaction(Transaction(animation: nil)) {
-            areControlsVisible = true
+            areControlsVisible = false
         }
     }
 
@@ -1508,6 +1531,7 @@ private struct VLCQueueMiniPlayerView: View {
                 .aspectRatio(16.0 / 9.0, contentMode: .fit)
                 .frame(maxWidth: .infinity)
                 .background(Color.black)
+                .allowsHitTesting(false)
                 .onAppear {
                     didAttachVideoSurface = true
                     AppLogger.info(
@@ -1544,25 +1568,12 @@ private struct VLCQueueMiniPlayerView: View {
                     Button(action: togglePictureInPicture) {
                         Image(systemName: isPictureInPictureActive ? "pip.exit" : "pip.enter")
                             .font(.system(size: 13, weight: .semibold))
-                            .frame(width: 30, height: 30)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                     }
                     .disabled(!canTogglePictureInPicture)
                     .opacity(canTogglePictureInPicture ? 1 : 0.38)
                     .accessibilityLabel(isPictureInPictureActive ? "Exit Picture in Picture" : "Picture in Picture")
-
-                    Button(action: expandPreview) {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 13, weight: .semibold))
-                            .frame(width: 30, height: 30)
-                    }
-                    .accessibilityLabel("Expand")
-
-                    Button(action: onClose) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 13, weight: .semibold))
-                            .frame(width: 30, height: 30)
-                    }
-                    .accessibilityLabel("Close")
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Color.white)
@@ -1571,7 +1582,7 @@ private struct VLCQueueMiniPlayerView: View {
                 .padding(6)
             }
 
-            HStack(spacing: 8) {
+            HStack(spacing: 4) {
                 Button(action: togglePlayback) {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                         .font(.system(size: 15, weight: .semibold))
@@ -1593,7 +1604,31 @@ private struct VLCQueueMiniPlayerView: View {
                         .lineLimit(1)
                 }
                 .layoutPriority(1)
+
+                Spacer(minLength: 0)
+
+                // Keep navigation outside the UIKit video surface so taps
+                // cannot be intercepted by the video/PiP presentation layer.
+                Button(action: expandPreview) {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("Expand")
+                .accessibilityIdentifier("preview.mini.expand")
+
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel("Close")
+                .accessibilityIdentifier("preview.mini.close")
             }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.white)
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(Color.black.opacity(0.94))
@@ -1603,6 +1638,7 @@ private struct VLCQueueMiniPlayerView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                .allowsHitTesting(false)
         )
         .shadow(color: Color.black.opacity(0.42), radius: 16, x: 0, y: 8)
         .onAppear {
@@ -1690,7 +1726,7 @@ private struct VLCQueueMiniPlayerView: View {
 
     private func expandPreview() {
         let snapshot: QueuePreviewPlaybackSnapshot
-        if isLoading, let requested = preview.playbackSnapshot {
+        if isLoading || playbackError != nil, let requested = preview.playbackSnapshot {
             snapshot = requested
         } else {
             snapshot = QueuePreviewPlaybackSnapshot(
@@ -2311,16 +2347,28 @@ enum QueuePreviewSeekCompletion {
     ) async throws {
         // SwiftVLC's currentTime is optimistic after seek(). Only a native
         // time/position event can confirm that the asynchronous seek landed.
+        var closestNativeSeconds: Double?
         for _ in 0..<maxPolls {
             try validate()
-            if let seconds = reportedSeconds(), seconds.isFinite,
-               abs(seconds - targetSeconds) <= 0.35 { return }
+            if let seconds = reportedSeconds(), seconds.isFinite {
+                if closestNativeSeconds.map({ abs(seconds - targetSeconds) < abs($0 - targetSeconds) }) ?? true {
+                    closestNativeSeconds = seconds
+                }
+                // Native time events can arrive about 400 ms after a playing
+                // seek. Confirm that bounded delay instead of treating it as
+                // a failed seek, while rejecting unrelated timeline positions.
+                if abs(seconds - targetSeconds) <= 0.5 { return }
+            }
             // Paused libVLC seeks do not always emit timeline events.
             // A new displayed video frame is an independent output ack.
             if didDisplayFrame() { return }
             try await Task.sleep(for: .milliseconds(20))
         }
         try validate()
+        AppLogger.warning("Queue preview seek confirmation timed out", category: .ui, metadata: [
+            "targetSeconds": String(targetSeconds),
+            "closestNativeSeconds": closestNativeSeconds.map(String.init(describing:)) ?? "none"
+        ])
         throw QueuePreviewPlaybackResumeError.seekNotCompleted
     }
 }
@@ -2396,7 +2444,14 @@ enum QueuePreviewVLCSeek {
                     defer {
                         if (try? validate()) != nil { player.isMuted = wasMuted }
                     }
+                    clock.seconds = nil
                     player.resume()
+                    // Resume is asynchronous too. A seek sent while the input
+                    // is still paused can repeat the original ignored seek.
+                    try await QueuePreviewSeekCompletion.waitUntilReady(
+                        isPlaying: { player.state == .playing }, reportedSeconds: { clock.seconds },
+                        validate: validate
+                    )
                     clock.seconds = nil
                     try player.seek(to: .seconds(seconds))
                     try await QueuePreviewSeekCompletion.wait(
@@ -2474,14 +2529,14 @@ enum QueuePreviewDebugHandoff {
 #endif
 
 enum QueuePreviewPlayerFactory {
-    static let softwareDecodeInstance = makeSoftwareDecodeInstance(applicationName: "Taption Encoder Preview")
-    static let thumbnailDecodeInstance = makeSoftwareDecodeInstance(applicationName: "Taption Encoder Thumbnail")
+    static let softwareDecodeInstance = makeSoftwareDecodeInstance(applicationName: "BOKKI Encoder Preview")
+    static let thumbnailDecodeInstance = makeSoftwareDecodeInstance(applicationName: "BOKKI Encoder Thumbnail")
 
     @MainActor
     static func makePreviewPlayer() -> Player {
         Player(
             instance: makeSoftwareDecodeInstance(
-                applicationName: "Taption Encoder Preview \(UUID().uuidString)"
+                applicationName: "BOKKI Encoder Preview \(UUID().uuidString)"
             )
         )
     }

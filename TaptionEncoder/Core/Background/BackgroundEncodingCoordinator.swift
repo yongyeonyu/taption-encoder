@@ -134,7 +134,7 @@ final class UIApplicationBackgroundEncodingCoordinator: BackgroundEncodingCoordi
 
         let request = BGContinuedProcessingTaskRequest(
             identifier: taskIdentifier,
-            title: "YYY Encoder",
+            title: "BOKKI Encoder",
             subtitle: plan.sourceURL?.lastPathComponent ?? "Encoding video"
         )
         request.strategy = .queue

@@ -1,0 +1,48 @@
+CLN08P6M2Q source-only cleanup (2026-10-08): editable source, copy and required rendering inputs are retained. Generated Finished/PublicAssets/Evidence and handoff manifests are scheduled for deletion after main publication. Release/validation paths below describe historical evidence, not a guarantee of local availability. Current source and release status are documented in AGENTS.md, temp.md and test.md.
+
+BKI7H2D9P6
+Website integration reference — no website or store changes performed
+
+Current public product
+Website name: Bokki Encoder, as supplied by the company website brief
+App Store name: YYY Encoder
+Public version: 1.1.9
+Apple ID: 6780777838
+App Store URL: https://apps.apple.com/app/id6780777838
+Support email: support@bokkiyaw.com
+
+Connection mapping
+Marketing URL -> the final Bokki Encoder product page
+Support URL -> the public support page with a working support contact
+Privacy Policy URL -> the complete public app privacy policy
+The website's root /app-ads.txt -> AdMob authorized seller discovery
+These are future integration destinations. No metadata fields have been edited in this research task.
+
+Current app configuration applied to Google's published app-ads.txt format
+google.com, pub-9754025737691277, DIRECT, f08c47fec0942fa0
+This line is ready for a domain-root text file. AdMob console verification was not performed in this task.
+Official instructions: https://support.google.com/admob/answer/9363762?hl=en
+
+Actual libVLC and FFmpeg notices
+/Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/OpenSourceNotices/libVLC-LGPL-Notice.txt
+/Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/OpenSourceNotices/FFmpeg-LGPL-Decode-Bridge.txt
+/Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/OpenSourceNotices/LGPL-2.1.txt
+/Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/OpenSourceNotices/libVLC-Contrib-Licenses.txt
+
+Related notices
+/Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/OpenSourceNotices/SwiftVLC-MIT.txt
+/Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/OpenSourceNotices/GoogleMobileAds.txt
+/Users/u_mo_c/Documents/taption_encoder/TaptionEncoder/OpenSourceNotices/GoogleUserMessagingPlatform.txt
+
+Verified license facts
+libVLC and the FFmpeg decode bridge are described in the actual app notices as LGPL 2.1 or later. FFmpeg 8.1.1 is built with GPL and nonfree components disabled in this bridge. libVLC contrib libraries have separate notices. SwiftVLC is MIT-licensed. Google SDK terms/notices must be retained separately.
+
+Source-offer facts
+The canonical libVLC/FFmpeg notices include a written offer for corresponding source and relinking materials, valid for at least three years from distribution, and currently direct requests to support@bokkiyaw.com. Preserve the actual license and source-offer wording when adding a website licenses page. The published 1.1.9 binary retains its historical bundled contact address; the local email replacement does not change it.
+
+Existing materials and limits
+New 1.1.11 (42) corresponding source and relink materials are retained in the exact record:
+/Users/u_mo_c/Documents/TaptionEncoderReleases/1.1.11-42-UIX07N5K2Q/RELEASE_MANIFEST.json
+The owner's earlier cleanup deleted the exact 1.1.9 archive/IPA/dSYM/screenshot/source-release records. Do not promise that those deleted exact packages are downloadable or restored. Canonical source, provenance, licenses, and reconstruction tooling remain, but this research did not rebuild a historical source package or verify license compliance anew.
+
+The website draft does not create a new EULA or replace the actual app notices.

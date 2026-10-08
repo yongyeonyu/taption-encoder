@@ -65,10 +65,13 @@ private struct HelpSheetContentView: View {
                 SheetInfoCard(
                     title: "Version",
                     rows: [
+                        ("Name", AppConfiguration().appName),
                         ("App", appVersion),
                         ("Build", buildNumber)
                     ]
                 )
+
+                WebsiteSupportContentView()
 
                 DeviceInfoContentView()
 
@@ -76,6 +79,47 @@ private struct HelpSheetContentView: View {
             }
             .padding(18)
         }
+    }
+}
+
+private struct WebsiteSupportContentView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Website & Support")
+                .font(.headline)
+                .foregroundStyle(.white)
+
+            link("Website", icon: "globe", destination: AppConfiguration.marketingURL, id: "help.website")
+            link("Support", icon: "questionmark.circle", destination: AppConfiguration.supportURL, id: "help.support")
+            link("Privacy Policy", icon: "hand.raised", destination: AppConfiguration.privacyPolicyURL, id: "help.privacy")
+            link("Open-source Information", icon: "doc.text", destination: AppConfiguration.openSourceURL, id: "help.open-source")
+            link("Email Support", icon: "envelope", destination: AppConfiguration.supportEmailURL, id: "help.email")
+
+            Text(AppConfiguration.supportEmail)
+                .font(.caption)
+                .foregroundStyle(TaptionTheme.mutedText)
+                .textSelection(.enabled)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(TaptionTheme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(TaptionTheme.border, lineWidth: 1)
+        )
+    }
+
+    private func link(_ title: String, icon: String, destination: URL, id: String) -> some View {
+        Link(destination: destination) {
+            Label(title, systemImage: icon)
+                .font(.subheadline)
+                .foregroundStyle(TaptionTheme.accent)
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .accessibilityIdentifier(id)
+        .accessibilityValue(destination.absoluteString)
     }
 }
 

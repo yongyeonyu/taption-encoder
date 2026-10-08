@@ -1,6 +1,13 @@
 import Foundation
 
 struct AppConfiguration: Equatable {
+    static let marketingURL = URL(string: "https://bokkiyaw.com/products/encoder/")!
+    static let supportURL = URL(string: "https://bokkiyaw.com/support/encoder/")!
+    static let privacyPolicyURL = URL(string: "https://bokkiyaw.com/privacy/encoder/")!
+    static let openSourceURL = URL(string: "https://bokkiyaw.com/licenses/")!
+    static let supportEmail = "support@bokkiyaw.com"
+    static let supportEmailURL = URL(string: "mailto:support@bokkiyaw.com")!
+
     let appName: String
     let bundleIdentifier: String
     let minimumOSDescription: String
@@ -10,7 +17,7 @@ struct AppConfiguration: Equatable {
     let backgroundEncodingMinimumMajorVersion: Int
 
     init(
-        appName: String = "YYY Encoder",
+        appName: String = "BOKKI Encoder",
         bundleIdentifier: String = "com.taption.encoder",
         minimumOSDescription: String = "iOS/iPadOS 18.0",
         outputSuffix: String = "_taption",

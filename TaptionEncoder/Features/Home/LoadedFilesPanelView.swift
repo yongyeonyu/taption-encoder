@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import SwiftVLC
 import UIKit
@@ -51,7 +52,7 @@ struct LoadedFilesPanelView: View {
             } else {
                 ScrollViewReader { scrollProxy in
                     ScrollView {
-                        LazyVStack(spacing: 8 * contentScale) {
+                        LazyVStack(spacing: 0) {
                             ForEach(files) { file in
                                 QueueFileDropContainer(
                                     targetID: file.id,
@@ -112,7 +113,6 @@ struct LoadedFilesPanelView: View {
                         }
                         .animation(queueSpringAnimation, value: files.map(\.id))
                         .animation(queueSpringAnimation, value: pressedGroupAnchorID)
-                        .padding(8 * contentScale)
                     }
                     .onDrop(
                         of: [UTType.plainText],
@@ -145,12 +145,7 @@ struct LoadedFilesPanelView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: panelHeight)
-        .background(TaptionTheme.surface)
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(TaptionTheme.strongBorder, lineWidth: 1)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipped()
     }
 
     private var queueSpringAnimation: Animation {
@@ -201,7 +196,7 @@ struct LoadedFilesPanelView: View {
             Image(systemName: "rectangle.stack.badge.plus")
                 .font(.system(size: 24 * contentScale, weight: .semibold))
                 .foregroundStyle(TaptionTheme.mutedText)
-            Text("Imported files appear here and are analyzed automatically.")
+            Text("Add videos from File, Album or Folder.")
                 .font(contentScale < 0.9 ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
                 .foregroundStyle(TaptionTheme.mutedText)
                 .multilineTextAlignment(.center)
@@ -267,30 +262,67 @@ private struct EncodingFileCardView: View {
     }
 
     private var cardContent: some View {
-        HStack(alignment: .top, spacing: 9 * contentScale) {
+        HStack(alignment: .center, spacing: 12 * contentScale) {
             QueueFileThumbnailView(
                 sourceURL: file.thumbnailSourceURL,
                 canAttemptThumbnail: file.isInteractable,
                 playbackGestureEnabled: thumbnailPlaybackEnabled,
                 contentScale: contentScale,
+                usesListLayout: true,
                 onPlay: onPlay
             )
 
-            VStack(alignment: .leading, spacing: 7 * contentScale) {
-                headerRow
-                informationSection
+            VStack(alignment: .leading, spacing: 5 * contentScale) {
+                Text(file.fileName)
+                    .font(.system(size: 15 * contentScale, weight: .medium))
+                    .foregroundStyle(file.isInteractable ? TaptionTheme.primaryText : TaptionTheme.disabledText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let info = file.videoInfo {
+                    Text("\(info.duration) · \(info.fileSize)")
+                        .font(.system(size: 12 * contentScale))
+                        .foregroundStyle(TaptionTheme.mutedText)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                if file.statusText != "Ready", file.statusText != "Selected", file.statusText != "Queued" {
+                    Text(file.statusText)
+                        .font(.system(size: 11 * contentScale, weight: .medium))
+                        .foregroundStyle(statusColor)
+                        .lineLimit(1)
+                }
                 progressSection
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: onToggleSelection) {
+                Image(systemName: file.isMultiSelected ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 20 * contentScale, weight: .medium))
+                    .foregroundStyle(file.isMultiSelected ? TaptionTheme.accent : TaptionTheme.strongBorder)
+                    .frame(width: 44 * contentScale, height: 44 * contentScale)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!file.isEnabled)
+            .accessibilityLabel(file.isMultiSelected ? "Deselect \(file.fileName)" : "Select \(file.fileName)")
+            .accessibilityHint("Select videos to move or remove them together.")
+            .accessibilityIdentifier("queue.selection.\(file.fileName)")
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 17 * contentScale))
+                .foregroundStyle(TaptionTheme.strongBorder)
+                .frame(width: 20 * contentScale)
+                .accessibilityHidden(true)
         }
-        .padding(9 * contentScale)
+        .padding(.vertical, 11 * contentScale)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)
+        .background(TaptionTheme.appBackground)
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(cardBorder, lineWidth: 1)
+            Rectangle()
+                .fill(TaptionTheme.border)
+                .frame(height: 1),
+            alignment: .bottom
         )
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .accessibilityAction(named: "Delete \(file.fileName)", onDelete)
+        .accessibilityAction(named: "Preview \(file.fileName)", onPlay)
     }
 
     private var headerRow: some View {
@@ -454,8 +486,8 @@ private struct EncodingFileCardView: View {
                 .background(deleteColor)
                 .clipShape(Circle())
                 .shadow(color: deleteColor.opacity(0.35), radius: 8, x: 0, y: 2)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                .padding(.trailing, 14 * contentScale)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .padding(.leading, 14 * contentScale)
                 .opacity(progress)
                 .scaleEffect(0.82 + (0.18 * progress))
                 .allowsHitTesting(false)
@@ -1398,6 +1430,7 @@ private struct QueueFileThumbnailView: View {
     var canAttemptThumbnail: Bool
     var playbackGestureEnabled: Bool = true
     var contentScale: CGFloat
+    var usesListLayout: Bool = false
     var onPlay: (() -> Void)? = nil
 
     @State private var thumbnailImage: UIImage?
@@ -1406,7 +1439,7 @@ private struct QueueFileThumbnailView: View {
     @State private var lastPointerMovementAt = Date.distantPast
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
+        ZStack(alignment: usesListLayout ? .center : .bottomTrailing) {
             RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .fill(Color.black.opacity(0.34))
                 .accessibilityHidden(true)
@@ -1447,12 +1480,12 @@ private struct QueueFileThumbnailView: View {
         }
         .simultaneousGesture(pointerMovementGesture)
         .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .onTapGesture(count: 2) {
+        .onTapGesture(count: usesListLayout ? 1 : 2) {
             guard canStartPlayback, let onPlay else { return }
             onPlay()
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(canAttemptThumbnail && onPlay != nil ? "Double tap to play preview" : "Video thumbnail")
+        .accessibilityLabel(canAttemptThumbnail && onPlay != nil ? (usesListLayout ? "Play preview" : "Double tap to play preview") : "Video thumbnail")
         .accessibilityAddTraits(canAttemptThumbnail && onPlay != nil ? .isButton : [])
         .accessibilityAction {
             guard canStartPlayback, let onPlay else { return }
@@ -1489,10 +1522,10 @@ private struct QueueFileThumbnailView: View {
 
     private var playBadge: some View {
         Image(systemName: "play.fill")
-            .font(.system(size: max(7, 8 * contentScale), weight: .bold))
-            .foregroundStyle(TaptionTheme.accentButtonText)
-            .frame(width: max(15, 17 * contentScale), height: max(15, 17 * contentScale))
-            .background(TaptionTheme.accent)
+            .font(.system(size: (usesListLayout ? 14 : 8) * contentScale, weight: .bold))
+            .foregroundStyle(usesListLayout ? TaptionTheme.primaryText : TaptionTheme.accentButtonText)
+            .frame(width: (usesListLayout ? 34 : 17) * contentScale, height: (usesListLayout ? 34 : 17) * contentScale)
+            .background(usesListLayout ? Color.black.opacity(0.6) : TaptionTheme.accent)
             .clipShape(Circle())
             .overlay(
                 Circle()
@@ -1508,8 +1541,8 @@ private struct QueueFileThumbnailView: View {
 
     private var thumbnailSize: CGSize {
         CGSize(
-            width: max(48, 58 * contentScale),
-            height: max(34, 42 * contentScale)
+            width: max(48, (usesListLayout ? 100 : 58) * contentScale),
+            height: max(34, (usesListLayout ? 62 : 42) * contentScale)
         )
     }
 
@@ -1548,7 +1581,7 @@ private struct QueueFileThumbnailView: View {
 }
 
 enum QueueVideoThumbnailRenderer {
-    static let defaultPixelSize = CGSize(width: 192, height: 108)
+    static let defaultPixelSize = CGSize(width: 384, height: 216)
 
     @MainActor
     static func thumbnailImage(
@@ -1558,6 +1591,22 @@ enum QueueVideoThumbnailRenderer {
     ) async throws -> UIImage {
         if let sampleThumbnail = SampleThumbnailCatalog.image(for: sourceURL) {
             return sampleThumbnail
+        }
+
+        // Native thumbnails keep common MP4/MOV cover images sharp and correctly colored.
+        // Other containers and unsupported native tracks retain the libVLC fallback.
+        if ["mp4", "mov", "m4v", "3gp", "3g2"].contains(sourceURL.pathExtension.lowercased()) {
+            do {
+                let generator = AVAssetImageGenerator(asset: AVURLAsset(url: sourceURL))
+                generator.appliesPreferredTrackTransform = true
+                generator.maximumSize = pixelSize
+                let image = try await generator.image(at: CMTime(seconds: 0.2, preferredTimescale: 600))
+                return UIImage(cgImage: image.image)
+            } catch {
+                if Task.isCancelled { throw CancellationError() }
+                AppLogger.debug("Native thumbnail unavailable; using libVLC", category: .ui,
+                                metadata: ["name": sourceURL.lastPathComponent])
+            }
         }
 
         do {
@@ -1589,7 +1638,7 @@ enum QueueVideoThumbnailRenderer {
             width: Int(max(pixelSize.width.rounded(), 1)),
             height: Int(max(pixelSize.height.rounded(), 1)),
             crop: true,
-            seekMode: .fast,
+            seekMode: .precise,
             timeout: timeout,
             instance: QueuePreviewPlayerFactory.thumbnailDecodeInstance
         )

@@ -13,7 +13,7 @@ Source SHA-256: b6863adde98898f42602017462871b5f6333e65aec803fdd7a6308639c52edf3
 Copyright: FFmpeg project contributors
 License: GNU Lesser General Public License version 2.1 or later
 
-Enabled surface in this YYY Encoder bridge:
+Enabled surface in this BOKKI Encoder bridge:
 - Libraries: avformat, avcodec, avutil, swresample, swscale
 - Demuxers: vc1, avi, mov, dv, asf, rm
 - Video decoders: vc1, vc1image, y41p, rawvideo, prores_raw, dvvideo, h263, mjpeg, mpeg4, msmpeg4v3, msrle, smc, r10k, r210, rv10, rv20, snow, utvideo, wmv2
@@ -26,7 +26,7 @@ Build policy:
 - No FFmpeg command-line executable is bundled.
 - No downloaded codec plugin or runtime-downloaded executable is used.
 - No --enable-gpl or --enable-nonfree configure flag is used.
-- H.265 / HEVC MP4/MOV output remains handled by YYY Encoder's AVAssetWriter path.
+- H.265 / HEVC MP4/MOV output remains handled by BOKKI Encoder's AVAssetWriter path.
 - Supported bridge audio is written by AVAssetWriter as AAC in MP4/MOV, or as
   a supported Apple-native audio output selected for MOV.
 
@@ -34,15 +34,16 @@ The exact configure line, enabled component map, and build reproduction notes
 are included with the corresponding-source materials described below.
 
 Corresponding source and relinking materials:
+Notices and materials requests: https://bokkiyaw.com/licenses/
 To request the complete corresponding FFmpeg source, build scripts, local
-changes, and materials needed to relink this YYY Encoder release with a
-modified LGPL library, contact builday365@gmail.com. This written offer is valid
+changes, and materials needed to relink this BOKKI Encoder release with a
+modified LGPL library, contact support@bokkiyaw.com. This written offer is valid
 for at least three years from the date this application version is
 distributed. Any charge will be no more than the reasonable cost of
 physically providing the materials.
 
 The LGPL permits reverse engineering when needed to debug modifications to
-the LGPL-covered library. Nothing in YYY Encoder's terms is intended to
+the LGPL-covered library. Nothing in BOKKI Encoder's terms is intended to
 restrict rights granted by the applicable open-source licenses.
 
 The complete GNU Lesser General Public License version 2.1 text follows this
