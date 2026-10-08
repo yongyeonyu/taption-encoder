@@ -1,4 +1,4 @@
-CLN08P6M2Q source-only cleanup (2026-10-08): editable source, copy and required rendering inputs are retained. Generated Finished/PublicAssets/Evidence and handoff manifests are scheduled for deletion after main publication. Release/validation paths below describe historical evidence, not a guarantee of local availability. Current source and release status are documented in AGENTS.md, temp.md and test.md.
+CLN08P6M2Q source-only cleanup (2026-10-08): editable source, copy and required rendering inputs are retained. Generated Finished/PublicAssets/Evidence and handoff manifests were deleted after main publication. Release/validation paths below describe historical evidence, not a guarantee of local availability. Current source and release status are documented in AGENTS.md, temp.md and test.md.
 
 BKI7H2D9P6
 Website integration reference — no website or store changes performed
