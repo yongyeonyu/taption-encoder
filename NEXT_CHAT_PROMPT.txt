@@ -8,7 +8,7 @@ GitHub: https://github.com/yongyeonyu/taption-encoder
 
 CLN08P6M2Q 완료 — source-only 정리 (2026-10-08)
 
-사용자가 “워크트리 클린 메인 커밋 푸쉬 후 불필요한 파일 전부 삭제. 소스만 빼고 다 지워”라고 명시했습니다. 먼저 검증된 최신 소스/아이콘/버전과 홈페이지 editable sources를main에 게시한 뒤 exact release41/42/43 records, validation/screenshots/design outputs, 종료된Encoder build/package scratch, 빈DerivedData, UIR/UIX 전용simulators6개와logs를 영구 삭제했습니다. 일반filesystem targets30개와 simulator registrations/data paths6개는 absent입니다. target allocation약42.89GB, 측정available space77.36→127.08GB. 다른simulators13개/shared runtime1개는 유지됐습니다.
+사용자가 “워크트리 클린 메인 커밋 푸쉬 후 불필요한 파일 전부 삭제. 소스만 빼고 다 지워”라고 명시했습니다. 먼저 검증된 최신 소스/아이콘/버전과 홈페이지 editable sources를main에 게시한 뒤 exact release41/42/43 records, validation/screenshots/design outputs, 종료된Encoder build/package scratch, 빈DerivedData, UIR/UIX 전용simulators6개와logs를 영구 삭제했습니다. 추가Encoder배포logs9개/사용하지않는package lock12개도 정리했고, 일반filesystem targets총51개와 simulator registrations/data paths6개는 absent입니다. target allocation약42.92GB, 측정available space77.36→127.08GB. 다른simulators13개/shared runtime1개는 유지됐습니다.
 
 앱source121개는 제출43 SourceIdentity와 SHA256이 전부 같고, 앱아이콘/필수Vendor binaries/resources/licenses/provenance/rebuild tooling/Git/인증키/사용자원본을 보존했습니다. 홈페이지 copy/render.swift/layout/편집SVG와 renderer의 필수PNG 입력도 Git에 있습니다. Scripts/app_store_connect.py를 보존했고 API key는 ~/.appstoreconnect/private_keys에만 있습니다. JWT/key 원문은 출력·저장하지 마세요. GET은 읽기 전용이며 write는 해당 동작의 사용자 지시가 필요합니다.
 
