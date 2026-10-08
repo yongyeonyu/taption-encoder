@@ -1,5 +1,15 @@
 # 진행 중 작업
 
+# CLN08S9K4P
+
+요청: “소스 제외 전부 삭제해”. 이전에 보존했던WebsiteDrafts/Scripts와 루트AGENTS/NEXT_CHAT/temp/test 문서도 삭제하고 앱소스·빌드설정·필수resources/vendor/licenses 및테스트입력만 남긴다. 이번 명시적 지시는 비소스문서 보존과temp의미완료항목 유지보다 우선한다. 기존미완료PUB/EML/FIX는 완료로 표시하지 않으며 기존main/Git 기록에 남긴다.
+
+원인: 앞선정리후에도 홈페이지제작원본/배포도구와작업문서가 남아있다.
+
+해결: 삭제전원격main8935741 일치/source119개 hash/정확한target6개의inode·크기·열린파일0 확인, 먼저이작업기록을main에 보존하고 실제삭제한다. Xcode에남은README/AGENTS references2개도 제거하되모든compile/link/resource/buildsettings를그대로유지한다.
+
+검증: 소스118개 SHA256 불변 + project의document references외semantic변경0, privatekey해시보존, 삭제6targets absent, 신규산출물생성/Applewrite/물리앱데이터변경0, 최종main원격일치/워크트리clean. 완료증거는Git commit message와tool readback으로남기며root문서는사용자지시에따라삭제한다.
+
 # PUB08K7N4M
 
 남은 요청: BOKKI Encoder 1.1.12 (43)의 Apple 심사 결과 및 승인 후 실제 공개 출시 확인. BKR08N6Q2M의 대문자 이름·최신 로컬 기능·새 홈페이지/지원 이메일·실제 UI 소개 사진·새 배포/단일 심사 제출은 완료했다.

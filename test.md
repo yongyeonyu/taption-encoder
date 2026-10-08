@@ -857,3 +857,10 @@ Support: builday365@gmail.com
 - 삭제 후 첫git status --porcelain empty. AGENTS/NEXT_CHAT/temp 및 source handoff notes를 실제 availability로 갱신했다. 완료 CLN만temp에서 제거하고 PUB08K7N4M/EML08K3P9R/FIX06P3M7Q는 그대로 남긴다. 완료 기록을 별도main commit/push하고 최종HEAD/remote와clean을 독립 확인한다. 정확한41/42/43IPA/archive/dSYM/raw 증거의 복구는 보장하지 않는다.
 
 - 최종 즉시 하위temp inventory 보완 (2026-10-08T06:09:26.089674+00:00): DARWIN_USER_TEMP_DIR의Encoder .xcdistributionlogs9개와 이미삭제된UIR/UIX packages만 가리키는 .lock12개를 발견. 정확한 inode/device와 builder/open-handle0 재검증 후21개/27,455,488allocated bytes를 삭제했다. 총filesystem targets51개와simulator6개 absent, total allocation42.92GB. source121 SHA256 재일치, available volume127.12GB. 이source-only cleanup의 자체임시계획/API GET JSON5개는 최종원격/clean readback 후 제거한다.
+
+# CLN08S9K4P — app-source-only follow-up
+
+- 직접지시: “소스 제외 전부 삭제해”. 앞선CLN08P6M2Q가보존한홈페이지source/배포scripts/root작업docs도불필요하다는최신범위를적용한다. 삭제Targets WebsiteDrafts, Scripts, AGENTS.md, NEXT_CHAT_PROMPT.txt, temp.md, test.md. 사전allocatedbytes5,419,008/sourcebase893574128cdf076a28c00ad35ceb4d0eb99af7e9, gitfetch분기0/0.
+- 소스119개해시기준index 995e8b083f9b6ef330e61e2347bc7870025aee2cbb893c1bc0e19c2ecde1fa27. Compile/link/resource/package/buildsetting변경없이Xcode의README/AGENTS metadata refs만 제거한다. AppSwift/C/필수아이콘/static decoder/라이선스·componentpins/rebuildsource/testinputs는유지한다. Vendor문서/approval-template는source-bundle tool의직접입력이고fixture가검증하므로그sourceinputs는남긴다.
+- 실제운영/사이트/Apple상태/기기앱/Stars/계정·API키를변경하지않는다. 관련외부artifactsroots/private-temp는전회정리로absent, activebuilder0 및targetopenhandle0. 키내용은출력하지않고삭제전후digest를비교한다. Root기록과pendingPUB/EML/FIX는이커밋과이전Githistory에남기며완료로둔갑시키지않는다.
+- 본scope/evidence를우선commit/push하고정확한6targets만삭제한다. 삭제후plutilproject검사와sourcehash/diffcheck/원격HEAD일치/clean/readback을완료한다. 최종로그는삭제커밋본문및tool결과에남긴다.
