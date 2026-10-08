@@ -142,8 +142,6 @@
 		1A2B3C4D5E6F701000000101 /* TaptionEncoderApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionEncoderApp.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F701000000102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F701000000103 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		1A2B3C4D5E6F701000000104 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = docs/overview/README.md; sourceTree = SOURCE_ROOT; };
-		1A2B3C4D5E6F701000000105 /* AGENTS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = AGENTS.md; sourceTree = SOURCE_ROOT; };
 		1A2B3C4D5E6F701000000106 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		25F139C19A60E48CE49E88B2 /* EncodingLiveActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EncodingLiveActivityAttributes.swift; sourceTree = "<group>"; };
 		2A2B3C4D5E6F701000000101 /* TaptionVideoCoreModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionVideoCoreModels.swift; sourceTree = "<group>"; };
@@ -282,8 +280,6 @@
 				1A2B3C4D5E6F701000000301 /* TaptionEncoder */,
 				B10000000000000000000300 /* TaptionEncoderThumbnailExtension */,
 				8A2B3C4D5E6F701000000300 /* TaptionEncoderTests */,
-				1A2B3C4D5E6F701000000104 /* README.md */,
-				1A2B3C4D5E6F701000000105 /* AGENTS.md */,
 				1A2B3C4D5E6F701000000302 /* Products */,
 				4E7472FFB47CCB921B9BFCC2 /* TaptionEncoderLiveActivityExtension */,
 				822D7D0C4E2F68FFB02366B3 /* Frameworks */,
