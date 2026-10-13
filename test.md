@@ -235,3 +235,8 @@
 - 원본 코드 94개(Swift/C/header/modulemap/shell script)는 SHA256 전후 일치. Xcode 프로젝트/Info.plist/asset manifest/Package.resolved 및 배포 도구의 원본 JSON/TSV 설정, Git 이력, 사용자 지시된 작업 기록은 보존합니다. 인증 키와 설치된 기기 앱/TestFlight 빌드는 변경하지 않았습니다.
 - 현재 checkout은 소스 보관 형태입니다. 즉시 앱 빌드/일부 테스트/배포가 가능한 상태로 보고하지 않습니다. 재사용하려면 Vendor/FFmpegLGPLDecodeBridge/build_ffmpeg_lgpl_decode_bridge.sh로 framework를 재생성하고, 아이콘/테스트 입력/라이선스 자료는 삭제 전 커밋 0836a13에서 복구해야 합니다.
 - 이미지·영상·정적 라이브러리 및 생성 산출물 부재, 설정 plist 구문과 git diff --check를 검사했습니다. 재생성 가능 파일을 다시 만들지 않도록 빌드/테스트는 실행하지 않았습니다.
+
+## TF14B4J8Q1 — main 정리·3기기 설치·TestFlight 빌드 49 (2026-10-14)
+- 새 빌드/설치 요청에 따라 소스 보관 정리에서 삭제했던 필수 입력 22개를 0836a13에서 복구했습니다. framework·아이콘·영상 검사 입력·라이선스/빌드 자료는 해당 커밋의 내용과 byte 단위 일치합니다.
+- 원본 코드 94개는 2e14c1d(빌드 48의 420개 활성 단위 검사 + iPad 시뮬레이터 UI 검사 2개 통과)와 동일합니다. 이번에는 구현 변경이 없으므로 유효한 이전 기능 검증을 재사용하고 새 archive·IPA 서명·실기기 설치/실행·Apple 처리 상태를 별도로 확인합니다. 기존 원본 xcresult는 사용자 요청으로 삭제되어 기록만 보존됩니다.
+- Apple API에서 최신 빌드 48 확인 후, 앱 및 두 확장과 검사 구성의 CURRENT_PROJECT_VERSION 8곳을 49로 올렸습니다. 마케팅 버전 1.1.13 유지. git diff --check / project plist 검사 성공.

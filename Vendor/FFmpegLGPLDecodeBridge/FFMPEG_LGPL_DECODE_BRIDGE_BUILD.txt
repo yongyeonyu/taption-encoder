@@ -1,0 +1,57 @@
+FFmpeg version: 8.1.1
+FFmpeg source: https://ffmpeg.org/releases/ffmpeg-8.1.1.tar.xz
+FFmpeg SHA-256: b6863adde98898f42602017462871b5f6333e65aec803fdd7a6308639c52edf3
+Minimum iOS: 17.0
+
+Configure flags:
+  --disable-everything
+  --disable-programs
+  --disable-doc
+  --disable-debug
+  --disable-network
+  --disable-autodetect
+  --disable-asm
+  --disable-avdevice
+  --disable-avfilter
+  --disable-shared
+  --enable-pic
+  --enable-static
+  --enable-avcodec
+  --enable-avformat
+  --enable-avutil
+  --enable-swresample
+  --enable-swscale
+  --enable-protocol=file
+  --enable-demuxer=vc1,avi,mov,dv,asf,rm
+  --enable-parser=vc1,mpeg4video
+  --enable-decoder=vc1,vc1image,y41p,rawvideo,prores_raw,dvvideo,mjpeg,mpeg4,msmpeg4v3,msrle,smc,r10k,r210,rv10,rv20,snow,utvideo,wmv2,pcm_s16le,mp3,aac,ac3,wmav2
+
+Enabled demuxers: vc1, avi, mov, dv, asf, rm
+Enabled decoders: vc1, vc1image, y41p, rawvideo, prores_raw, dvvideo, h263, mjpeg, mpeg4, msmpeg4v3, msrle, smc, r10k, r210, rv10, rv20, snow, utvideo, wmv2, pcm_s16le, mp3, aac, ac3, wmav2
+Enabled parsers: ac3, vc1, mpeg4video
+Enabled protocol: file
+Enabled libraries linked into bridge: avformat, avcodec, avutil, swresample, swscale
+Bridge frame outputs: direct NV12 video for even dimensions, BGRA fallback video for odd dimensions, and swresample-converted packed signed 16-bit PCM audio
+
+Policy:
+- No --enable-gpl
+- No --enable-nonfree
+- No external libraries
+- No FFmpeg executable or runtime-downloaded plugin
+- Decode-only bridge for the enabled legacy input codecs and audio formats; H.265 / HEVC MP4/MOV plus Apple-native audio output remain handled by Taption Encoder's AVAssetWriter path.
+
+Notice/source/EULA checklist:
+- The official source URL and SHA-256 above record provenance only; they do
+  not by themselves satisfy LGPL distribution requirements for a statically
+  linked application.
+- Local bridge source is stored under Vendor/FFmpegLGPLDecodeBridge/Sources.
+- The shipped notice and written source-material offer are stored at
+  TaptionEncoder/OpenSourceNotices/FFmpeg-LGPL-Decode-Bridge.txt.
+- The complete LGPL 2.1 text is stored at
+  TaptionEncoder/OpenSourceNotices/LGPL-2.1.txt.
+- Public distribution remains blocked until the exact corresponding source,
+  local changes, build scripts, and application relinking materials are
+  assembled and verified as deliverable for the distributed binary.
+- Formal counsel approval and confirmation that the final App Store EULA and
+  distribution mechanism preserve required reverse-engineering and relinking
+  rights remain separate release gates.
