@@ -142,6 +142,14 @@ struct QueueVideoPreviewView: View {
 
     @ViewBuilder
     var body: some View {
+        // Keep orientation ownership stable while swiping between VLC and native playback.
+        ZStack { playerView }
+            .onAppear { AppOrientationController.shared.activatePreviewOrientations() }
+            .onDisappear { AppOrientationController.shared.restorePortrait() }
+    }
+
+    @ViewBuilder
+    private var playerView: some View {
         if preview.usesNativePlayback {
             NativeQueueVideoPreviewView(
                 preview: preview, adUnitID: adUnitID,
@@ -171,12 +179,13 @@ struct QueuePreviewAddListButton: View {
 
     var body: some View {
         Button(action: action) {
-            Label("Add List", systemImage: isAdded ? "checkmark.square.fill" : "square")
-                .font(.subheadline.weight(.semibold))
+            Label(isAdded ? "Added" : "Add", systemImage: isAdded ? "checkmark" : "plus")
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(isAdded ? TaptionTheme.accent : .white)
-                .padding(.horizontal, 14)
+                .fixedSize(horizontal: true, vertical: false)
+                .padding(.horizontal, 11)
                 .frame(minHeight: 44)
-                .background(.white.opacity(0.16), in: Capsule())
+                .background(.white.opacity(0.14), in: Capsule())
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -189,43 +198,292 @@ struct QueuePreviewAddListButton: View {
     }
 }
 
-struct QueuePreviewFileNavigation: View {
-    var playlist: QueueVideoPreviewPlaylist?
-    var isEnabled: Bool
+enum QueuePreviewBarNavigation: Equatable {
+    case previous, next
+
+    static func destination(translation: CGSize, playlist: QueueVideoPreviewPlaylist?, isEnabled: Bool) -> Self? {
+        guard isEnabled, let playlist,
+              translation.width.isFinite, translation.height.isFinite,
+              abs(translation.width) >= 44,
+              abs(translation.width) > abs(translation.height) * 1.4 else { return nil }
+        if translation.width < 0, playlist.hasNext { return .next }
+        if translation.width > 0, playlist.hasPrevious { return .previous }
+        return nil
+    }
+}
+
+struct QueuePreviewRoundButton: View {
+    var symbol: String
+    var label: String
+    var identifier: String
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(.white.opacity(0.14), in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+struct QueuePreviewActionBar: View {
+    var preview: QueueVideoPreview
+    var isAdded: Bool
+    var canAdd: Bool
+    var canNavigate: Bool
+    var onAdd: () -> Void
+    var onClose: () -> Void
     var onPrevious: () -> Void
     var onNext: () -> Void
 
+    @State private var showsInformation = false
+    @State private var isSharing = false
+    @State private var shareError: String?
+
     var body: some View {
-        if let playlist {
-            HStack(spacing: 12) {
-                Button(action: onPrevious) {
-                    Label("Previous", systemImage: "backward.end.fill")
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .disabled(!isEnabled || !playlist.hasPrevious)
-                .accessibilityLabel("Previous file")
-                .accessibilityIdentifier("preview.previous")
-                .accessibilityHint(playlist.previousName ?? "First video")
-
-                Text(playlist.positionText)
-                    .font(.caption.monospacedDigit())
-                    .accessibilityIdentifier("preview.position")
-
-                Button(action: onNext) {
-                    Label("Next", systemImage: "forward.end.fill")
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .disabled(!isEnabled || !playlist.hasNext)
-                .accessibilityLabel("Next file")
-                .accessibilityIdentifier("preview.next")
-                .accessibilityHint(playlist.nextName ?? "Last video")
+        HStack(spacing: 7) {
+            QueuePreviewRoundButton(symbol: "info", label: "Video information", identifier: "preview.info") {
+                showsInformation = true
             }
-            .font(.subheadline.weight(.semibold))
-            .buttonStyle(.plain)
-            .foregroundStyle(.white)
+            QueuePreviewRoundButton(symbol: "square.and.arrow.up", label: "Share video", identifier: "preview.share") {
+                isSharing = true
+            }
+            .background {
+                QueuePreviewSharePresenter(sourceURL: preview.sourceURL, isPresented: $isSharing) {
+                    shareError = $0
+                }
+                .allowsHitTesting(false)
+            }
+            Text(preview.displayName)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 44)
+                .contentShape(Rectangle())
+                .accessibilityIdentifier("preview.filename")
+                .accessibilityValue(preview.playlist?.positionText ?? "1 / 1")
+                .accessibilityHint("Swipe left for the next file or right for the previous file.")
+                .accessibilityAdjustableAction { direction in
+                    guard canNavigate else { return }
+                    switch direction {
+                    case .increment: if preview.playlist?.hasNext == true { onNext() }
+                    case .decrement: if preview.playlist?.hasPrevious == true { onPrevious() }
+                    @unknown default: break
+                    }
+                }
+            QueuePreviewAddListButton(isAdded: isAdded, isEnabled: canAdd, action: onAdd)
+            QueuePreviewRoundButton(symbol: "xmark", label: "Close", identifier: "preview.close", action: onClose)
         }
+        .contentShape(Rectangle())
+        .highPriorityGesture(DragGesture(minimumDistance: 24).onEnded { value in
+            guard !showsInformation && !isSharing else { return }
+            switch QueuePreviewBarNavigation.destination(translation: value.translation, playlist: preview.playlist, isEnabled: canNavigate) {
+            case .previous: onPrevious()
+            case .next: onNext()
+            case nil: break
+            }
+        })
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("preview.actions")
+        .sheet(isPresented: $showsInformation) {
+            QueuePreviewInformationSheet(preview: preview)
+        }
+        .alert("Unable to share", isPresented: Binding(
+            get: { shareError != nil },
+            set: { if !$0 { shareError = nil } }
+        )) {
+            Button("OK", role: .cancel) { shareError = nil }
+        } message: { Text(shareError ?? "") }
+        .onChange(of: preview.id) { _, _ in
+            showsInformation = false
+            isSharing = false
+        }
+    }
+}
+
+struct QueuePreviewInformationSheet: View {
+    var preview: QueueVideoPreview
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("File") {
+                    info("Name", preview.displayName)
+                    info("Size", preview.videoInfo.fileSize)
+                    info("Duration", preview.videoInfo.duration)
+                    info("Container", preview.sourceURL.pathExtension.uppercased())
+                }
+                Section("Video") {
+                    info("Format", preview.videoInfo.inputSummary)
+                    info("Resolution", preview.videoInfo.resolution)
+                    info("Frame rate", preview.videoInfo.frameRate)
+                }
+                Section("Audio") {
+                    info("Format", preview.videoInfo.audio)
+                }
+                Section("Conversion") {
+                    info("Video processing", preview.pathBadge)
+                    Text(preview.videoInfo.codecPathDetail).font(.footnote).foregroundStyle(.secondary)
+                    info("Audio processing", preview.videoInfo.audioPathBadge)
+                    Text(preview.videoInfo.audioPathDetail).font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            .textSelection(.enabled)
+            .navigationTitle("Video Info")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }.accessibilityIdentifier("preview.info.done")
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func info(_ name: String, _ value: String) -> some View {
+        LabeledContent(name, value: value.isEmpty ? "Not available" : value)
+    }
+}
+
+struct QueuePreviewSharePresenter: UIViewControllerRepresentable {
+    var sourceURL: URL
+    @Binding var isPresented: Bool
+    var onError: (String) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        let anchor = UIViewController()
+        anchor.view.backgroundColor = .clear
+        anchor.view.isUserInteractionEnabled = false
+        return anchor
+    }
+
+    func updateUIViewController(_ anchor: UIViewController, context: Context) {
+        context.coordinator.parent = self
+        if isPresented { context.coordinator.present(from: anchor) }
+        else { context.coordinator.dismiss() }
+    }
+
+    static func dismantleUIViewController(_ anchor: UIViewController, coordinator: Coordinator) {
+        coordinator.dismiss()
+    }
+
+    final class Coordinator: NSObject, UIAdaptivePresentationControllerDelegate, UIPopoverPresentationControllerDelegate {
+        var parent: QueuePreviewSharePresenter
+        private weak var activityController: UIActivityViewController?
+        private var scopedURL: URL?
+        private var isPreparing = false
+
+        init(parent: QueuePreviewSharePresenter) { self.parent = parent }
+
+        func present(from anchor: UIViewController) {
+            guard !isPreparing, activityController == nil else { return }
+            isPreparing = true
+            DispatchQueue.main.async { [weak self, weak anchor] in
+                guard let self else { return }
+                self.isPreparing = false
+                guard self.parent.isPresented, let anchor, anchor.view.window != nil else { return }
+                let url = self.parent.sourceURL
+                if url.startAccessingSecurityScopedResource() { self.scopedURL = url }
+                guard url.isFileURL, FileManager.default.isReadableFile(atPath: url.path) else {
+                    self.finish()
+                    self.parent.onError("This video is no longer available. Open the file again and try sharing it.")
+                    return
+                }
+                let controller = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+                self.activityController = controller
+                // UIKit requires an anchored popover on iPad; iPhone uses the native modal share sheet.
+                if let popover = controller.popoverPresentationController {
+                    popover.sourceView = anchor.view
+                    popover.sourceRect = anchor.view.bounds
+                    popover.permittedArrowDirections = [.up, .down]
+                    popover.delegate = self
+                }
+                controller.completionWithItemsHandler = { [weak self] _, _, _, error in
+                    DispatchQueue.main.async {
+                        self?.finish()
+                        if let error { self?.parent.onError(error.localizedDescription) }
+                    }
+                }
+                anchor.present(controller, animated: true) {
+                    controller.presentationController?.delegate = self
+                }
+            }
+        }
+
+        func dismiss() {
+            guard let controller = activityController else { return }
+            controller.dismiss(animated: true) { [weak self] in self?.finish() }
+        }
+
+        private func finish() {
+            activityController = nil
+            if let url = scopedURL {
+                url.stopAccessingSecurityScopedResource()
+                scopedURL = nil
+            }
+            if parent.isPresented { parent.isPresented = false }
+        }
+
+        func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { finish() }
+        func popoverPresentationControllerDidDismissPopover(_ popoverPresentationController: UIPopoverPresentationController) { finish() }
+
+        deinit { scopedURL?.stopAccessingSecurityScopedResource() }
+    }
+}
+
+struct QueuePreviewCenterControls: View {
+    var isPlaying: Bool
+    var canSeek: Bool
+    var onBackward: () -> Void
+    var onToggle: () -> Void
+    var onForward: () -> Void
+
+    var body: some View {
+        HStack(spacing: 30) {
+            skipButton("gobackward.10", label: "Back 10 seconds", identifier: "preview.backward", action: onBackward)
+            Button(action: onToggle) {
+                Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 34, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 76, height: 76)
+                    .background(.black.opacity(0.56), in: Circle())
+                    .overlay(Circle().stroke(.white.opacity(0.16), lineWidth: 1))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(isPlaying ? "Pause" : "Play")
+            .accessibilityIdentifier("preview.playback")
+            skipButton("goforward.10", label: "Forward 10 seconds", identifier: "preview.forward", action: onForward)
+        }
+    }
+
+    private func skipButton(_ symbol: String, label: String, identifier: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 25, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 52, height: 52)
+                .background(.black.opacity(0.5), in: Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!canSeek)
+        .opacity(canSeek ? 1 : 0.4)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -317,7 +575,6 @@ private struct VLCQueueVideoPreviewView: View {
         )
         .onAppear {
             beginVideoPlaybackAdSuppressionIfNeeded()
-            AppOrientationController.shared.activatePreviewOrientations()
         }
         .task(id: preview.id) {
             await startPlayback()
@@ -425,15 +682,10 @@ private struct VLCQueueVideoPreviewView: View {
         safeAreaInsets: EdgeInsets
     ) -> some View {
         VStack(spacing: 0) {
-            previewHeader
-                .padding(.horizontal, containerSize.width < 380 ? 12 : 16)
-                .padding(.top, previewHeaderTopPadding(containerSize: containerSize, safeAreaInsets: safeAreaInsets))
-
             Spacer(minLength: 0)
-
             transportControls
                 .padding(.horizontal, containerSize.width < 380 ? 10 : 16)
-                .padding(.bottom, 18)
+                .padding(.bottom, max(safeAreaInsets.bottom, 12))
         }
     }
 
@@ -443,97 +695,25 @@ private struct VLCQueueVideoPreviewView: View {
         return min(widthFitScale, heightScale)
     }
 
-    private func previewHeaderTopPadding(
-        containerSize: CGSize,
-        safeAreaInsets: EdgeInsets
-    ) -> CGFloat {
-        max(safeAreaInsets.top, 8)
-            + (50 * previewBannerScale(containerSize: containerSize))
-            + 24
-    }
-
-    private var previewHeader: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 7) {
-                Text(preview.displayName)
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.94))
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.72)
-                    .truncationMode(.middle)
-
-                PreviewBadgeFlowLayout(horizontalSpacing: 7, verticalSpacing: 7) {
-                    previewBadge(systemImage: "video", text: preview.codecBadge)
-                    previewBadge(systemImage: "point.3.connected.trianglepath.dotted", text: preview.pathBadge)
-                    previewBadge(systemImage: "aspectratio", text: preview.videoInfo.resolution)
-                    previewBadge(systemImage: "speaker.wave.2", text: preview.videoInfo.audio)
-                    previewBadge(systemImage: "externaldrive", text: preview.videoInfo.fileSize)
-                        .accessibilityElement(children: .combine)
-                        .accessibilityLabel("File size: \(preview.videoInfo.fileSize)")
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                QueuePreviewAddListButton(
-                    isAdded: isAddedToList,
-                    isEnabled: canAddToList && !isLoading,
-                    action: onAddToList
-                )
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .layoutPriority(1)
-
-            Spacer(minLength: 4)
-
-            Button(action: closePreview) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 28, weight: .semibold))
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(Color.white.opacity(0.94))
-                    .frame(width: 44, height: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close")
-            .accessibilityIdentifier("preview.close")
-        }
-    }
-
     private var centerPlayPauseOverlay: some View {
         Group {
             if areControlsVisible && !isLoading && playbackError == nil {
-                Button(action: togglePlayback) {
-                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 36, weight: .bold))
-                        .foregroundStyle(Color.white)
-                        .frame(width: 76, height: 76)
-                        .background(Color.black.opacity(0.54))
-                        .clipShape(Circle())
-                        .overlay(
-                            Circle()
-                                .stroke(Color.white.opacity(0.18), lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                QueuePreviewCenterControls(
+                    isPlaying: player.isPlaying, canSeek: hasUsableTimeline,
+                    onBackward: skipBackward, onToggle: togglePlayback, onForward: skipForward
+                )
                 .transition(.opacity.combined(with: .scale(scale: 0.92)))
             }
         }
     }
 
     private var transportControls: some View {
-        VStack(spacing: 9) {
-            QueuePreviewFileNavigation(
-                playlist: preview.playlist, isEnabled: !isLoading,
-                onPrevious: previousItem, onNext: nextItem
-            )
-
+        VStack(spacing: 4) {
             Slider(
                 value: Binding(
                     get: { displayedSliderPosition },
                     set: { newValue in
-                        guard hasUsableTimeline else {
-                            return
-                        }
+                        guard hasUsableTimeline else { return }
                         isScrubbing = true
                         scrubberPosition = QueuePreviewPlaybackMath.clampedPosition(newValue)
                         showControls(scheduleAutoHide: false)
@@ -545,60 +725,35 @@ private struct VLCQueueVideoPreviewView: View {
                         isScrubbing = true
                         scrubberPosition = displayedSliderPosition
                         showControls(scheduleAutoHide: false)
-                    } else {
-                        finishScrubbing()
-                    }
+                    } else { finishScrubbing() }
                 }
             )
             .disabled(!hasUsableTimeline)
-            .tint(Color.white)
+            .tint(.white)
+            .accessibilityLabel("Playback position")
+            .accessibilityIdentifier("preview.timeline")
 
-            HStack(spacing: 6) {
-                Button(action: skipBackward) {
-                    Image(systemName: "gobackward.10")
-                        .font(.system(size: 19, weight: .semibold))
-                        .frame(width: 34, height: 36)
-                }
-                .accessibilityLabel("Rewind 10 seconds")
-
-
-
-                Button(action: togglePlayback) {
-                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 22, weight: .bold))
-                        .frame(width: 38, height: 38)
-                }
-                .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
-
-
-
-                Button(action: skipForward) {
-                    Image(systemName: "goforward.10")
-                        .font(.system(size: 19, weight: .semibold))
-                        .frame(width: 34, height: 36)
-                }
-                .accessibilityLabel("Forward 10 seconds")
-
-                Text("\(displayedCurrentTimeText) / \(durationText)")
-                    .font(.caption.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.88))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.62)
-                    .allowsTightening(true)
-                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .trailing)
-                    .layoutPriority(1)
+            HStack {
+                Text(displayedCurrentTimeText)
+                Spacer()
+                Text(durationText)
             }
-            .foregroundStyle(Color.white)
-            .buttonStyle(.plain)
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.white.opacity(0.72))
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("preview.time")
+            .padding(.bottom, 8)
+
+            QueuePreviewActionBar(
+                preview: preview, isAdded: isAddedToList,
+                canAdd: canAddToList && !isLoading, canNavigate: !isLoading,
+                onAdd: onAddToList, onClose: closePreview,
+                onPrevious: previousItem, onNext: nextItem
+            )
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 12)
-        .background(Color.black.opacity(0.58))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        )
+        .padding(.vertical, 10)
+        .background(.black.opacity(0.64), in: RoundedRectangle(cornerRadius: 18))
     }
 
     @ViewBuilder
@@ -648,25 +803,6 @@ private struct VLCQueueVideoPreviewView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(Color.white.opacity(0.12), lineWidth: 1)
         )
-    }
-
-    private func previewBadge(systemImage: String, text: String) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: systemImage)
-                .font(.caption2.weight(.semibold))
-            Text(text)
-                .font(.caption.weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.62)
-                .allowsTightening(true)
-                .layoutPriority(1)
-        }
-        .lineLimit(1)
-        .foregroundStyle(Color.white.opacity(0.86))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(Color.white.opacity(0.13))
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
     }
 
     private var displayedSliderPosition: Double {
@@ -1045,7 +1181,8 @@ private struct VLCQueueVideoPreviewView: View {
             return
         }
         let offset = Duration.seconds(seconds)
-        if (try? player.seek(by: offset, fast: true)) == nil {
+        // The skip buttons promise ten seconds, even when keyframes are far apart.
+        if (try? player.seek(by: offset, fast: false)) == nil {
             _ = player.jump(by: offset)
         }
         showControls(scheduleAutoHide: false)
@@ -1467,7 +1604,6 @@ private struct VLCQueueVideoPreviewView: View {
         didRequestShutdown = true
         playbackLifetime.invalidate()
         gestureFeedbackTask?.cancel()
-        AppOrientationController.shared.restorePortrait()
         pipController?.stop()
         endVideoPlaybackAdSuppressionIfNeeded()
         let sessionID = previewAudioSessionID
@@ -1918,115 +2054,6 @@ private struct VLCQueueMiniPlayerView: View {
             await player.shutdown()
             QueuePreviewAudioSessionController.deactivateAfterPreview(id: sessionID)
         }
-    }
-}
-
-private struct PreviewBadgeFlowLayout: Layout {
-    var horizontalSpacing: CGFloat
-    var verticalSpacing: CGFloat
-
-    func sizeThatFits(
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache _: inout ()
-    ) -> CGSize {
-        let maxWidth = proposal.width ?? .greatestFiniteMagnitude
-        let rows = rows(for: subviews, maxWidth: maxWidth)
-        let width = rows.reduce(CGFloat.zero) { max($0, $1.size.width) }
-        let height = rows.reduce(CGFloat.zero) { $0 + $1.size.height }
-            + CGFloat(max(0, rows.count - 1)) * verticalSpacing
-
-        return CGSize(
-            width: maxWidth.isFinite ? min(width, maxWidth) : width,
-            height: height
-        )
-    }
-
-    func placeSubviews(
-        in bounds: CGRect,
-        proposal _: ProposedViewSize,
-        subviews: Subviews,
-        cache _: inout ()
-    ) {
-        let rows = rows(for: subviews, maxWidth: bounds.width)
-        var y = bounds.minY
-
-        for row in rows {
-            var x = bounds.minX
-
-            for item in row.items {
-                subviews[item.index].place(
-                    at: CGPoint(x: x, y: y),
-                    proposal: ProposedViewSize(
-                        width: min(item.size.width, bounds.width),
-                        height: item.size.height
-                    )
-                )
-                x += item.size.width + horizontalSpacing
-            }
-
-            y += row.size.height + verticalSpacing
-        }
-    }
-
-    private func rows(for subviews: Subviews, maxWidth: CGFloat) -> [PreviewBadgeRow] {
-        guard !subviews.isEmpty else {
-            return []
-        }
-
-        let effectiveMaxWidth = maxWidth.isFinite && maxWidth > 0
-            ? maxWidth
-            : .greatestFiniteMagnitude
-        var rows: [PreviewBadgeRow] = []
-        var currentItems: [PreviewBadgeItem] = []
-        var currentSize = CGSize.zero
-
-        for index in subviews.indices {
-            let itemSize = size(for: subviews[index], maxWidth: effectiveMaxWidth)
-            let item = PreviewBadgeItem(index: index, size: itemSize)
-            let nextWidth = currentItems.isEmpty
-                ? itemSize.width
-                : currentSize.width + horizontalSpacing + itemSize.width
-
-            if !currentItems.isEmpty && nextWidth > effectiveMaxWidth {
-                rows.append(PreviewBadgeRow(items: currentItems, size: currentSize))
-                currentItems = [item]
-                currentSize = itemSize
-            } else {
-                currentItems.append(item)
-                currentSize.width = nextWidth
-                currentSize.height = max(currentSize.height, itemSize.height)
-            }
-        }
-
-        if !currentItems.isEmpty {
-            rows.append(PreviewBadgeRow(items: currentItems, size: currentSize))
-        }
-
-        return rows
-    }
-
-    private func size(for subview: Subviews.Element, maxWidth: CGFloat) -> CGSize {
-        let ideal = subview.sizeThatFits(.unspecified)
-        guard maxWidth.isFinite, ideal.width > maxWidth else {
-            return ideal
-        }
-
-        let constrained = subview.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
-        return CGSize(
-            width: min(constrained.width, maxWidth),
-            height: constrained.height
-        )
-    }
-
-    private struct PreviewBadgeRow {
-        var items: [PreviewBadgeItem]
-        var size: CGSize
-    }
-
-    private struct PreviewBadgeItem {
-        var index: Int
-        var size: CGSize
     }
 }
 

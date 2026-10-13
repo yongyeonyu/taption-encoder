@@ -50,45 +50,25 @@ struct NativeQueueVideoPreviewView: View {
                             .ignoresSafeArea()
                             .zIndex(0)
                         if areControlsVisible {
-                            VStack(spacing: 12) {
+                            VStack {
                                 AdMobBannerSlotView(adUnitID: adUnitID, displayScale: 1)
-                                HStack(alignment: .top, spacing: 8) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(preview.displayName)
-                                            .font(.headline)
-                                            .lineLimit(2)
-                                            .truncationMode(.middle)
-                                        Text("\(preview.codecBadge) · \(preview.videoInfo.resolution)")
-                                            .font(.caption)
-                                            .foregroundStyle(.white.opacity(0.7))
-                                        Text("File size: \(preview.videoInfo.fileSize)")
-                                            .font(.caption)
-                                            .foregroundStyle(.white.opacity(0.7))
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    headerButtons
-                                }
-                                QueuePreviewAddListButton(
-                                    isAdded: isAddedToList,
-                                    isEnabled: canAddToList && !playback.isLoading,
-                                    action: onAddToList
-                                )
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.top, max(proxy.safeAreaInsets.top, 8))
+                                Spacer(minLength: 0)
                             }
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.top, max(proxy.safeAreaInsets.top, 8))
-                            .padding(.bottom, 12)
-                            .background(LinearGradient(
-                                colors: [.black.opacity(0.85), .clear],
-                                startPoint: .top, endPoint: .bottom
-                            ))
                             .zIndex(1)
                             .transition(.opacity)
+
+                            if !playback.isLoading && playback.errorMessage == nil {
+                                centerPlaybackControls
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                    .zIndex(1)
+                                    .transition(.opacity)
+                            }
+
                             playbackControls
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                                .padding(.horizontal, 16)
-                                .padding(.bottom, max(proxy.safeAreaInsets.bottom, 16))
+                                .padding(.horizontal, proxy.size.width < 380 ? 10 : 16)
+                                .padding(.bottom, max(proxy.safeAreaInsets.bottom, 12))
                                 .zIndex(1)
                                 .transition(.opacity)
                         }
@@ -101,9 +81,6 @@ struct NativeQueueVideoPreviewView: View {
             if !didBeginAdSuppression {
                 didBeginAdSuppression = true
                 AdMobBootstrapper.beginVideoPlaybackAdSuppression(reason: "nativeQueuePreview")
-            }
-            if !isMiniPlayer {
-                AppOrientationController.shared.activatePreviewOrientations()
             }
         }
         .task(id: preview.id) {
@@ -118,9 +95,6 @@ struct NativeQueueVideoPreviewView: View {
         .onDisappear {
             playback.shutdown()
             onPictureInPictureActiveChanged(false)
-            if !isMiniPlayer {
-                AppOrientationController.shared.restorePortrait()
-            }
             if didBeginAdSuppression {
                 didBeginAdSuppression = false
                 AdMobBootstrapper.endVideoPlaybackAdSuppression(reason: "nativeQueuePreview")
@@ -165,18 +139,32 @@ struct NativeQueueVideoPreviewView: View {
         }
     }
 
+    private var centerPlaybackControls: some View {
+        TimelineView(.periodic(from: .now, by: 0.25)) { _ in
+            let duration = playbackDuration
+            QueuePreviewCenterControls(
+                isPlaying: playback.player.rate > 0,
+                canSeek: duration > 0,
+                onBackward: { seek(to: playback.player.currentTime().seconds - 10, duration: duration) },
+                onToggle: {
+                    if playback.player.rate > 0 { playback.player.pause() } else { playback.player.play() }
+                },
+                onForward: { seek(to: playback.player.currentTime().seconds + 10, duration: duration) }
+            )
+        }
+    }
+
+    private var playbackDuration: Double {
+        let raw = playback.player.currentItem?.duration.seconds ?? 0
+        return raw.isFinite ? max(raw, 0) : 0
+    }
+
     private var playbackControls: some View {
         TimelineView(.periodic(from: .now, by: 0.25)) { _ in
-            let rawDuration = playback.player.currentItem?.duration.seconds ?? 0
-            let duration = rawDuration.isFinite ? max(rawDuration, 0) : 0
+            let duration = playbackDuration
             let rawSeconds = playback.player.currentTime().seconds
             let seconds = rawSeconds.isFinite ? min(max(rawSeconds, 0), duration) : 0
-            let isPlaying = playback.player.rate > 0
-            VStack(spacing: 12) {
-                QueuePreviewFileNavigation(
-                    playlist: preview.playlist, isEnabled: !playback.isLoading,
-                    onPrevious: onPrevious, onNext: onNext
-                )
+            VStack(spacing: 4) {
                 Slider(value: Binding(
                     get: { isScrubbing ? scrubSeconds : seconds },
                     set: {
@@ -194,34 +182,29 @@ struct NativeQueueVideoPreviewView: View {
                 })
                 .disabled(duration <= 0 || playback.isLoading)
                 .accessibilityLabel("Playback position")
-                HStack(spacing: 24) {
-                    Button { seek(to: seconds - 10, duration: duration) } label: {
-                        Image(systemName: "gobackward.10").frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Back 10 seconds")
-                    Button {
-                        if isPlaying { playback.player.pause() } else { playback.player.play() }
-                    } label: {
-                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                            .frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel(isPlaying ? "Pause" : "Play")
-                    Button { seek(to: seconds + 10, duration: duration) } label: {
-                        Image(systemName: "goforward.10").frame(width: 44, height: 44)
-                    }
-                    .accessibilityLabel("Forward 10 seconds")
-                    Spacer(minLength: 0)
-                    Text("\(QueuePreviewPlaybackMath.formattedSeconds(isScrubbing ? scrubSeconds : seconds)) / \(QueuePreviewPlaybackMath.formattedSeconds(duration))")
-                        .font(.caption.monospacedDigit())
+                .accessibilityIdentifier("preview.timeline")
+                HStack {
+                    Text(QueuePreviewPlaybackMath.formattedSeconds(isScrubbing ? scrubSeconds : seconds))
+                    Spacer()
+                    Text(QueuePreviewPlaybackMath.formattedSeconds(duration))
                 }
-                .disabled(playback.isLoading || playback.errorMessage != nil)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.white.opacity(0.72))
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("preview.time")
+                .padding(.bottom, 8)
+
+                QueuePreviewActionBar(
+                    preview: preview, isAdded: isAddedToList,
+                    canAdd: canAddToList && !playback.isLoading, canNavigate: !playback.isLoading,
+                    onAdd: onAddToList, onClose: onClose,
+                    onPrevious: onPrevious, onNext: onNext
+                )
             }
             .tint(.white)
-            .buttonStyle(.plain)
-            .font(.title2)
-            .foregroundStyle(.white)
-            .padding(16)
-            .background(.black.opacity(0.68), in: RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 10)
+            .background(.black.opacity(0.64), in: RoundedRectangle(cornerRadius: 18))
         }
     }
 

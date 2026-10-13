@@ -4337,6 +4337,33 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
     }
 
+    func testPreviewBottomBarSwipeNavigatesOneFileAndRespectsBoundaries() {
+        let middle = QueueVideoPreviewPlaylist(currentIndex: 1, totalCount: 3,
+            previousID: "first", previousName: "First.mp4", nextID: "last", nextName: "Last.mp4")
+        XCTAssertEqual(QueuePreviewBarNavigation.destination(translation: CGSize(width: -100, height: 5), playlist: middle, isEnabled: true), .next)
+        XCTAssertEqual(QueuePreviewBarNavigation.destination(translation: CGSize(width: 100, height: -5), playlist: middle, isEnabled: true), .previous)
+        var first = middle
+        first.currentIndex = 0
+        first.previousID = nil
+        XCTAssertNil(QueuePreviewBarNavigation.destination(translation: CGSize(width: 100, height: 0), playlist: first, isEnabled: true))
+        var last = middle
+        last.currentIndex = 2
+        last.nextID = nil
+        XCTAssertNil(QueuePreviewBarNavigation.destination(translation: CGSize(width: -100, height: 0), playlist: last, isEnabled: true))
+        XCTAssertNil(QueuePreviewBarNavigation.destination(translation: CGSize(width: -100, height: 0), playlist: nil, isEnabled: true))
+        XCTAssertNil(QueuePreviewBarNavigation.destination(translation: CGSize(width: -100, height: 0), playlist: middle, isEnabled: false))
+    }
+
+    func testPreviewBottomBarIgnoresTapJitterVerticalAndInvalidDrags() {
+        let playlist = QueueVideoPreviewPlaylist(currentIndex: 1, totalCount: 3,
+            previousID: "first", previousName: nil, nextID: "last", nextName: nil)
+        for translation in [CGSize.zero, CGSize(width: 12, height: 0), CGSize(width: -43, height: 0),
+                            CGSize(width: 44, height: 80), CGSize(width: -60, height: 55),
+                            CGSize(width: CGFloat.nan, height: 0), CGSize(width: 100, height: CGFloat.infinity)] {
+            XCTAssertNil(QueuePreviewBarNavigation.destination(translation: translation, playlist: playlist, isEnabled: true))
+        }
+    }
+
     func testQueuePreviewBackgroundTapHidesControlsWhenReadyAndIdle() {
         let cases: [(loading: Bool, error: Bool, visible: Bool, scrubbing: Bool, dragging: Bool, hides: Bool)] = [
             (false, false, true, false, false, true),
