@@ -228,3 +228,10 @@
 - iPad/iPhone의 com.bokki.previewvalidation.* 검사 runner 제거 및 작업용 Documents/BOKKI-Review-RF14T0P10A, Documents/BOKKI-Swipe-IP13S8W4Q1-ur7esntb 폴더 부재를 확인했습니다. 빈 폴더로 교체하는 도구는 삭제 후 경로 재조회 오류를 반환했으나, 별도 files 조회가 성공하며 0개를 반환해 실제 삭제를 확인했습니다. 설치한 본 앱(iPad 48 / iPhone 47)과 개인 영상은 유지했습니다.
 - 추적 파일 131개의 전후 SHA256을 비교했으며 작업 기록 temp.md/test.md 외 129개 입력의 내용/존재가 동일합니다. 소스·Xcode 프로젝트/설정·아이콘/테스트 입력·링크에 필요한 Vendor 의존성·인증키와 Git 이력을 보존했습니다. 프로젝트 plist 검사 및 git diff --check 성공.
 - 제출된 TestFlight 빌드 48은 로컬 파일 삭제로 변경되지 않습니다. 삭제한 archive/IPA/dSYM/원본 검사 결과/검증 이미지 경로는 이전 기록에 역사적 참고로만 남아 있으며 복구는 보장되지 않습니다. 재검사는 소스와 새 QA 자료에서 다시 생성해야 합니다.
+
+
+## CL14C0D8N2 — 사용자 반복 요청에 따른 소스 보관 형태 정리 (2026-10-14)
+- 이전 정리에서 보존했던 사전 컴파일 FFmpeg xcframework 전체(두 lib.a 및 생성된 header/modulemap/Info.plist), 앱 아이콘 PNG 3개, 영상 테스트 입력(VC-1/Y41P), 비코드 라이선스/배포 안내 문서를 삭제했습니다. 생성 header/modulemap은 삭제 전에 Vendor/Sources의 원본과 동일함을 확인했습니다.
+- 원본 코드 94개(Swift/C/header/modulemap/shell script)는 SHA256 전후 일치. Xcode 프로젝트/Info.plist/asset manifest/Package.resolved 및 배포 도구의 원본 JSON/TSV 설정, Git 이력, 사용자 지시된 작업 기록은 보존합니다. 인증 키와 설치된 기기 앱/TestFlight 빌드는 변경하지 않았습니다.
+- 현재 checkout은 소스 보관 형태입니다. 즉시 앱 빌드/일부 테스트/배포가 가능한 상태로 보고하지 않습니다. 재사용하려면 Vendor/FFmpegLGPLDecodeBridge/build_ffmpeg_lgpl_decode_bridge.sh로 framework를 재생성하고, 아이콘/테스트 입력/라이선스 자료는 삭제 전 커밋 0836a13에서 복구해야 합니다.
+- 이미지·영상·정적 라이브러리 및 생성 산출물 부재, 설정 plist 구문과 git diff --check를 검사했습니다. 재생성 가능 파일을 다시 만들지 않도록 빌드/테스트는 실행하지 않았습니다.
