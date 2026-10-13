@@ -61,4 +61,20 @@
 - Apple API 실시간 조회: 최신 빌드는 `1.1.12 (43)`, 처리 VALID, 내부 IN_BETA_TESTING입니다. App Store 버전 1.1.12는 READY_FOR_DISTRIBUTION입니다. 근거: `builds-before.json`, `versions-before.json`.
 - 기존 내부 그룹 `Taption Encoder Internal`은 hasAccessToAllBuilds=true입니다. 그룹·테스터 설정은 유지합니다. 근거: `groups-before.json`.
 - 앱·확장·테스트의 Debug/Release 8개 설정을 모두 `1.1.13 (44)`로 올렸습니다. 인증 키는 기존 저장소 외부 경로를 사용하고, 유효한 Apple Distribution 인증서를 확인했습니다.
-- 서명 archive, IPA 검증 및 Apple 처리 결과는 진행 후 아래에 추가합니다.
+
+## 커밋·서명·업로드
+
+- 소스 커밋 `3577219fefedf06e3e21c97b1275523bcd3edde9`를 main에 생성하고 origin/main으로 푸시했습니다. clean 상태에서 해당 커밋을 archive했습니다.
+- Xcode 27.0 Release archive 및 app-store-connect IPA export가 모두 exit 0으로 성공했습니다. 자동 빌드 번호 변경은 끄고 1.1.13 (44)를 고정했습니다. 근거: `archive-result.json`, `export-result.json`.
+- IPA의 앱·Live Activity·Thumbnail 확장 3개 모두 1.1.13 (44), Apple Distribution 서명, Team 4FWG8XXYM7 일치를 확인했습니다. 각 codesign --verify --deep --strict 통과, App Store 배포 프로파일, get-task-allow=false, 프로파일 유효기간을 검증했습니다. 근거: `ipa-verification.json`.
+- IPA 크기 28,301,564 bytes, SHA-256 `fe7e70ef5c707eab683923688ebd3c32b065e0d17f50a7b35de4970a2ec96dab`.
+- 빌드 후 추적 파일 121개의 SHA-256이 커밋 당시와 모두 일치하고 워크트리 clean입니다. 근거: `post-build-source-verification.json`.
+- 2026-10-13 17:24:11 KST, altool UPLOAD SUCCEEDED with no errors(exit 0). Delivery UUID `07b9d10f-018f-48eb-93c3-e376ff40effd`. 근거: `upload-result.json`, `upload.log`.
+
+## 최종 결과 — 완료
+
+- 2026-10-13 17:26:49 KST, Apple API에서 `1.1.13 (44)` processingState=VALID, internalBuildState=IN_BETA_TESTING, usesNonExemptEncryption=false를 확인했습니다. Build ID `07b9d10f-018f-48eb-93c3-e376ff40effd`. 근거: `testflight-ready.json`, `delivery-status.json`.
+- 기존 내부 그룹 `Taption Encoder Internal`의 빌드 목록에서도 44/VALID를 확인했습니다. 근거: `internal-group-builds-after.json`(HTTP 200). 새 테스터·그룹 추가 없이 기존 자동 배포 설정으로 사용 가능합니다.
+- 이번 배포는 TestFlight 내부 테스트까지입니다. 외부 베타 상태는 READY_FOR_BETA_SUBMISSION이며 App Store 심사 제출은 수행하지 않았습니다.
+- 배포 파일은 위 외부 검증 폴더의 `BOKKIEncoder-1.1.13-44.xcarchive` 및 `Export/Taption Encoder.ipa`입니다. 소스 저장소에 IPA·archive·인증 키를 추가하지 않았습니다.
+- 검증 완료 항목을 temp.md에서 제거했습니다. 최종 기록 커밋·푸시 후 main/origin/main/실제 원격 SHA 일치, clean 상태 및 배포 소스 119개 일치 확인은 `final-git-verification.json`에 기록합니다.
