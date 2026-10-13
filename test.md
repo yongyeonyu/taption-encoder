@@ -219,3 +219,12 @@
 - `BOKKIEncoder-1.1.13-48.xcarchive` archive 및 App Store Connect export 성공. 앱·Live Activity·thumbnail extension 모두 1.1.13(48), Apple Distribution 서명·팀·배포 provisioning 검증 성공(`ipa-verification.json`). IPA 28,392,614 bytes, SHA256 `09ef456adcce7b01c828e0f633d0ddcc954dce0a04cb991c020499ec0d9481fd`.
 - Apple upload 성공(`upload-result.json`, `upload.log`). Delivery/build ID `9188d2c9-d649-4980-a13c-e5bc6b0a48ee`.
 - 2026-10-14 02:57 KST Apple 처리 **VALID / IN_BETA_TESTING** 확인(`testflight-ready.json`). 내부 beta group 1개에 빌드 48 포함 확인(`internal-groups48-verified.json`). 한국어/영어 TestFlight 안내 등록 후 내용 재조회 일치(`beta-notes-verified.json`). 외부 beta 심사/App Store 재심사는 이번 요청 범위에서 제출하지 않았습니다.
+
+
+## CL14R7G2K9 — 생성 자료 및 BOKKI 전용 시뮬레이터 삭제 (2026-10-14)
+- 사용자 요청에 따라 BOKKI 소유 임시 빌드/검사 캐시, SPM 다운로드 캐시, archive/IPA/dSYM/xcresult, 테스트 harness 및 합성 영상, 배포 로그, 소개/검증용 화면을 삭제했습니다. 삭제 후보의 실행 중 xcodebuild 및 열린 파일이 없음을 확인하고 삭제 후 경로 부재를 재검사했습니다.
+- 임시 생성 자료 점유 약 3.53GiB(3,787,980,800 bytes), 전용 시뮬레이터 2개 점유 약 7.75GiB를 제거했습니다. 디스크 여유는 약 45GiB에서 54GiB로 증가했습니다(APFS 공유 블록 때문에 점유 합과 확보 공간은 다릅니다).
+- 삭제된 전용 simulator: E12CAC71-2275-48A6-B014-557B27787A35 / 306181D1-49AC-456A-91F7-B69B6B53D774. 다른 Taption 프로젝트의 실행 중 simulator 023E6D0E-B678-4239-8E6D-C79FF4BC1DEF / 40489265-CA76-4F54-A051-A1F54F01741B는 유지 확인했습니다.
+- iPad/iPhone의 com.bokki.previewvalidation.* 검사 runner 제거 및 작업용 Documents/BOKKI-Review-RF14T0P10A, Documents/BOKKI-Swipe-IP13S8W4Q1-ur7esntb 폴더 부재를 확인했습니다. 빈 폴더로 교체하는 도구는 삭제 후 경로 재조회 오류를 반환했으나, 별도 files 조회가 성공하며 0개를 반환해 실제 삭제를 확인했습니다. 설치한 본 앱(iPad 48 / iPhone 47)과 개인 영상은 유지했습니다.
+- 추적 파일 131개의 전후 SHA256을 비교했으며 작업 기록 temp.md/test.md 외 129개 입력의 내용/존재가 동일합니다. 소스·Xcode 프로젝트/설정·아이콘/테스트 입력·링크에 필요한 Vendor 의존성·인증키와 Git 이력을 보존했습니다. 프로젝트 plist 검사 및 git diff --check 성공.
+- 제출된 TestFlight 빌드 48은 로컬 파일 삭제로 변경되지 않습니다. 삭제한 archive/IPA/dSYM/원본 검사 결과/검증 이미지 경로는 이전 기록에 역사적 참고로만 남아 있으며 복구는 보장되지 않습니다. 재검사는 소스와 새 QA 자료에서 다시 생성해야 합니다.
