@@ -240,3 +240,9 @@
 - 새 빌드/설치 요청에 따라 소스 보관 정리에서 삭제했던 필수 입력 22개를 0836a13에서 복구했습니다. framework·아이콘·영상 검사 입력·라이선스/빌드 자료는 해당 커밋의 내용과 byte 단위 일치합니다.
 - 원본 코드 94개는 2e14c1d(빌드 48의 420개 활성 단위 검사 + iPad 시뮬레이터 UI 검사 2개 통과)와 동일합니다. 이번에는 구현 변경이 없으므로 유효한 이전 기능 검증을 재사용하고 새 archive·IPA 서명·실기기 설치/실행·Apple 처리 상태를 별도로 확인합니다. 기존 원본 xcresult는 사용자 요청으로 삭제되어 기록만 보존됩니다.
 - Apple API에서 최신 빌드 48 확인 후, 앱 및 두 확장과 검사 구성의 CURRENT_PROJECT_VERSION 8곳을 49로 올렸습니다. 마케팅 버전 1.1.13 유지. git diff --check / project plist 검사 성공.
+- 배포 소스 main 커밋 `99fc7450e02c70cff60218f25d4d936649be290c` 푸시·clean 확인 후 archive했습니다. 고정 Package.resolved 버전(SwiftVLC 0.10.1 / GoogleMobileAds 13.5.0 / UMP 3.1.0)을 다시 받아 resolve 및 Release archive 성공. `build-source.json`/`post-build-source-verification.json`에 추적 파일 전후 hash 불변 확인.
+- archive의 앱·Live Activity·thumbnail extension 모두 1.1.13(49), 서명 검증 성공 및 세 요청 기기가 provisioning에 포함됨을 확인했습니다.
+- iPad Pro 12.9-inch 6세대(00008112-000964980E45401E), iPhone 11 Pro(00008030-001628201AD2802E), iPhone 18 Pro Max(00008160-000E195A1140000A) 모두 설치·설치 메타데이터 재조회·앱 launch 성공. 각 `*-device-result.json`의 install/installed/launch exitCode 0, 실제 설치 버전 1.1.13(49) 일치. 기존 앱 데이터는 유지하고 실기기 터치 검사를 통과했다고 보고하지 않습니다. 설치본은 개발 서명 Release이고 TestFlight 배포본은 별도로 Apple Distribution export했습니다.
+- App Store Connect export 성공 로그와 IPA의 독립 서명/프로파일 검증을 확인했습니다. export 이후 shell 보고용 status 변수에서 readonly 오류가 있었으나 완료된 export와 산출물에는 영향 없으며 후속 Python 검증으로 결과를 기록했습니다. 앱/두 확장 모두 Apple Distribution·4FWG8XXYM7 팀·배포 프로파일(get-task-allow false, ProvisionedDevices 없음) 검증 성공. IPA 28,392,647 bytes, SHA256 `c08ac0d8852bc74df864657927602e0080a05f05c623524e4e40c7c1aa191837`.
+- Apple 업로드 성공: delivery/build `a65d584f-a67f-4458-9ae5-8994a6dba70d`. 2026-10-14 03:28 KST **VALID / IN_BETA_TESTING** 확인, 내부 beta group 1개에 빌드 49 포함 확인. 한국어/영어 TestFlight 안내 등록 및 재조회 일치. App Store/외부 beta 심사 제출은 이번 요청 범위에 포함하지 않았습니다.
+- 새 생성 자료는 `/private/tmp/BOKKIEncoder-TF14B4J8Q1-4u_q66e3`에 보관하고, 이번 배포 요청으로 필수 입력을 복구한 상태이므로 즉시 빌드 불가로 기술한 직전 소스 보관 기록은 과거 상태입니다.
