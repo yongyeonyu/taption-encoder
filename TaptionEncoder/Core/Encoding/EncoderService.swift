@@ -291,6 +291,8 @@ final class AVFoundationHEVCEncoderService: EncoderServicing {
         guard let temporaryOutputURL = plan.temporaryOutputURL else {
             throw TaptionVideoCoreError.missingTemporaryOutputURL
         }
+        try Task.checkCancellation()
+        try MediaFileIdentity.validateEncodingOutput(source: sourceURL, temporary: temporaryOutputURL)
         guard let route = plan.codecRoute else {
             throw TaptionVideoCoreError.exportFailed("The codec route was not prepared.")
         }
@@ -308,7 +310,9 @@ final class AVFoundationHEVCEncoderService: EncoderServicing {
             at: temporaryOutputURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        try? FileManager.default.removeItem(at: temporaryOutputURL)
+        if FileManager.default.fileExists(atPath: temporaryOutputURL.path) {
+            try FileManager.default.removeItem(at: temporaryOutputURL)
+        }
 
         let executionKind = plan.codecExecutionKind ?? .software
         try TaptionSourcePreservingExecutionAudit.validate(plan: plan)

@@ -3,101 +3,12 @@ import Foundation
 import MediaPlayer
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 #if DEBUG
 @_spi(ValidationHarness) import SwiftVLC
 #else
 import SwiftVLC
 #endif
-
-enum QueuePreviewPlaybackMath {
-    static let skipIntervalSeconds = 10.0
-
-    static func seconds(from duration: Duration?) -> Double? {
-        guard let duration else {
-            return nil
-        }
-        let components = duration.components
-        let seconds = Double(components.seconds)
-        let attoseconds = Double(components.attoseconds) / 1_000_000_000_000_000_000
-        let total = seconds + attoseconds
-        return total.isFinite ? max(0, total) : nil
-    }
-
-    static func formattedTime(_ duration: Duration?) -> String {
-        formattedSeconds(seconds(from: duration))
-    }
-
-    static func formattedSeconds(_ seconds: Double?) -> String {
-        guard let secondsValue = seconds,
-              secondsValue.isFinite else {
-            return "--:--"
-        }
-        let wholeSeconds = max(0, Int(secondsValue.rounded()))
-        let hours = wholeSeconds / 3600
-        let minutes = (wholeSeconds % 3600) / 60
-        let seconds = wholeSeconds % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%02d:%02d", minutes, seconds)
-    }
-
-    static func clampedPosition(_ value: Double) -> Double {
-        guard value.isFinite else {
-            return 0
-        }
-        return min(max(value, 0), 1)
-    }
-
-    static func hasUsableTimeline(durationSeconds: Double?) -> Bool {
-        guard let durationSeconds,
-              durationSeconds.isFinite else {
-            return false
-        }
-        return durationSeconds > 0
-    }
-
-    static func displayedSliderPosition(
-        playerPosition: Double,
-        isScrubbing: Bool,
-        scrubberPosition: Double,
-        dragSeekPreviewPosition: Double?,
-        durationSeconds: Double?
-    ) -> Double {
-        guard hasUsableTimeline(durationSeconds: durationSeconds) else {
-            return 0
-        }
-        if isScrubbing {
-            return clampedPosition(scrubberPosition)
-        }
-        if let dragSeekPreviewPosition {
-            return clampedPosition(dragSeekPreviewPosition)
-        }
-        return clampedPosition(playerPosition)
-    }
-
-    static func horizontalDragPosition(
-        startPosition: Double,
-        translation: CGFloat,
-        containerWidth: CGFloat
-    ) -> Double {
-        guard containerWidth > 0 else {
-            return clampedPosition(startPosition)
-        }
-        let positionDelta = Double(translation / containerWidth)
-        return clampedPosition(startPosition + positionDelta)
-    }
-
-    static func verticalAdjustmentDelta(
-        translation: CGFloat,
-        containerHeight: CGFloat
-    ) -> Float {
-        guard containerHeight > 0 else {
-            return 0
-        }
-        return Float(-translation / containerHeight)
-    }
-}
 
 enum QueuePreviewControlsVisibilityPolicy {
     static func shouldHideOnBackgroundTap(
@@ -139,6 +50,7 @@ struct QueueVideoPreviewView: View {
     var onPictureInPictureActiveChanged: (Bool) -> Void
     var onPrevious: () -> Void
     var onNext: () -> Void
+    var onAuthorizeFolder: (URL, Int) -> String? = { _, _ in nil }
 
     @ViewBuilder
     var body: some View {
@@ -157,7 +69,7 @@ struct QueueVideoPreviewView: View {
                 onAddToList: onAddToList,
                 onClose: onClose, onMinimize: onMinimize,
                 onPictureInPictureActiveChanged: onPictureInPictureActiveChanged,
-                onPrevious: onPrevious, onNext: onNext
+                onPrevious: onPrevious, onNext: onNext, onAuthorizeFolder: onAuthorizeFolder
             )
         } else {
             VLCQueueVideoPreviewView(
@@ -166,7 +78,7 @@ struct QueueVideoPreviewView: View {
                 onAddToList: onAddToList,
                 onClose: onClose, onMinimize: onMinimize,
                 onPictureInPictureActiveChanged: onPictureInPictureActiveChanged,
-                onPrevious: onPrevious, onNext: onNext
+                onPrevious: onPrevious, onNext: onNext, onAuthorizeFolder: onAuthorizeFolder
             )
         }
     }
@@ -200,14 +112,16 @@ struct QueuePreviewAddListButton: View {
 
 enum QueuePreviewBarNavigation: Equatable {
     case previous, next
+    case folderAccessRequired
 
-    static func destination(translation: CGSize, playlist: QueueVideoPreviewPlaylist?, isEnabled: Bool) -> Self? {
-        guard isEnabled, let playlist,
+    static func destination(translation: CGSize, playlist: QueueVideoPreviewPlaylist?, isEnabled: Bool, needsFolderAccess: Bool = false) -> Self? {
+        guard isEnabled,
               translation.width.isFinite, translation.height.isFinite,
               abs(translation.width) >= 44,
               abs(translation.width) > abs(translation.height) * 1.4 else { return nil }
-        if translation.width < 0, playlist.hasNext { return .next }
-        if translation.width > 0, playlist.hasPrevious { return .previous }
+        if translation.width < 0, playlist?.hasNext == true { return .next }
+        if translation.width > 0, playlist?.hasPrevious == true { return .previous }
+        if needsFolderAccess { return .folderAccessRequired }
         return nil
     }
 }
@@ -242,10 +156,15 @@ struct QueuePreviewActionBar: View {
     var onClose: () -> Void
     var onPrevious: () -> Void
     var onNext: () -> Void
+    var onAuthorizeFolder: (URL, Int) -> String? = { _, _ in nil }
 
     @State private var showsInformation = false
     @State private var isSharing = false
     @State private var shareError: String?
+    @State private var errorTitle = "Unable to share"
+    @State private var showsFolderAccess = false
+    @State private var connectsFolderAfterInformation = false
+    @State private var showsFolderHint = false
 
     var body: some View {
         HStack(spacing: 7) {
@@ -257,6 +176,7 @@ struct QueuePreviewActionBar: View {
             }
             .background {
                 QueuePreviewSharePresenter(sourceURL: preview.sourceURL, isPresented: $isSharing) {
+                    errorTitle = "Unable to share"
                     shareError = $0
                 }
                 .allowsHitTesting(false)
@@ -270,7 +190,9 @@ struct QueuePreviewActionBar: View {
                 .contentShape(Rectangle())
                 .accessibilityIdentifier("preview.filename")
                 .accessibilityValue(preview.playlist?.positionText ?? "1 / 1")
-                .accessibilityHint("Swipe left for the next file or right for the previous file.")
+                .accessibilityHint(preview.folderAccessURL == nil
+                    ? "Swipe left for the next file or right for the previous file."
+                    : "Connect this folder in Video information to browse nearby videos.")
                 .accessibilityAdjustableAction { direction in
                     guard canNavigate else { return }
                     switch direction {
@@ -284,19 +206,55 @@ struct QueuePreviewActionBar: View {
         }
         .contentShape(Rectangle())
         .highPriorityGesture(DragGesture(minimumDistance: 24).onEnded { value in
-            guard !showsInformation && !isSharing else { return }
-            switch QueuePreviewBarNavigation.destination(translation: value.translation, playlist: preview.playlist, isEnabled: canNavigate) {
+            guard !showsInformation && !isSharing && !showsFolderAccess else { return }
+            let direction = QueuePreviewBarNavigation.destination(translation: value.translation,
+                playlist: preview.playlist, isEnabled: canNavigate, needsFolderAccess: preview.folderAccessURL != nil)
+            switch direction {
             case .previous: onPrevious()
             case .next: onNext()
+            case .folderAccessRequired: showsFolderHint = true
             case nil: break
             }
         })
+        .overlay(alignment: .top) {
+            if showsFolderHint {
+                Text("Connect the folder in ⓘ to browse its videos.")
+                    .font(.caption).foregroundStyle(.white)
+                    .padding(10)
+                    .background(.black.opacity(0.85), in: Capsule())
+                    .offset(y: -120)
+                    .allowsHitTesting(false)
+                    .accessibilityIdentifier("preview.folder.hint")
+            }
+        }
+        .task(id: showsFolderHint) {
+            guard showsFolderHint else { return }
+            do { try await Task.sleep(for: .seconds(3)) } catch { return }
+            showsFolderHint = false
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("preview.actions")
-        .sheet(isPresented: $showsInformation) {
-            QueuePreviewInformationSheet(preview: preview)
+        .sheet(isPresented: $showsInformation, onDismiss: {
+            if connectsFolderAfterInformation {
+                connectsFolderAfterInformation = false
+                showsFolderAccess = true
+            }
+        }) {
+            QueuePreviewInformationSheet(preview: preview) {
+                connectsFolderAfterInformation = true
+                showsInformation = false
+            }
         }
-        .alert("Unable to share", isPresented: Binding(
+        .background {
+            QueuePreviewFolderAccessPresenter(directoryURL: preview.folderAccessURL, isPresented: $showsFolderAccess) { url in
+                if let url {
+                    errorTitle = "Folder access"
+                    shareError = onAuthorizeFolder(url, 0)
+                }
+            }
+            .allowsHitTesting(false)
+        }
+        .alert(errorTitle, isPresented: Binding(
             get: { shareError != nil },
             set: { if !$0 { shareError = nil } }
         )) {
@@ -305,17 +263,30 @@ struct QueuePreviewActionBar: View {
         .onChange(of: preview.id) { _, _ in
             showsInformation = false
             isSharing = false
+            showsFolderAccess = false
+            connectsFolderAfterInformation = false
+            showsFolderHint = false
         }
     }
 }
 
 struct QueuePreviewInformationSheet: View {
     var preview: QueueVideoPreview
+    var onConnectFolder: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             Form {
+                if preview.folderAccessURL != nil {
+                    Section("Folder navigation") {
+                        LabeledContent("Folder", value: preview.folderAccessURL?.lastPathComponent ?? "")
+                        Button("Connect folder", action: onConnectFolder)
+                            .accessibilityIdentifier("preview.folder.connect")
+                        Text("Choose the folder containing this video once to browse its other videos.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
                 Section("File") {
                     info("Name", preview.displayName)
                     info("Size", preview.videoInfo.fileSize)
@@ -353,94 +324,6 @@ struct QueuePreviewInformationSheet: View {
 
     private func info(_ name: String, _ value: String) -> some View {
         LabeledContent(name, value: value.isEmpty ? "Not available" : value)
-    }
-}
-
-struct QueuePreviewSharePresenter: UIViewControllerRepresentable {
-    var sourceURL: URL
-    @Binding var isPresented: Bool
-    var onError: (String) -> Void
-
-    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
-
-    func makeUIViewController(context: Context) -> UIViewController {
-        let anchor = UIViewController()
-        anchor.view.backgroundColor = .clear
-        anchor.view.isUserInteractionEnabled = false
-        return anchor
-    }
-
-    func updateUIViewController(_ anchor: UIViewController, context: Context) {
-        context.coordinator.parent = self
-        if isPresented { context.coordinator.present(from: anchor) }
-        else { context.coordinator.dismiss() }
-    }
-
-    static func dismantleUIViewController(_ anchor: UIViewController, coordinator: Coordinator) {
-        coordinator.dismiss()
-    }
-
-    final class Coordinator: NSObject, UIAdaptivePresentationControllerDelegate, UIPopoverPresentationControllerDelegate {
-        var parent: QueuePreviewSharePresenter
-        private weak var activityController: UIActivityViewController?
-        private var scopedURL: URL?
-        private var isPreparing = false
-
-        init(parent: QueuePreviewSharePresenter) { self.parent = parent }
-
-        func present(from anchor: UIViewController) {
-            guard !isPreparing, activityController == nil else { return }
-            isPreparing = true
-            DispatchQueue.main.async { [weak self, weak anchor] in
-                guard let self else { return }
-                self.isPreparing = false
-                guard self.parent.isPresented, let anchor, anchor.view.window != nil else { return }
-                let url = self.parent.sourceURL
-                if url.startAccessingSecurityScopedResource() { self.scopedURL = url }
-                guard url.isFileURL, FileManager.default.isReadableFile(atPath: url.path) else {
-                    self.finish()
-                    self.parent.onError("This video is no longer available. Open the file again and try sharing it.")
-                    return
-                }
-                let controller = UIActivityViewController(activityItems: [url], applicationActivities: nil)
-                self.activityController = controller
-                // UIKit requires an anchored popover on iPad; iPhone uses the native modal share sheet.
-                if let popover = controller.popoverPresentationController {
-                    popover.sourceView = anchor.view
-                    popover.sourceRect = anchor.view.bounds
-                    popover.permittedArrowDirections = [.up, .down]
-                    popover.delegate = self
-                }
-                controller.completionWithItemsHandler = { [weak self] _, _, _, error in
-                    DispatchQueue.main.async {
-                        self?.finish()
-                        if let error { self?.parent.onError(error.localizedDescription) }
-                    }
-                }
-                anchor.present(controller, animated: true) {
-                    controller.presentationController?.delegate = self
-                }
-            }
-        }
-
-        func dismiss() {
-            guard let controller = activityController else { return }
-            controller.dismiss(animated: true) { [weak self] in self?.finish() }
-        }
-
-        private func finish() {
-            activityController = nil
-            if let url = scopedURL {
-                url.stopAccessingSecurityScopedResource()
-                scopedURL = nil
-            }
-            if parent.isPresented { parent.isPresented = false }
-        }
-
-        func presentationControllerDidDismiss(_ presentationController: UIPresentationController) { finish() }
-        func popoverPresentationControllerDidDismissPopover(_ popoverPresentationController: UIPopoverPresentationController) { finish() }
-
-        deinit { scopedURL?.stopAccessingSecurityScopedResource() }
     }
 }
 
@@ -498,6 +381,7 @@ private struct VLCQueueVideoPreviewView: View {
     var onPictureInPictureActiveChanged: (Bool) -> Void
     var onPrevious: () -> Void
     var onNext: () -> Void
+    var onAuthorizeFolder: (URL, Int) -> String? = { _, _ in nil }
 
     @State private var player = QueuePreviewPlayerFactory.makePreviewPlayer()
     @State private var playbackLifetime = QueuePreviewPlaybackLifetime()
@@ -748,7 +632,7 @@ private struct VLCQueueVideoPreviewView: View {
                 preview: preview, isAdded: isAddedToList,
                 canAdd: canAddToList && !isLoading, canNavigate: !isLoading,
                 onAdd: onAddToList, onClose: closePreview,
-                onPrevious: previousItem, onNext: nextItem
+                onPrevious: previousItem, onNext: nextItem, onAuthorizeFolder: onAuthorizeFolder
             )
         }
         .padding(.horizontal, 10)

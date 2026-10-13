@@ -96,6 +96,16 @@
 		E20C10D1912A6156FE012F74 /* Y41P.avi in Resources */ = {isa = PBXBuildFile; fileRef = B8858C4E1F3ED23277456780 /* Y41P.avi */; };
 		E7A52CBD8BD1268A8A0B6461 /* VC-1 Raw.vc1 in Resources */ = {isa = PBXBuildFile; fileRef = 5451DA230C981A72D8E8E1BF /* VC-1 Raw.vc1 */; };
 		F302F927F6EAD26A3B0879EA /* EncodingLiveActivityCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61752A4CFD225BC9A187B244 /* EncodingLiveActivityCoordinator.swift */; };
+		0D5070D4DA954A6F1E62BCA4 /* MediaFileIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81BAB11B4189B4B5FD6A4BC4 /* MediaFileIdentity.swift */; };
+		815D9FC3C0E76221A5E48413 /* SecurityScopedAccessStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2E401C604539610176CAD8D /* SecurityScopedAccessStore.swift */; };
+		D46D52BF79F02B9A2077DF16 /* PreviewFolderBookmarkStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1EFF57E0A9058D85879C49C /* PreviewFolderBookmarkStore.swift */; };
+		92018B0FE82247806ED0907C /* InspectedMediaCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 632218B3828645EC077F0408 /* InspectedMediaCache.swift */; };
+		9ACDB5052E0A13E8B633868E /* PendingSaveCleanup.swift in Sources */ = {isa = PBXBuildFile; fileRef = D690266C7BB138BADBA6CF5D /* PendingSaveCleanup.swift */; };
+		4E0CFBAB627489B7047C5B56 /* MediaDisplayFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F9AD24C5B4AFB08C2E9FC4E /* MediaDisplayFormatting.swift */; };
+		336FBE3096378BDA413D8E1C /* LoadedVideoInfoFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DF727E59A43D8DC20D08992 /* LoadedVideoInfoFactory.swift */; };
+		422032FAF2EAD1BC1F369BF5 /* QueuePreviewPlaybackMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = F710316FDA271A279ED4DDBF /* QueuePreviewPlaybackMath.swift */; };
+		CC3EF6679EC602C3D4114787 /* QueuePreviewModalPresenters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2346EAA2C9CF4A6E90AC739F /* QueuePreviewModalPresenters.swift */; };
+		B85C13A667EB4B66F41E9CFA /* RefactoringRegressionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65DE4842C427DC26E8786ADD /* RefactoringRegressionTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -227,6 +237,16 @@
 		B2312973914E63DB4C5881AD /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		B8858C4E1F3ED23277456780 /* Y41P.avi */ = {isa = PBXFileReference; includeInIndex = 1; name = Y41P.avi; path = TaptionEncoderTests/Fixtures/Y41P.avi; sourceTree = "<group>"; };
 		F82EE42DD1A26E2E406B25B9 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		81BAB11B4189B4B5FD6A4BC4 /* MediaFileIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionEncoder/Core/Storage/MediaFileIdentity.swift; sourceTree = SOURCE_ROOT; };
+		F2E401C604539610176CAD8D /* SecurityScopedAccessStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionEncoder/Core/SourceOpening/SecurityScopedAccessStore.swift; sourceTree = SOURCE_ROOT; };
+		A1EFF57E0A9058D85879C49C /* PreviewFolderBookmarkStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionEncoder/Core/SourceOpening/PreviewFolderBookmarkStore.swift; sourceTree = SOURCE_ROOT; };
+		632218B3828645EC077F0408 /* InspectedMediaCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionEncoder/Core/MediaInspection/InspectedMediaCache.swift; sourceTree = SOURCE_ROOT; };
+		D690266C7BB138BADBA6CF5D /* PendingSaveCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionEncoder/Core/PendingSave/PendingSaveCleanup.swift; sourceTree = SOURCE_ROOT; };
+		6F9AD24C5B4AFB08C2E9FC4E /* MediaDisplayFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionEncoder/Shared/MediaDisplayFormatting.swift; sourceTree = SOURCE_ROOT; };
+		4DF727E59A43D8DC20D08992 /* LoadedVideoInfoFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionEncoder/Features/Home/LoadedVideoInfoFactory.swift; sourceTree = SOURCE_ROOT; };
+		F710316FDA271A279ED4DDBF /* QueuePreviewPlaybackMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionEncoder/Features/Preview/QueuePreviewPlaybackMath.swift; sourceTree = SOURCE_ROOT; };
+		2346EAA2C9CF4A6E90AC739F /* QueuePreviewModalPresenters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionEncoder/Features/Preview/QueuePreviewModalPresenters.swift; sourceTree = SOURCE_ROOT; };
+		65DE4842C427DC26E8786ADD /* RefactoringRegressionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionEncoderTests/RefactoringRegressionTests.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -371,6 +391,7 @@
 		3A2B3C4D5E6F701000000402 /* Home */ = {
 			isa = PBXGroup;
 			children = (
+				4DF727E59A43D8DC20D08992 /* LoadedVideoInfoFactory.swift */,
 				3A2B3C4D5E6F701000000201 /* HomeView.swift */,
 				3A2B3C4D5E6F701000000202 /* HomeViewModel.swift */,
 				3A2B3C4D5E6F701000000203 /* HomeScreenState.swift */,
@@ -396,6 +417,7 @@
 		3A2B3C4D5E6F701000000404 /* MediaInspection */ = {
 			isa = PBXGroup;
 			children = (
+				632218B3828645EC077F0408 /* InspectedMediaCache.swift */,
 				3A2B3C4D5E6F701000000302 /* MediaInspector.swift */,
 			);
 			path = MediaInspection;
@@ -404,6 +426,7 @@
 		3A2B3C4D5E6F701000000405 /* Storage */ = {
 			isa = PBXGroup;
 			children = (
+				81BAB11B4189B4B5FD6A4BC4 /* MediaFileIdentity.swift */,
 				3A2B3C4D5E6F701000000303 /* StorageChecking.swift */,
 			);
 			path = Storage;
@@ -412,6 +435,8 @@
 		3A2B3C4D5E6F701000000406 /* SourceOpening */ = {
 			isa = PBXGroup;
 			children = (
+				A1EFF57E0A9058D85879C49C /* PreviewFolderBookmarkStore.swift */,
+				F2E401C604539610176CAD8D /* SecurityScopedAccessStore.swift */,
 				3A2B3C4D5E6F701000000304 /* SourceOpening.swift */,
 			);
 			path = SourceOpening;
@@ -428,6 +453,7 @@
 		3A2B3C4D5E6F701000000408 /* PendingSave */ = {
 			isa = PBXGroup;
 			children = (
+				D690266C7BB138BADBA6CF5D /* PendingSaveCleanup.swift */,
 				3A2B3C4D5E6F701000000306 /* PendingSaveStore.swift */,
 				3A2B3C4D5E6F701000000313 /* SaveFailurePresentation.swift */,
 			);
@@ -492,6 +518,7 @@
 		4A2B3C4D5E6F701000000203 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+				6F9AD24C5B4AFB08C2E9FC4E /* MediaDisplayFormatting.swift */,
 				4A2B3C4D5E6F701000000116 /* SampleThumbnailCatalog.swift */,
 				4A2B3C4D5E6F701000000204 /* UI */,
 				DC8DF6E21BFD6329F71C4664 /* LiveActivity */,
@@ -512,6 +539,8 @@
 		4A2B3C4D5E6F701000000209 /* Preview */ = {
 			isa = PBXGroup;
 			children = (
+				2346EAA2C9CF4A6E90AC739F /* QueuePreviewModalPresenters.swift */,
+				F710316FDA271A279ED4DDBF /* QueuePreviewPlaybackMath.swift */,
 				4A2B3C4D5E6F701000000117 /* QueuePreviewViews.swift */,
 				6F06A8B20000000000000110 /* NativeQueueVideoPreviewView.swift */,
 			);
@@ -601,6 +630,7 @@
 		8A2B3C4D5E6F701000000300 /* TaptionEncoderTests */ = {
 			isa = PBXGroup;
 			children = (
+				65DE4842C427DC26E8786ADD /* RefactoringRegressionTests.swift */,
 				8A2B3C4D5E6F701000000101 /* CodecRoutePlannerTests.swift */,
 				8A2B3C4D5E6F701000000102 /* CodecFixtureEvidenceTests.swift */,
 				8A2B3C4D5E6F701000000103 /* ProjectDocumentTests.swift */,
@@ -849,6 +879,15 @@
 				4A2B3C4D5E6F701000000012 /* ImportableVideoTypes.swift in Sources */,
 				4A2B3C4D5E6F701000000013 /* LoadedFilesPanelView.swift in Sources */,
 				4A2B3C4D5E6F701000000014 /* HomeQueueModels.swift in Sources */,
+				CC3EF6679EC602C3D4114787 /* QueuePreviewModalPresenters.swift in Sources */,
+				422032FAF2EAD1BC1F369BF5 /* QueuePreviewPlaybackMath.swift in Sources */,
+				336FBE3096378BDA413D8E1C /* LoadedVideoInfoFactory.swift in Sources */,
+				4E0CFBAB627489B7047C5B56 /* MediaDisplayFormatting.swift in Sources */,
+				9ACDB5052E0A13E8B633868E /* PendingSaveCleanup.swift in Sources */,
+				92018B0FE82247806ED0907C /* InspectedMediaCache.swift in Sources */,
+				D46D52BF79F02B9A2077DF16 /* PreviewFolderBookmarkStore.swift in Sources */,
+				815D9FC3C0E76221A5E48413 /* SecurityScopedAccessStore.swift in Sources */,
+				0D5070D4DA954A6F1E62BCA4 /* MediaFileIdentity.swift in Sources */,
 				4A2B3C4D5E6F701000000015 /* HomeMenuSheetView.swift in Sources */,
 				4A2B3C4D5E6F701000000016 /* SampleThumbnailCatalog.swift in Sources */,
 				4A2B3C4D5E6F701000000017 /* QueuePreviewViews.swift in Sources */,
@@ -894,6 +933,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8A2B3C4D5E6F701000000001 /* CodecRoutePlannerTests.swift in Sources */,
+				B85C13A667EB4B66F41E9CFA /* RefactoringRegressionTests.swift in Sources */,
 				8A2B3C4D5E6F701000000002 /* CodecFixtureEvidenceTests.swift in Sources */,
 				8A2B3C4D5E6F701000000003 /* ProjectDocumentTests.swift in Sources */,
 			);
@@ -1065,7 +1105,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 48;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				ENABLE_PREVIEWS = YES;
@@ -1094,7 +1134,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 48;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				ENABLE_PREVIEWS = YES;
@@ -1123,7 +1163,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 48;
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1155,7 +1195,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 48;
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -1185,7 +1225,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 48;
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = TaptionEncoderTests;
@@ -1214,7 +1254,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 48;
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = TaptionEncoderTests;
@@ -1243,7 +1283,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 48;
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TaptionEncoderThumbnailExtension/Info.plist;
@@ -1271,7 +1311,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 48;
 				DEVELOPMENT_TEAM = 4FWG8XXYM7;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TaptionEncoderThumbnailExtension/Info.plist;

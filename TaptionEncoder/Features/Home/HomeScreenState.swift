@@ -824,6 +824,7 @@ struct QueueVideoPreview: Identifiable, Equatable {
     var videoInfo: LoadedVideoInfo
     var displaySize: TaptionPixelSize?
     var playlist: QueueVideoPreviewPlaylist? = nil
+    var folderAccessURL: URL? = nil
     var usesNativePlayback: Bool = false
     var playbackSnapshot: QueuePreviewPlaybackSnapshot? = nil
 

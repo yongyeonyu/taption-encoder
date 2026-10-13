@@ -17,6 +17,7 @@ struct NativeQueueVideoPreviewView: View {
     var onPictureInPictureActiveChanged: (Bool) -> Void = { _ in }
     var onPrevious: () -> Void = {}
     var onNext: () -> Void = {}
+    var onAuthorizeFolder: (URL, Int) -> String? = { _, _ in nil }
 
     @StateObject private var playback = NativeQueuePreviewPlayback()
     @State private var didBeginAdSuppression = false
@@ -198,7 +199,7 @@ struct NativeQueueVideoPreviewView: View {
                     preview: preview, isAdded: isAddedToList,
                     canAdd: canAddToList && !playback.isLoading, canNavigate: !playback.isLoading,
                     onAdd: onAddToList, onClose: onClose,
-                    onPrevious: onPrevious, onNext: onNext
+                    onPrevious: onPrevious, onNext: onNext, onAuthorizeFolder: onAuthorizeFolder
                 )
             }
             .tint(.white)
@@ -209,8 +210,8 @@ struct NativeQueueVideoPreviewView: View {
     }
 
     private func seek(to seconds: Double, duration: Double) {
-        guard duration > 0, seconds.isFinite else { return }
-        playback.player.seek(to: CMTime(seconds: min(max(seconds, 0), duration), preferredTimescale: 600),
+        guard let seconds = QueuePreviewPlaybackMath.clampedSeekSeconds(seconds, duration: duration) else { return }
+        playback.player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600),
                              toleranceBefore: .zero, toleranceAfter: .zero)
     }
 
@@ -294,7 +295,18 @@ private final class NativeQueuePreviewPlayback: ObservableObject {
             try await QueuePreviewAudioSessionController.activateForPreview(id: sessionID)
             try Task.checkCancellation()
             guard self.sessionID == sessionID else { return }
-        } catch { return }
+        } catch is CancellationError {
+            if self.sessionID == sessionID { shutdown() }
+            return
+        } catch {
+            guard self.sessionID == sessionID else { return }
+            shutdown()
+            isLoading = false
+            errorMessage = "Audio playback could not start. Close the preview and try again."
+            AppLogger.error("Native preview audio activation failed", category: .ui,
+                            metadata: ["error": error.localizedDescription])
+            return
+        }
         player.isMuted = false
         player.volume = 1
         let item = AVPlayerItem(url: preview.sourceURL)

@@ -78,3 +78,138 @@
 - 이번 배포는 TestFlight 내부 테스트까지입니다. 외부 베타 상태는 READY_FOR_BETA_SUBMISSION이며 App Store 심사 제출은 수행하지 않았습니다.
 - 배포 파일은 위 외부 검증 폴더의 `BOKKIEncoder-1.1.13-44.xcarchive` 및 `Export/Taption Encoder.ipa`입니다. 소스 저장소에 IPA·archive·인증 키를 추가하지 않았습니다.
 - 검증 완료 항목을 temp.md에서 제거했습니다. 최종 기록 커밋·푸시 후 main/origin/main/실제 원격 SHA 일치, clean 상태 및 배포 소스 119개 일치 확인은 `final-git-verification.json`에 기록합니다.
+
+# IP13S8W4Q1
+
+2026-10-13 요청: iPhone 11에서 미리보기 하단 스와이프로 다음 파일이 재생되지 않는 현상을 실기기로 확인합니다.
+근거 폴더: `/private/tmp/BOKKIEncoder-IP13S8W4Q1-ur7esntb`
+
+## 초기 확인 — 실기기 테스트 진행 중
+
+- 시작 HEAD `7c666f2d91db14e2f9ae2915cedbbce43a4bd100`, 워크트리 clean이었습니다.
+- 연결 대상은 사용자 iPhone 11 Pro(iPhone12,3), iOS 27.0.1입니다. iPhone 미러링 설정에서도 대상 이름이 iPhone 11 Pro임을 확인했으며 설정을 변경하지 않았습니다.
+- devicectl 최초 설치 앱 조회에서 BOKKI Encoder `1.1.12 (43)`이 확인되었습니다. 최신 TestFlight 배포는 `1.1.13 (44)`이므로 최신 설치 상태에서 재현해야 합니다. 일반 배포 앱을 포함한 재조회 결과는 `device-app-before.json`에 보존합니다.
+- 현재 미러링 화면은 “iPhone 사용 중 / 연결하려면 iPhone을 잠그십시오”입니다. 사용자에게 화면 잠금을 요청했습니다. 터치 검증과 실제 문제 재현은 아직 수행하지 않았으며 앱 소스를 수정하지 않았습니다.
+
+## 대상 변경 및 연결 준비
+
+- 사용자 요청에 따라 실제 테스트 대상을 iPhone 18 Pro Max(iPhone19,7), iOS 27.2로 변경했습니다. 해당 기기는 이미 `1.1.13 (44)`이 설치되어 있습니다. 근거: `iphone18-app-before.json`, `iphone18-details.json`.
+- iPhone 11 Pro에는 대상 변경 메시지를 받기 전에 시작한 동일 소스 Release 개발 서명 빌드 44 설치가 완료되었습니다. 앱 삭제 없이 업데이트했고, 버전 재조회로 44를 확인했습니다. 근거: `install-build44.json`, `iphone11-app-after.json`. 이 기기의 터치 검증은 수행하지 않았습니다.
+- Mac의 미러링 선택 기기를 iPhone 18 Pro Max로 변경했습니다. 응답이 멈춘 미러링 앱을 재시작했고 다른 앱은 종료하지 않았습니다.
+- 다시 연결한 미러링에도 “iPhone 사용 중 / 연결하려면 iPhone을 잠그십시오”가 표시됩니다. 사용자에게 iPhone 18 Pro Max의 화면 잠금을 요청했습니다. 실제 스와이프 재현·수정·통과 판정은 아직 없으며 작업을 진행 중으로 유지합니다.
+
+## 연결 후 검사 준비
+
+- 사용자 화면 잠금 후 iPhone 18 미러링 연결 및 실제 BOKKI Encoder 빌드 44의 홈 화면을 확인했습니다. 다만 미러링 좌표 터치는 `noWindowsAvailable` 오류로 수행되지 않았습니다. 이 도구 오류를 앱의 스와이프 실패로 판정하지 않습니다.
+- 별도 검증 폴더의 실기기 XCTest UI 검사 프로젝트를 배포 서명하여 준비했습니다. 앱 소스는 변경하지 않았습니다. 첫 검사 `DeviceSnapshot.xcresult`는 UI 검사 초기화 시 잠금 인증 실패(com.apple.sharing.authentication error 12)로 종료됐습니다. 스와이프 검사는 실행되지 않았으므로 앱 회귀 판정에 사용하지 않습니다. 근거: `device-snapshot-result.json`, `device-snapshot.log`.
+- 실기기 자동 검사를 위해 사용자에게 iPhone 18 Pro Max의 실제 화면 잠금 해제를 요청했습니다. 제어된 합성 영상 2개(01 Ocean.mp4, 02 Sunset.mp4)를 task ID가 포함된 별도 폴더로 준비합니다. 원본 사용자 영상은 수정하지 않습니다.
+- 합성 영상 2개의 별도 폴더 `Documents/BOKKI-Swipe-IP13S8W4Q1-ur7esntb` 전송이 완료됐습니다. 근거: `fixture-copy.json`, `fixture-hashes.json`.
+- 미러링 앱을 정상 종료했습니다. 이후 devicectl lockState에서 passcodeRequired=true, unlockedSinceBoot=true를 확인했습니다. 자동 검사에 필요한 실제 잠금 해제를 대기합니다. 근거: `iphone18-lock-state.json`. 아직 스와이프의 실기기 통과·실패 결과는 없습니다.
+
+## 최종 실기기 결과 — 완료
+
+2026-10-13, 실제 iPhone 18 Pro Max(iPhone19,7, UDID 00008160-000E195A1140000A), iOS 27.2(24B5099f), 설치된 BOKKI Encoder 1.1.13 (44)에서 검사했습니다. 앱 소스 119개의 SHA-256은 배포본과 동일합니다. 근거: `final-device-verification.json`.
+
+| 검증 | 결과 | 근거 |
+| --- | --- | --- |
+| 폴더의 영상 2개 미리보기 | 실제 UI 검사 1개 통과, 실패 0 | `device-bottom-swipe-build44-r2.xcresult`, `device-bottom-swipe-summary.json` |
+| 1개만 선택한 큐의 미리보기 | 실제 UI 검사 1개 통과, 실패 0; 다음/이전 파일이 없는 상태 재현 | `device-single-file-build44.xcresult`, `device-single-file-summary.json` |
+
+복수 파일 검사 상세:
+
+- 동일한 하단 정보·공유·파일명·Add·X 줄에서 6번 좌우 스와이프했습니다. 01 Ocean → 02 Sunset → 01 Ocean의 실제 파일 이동 4회 및 첫/마지막 경계 유지 2회가 통과했습니다.
+- 새 파일의 이름·목록 위치(1 / 2, 2 / 2)·재생/일시정지 상태와 재생 시간 진행을 확인했습니다. 파일을 바꿔도 미리보기가 닫히지 않습니다.
+- 정보 버튼에서 시작한 드래그도 이전 파일로 이동하며 정보창을 잘못 열지 않습니다. 정상 정보 버튼 탭 및 정보창 닫기는 작동하고 재생이 유지됩니다.
+- Add 후 Added/중복 추가 비활성화, 다른 파일로 이동 후 돌아왔을 때 체크 상태 보존, 추가 후 계속 재생, X로 미리보기 종료를 확인했습니다. 실제 외부 공유 전송·변환·Star 차감은 수행하지 않았습니다.
+
+단일 파일 비교와 원인 근거:
+
+- 테스트 파일 1개만 남은 큐에서 썸네일로 미리보기를 다시 열었습니다. 접근성 목록 위치는 1 / 1입니다. 같은 하단 줄을 양방향으로 길게 스와이프해도 동일 파일을 계속 재생하는 상태가 재현됐습니다. 이동할 인접 파일이 없는 상태입니다.
+- 검사 전 기기 기록에서도 외부 파일 열기 후 `Queue preview opened ... position=single`가 확인됩니다. 개인 파일명은 검증 요약에서 제외했습니다. 근거: `prior-preview-modes-sanitized.json`.
+- 코드상 단일 파일 흐름은 folderBatch를 비우고, currentReviewPreview에는 playlist가 없습니다. 하단 스와이프는 playlist의 hasNext/hasPrevious가 있을 때만 이동합니다. 복수 파일 흐름·폴더 미리보기는 playlist를 구성합니다.
+- 사용 경로: 홈의 Folder에서 영상이 여러 개 있는 폴더를 선택하거나, File에서 여러 영상을 선택하면 이전/다음 이동할 목록이 생깁니다. 현재 재현 결과에 따라 앱 코드를 변경하지 않았습니다. 다른 복수 파일 목록에서 실패한다면 해당 목록의 파일·진입 경로로 별도 재현이 필요합니다.
+
+검사 과정 보완:
+
+- `device-snapshot-unlocked.xcresult`는 검사 선택자 오류로 실제 검사 0개가 실행됐으므로 통과 근거에서 제외했습니다. 선택자를 고친 `device-snapshot-real.xcresult`에서 실제 기기 및 앱 화면 연결을 확인했습니다.
+- 첫 폴더 진입 검사는 Files 격자 셀의 중앙(이름 영역) 탭으로 폴더를 열지 못했습니다. 폴더 아이콘 중심으로 검사 터치 좌표를 바꾼 후 올바른 테스트 폴더가 열렸습니다. 첫 실패는 앱의 스와이프 실패로 분류하지 않습니다.
+- 완료된 항목은 temp.md에서 제거했습니다. Git HEAD는 `7c666f2`를 유지하며 변경은 검증 기록 temp.md/test.md뿐입니다. 새 앱 빌드·TestFlight 업로드·커밋·푸시는 하지 않았습니다.
+
+실제 실기기 화면: `/Users/u_mo_c/.codex/visualizations/2026/10/06/01a1120c-6544-7a80-b5b5-8056e18d2f90/IP13S8W4Q1`
+
+대표 캡처: `iPhone18-Build44-Next.png`, `iPhone18-Build44-Previous.png`, `iPhone18-Build44-Added-Returns.png`, `iPhone18-SingleFile-AfterSwipe.png`. 합성 테스트 영상 및 실제 배포 앱의 광고 설정으로 캡처했습니다. 검증용 영상은 별도 폴더에만 추가했고 기존 사용자 영상을 삭제·수정하지 않았습니다.
+
+# SB13N6F8Q2
+
+한 파일을 선택하거나 외부에서 열어도 같은 폴더의 영상을 하단 스와이프로 이전/다음 재생하는 수정입니다. 앞선 IP13S8W4Q1 기록은 빌드 44의 수정 전 결과입니다.
+
+근거 폴더: `/private/tmp/BOKKIEncoder-SB13N6F8Q2-5l7s8kfr`
+
+- 원인: 단일 파일 선택 흐름에 인접 파일 재생 목록이 없었습니다.
+- 수정: 같은 폴더의 영상 파일을 자연 정렬하고 선택 파일의 위치에서 시작합니다. 인접 파일은 재생할 때 검사하며, 숨김 파일·디렉터리·비영상·오디오 전용 파일은 제외합니다. 재생할 수 없는 인접 항목은 이동 과정에서 건너뜁니다.
+- 변환 목록은 선택 파일과 명시적으로 +Add한 파일만 유지합니다. 미리보기를 닫거나 다시 열어도 폴더 탐색과 추가 상태가 보존되며, 큐의 삭제·순서 변경을 되돌리지 않습니다.
+- 단일 문서 권한만 있어 폴더를 읽지 못할 경우 첫 수평 스와이프에서 iOS 폴더 선택을 요청합니다. 같은 폴더 또는 상위 폴더를 허용하면 화면을 종료하지 않고 탐색을 이어가며, 관계없는 폴더는 거부합니다.
+- 자동 검사: `FocusedUnit-r3.xcresult`, `focused-unit-summary.json` — 27개 실행, 27개 통과, 실패·건너뜀 0. 신규 7개와 기존 미리보기/큐 회귀 20개입니다.
+- 검사 보완: 첫 실행의 두 파일명 비교는 단일 카드의 ID 형식 대신 fileName을 검사하도록 수정했습니다. 두 번째 실행에서는 기존 다중 파일 준비 완료 검사(기본 2초)가 Mac 자원 압박 중 시간 초과했습니다. 해당 검사의 대기 한도를 10초로 변경했고 최종 전체 27개가 통과했습니다. 두 번째 실행은 저장 공간 소진 중 결과 저장이 끝나지 않아 이 작업의 프로세스만 종료했으며 완료 근거로 사용하지 않습니다.
+- 빌드: Release `1.1.13 (45)` 성공. 앱 및 Thumbnail/Live Activity 확장 모두 버전 45, 팀 4FWG8XXYM7, 서명 검증 통과. 근거: `release-build-result.json`, `release-signatures.json`, `release-source.json`.
+- 실기기 설치: iPhone 18 Pro Max(00008160-000E195A1140000A, iOS 27.2)에 기존 앱을 업데이트하고 설치 버전 45 확인. 근거: `iphone18-install45.json`, `iphone18-installed45.json`.
+- 실제 File 선택 검사 완료: 작업 소유 합성 영상 폴더에 00 Before.mp4와 03 Alpha.mov를 추가하고 네 파일 중 01 Ocean.mp4 하나만 선택했습니다. Files 선택된 셀 1개, 홈 변환 큐 1개, 선택 파일의 재생 목록 위치 2 / 4를 검증했습니다.
+- 실제 iPhone 18 Pro Max, 빌드 45, iOS 27.2: `device-single-file45-r3.xcresult`, `device-single-file45-summary.json` — 1개 실행, 1개 통과, 실패·건너뜀 0, 111.258초. 실제 하단 줄 스와이프 10회(파일 이동 8회, 양 끝 경계 2회), 재생 시간 증가, 정보 시트, 일반 VLC 재생↔HEVC Alpha 네이티브 재생 전환, +Add 후 재생 유지, 추가 체크 보존, X로 종료, 변환 큐 2개만 유지, 다시 열어 폴더 4개 탐색을 확인했습니다.
+- 기존 Folder 모드 실기기 회귀: `device-folder45.xcresult`, `device-folder45-summary.json` — 1개 실행, 1개 통과, 실패·건너뜀 0, 38.840초. 단일 파일 세션 뒤 같은 폴더를 Folder로 다시 열고 3번의 실제 스와이프를 검사했습니다. 앞선 세션의 Added 표시가 새 폴더 세션에 남지 않고, X로 폴더 목록 복귀 및 폴더 목록 닫기도 통과했습니다.
+- 실기기 검사 보완: 첫 실행은 iOS 파일 선택의 열기 버튼 식별자가 폴더 선택과 달라 선택을 확정하지 못했습니다. 관측한 파일 선택 버튼 식별자로 수정했습니다. 두 번째 실행은 XCTest가 애니메이션 완료를 두 번 각각 60초 기다리면서 90초 테스트 영상이 종료되어 실패했습니다. 검사 프로세스에서만 XCUIApplication의 idleAnimationWaitEnabled를 false로 설정한 뒤 동일한 Release 앱에서 모든 터치·재생 상태 검사가 통과했습니다. 관련 인터페이스 확인: https://github.com/appium/WebDriverAgent/blob/master/PrivateHeaders/XCTest/XCUIApplication.h . 앱 코드·광고·재생 시간은 이 검사 보완 과정에서 변경하지 않았습니다.
+- 접근 권한 요청·관계없는 폴더 거부·폴더 허용 전 원래 미리보기 유지 조건은 자동 검사로 확인했습니다. 실기기 두 검사는 앱 소유 테스트 폴더에서 수행하여 추가 폴더 권한이 필요한 외부 공급자 상황을 실기기에서 재현하지는 않았습니다.
+- 캡처 10개: `/Users/u_mo_c/.codex/visualizations/2026/10/06/01a1120c-6544-7a80-b5b5-8056e18d2f90/SB13N6F8Q2` . 대표 캡처는 `iPhone18-Build45-OnlyOneSelected.png`, `iPhone18-Build45-SelectedMiddle.png`, `iPhone18-Build45-Previous.png`, `iPhone18-Build45-Next.png`, `iPhone18-Build45-NativeAlpha.png`, `iPhone18-Build45-TwoItem-Queue.png`, `iPhone18-Build45-FolderMode-Regression.png`입니다. 실제 기기 캡처이며 이미지 편집을 하지 않았습니다.
+- 최종 소스는 Release 빌드 당시 해시와 일치합니다(test.md/temp.md의 기록 변경 제외). 선택·재생 과정에서 변환을 실행하거나 Star를 차감하지 않았습니다. 기존 사용자 영상·키·다른 프로젝트 파일을 삭제하지 않았고, 검사에 사용한 BOKKI 전용 시뮬레이터는 종료했습니다.
+- 완료 항목은 temp.md에서 제거합니다. Git HEAD는 7c666f2를 유지합니다. 이번 수정은 커밋·푸시·TestFlight 업로드 전이며, 빌드 45는 iPhone 18에 직접 설치한 실기기 검증용 빌드입니다.
+
+# SW14F6P2R9
+
+사용자 재현: 재생 중 파일명·버튼이 있는 하단 줄을 스와이프하면 영상 이동 대신 탐색창이 뜹니다. 빌드 45의 앱 내부 폴더 검증으로 외부 문서 권한 흐름까지 검증됐다고 판단할 수 없습니다.
+
+근거 폴더: `/var/folders/q1/0p9tcvnx7yx5l12y55zm4tdm0000gn/T/BOKKIEncoder-SW14F6P2R9-1wfkt_4o`
+
+- 기기 로그: 외부 파일 열기 직후 Single file preview needs folder access 분기 확인. 개인 파일명·경로를 제외한 근거는 `before-sanitized-events.json`입니다. 원본 로그는 저장소 밖에만 보존했습니다.
+- 수정: 스와이프는 이전·다음 이동만 수행하며 권한 미보유 상태에서 폴더 선택창을 열지 않습니다. 짧은 안내만 표시하고, 정보 메뉴의 Connect folder를 눌렀을 때만 폴더 선택을 표시합니다.
+- 정보 시트를 닫은 후 폴더 선택을 표시해 두 모달이 겹치지 않도록 했습니다. 연결 후에는 현재 영상이 유지되며 다음 스와이프부터 폴더 내 이동이 가능합니다.
+- 허용한 입력 폴더·명시적으로 연결한 폴더의 북마크를 앱 설정에 보관하고, 해당 폴더의 파일을 다시 열면 security scope를 복원합니다. 관련 없는 폴더를 적용하지 않고, 손상된 북마크는 제외하며 복원 과정에서 UI를 표시하지 않습니다.
+- 자동 검사: `FocusedUnit.xcresult`, `focused-unit-summary.json` — 30개 실행, 30개 통과, 실패·건너뜀 0. 권한 미보유 스와이프 결과 분리, 연결 북마크의 모델 교체 후 보존, 손상/관계없는 북마크, Folder 선택 권한 재사용 및 기존 탐색/큐 회귀를 포함합니다.
+- Release 1.1.13 (46) 빌드·앱 및 두 확장 서명 검증 통과. iPhone 18 Pro Max 업데이트 설치와 버전 46을 확인했습니다. `release-build-result.json`, `release-signatures.json`, `iphone18-install46.json`, `iphone18-installed46.json`.
+- 실기기 외부 경로 검사 준비: Files 앱의 로컬 위치 조회 후 테스트 소유 영상을 로컬 외부 폴더로 복사하려 했으나 File View를 찾지 못해 복사 작업을 시작하지 못했습니다. 사용자 파일을 수정·삭제하지 않았습니다. 이 준비 검사는 BOKKI 기능 통과 근거로 사용하지 않습니다.
+- 사용자에게 빌드 46에서 문제가 났던 같은 영상을 다시 열어 재생 화면에 두도록 요청했고, 같은 영상을 열어 두었다는 답변을 받았습니다. 앱 소유 합성 파일 대신 실제 해당 외부 파일로 검증했습니다.
+- 실제 파일 위치: iCloud Drive의 다운로드 폴더. 파일명·개인 경로는 이 기록과 최종 요약에 포함하지 않습니다. 별도의 source-private.json 및 XCTest 원본은 저장소 밖에만 보관했습니다.
+- UI 보완: 정보 메뉴의 폴더 이름 표시, 안내가 타임라인과 겹치지 않도록 위치 조정, 폴더 선택을 UIKit에서 직접 표시하며 delegate 및 interactive dismissal 모두 표시 상태를 정리하도록 수정했습니다. 최종 빌드는 1.1.13 (47)입니다.
+- 최종 자동 검사: `FocusedUnit47.xcresult`, `focused-unit47-summary.json` — 30개 실행, 30개 통과, 실패·건너뜀 0. 빌드 47 소스로 재실행했습니다.
+- 실제 권한 미보유 동작: 빌드 46의 외부 열기 및 빌드 47의 같은 iCloud 파일 선택에서 양방향 하단 스와이프가 Files 선택창을 열지 않고 현재 미리보기를 유지했습니다. `actual-external47-r4.log`의 EXTERNAL_BLOCKED_SWIPE_NO_PICKER_PASSED로 단계 결과를 확인합니다.
+- 실제 취소 및 연결: `actual-external47-r4.log`의 EXPLICIT_FOLDER_CANCEL_KEEPS_PREVIEW_PASSED, 그리고 iCloud 다운로드 폴더를 명시적으로 선택한 뒤 목록 수가 1보다 커지는 것을 확인했습니다. 이 실행 전체는 파일 이동 후 메뉴가 숨겨지는 동안 접근성 파일명을 바로 읽은 검사 도구 오류로 실패했으므로 전체 테스트 통과로 기록하지 않습니다.
+- 실제 연결 후 및 재실행: `connected-icloud47.xcresult`, `connected-icloud47-summary.json` — 실제 iPhone 18 Pro Max(00008160-000E195A1140000A, iOS 27.2), 1개 실행, 1개 통과, 실패·건너뜀 0, 67.021초. 현재 파일 닫기/선택 파일 다시 열기, 실제 이전·다음 재생, 앱 종료·재실행 후 같은 파일 하나만 재선택, 추가 폴더 요청 없이 목록 복원, 연결 버튼이 재등장하지 않음, 양방향 이동 재검증을 통과했습니다. 메뉴가 숨겨진 경우 배경 탭으로 다시 표시한 뒤 파일명·재생 상태를 검사합니다.
+- 검사 도구 보완: 재생 중 스와이프 직후 정보 메뉴는 애니메이션·안내 표시가 정리된 뒤 확인했습니다. iOS 27 폴더 선택창에 취소 텍스트 버튼이 없어 표준 시트 스와이프 닫기로 검사했습니다. directoryURL은 권한 없는 iCloud 부모 폴더로 처음부터 이동시키지 못해, 실제 iCloud Drive → 다운로드 폴더를 명시적으로 탐색해 연결했습니다. 잘못된 폴더를 선택해 검증을 통과시키지 않았습니다.
+- 최종 배포/보존: 앱 및 두 확장 모두 빌드 47·서명 검증, iPhone 18 설치 버전 47 확인. 실제 iCloud 다운로드 폴더는 연결되어 있으며 마지막 검사는 원래 선택 파일의 재생 화면으로 돌아왔습니다. 변환 실행·Star 차감·외부 공유 전송·사용자 미디어 삭제/수정은 수행하지 않았습니다.
+- 저장 공간 보완: 진행 중 디스크가 소진되어, 활성 BOKKI 빌드가 없음을 확인한 뒤 이 작업이 생성한 전용 Debug Build 캐시와 Release Intermediates.noindex만 제거했습니다. 소스·패키지 의존성·인증 키·기존 사용자 영상·검사 결과·Release 앱은 보존했고 다른 프로젝트 캐시는 삭제하지 않았습니다. 필요한 캐시는 빌드 47 검사에서 재생성했습니다.
+- `final-verification.json`: 최종 소스 해시가 Release 47 빌드와 일치, git diff --check 통과. Git HEAD는 7c666f2를 유지하며 이번 수정의 커밋·푸시·TestFlight 업로드는 하지 않았습니다. 완료 항목을 temp.md에서 제거합니다.
+
+## RF14T0P10A — 다방면 코드 리뷰 / 상위 10개 리팩토링 (2026-10-14)
+
+기존 SB13N6F8Q2·SW14F6P2R9 미커밋 구현과 검증 기록을 보존한 상태에서 시작했습니다. 구현·파일 접근·취소/수명·큐·메모리·저장 복구·용량·수치·UIKit 모달·배포 경계를 검토했습니다. 재생성 자료는 `/private/tmp/BOKKIEncoder-RF14T0P10A-5nan1f74`에 두고 원본 영상/인증 키/타 프로젝트 자료는 변경하지 않았습니다.
+
+| 우선순위 | 개선 항목 | 발견 근거와 반영 내용 |
+| --- | --- | --- |
+| 1 | 인코딩 원본 보호 | EncoderService가 임시 경로를 먼저 삭제하므로 원본과 같은 경로/링크인 잘못된 계획이 원본을 지울 수 있었습니다. MediaFileIdentity로 동일 경로·심볼릭 링크·하드 링크를 사전 거부하고 취소 여부도 삭제 전에 확인합니다. 기존 출력 삭제 오류도 숨기지 않습니다. |
+| 2 | 초기화 정리 범위 | reset 이후 비동기 전체 디렉터리 정리가 새 작업 출력까지 제거할 수 있었습니다. PendingSaveCleanup이 초기화 시 캡처한 작업만 정리하며 기록 삭제 실패 시 영상은 보존합니다. |
+| 3 | 저장 복구의 오류 구분 | fileExists(false)가 접근 오류와 실제 누락을 함께 취급했습니다. 일반 파일 여부를 검사하고 누락만 복구/정리하며 권한·IO 오류는 전파해 manifest를 보존합니다. 디렉터리는 영상으로 복구하지 않습니다. |
+| 4 | 보안 범위 접근 수명 | URL 배열과 수동 start/stop이 분산되고 모델 해제 시 scope 회수가 없었습니다. SecurityScopedAccessStore가 표준 경로별 획득을 중복 제거하고 성공한 획득만 해제·deinit 회수합니다. encodingStartTask 해제 취소도 추가했습니다. 광고 polling의 self 강한 참조가 sleep/await 동안 지속되는 수명 문제도 제거하고 operation ID로 취소/교체된 조회의 상태 덮어쓰기를 막았습니다. |
+| 5 | 검사 캐시의 메모리 상한 | 검사 결과가 무제한 누적됐습니다. InspectedMediaCache를 큐 모델에서 분리해 128개 LRU 상한·접근 갱신·fingerprint 불일치 무효화를 적용했습니다. |
+| 6 | 폴더 북마크 책임 분리 | HomeViewModel 안의 저장·복원·중복 제거 로직이 섞이고 stale 북마크가 갱신되지 않았습니다. PreviewFolderBookmarkStore가 UI 없는 복원, stale 갱신, 잘못된/중복 데이터 정리와 20개 상한을 담당합니다. 경로 포함 검사는 공통화했습니다. |
+| 7 | 저장 용량의 안전한 계산 | Int64 합산 overflow와 아직 없는 출력 디렉터리의 용량 조회 실패 가능성이 있었습니다. StorageByteBudget이 포화 합산/음수 보정을 하고 실제 존재하는 출력 볼륨의 상위 경로에서 용량을 조회합니다. |
+| 8 | 영상 정보·재생 수치 공통화 | 매우 큰 duration/fps의 Int 변환이 trap을 일으킬 수 있고 UI 파일에 계산이 섞여 있었습니다. LoadedVideoInfoFactory·MediaDisplayFormatting·QueuePreviewPlaybackMath로 분리하고 비정상 수치·geometry를 거부합니다. native seek도 유한 시간/CMTime 표현 범위로 제한합니다. |
+| 9 | 큐 입력 중복 제거 | FolderEncodingBatch의 Dictionary(uniqueKeysWithValues:)가 중복 URL에서 crash할 수 있었습니다. 표준 경로 기준 입력을 순서 보존 중복 제거하고 파일 선택 진입에도 적용했습니다. |
+| 10 | 미리보기 모달/실패 상태 | UIKit 공유·폴더 presenter를 별도 파일로 분리했습니다. 닫힌 뒤 예약된 async present가 실행되지 않도록 요청 ID를 무효화하고 이미 열린 모달 위 중복 표시를 막습니다. native 오디오 활성화 실패가 무한 로딩으로 남지 않도록 오류 상태와 session 정리도 적용했습니다. |
+
+검증 진행 기록:
+- 작업 전 변경은 `before.patch`, git 상태는 `before-status.txt`에 보존했습니다.
+- 신규 회귀 15개 + 기존 관련 회귀 45개: `ReviewUnit48-r2.xcresult`, **60개 통과, 실패/스킵 0**.
+- 전체 활성 검사 첫 실행: 419개, 4 assertion 실패(3개 테스트). 샘플 이미지 삭제 후 이전 필수 리소스 가정, 변경된 외부 승인 선택 정책, FFmpeg decoder 나열 순서를 예전 문자열로 확인하던 검사입니다. 기존 source-only 정리와 현재 배포/빌드 레시피에 맞게 검사를 교정했으며 해당 제품 소스/배포 게이트를 완화하지 않았습니다.
+- 빌드 번호는 앱·확장·검사 구성 모두 48, 마케팅 버전은 1.1.13입니다.
+- 수명 추가 검사: 광고가 unavailable일 때 polling 시작 후 HomeViewModel을 해제하면 weak 참조가 nil인지 검증했습니다. 최종 전체 활성 검사 `ReviewAll48-final.xcresult`: **420개 통과, 실패/스킵 0**(`review-all-final-summary.json`).
+- 최종 Release `build analyze`: 모두 성공(`release-build-result.json`, `release-build.log`). 기존 AVAssetExportSession 호환 어댑터의 deprecated API 경고는 남아 있으며, 이 범위에서는 호환성 변경을 하지 않았습니다.
+- 실제 iPad Pro 12.9-inch 6세대(iPad14,6, iPadOS 27.0.1)에 최종 1.1.13(48) 설치 성공(`ipad-install48-final.json`). 기존 앱 데이터는 유지했습니다. 작업 전용 synthetic fixture 3개만 Documents/BOKKI-Review-RF14T0P10A에 추가했습니다.
+- 실기기 UI 첫 시도는 XCTest runner가 automation mode 활성화 시간 초과로 시작하지 못했습니다(`ipad-review48.xcresult`/summary). 앱 기능 테스트가 통과한 것으로 계산하지 않습니다. 잠금 해제 요청을 보냈으며, iPad 시뮬레이터 검사를 별도로 진행합니다.

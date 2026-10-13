@@ -1,6 +1,7 @@
 import Foundation
 import Photos
 import UIKit
+import UniformTypeIdentifiers
 
 private enum PendingSaveConflictResolution: Equatable {
     case prompt
@@ -71,6 +72,7 @@ final class HomeViewModel: ObservableObject {
         }
     }
     @Published private var previewAddedToListURLs: [URL] = []
+    @Published private var singleFilePreviewContext: SingleFilePreviewContext?
     @Published private(set) var batteryEncodingAlert: BatteryEncodingAlert?
 
     private let environment: AppEnvironment
@@ -78,6 +80,7 @@ final class HomeViewModel: ObservableObject {
     private let resourceMonitor: EncodingResourceMonitoring
     private let batteryPowerMonitor: any BatteryPowerMonitoring
     private let batterySettingsProvider: () -> BatteryEncodingSettings
+    private let previewFolderBookmarks: PreviewFolderBookmarkStore
     private var activeTask: Task<Void, Never>?
     private var encodingStartTask: Task<Void, Never>?
     private var encodingStartOperationID: UUID?
@@ -95,7 +98,7 @@ final class HomeViewModel: ObservableObject {
     private var hasRestoredPendingSaves = false
     private var hasLoadedStarWallet = false
     private var pendingSaveAccessURLs: [UUID: URL] = [:]
-    private var securityScopedURLs: [URL] = []
+    private let securityScopedAccess = SecurityScopedAccessStore()
     private var importBrowserMode: HomeImportBrowserMode?
     private var importBrowserRootURL: URL?
     private var importBrowserRootDisplayName: String?
@@ -114,6 +117,7 @@ final class HomeViewModel: ObservableObject {
     private var shouldAutoResumeBatchAfterStarEarn = false
     private var hasConfirmedSeparateMultiFileEncoding = false
     private var rewardedAdStatePollingTask: Task<Void, Never>?
+    private var rewardedAdPollingID: UUID?
     private var activeEncodingActivitySessionID: UUID?
     private var lastEncodingActivitySnapshot: TaptionEncodingActivitySnapshot?
     private var deferredBatteryStopReason: BatteryEncodingBlockReason?
@@ -125,13 +129,15 @@ final class HomeViewModel: ObservableObject {
         environment: AppEnvironment = .phase0,
         sourceDownloader: any VideoSourceDownloading = UbiquitousVideoDownloader(),
         batteryPowerMonitor: any BatteryPowerMonitoring = UIDeviceBatteryPowerMonitor(),
-        batterySettingsProvider: @escaping () -> BatteryEncodingSettings = { BatteryEncodingSettings.load() }
+        batterySettingsProvider: @escaping () -> BatteryEncodingSettings = { BatteryEncodingSettings.load() },
+        previewFolderDefaults: UserDefaults = .standard
     ) {
         self.environment = environment
         self.sourceDownloader = sourceDownloader
         self.resourceMonitor = environment.resourceMonitor
         self.batteryPowerMonitor = batteryPowerMonitor
         self.batterySettingsProvider = batterySettingsProvider
+        self.previewFolderBookmarks = PreviewFolderBookmarkStore(defaults: previewFolderDefaults)
         let initialBatterySettings = batterySettingsProvider()
         self.selectedOutput = TaptionOutputSelection(
             videoCodec: environment.configuration.defaultOutputCodec,
@@ -163,6 +169,7 @@ final class HomeViewModel: ObservableObject {
     deinit {
         AppLogger.info("HomeViewModel deinitialized", category: .app)
         activeTask?.cancel()
+        encodingStartTask?.cancel()
         resourceMonitorTask?.cancel()
         selectionInspectionTask?.cancel()
         previewInspectionTask?.cancel()
@@ -1228,25 +1235,37 @@ final class HomeViewModel: ObservableObject {
         } else if nextState == .ready {
             rewardedAdStatePollingTask?.cancel()
             rewardedAdStatePollingTask = nil
+            rewardedAdPollingID = nil
         }
     }
 
     private func startRewardedAdStatePolling() {
         rewardedAdStatePollingTask?.cancel()
+        let operationID = UUID()
+        rewardedAdPollingID = operationID
+        let service = environment.starEarningService
         rewardedAdStatePollingTask = Task { @MainActor [weak self] in
-            guard let self else {
-                return
-            }
             while !Task.isCancelled {
-                let state = await environment.starEarningService.prepareNextAd()
-                rewardedAdState = state
-                if state == .ready || isWatchingStarAd {
-                    break
-                }
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                let state = await service.prepareNextAd()
+                guard !Task.isCancelled,
+                      let shouldContinue = self?.applyPolledAdState(state, operationID: operationID) else { return }
+                if !shouldContinue { break }
+                do { try await Task.sleep(for: .seconds(1)) } catch { return }
             }
-            rewardedAdStatePollingTask = nil
+            self?.finishAdPolling(operationID: operationID)
         }
+    }
+
+    private func applyPolledAdState(_ state: AdLoadState, operationID: UUID) -> Bool {
+        guard rewardedAdPollingID == operationID else { return false }
+        rewardedAdState = state
+        return state != .ready && !isWatchingStarAd
+    }
+
+    private func finishAdPolling(operationID: UUID) {
+        guard rewardedAdPollingID == operationID else { return }
+        rewardedAdPollingID = nil
+        rewardedAdStatePollingTask = nil
     }
 
     private func clearActiveStarCharge(for source: HomeSelectedSource) {
@@ -1706,7 +1725,9 @@ final class HomeViewModel: ObservableObject {
             displayName: url.lastPathComponent,
             url: url
         )
-        beginSecurityScopedAccessIfNeeded(for: url)
+        let authorizedFolders = storedPreviewFolderAccess(for: url)
+        beginSecurityScopedAccessIfNeeded(for: authorizedFolders + [url, url.deletingLastPathComponent()])
+        prepareSingleFilePreviewContext(for: url)
         prepareEncodingFlow(
             source: source,
             autoStartAfterPrepare: autoStartAfterPrepare,
@@ -1795,6 +1816,7 @@ final class HomeViewModel: ObservableObject {
 
         do {
             let fileURLs = try videoFileURLs(in: url)
+            rememberPreviewFolderAccess(securityScopedRootURL ?? url)
             AppLogger.info(
                 "Folder video scan completed",
                 category: .folderImport,
@@ -1985,6 +2007,9 @@ final class HomeViewModel: ObservableObject {
         let insertionIndex = targetOriginalIndex > firstMovingIndex ? targetIndex + 1 : targetIndex
         reorderedURLs.insert(contentsOf: movingURLs, at: insertionIndex)
         batch.fileURLs = reorderedURLs
+        if singleFilePreviewContext != nil {
+            singleFilePreviewContext?.queuedURLs = reorderedURLs
+        }
         batch = applyFolderStarBudget(to: batch)
         batch.currentIndex = queueCurrentIndex(for: batch)
         folderBatch = batch
@@ -2048,6 +2073,8 @@ final class HomeViewModel: ObservableObject {
     }
 
     func openPreviewForFileCard(id: String) {
+        if let url = singleFilePreviewContext?.fileURLs.first(where: { $0.absoluteString == id }),
+           openSingleFileSiblingPreview(url: url) { return }
         if openBatchPreviewForFileCard(id: id) {
             return
         }
@@ -2125,6 +2152,9 @@ final class HomeViewModel: ObservableObject {
     }
 
     func isPreviewAddedToList(_ preview: QueueVideoPreview) -> Bool {
+        if let context = singleFilePreviewContext, context.fileURLs.contains(preview.sourceURL) {
+            return context.queuedURLs.contains(preview.sourceURL)
+        }
         if folderPreviewContext != nil {
             return previewAddedToListURLs.contains(preview.sourceURL)
         }
@@ -2135,6 +2165,10 @@ final class HomeViewModel: ObservableObject {
     }
 
     func canAddPreviewToList(_ preview: QueueVideoPreview) -> Bool {
+        if let context = singleFilePreviewContext, context.fileURLs.contains(preview.sourceURL) {
+            return activePreview?.id == preview.id && activePreview?.sourceURL == preview.sourceURL
+                && !state.isBusy && state.canSelectSource && !context.queuedURLs.contains(preview.sourceURL)
+        }
         guard activePreview?.id == preview.id,
               activePreview?.sourceURL == preview.sourceURL,
               !state.isBusy, state.canSelectSource,
@@ -2146,6 +2180,10 @@ final class HomeViewModel: ObservableObject {
     @discardableResult
     func addPreviewToList(_ preview: QueueVideoPreview) -> Bool {
         guard canAddPreviewToList(preview) else { return false }
+        if singleFilePreviewContext?.fileURLs.contains(preview.sourceURL) == true {
+            singleFilePreviewContext?.queuedURLs.append(preview.sourceURL)
+            return true
+        }
         // Keep the browser and player alive. Membership changes must never
         // replace the current preview, seek, pause or prepare an encoding job.
         previewAddedToListURLs.append(preview.sourceURL)
@@ -2156,6 +2194,21 @@ final class HomeViewModel: ObservableObject {
 
     func closePreviewFromPlayer() {
         guard activePreview != nil else { return }
+        if let context = singleFilePreviewContext {
+            dismissPreview()
+            let existing = folderBatch?.fileURLs ?? [(currentReview ?? state.preparedEncodingReview)?.source.url].compactMap { $0 }
+            guard existing != context.queuedURLs else { return }
+            var batch = FolderEncodingBatch(folderURL: context.initialURL.deletingLastPathComponent(),
+                folderName: context.initialURL.deletingLastPathComponent().lastPathComponent,
+                sourceKind: .files, fileURLs: context.queuedURLs)
+            for url in context.queuedURLs { batch.itemStates[url] = context.items[url] }
+            folderBatch = batch
+            currentReview = nil
+            guard let first = batch.currentFileURL else { return }
+            prepareEncodingFlow(source: HomeSelectedSource(kind: .files, displayName: first.lastPathComponent, url: first),
+                deferEncodingPreparationUntilStart: true, preinspectedAsset: context.items[first]?.asset)
+            return
+        }
         let browserBatch = folderPreviewContext == nil ? nil : folderBatch
         let addedURLs = previewAddedToListURLs
         dismissPreview()
@@ -2327,6 +2380,124 @@ final class HomeViewModel: ObservableObject {
         requestEncodingStart(for: review, autoResumeAfterStarEarn: false)
     }
 
+    private func prepareSingleFilePreviewContext(for url: URL) {
+        guard url.isFileURL else { return }
+        var context = SingleFilePreviewContext(initialURL: url, fileURLs: [url], queuedURLs: [url])
+        do {
+            context.fileURLs = try singleFilePreviewURLs(around: url)
+        } catch {
+            context.needsFolderAccess = true
+            AppLogger.info("Single file preview needs folder access", category: .fileImport)
+        }
+        singleFilePreviewContext = context
+    }
+
+    private func previewFolder(_ folderURL: URL, contains fileURL: URL) -> Bool {
+        MediaFileIdentity.folder(folderURL, contains: fileURL)
+    }
+
+    private func storedPreviewFolderAccess(for fileURL: URL) -> [URL] {
+        previewFolderBookmarks.folders(containing: fileURL)
+    }
+
+    private func rememberPreviewFolderAccess(_ folderURL: URL) {
+        previewFolderBookmarks.remember(folderURL)
+    }
+
+    private func singleFilePreviewURLs(around selectedURL: URL) throws -> [URL] {
+        let selectedPath = selectedURL.standardizedFileURL.path
+        var urls = try videoFileURLs(in: selectedURL.deletingLastPathComponent()).filter { url in
+            guard let type = UTType(filenameExtension: url.pathExtension) else { return true }
+            return !type.conforms(to: .audio) || type.conforms(to: .movie)
+        }.map { url in
+            url.standardizedFileURL.path == selectedPath ? selectedURL : url
+        }
+        if !urls.contains(selectedURL) { urls.append(selectedURL) }
+        return urls.sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+    }
+
+    /// A Files URL can grant one document without granting its enclosing folder.
+    /// Remember an explicitly connected folder without replacing playback.
+    func authorizeSingleFilePreviewFolder(_ folderURL: URL, navigationOffset: Int) -> String? {
+        guard let context = singleFilePreviewContext, context.needsFolderAccess,
+              activePreview?.sourceURL == context.initialURL else { return nil }
+        guard previewFolder(folderURL, contains: context.initialURL) else {
+            return "Choose the folder containing this video."
+        }
+        securityScopedAccess.acquire(folderURL)
+        do {
+            let urls = try singleFilePreviewURLs(around: context.initialURL)
+            singleFilePreviewContext?.fileURLs = urls
+            singleFilePreviewContext?.needsFolderAccess = false
+            activePreview?.playlist = singleFilePreviewContext?.playlist(for: context.initialURL)
+            activePreview?.folderAccessURL = nil
+            rememberPreviewFolderAccess(folderURL)
+            if navigationOffset != 0 { openAdjacentPreview(offset: navigationOffset) }
+            return nil
+        } catch {
+            return "This folder could not be read. Select the video's folder again."
+        }
+    }
+
+    private func cacheSingleFilePreviewItem(url: URL, asset: TaptionVideoAsset, info: LoadedVideoInfo) {
+        guard singleFilePreviewContext?.fileURLs.contains(url) == true else { return }
+        var item = BatchItemRuntime.queued
+        item.asset = asset
+        item.videoInfo = info
+        item.isRouteEncodable = info.isRouteEncodable
+        item.isEnabled = info.isRouteEncodable
+        item.isPreviewable = isPreviewableInCurrentBuild(asset: asset)
+        singleFilePreviewContext?.items[url] = item
+    }
+
+    private func openSingleFileSiblingPreview(url: URL, navigationOffset: Int? = nil) -> Bool {
+        guard let context = singleFilePreviewContext, context.fileURLs.contains(url) else { return false }
+        guard canOpenFolderPreviewInCurrentState else { return true }
+        previewInspectionTask?.cancel()
+        if let review = currentReview ?? state.preparedEncodingReview, review.source.url == url,
+           let preview = currentReviewPreview(for: url.absoluteString) {
+            cacheSingleFilePreviewItem(url: url, asset: review.job.asset, info: review.videoInfo)
+            presentPreview(preview)
+            return true
+        }
+        previewInspectionTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let inspected = try await self.inspectVideoReusingCache(at: url)
+                guard !Task.isCancelled, self.singleFilePreviewContext?.id == context.id else { return }
+                let asset = inspected.asset
+                guard self.isPreviewableInCurrentBuild(asset: asset) else {
+                    self.singleFilePreviewContext?.unavailableURLs.insert(url)
+                    self.refreshSingleFilePlaylistAfterUnavailableItem(navigationOffset: navigationOffset)
+                    return
+                }
+                let source = HomeSelectedSource(kind: .files, displayName: url.lastPathComponent, url: url)
+                let route = TaptionCodecRoutePlanner.selectRoute(for: asset,
+                    outputCodec: self.selectedOutput.videoCodec, requestedMode: .automatic)
+                let info = self.makeLoadedVideoInfo(source: source, asset: asset,
+                    outputName: self.outputName(for: source), routeSelection: route)
+                self.cacheSingleFilePreviewItem(url: url, asset: asset, info: info)
+                self.presentPreview(QueueVideoPreview(id: url.absoluteString,
+                    displayName: url.lastPathComponent, sourceURL: url, videoInfo: info,
+                    displaySize: asset.videoTrack?.displaySize,
+                    playlist: self.singleFilePreviewContext?.playlist(for: url),
+                    usesNativePlayback: asset.videoTrack?.codec == .hevcWithAlpha))
+            } catch {
+                guard !Task.isCancelled, self.singleFilePreviewContext?.id == context.id else { return }
+                self.singleFilePreviewContext?.unavailableURLs.insert(url)
+                self.refreshSingleFilePlaylistAfterUnavailableItem(navigationOffset: navigationOffset)
+            }
+        }
+        return true
+    }
+
+    private func refreshSingleFilePlaylistAfterUnavailableItem(navigationOffset: Int?) {
+        if let url = activePreview?.sourceURL {
+            activePreview?.playlist = singleFilePreviewContext?.playlist(for: url)
+        }
+        if let navigationOffset { openAdjacentPreview(offset: navigationOffset) }
+    }
+
     private func openBatchPreviewForFileCard(id: String, navigationOffset: Int? = nil) -> Bool {
         guard var batch = folderBatch,
               let selectedURL = batch.fileURLs.first(where: { $0.absoluteString == id }) else {
@@ -2399,6 +2570,13 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func openAdjacentPreview(offset: Int) {
+        if let context = singleFilePreviewContext, let preview = activePreview,
+           let index = context.candidates.firstIndex(of: preview.sourceURL), offset != 0 {
+            let targetIndex = index + offset
+            guard context.candidates.indices.contains(targetIndex) else { return }
+            _ = openSingleFileSiblingPreview(url: context.candidates[targetIndex], navigationOffset: offset)
+            return
+        }
         guard offset != 0,
               let activePreview,
               let batch = folderBatch,
@@ -2439,6 +2617,8 @@ final class HomeViewModel: ObservableObject {
             sourceURL: review.source.url,
             videoInfo: review.videoInfo,
             displaySize: review.job.asset.videoTrack?.displaySize,
+            playlist: singleFilePreviewContext?.playlist(for: review.source.url),
+            folderAccessURL: singleFilePreviewContext?.needsFolderAccess == true ? review.source.url.deletingLastPathComponent() : nil,
             usesNativePlayback: review.job.asset.videoTrack?.codec == .hevcWithAlpha
         )
     }
@@ -2531,6 +2711,9 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func presentPreview(_ preview: QueueVideoPreview) {
+        if let review = currentReview ?? state.preparedEncodingReview, review.source.url == preview.sourceURL {
+            cacheSingleFilePreviewItem(url: preview.sourceURL, asset: review.job.asset, info: preview.videoInfo)
+        }
         dismissMiniPreview()
         activePreview = preview
         AppLogger.info(
@@ -2956,15 +3139,8 @@ final class HomeViewModel: ObservableObject {
         state = .idle
         stopSecurityScopedAccess()
 
-        for pendingState in pendingStatesToReset {
-            Task {
-                try? await environment.pendingSaveStore.removePendingState(id: pendingState.id)
-                try? removeTemporaryOutput(for: pendingState)
-            }
-        }
-
-        Task {
-            removeAllPendingTemporaryOutputs()
+        Task { [store = environment.pendingSaveStore] in
+            await PendingSaveCleanup.removeCapturedStates(pendingStatesToReset, from: store)
         }
     }
 
@@ -5411,6 +5587,7 @@ final class HomeViewModel: ObservableObject {
 
         let removedActivePreview = activePreview.map { deletingURLs.contains($0.sourceURL) } ?? false
         batch.fileURLs.removeAll { deletingURLs.contains($0) }
+        singleFilePreviewContext?.queuedURLs.removeAll { deletingURLs.contains($0) }
         for url in deletingURLs {
             batch.itemStates.removeValue(forKey: url)
         }
@@ -5603,7 +5780,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func supportedVideoFileURLs(from urls: [URL]) -> [URL] {
-        urls
+        MediaFileIdentity.uniqueURLs(urls)
             .filter {
                 !selectedURLIsDirectory($0)
                     && SupportedVideoFileExtensions.contains($0.pathExtension)
@@ -5819,48 +5996,8 @@ final class HomeViewModel: ObservableObject {
         outputName: String,
         routeSelection: TaptionCodecRouteSelection? = nil
     ) -> LoadedVideoInfo {
-        let videoTrack = asset.videoTrack
-        let audioTrack = asset.audioTracks.first
-        let inputSupport = TaptionLaunchSupportCatalog.diagnoseInput(
-            container: asset.container,
-            videoCodec: videoTrack?.codec ?? .unknown
-        )
-        let routeSelection = routeSelection ?? TaptionCodecRoutePlanner.selectRoute(
-            for: asset,
-            outputCodec: selectedOutput.videoCodec,
-            requestedMode: .automatic
-        )
-        let videoPath = LoadedVideoPathInfo.make(
-            sourceCodec: videoTrack?.codec ?? .unknown,
-            routeSelection: routeSelection,
-            outputSelection: selectedOutput
-        )
-        let audioPath = LoadedAudioPathInfo.make(
-            firstAudioTrack: audioTrack,
-            trackCount: asset.audioTracks.count,
-            outputCodec: selectedOutput.audioCodec,
-            outputContainer: selectedOutput.container
-        )
-        return LoadedVideoInfo(
-            fileName: source.displayName,
-            inputSummary: "\(videoTrack?.codec.displayName ?? "Unknown") / \(asset.container.defaultFileExtension.uppercased())",
-            resolution: resolutionText(for: videoTrack),
-            frameRate: frameRateText(for: videoTrack?.nominalFrameRate),
-            duration: durationText(asset.duration),
-            audio: audioText(for: audioTrack, count: asset.audioTracks.count),
-            audioPathTitle: audioPath.title,
-            audioPathDetail: audioPath.detail,
-            audioOutputSummary: audioPath.outputSummary,
-            fileSize: fileSizeText(asset.fingerprint.fileSize),
-            inputSupportTitle: inputSupport.title,
-            inputSupportDetail: inputSupport.detail,
-            isInputSupportedNow: inputSupport.isSupportedNow,
-            codecPathTitle: videoPath.title,
-            codecPathDetail: videoPath.detail,
-            outputSummary: videoPath.outputSummary,
-            outputName: outputName,
-            isRouteEncodable: videoPath.isRouteEncodable
-        )
+        LoadedVideoInfoFactory.make(source: source, asset: asset, outputName: outputName,
+                                    selectedOutput: selectedOutput, routeSelection: routeSelection)
     }
 
     private func outputName(for source: HomeSelectedSource) -> String {
@@ -5873,60 +6010,9 @@ final class HomeViewModel: ObservableObject {
             + selectedOutput.container.defaultFileExtension
     }
 
-    private func resolutionText(for track: TaptionVideoTrackInfo?) -> String {
-        guard let track else {
-            return "Unknown"
-        }
-        return "\(track.displaySize.width)x\(track.displaySize.height)"
-    }
+    private func fileSizeText(_ bytes: Int64?) -> String { MediaDisplayFormatting.byteCount(bytes) }
 
-    private func frameRateText(for frameRate: TaptionRationalFrameRate?) -> String {
-        guard let frameRate else {
-            return "Unknown fps"
-        }
-        let value = frameRate.value
-        if abs(value.rounded() - value) < 0.01 {
-            return "\(Int(value.rounded())) fps"
-        }
-        return String(format: "%.2f fps", value)
-    }
-
-    private func durationText(_ duration: TimeInterval?) -> String {
-        guard let duration, duration.isFinite else {
-            return "Unknown"
-        }
-        let totalSeconds = max(0, Int(duration.rounded()))
-        let hours = totalSeconds / 3600
-        let minutes = (totalSeconds / 60) % 60
-        let seconds = totalSeconds % 60
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        }
-        return String(format: "%02d:%02d", minutes, seconds)
-    }
-
-    private func audioText(for audioTrack: TaptionAudioTrackInfo?, count: Int) -> String {
-        guard let audioTrack else {
-            return "No audio"
-        }
-        let suffix = count > 1 ? " +\(count - 1)" : ""
-        return "\(audioCodecName(audioTrack.codec))\(suffix)"
-    }
-
-    private func audioCodecName(_ codec: TaptionAudioCodec) -> String {
-        codec == .unknown ? "Unknown audio" : codec.displayName
-    }
-
-    private func fileSizeText(_ bytes: Int64?) -> String {
-        guard let bytes else {
-            return "Unknown size"
-        }
-        return formattedByteCount(bytes)
-    }
-
-    private func formattedByteCount(_ bytes: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
-    }
+    private func formattedByteCount(_ bytes: Int64) -> String { MediaDisplayFormatting.byteCount(bytes) }
 
     private func finalizedOutputURL(
         savedURL: URL,
@@ -6840,7 +6926,7 @@ final class HomeViewModel: ObservableObject {
         }
     }
 
-    private func resolveSecurityScopedAccessURL(from bookmarkData: Data?) -> URL? {
+    private func resolveSecurityScopedAccessURL(from bookmarkData: Data?, withoutUI: Bool = false) -> URL? {
         guard let bookmarkData else {
             return nil
         }
@@ -6849,7 +6935,7 @@ final class HomeViewModel: ObservableObject {
             var isStale = false
             let url = try URL(
                 resolvingBookmarkData: bookmarkData,
-                options: [],
+                options: withoutUI ? [.withoutUI] : [],
                 relativeTo: nil,
                 bookmarkDataIsStale: &isStale
             )
@@ -6874,24 +6960,13 @@ final class HomeViewModel: ObservableObject {
 
     private func activateFolderOutputDirectory(_ url: URL) -> Bool {
         let outputFolderURL = url.standardizedFileURL
-        let alreadyActive = hasActiveSecurityScopedAccess(for: outputFolderURL)
-        let didStartSecurityScope = alreadyActive
-            ? false
-            : outputFolderURL.startAccessingSecurityScopedResource()
+        let alreadyActive = securityScopedAccess.contains(outputFolderURL)
+        securityScopedAccess.acquire(outputFolderURL)
         var isDirectory: ObjCBool = false
-        let isReachableDirectory = FileManager.default.fileExists(
-            atPath: outputFolderURL.path,
-            isDirectory: &isDirectory
-        ) && isDirectory.boolValue
-
-        guard isReachableDirectory else {
-            if didStartSecurityScope {
-                outputFolderURL.stopAccessingSecurityScopedResource()
-            }
+        guard FileManager.default.fileExists(atPath: outputFolderURL.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            if !alreadyActive { securityScopedAccess.release(outputFolderURL) }
             return false
-        }
-        if didStartSecurityScope {
-            securityScopedURLs.append(outputFolderURL)
         }
         return true
     }
@@ -6920,41 +6995,6 @@ final class HomeViewModel: ObservableObject {
             category: .saving,
             metadata: ["temporary": state.temporaryOutputURL.lastPathComponent]
         )
-    }
-
-    private func removeAllPendingTemporaryOutputs() {
-        let directoryURL = TaptionEncoderStorageLocations.pendingEncodedVideosDirectoryURL
-        guard let files = try? FileManager.default.contentsOfDirectory(
-            at: directoryURL,
-            includingPropertiesForKeys: nil
-        ) else {
-            return
-        }
-
-        var removedCount = 0
-        for fileURL in files {
-            do {
-                try FileManager.default.removeItem(at: fileURL)
-                removedCount += 1
-            } catch {
-                AppLogger.warning(
-                    "Pending temporary output cleanup failed",
-                    category: .saving,
-                    metadata: [
-                        "temporary": fileURL.lastPathComponent,
-                        "error": error.localizedDescription
-                    ]
-                )
-            }
-        }
-
-        if removedCount > 0 {
-            AppLogger.info(
-                "Pending temporary outputs removed by reset",
-                category: .saving,
-                metadata: ["count": "\(removedCount)"]
-            )
-        }
     }
 
     private func codecPathTitle(mode: TaptionEncoderMode) -> String {
@@ -6992,41 +7032,25 @@ final class HomeViewModel: ObservableObject {
         preparationOperationID = nil
         dismissMiniPreview()
         stopSecurityScopedAccess()
-        securityScopedURLs = urls.filter { $0.startAccessingSecurityScopedResource() }
+        for url in urls { securityScopedAccess.acquire(url) }
         AppLogger.info(
             "Security scoped access started",
             category: .fileImport,
             metadata: [
                 "requested": "\(urls.count)",
-                "granted": "\(securityScopedURLs.count)",
+                "granted": "\(securityScopedAccess.count)",
                 "names": urls.map(\.lastPathComponent).joined(separator: "|")
             ]
         )
     }
 
     private func stopSecurityScopedAccess() {
-        guard !securityScopedURLs.isEmpty else {
-            return
-        }
-        AppLogger.info(
-            "Security scoped access stopped",
-            category: .fileImport,
-            metadata: [
-                "count": "\(securityScopedURLs.count)",
-                "names": securityScopedURLs.map(\.lastPathComponent).joined(separator: "|")
-            ]
-        )
-        for url in securityScopedURLs {
-            url.stopAccessingSecurityScopedResource()
-        }
-        securityScopedURLs = []
+        singleFilePreviewContext = nil
+        securityScopedAccess.releaseAll()
     }
 
     private func hasActiveSecurityScopedAccess(for url: URL) -> Bool {
-        let standardizedURL = url.standardizedFileURL
-        return securityScopedURLs.contains { scopedURL in
-            scopedURL.standardizedFileURL == standardizedURL
-        }
+        securityScopedAccess.contains(url)
     }
 
     private func destinationDescription(for state: TaptionPendingSaveState) -> String {

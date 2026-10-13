@@ -2611,7 +2611,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(extensionLegacyFileExtensions.contains("h261"))
         XCTAssertTrue(extensionLegacyConformance.isSuperset(of: ["public.movie", "public.video"]))
         XCTAssertTrue(projectText.contains("SampleThumbnailCatalog.swift in Sources"))
-        XCTAssertTrue(projectText.contains("SampleThumbnails in Resources"))
+        XCTAssertFalse(projectText.contains("SampleThumbnails in Resources"), "Source-only cleanup intentionally removed bundled sample images.")
         let extensionResourcesBlock = try XCTUnwrap(
             projectObjectBlock(
                 id: "B10000000000000000000600",
@@ -2626,10 +2626,10 @@ final class CodecRoutePlannerTests: XCTestCase {
                 in: projectText
             )
         )
-        XCTAssertTrue(
-            extensionResourcesBlock.contains("B10000000000000000000004 /* SampleThumbnails in Resources */"),
-            "Thumbnail extension target must embed SampleThumbnails for Files thumbnails."
-        )
+        XCTAssertFalse(extensionResourcesBlock.contains("SampleThumbnails in Resources"))
+        let providerText = try String(contentsOf: rootURL.appendingPathComponent("TaptionEncoderThumbnailExtension/ThumbnailProvider.swift"), encoding: .utf8)
+        XCTAssertTrue(providerText.contains("avFoundationImage("))
+        XCTAssertTrue(providerText.contains("supportedVideoImage("), "Missing samples must retain real-frame and fallback thumbnail paths.")
         XCTAssertFalse(
             testResourcesBlock.contains("SampleThumbnails in Resources"),
             "SampleThumbnails should not be routed only into the test bundle."
@@ -4362,6 +4362,13 @@ final class CodecRoutePlannerTests: XCTestCase {
                             CGSize(width: CGFloat.nan, height: 0), CGSize(width: 100, height: CGFloat.infinity)] {
             XCTAssertNil(QueuePreviewBarNavigation.destination(translation: translation, playlist: playlist, isEnabled: true))
         }
+    }
+
+    func testSingleFileSwipeReportsMissingFolderAccessWithoutNavigation() {
+        XCTAssertEqual(QueuePreviewBarNavigation.destination(translation: CGSize(width: -80, height: 4), playlist: nil, isEnabled: true, needsFolderAccess: true), .folderAccessRequired)
+        XCTAssertEqual(QueuePreviewBarNavigation.destination(translation: CGSize(width: 80, height: 4), playlist: nil, isEnabled: true, needsFolderAccess: true), .folderAccessRequired)
+        XCTAssertNil(QueuePreviewBarNavigation.destination(translation: CGSize(width: 10, height: 0), playlist: nil, isEnabled: true, needsFolderAccess: true))
+        XCTAssertNil(QueuePreviewBarNavigation.destination(translation: CGSize(width: 80, height: 0), playlist: nil, isEnabled: false, needsFolderAccess: true))
     }
 
     func testQueuePreviewBackgroundTapHidesControlsWhenReadyAndIdle() {
@@ -8624,7 +8631,7 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         let relinkScript = try String(contentsOf: relinkScriptURL, encoding: .utf8)
         XCTAssertTrue(relinkScript.contains("TaptionEncoder-AppObjects.tar.xz"))
-        XCTAssertTrue(relinkScript.contains("candidate-external-legal-review-required"))
+        XCTAssertTrue(relinkScript.contains("it is not a mandatory gate input"))
         XCTAssertTrue(relinkScript.contains("Mach-O.*object"))
         XCTAssertTrue(relinkScript.contains("-lvlc"))
         XCTAssertTrue(relinkScript.contains("-lTaptionFFmpegDecodeBridge"))
@@ -8658,11 +8665,10 @@ final class CodecRoutePlannerTests: XCTestCase {
 
         XCTAssertTrue(buildScript.contains("--disable-everything"))
         XCTAssertTrue(buildScript.contains("--enable-demuxer=vc1,avi,mov"))
-        XCTAssertTrue(
-            buildScript.contains(
-                "--enable-decoder=vc1,vc1image,y41p,rawvideo,pcm_s16le,prores_raw"
-            )
-        )
+        let decoderLine = try XCTUnwrap(buildScript.split(separator: "\n").first { $0.contains("--enable-decoder=") })
+        let decoderArgument = try XCTUnwrap(decoderLine.components(separatedBy: "--enable-decoder=").last)
+        let decoders = Set(decoderArgument.split(separator: ",").map(String.init))
+        XCTAssertTrue(decoders.isSuperset(of: ["vc1", "vc1image", "y41p", "rawvideo", "pcm_s16le", "prores_raw"]))
         XCTAssertFalse(buildScript.contains("--enable-gpl"))
         XCTAssertFalse(buildScript.contains("--enable-nonfree"))
         XCTAssertTrue(provenance.contains("H.265 / HEVC only in MP4 or MOV"))
@@ -13090,7 +13096,8 @@ final class CodecRoutePlannerTests: XCTestCase {
     @MainActor
     private func makePreviewQueueBrowserFixture(
         codec: TaptionVideoCodec = .h264,
-        availableBytes: Int64 = 1_000_000
+        availableBytes: Int64 = 1_000_000,
+        previewFolderDefaults: UserDefaults? = nil
     ) async throws -> (directory: URL, urls: [URL], model: HomeViewModel,
                        inspector: CountingMediaInspector, wallet: FakeStarWalletStore,
                        encoder: RecordingStartEncoder) {
@@ -13111,7 +13118,7 @@ final class CodecRoutePlannerTests: XCTestCase {
                 estimatedOutputBytes: 1_000, requiredWorkingBytes: 1_024, availableBytes: availableBytes
             )),
             starWalletStore: wallet
-        ))
+        ), previewFolderDefaults: previewFolderDefaults ?? UserDefaults(suiteName: "PreviewFolderTests-\(UUID().uuidString)")!)
         await model.refreshStarsIfNeeded()
         return (directory, urls, model, inspector, wallet, encoder)
     }
@@ -13212,6 +13219,230 @@ final class CodecRoutePlannerTests: XCTestCase {
         model.closePreviewFromPlayer()
         XCTAssertNil(model.activePreview)
         XCTAssertEqual(model.fileCardSnapshots, cards)
+    }
+
+    @MainActor
+    func testSingleFilePreviewDiscoversSiblingsWithoutQueueingThem() async throws {
+        let f = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        f.model.openExternalPlayerFile(url: f.urls[1])
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        let preview = try XCTUnwrap(f.model.activePreview)
+        XCTAssertEqual(preview.sourceURL, f.urls[1])
+        XCTAssertEqual(preview.playlist?.currentIndex, 1)
+        XCTAssertEqual(preview.playlist?.totalCount, 3)
+        XCTAssertEqual(preview.playlist?.previousID, f.urls[0].absoluteString)
+        XCTAssertEqual(preview.playlist?.nextID, f.urls[2].absoluteString)
+        XCTAssertEqual(f.model.fileCardSnapshots.map(\.fileName), ["b.mp4"])
+        XCTAssertEqual(f.inspector.inspectionCount, 1, "Siblings are inspected only when played")
+        f.model.openPreviousPreview()
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.sourceURL == f.urls[0] }
+        XCTAssertFalse(try XCTUnwrap(f.model.activePreview?.playlist).hasPrevious)
+        f.model.openPreviousPreview()
+        XCTAssertEqual(f.model.activePreview?.sourceURL, f.urls[0])
+        f.model.openNextPreview()
+        XCTAssertEqual(f.model.activePreview?.sourceURL, f.urls[1])
+        f.model.openNextPreview()
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.sourceURL == f.urls[2] }
+        XCTAssertFalse(try XCTUnwrap(f.model.activePreview?.playlist).hasNext)
+        f.model.openNextPreview()
+        XCTAssertEqual(f.model.activePreview?.sourceURL, f.urls[2])
+        XCTAssertEqual(f.model.fileCardSnapshots.count, 1)
+        let balance = await f.wallet.currentSnapshot()
+        XCTAssertEqual(balance.balance, 3)
+        let calls = await f.encoder.callCount()
+        XCTAssertEqual(calls, 0)
+        f.model.closePreviewFromPlayer()
+    }
+
+    @MainActor
+    func testSingleFileSiblingAddCommitsOnlyAddedFilesAndKeepsFolderNavigation() async throws {
+        let f = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        f.model.openExternalPlayerFile(url: f.urls[1])
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        f.model.openNextPreview()
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.sourceURL == f.urls[2] }
+        let preview = try XCTUnwrap(f.model.activePreview)
+        XCTAssertFalse(f.model.isPreviewAddedToList(preview))
+        XCTAssertTrue(f.model.addPreviewToList(preview))
+        XCTAssertFalse(f.model.addPreviewToList(preview))
+        XCTAssertEqual(f.model.activePreview, preview)
+        XCTAssertEqual(f.model.fileCardSnapshots.count, 1)
+        f.model.closePreviewFromPlayer()
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        XCTAssertEqual(f.model.fileCardSnapshots.map(\.id), [f.urls[1].absoluteString, f.urls[2].absoluteString])
+        f.model.openPreviewForFileCard(id: f.urls[1].absoluteString)
+        XCTAssertEqual(f.model.activePreview?.playlist?.totalCount, 3)
+        f.model.openPreviousPreview()
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.sourceURL == f.urls[0] }
+        XCTAssertFalse(f.model.isPreviewAddedToList(try XCTUnwrap(f.model.activePreview)))
+        f.model.closePreviewFromPlayer()
+        let balance = await f.wallet.currentSnapshot()
+        XCTAssertEqual(balance.balance, 3)
+        let calls = await f.encoder.callCount()
+        XCTAssertEqual(calls, 0)
+    }
+
+    @MainActor
+    func testSingleFileSiblingFastReturnCancelsPendingNavigation() async throws {
+        let f = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        f.model.openExternalPlayerFile(url: f.urls[1])
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        f.model.openNextPreview()
+        f.model.openPreviewForFileCard(id: f.urls[1].absoluteString)
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(f.model.activePreview?.sourceURL, f.urls[1])
+        f.model.openNextPreview()
+        f.model.closePreviewFromPlayer()
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertNil(f.model.activePreview)
+    }
+
+    @MainActor
+    func testSingleFileSiblingQueueEditsDoNotRestoreRemovedItems() async throws {
+        let f = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        f.model.openExternalPlayerFile(url: f.urls[1])
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        f.model.openNextPreview()
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.sourceURL == f.urls[2] }
+        XCTAssertTrue(f.model.addPreviewToList(try XCTUnwrap(f.model.activePreview)))
+        f.model.closePreviewFromPlayer()
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        f.model.moveQueueFiles(draggedID: f.urls[2].absoluteString, before: f.urls[1].absoluteString)
+        f.model.finishQueueMove()
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        f.model.openPreviewForFileCard(id: f.urls[2].absoluteString)
+        f.model.closePreviewFromPlayer()
+        XCTAssertEqual(f.model.fileCardSnapshots.map(\.id), [f.urls[2].absoluteString, f.urls[1].absoluteString])
+        f.model.deleteQueueFile(id: f.urls[1].absoluteString)
+        f.model.openPreviewForFileCard(id: f.urls[2].absoluteString)
+        f.model.openPreviousPreview()
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.sourceURL == f.urls[1] }
+        XCTAssertFalse(f.model.isPreviewAddedToList(try XCTUnwrap(f.model.activePreview)))
+        f.model.closePreviewFromPlayer()
+        XCTAssertEqual(f.model.fileCardSnapshots.map(\.id), [f.urls[2].absoluteString])
+    }
+
+    @MainActor
+    func testSingleFileSiblingNaturalOrderExcludesAudioHiddenFilesAndDirectories() async throws {
+        let f = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        let names = ["clip10.mp4", "clip2.mp4", "notes.txt", "music.mp3", ".hidden.mp4"]
+        for name in names { try Data("source".utf8).write(to: f.directory.appendingPathComponent(name)) }
+        try FileManager.default.createDirectory(at: f.directory.appendingPathComponent("folder.mp4"), withIntermediateDirectories: false)
+        let selected = f.directory.appendingPathComponent("clip10.mp4")
+        f.model.openExternalPlayerFile(url: selected)
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        let playlist = try XCTUnwrap(f.model.activePreview?.playlist)
+        XCTAssertEqual(playlist.previousName, "clip2.mp4")
+        XCTAssertEqual(playlist.totalCount, 5)
+        XCTAssertEqual(f.model.fileCardSnapshots.map(\.fileName), ["clip10.mp4"])
+        f.model.closePreviewFromPlayer()
+    }
+
+    @MainActor
+    func testSingleFileFolderGrantKeepsPlaybackAndRejectsUnrelatedFolder() async throws {
+        let f = try await makePreviewQueueBrowserFixture()
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: f.directory.path)
+            try? FileManager.default.removeItem(at: f.directory)
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o300], ofItemAtPath: f.directory.path)
+        f.model.openExternalPlayerFile(url: f.urls[0])
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        let original = try XCTUnwrap(f.model.activePreview)
+        XCTAssertNotNil(original.folderAccessURL)
+        XCTAssertNotNil(f.model.authorizeSingleFilePreviewFolder(f.directory.appendingPathComponent("unrelated"), navigationOffset: 1))
+        XCTAssertEqual(f.model.activePreview, original)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: f.directory.path)
+        XCTAssertNil(f.model.authorizeSingleFilePreviewFolder(f.directory, navigationOffset: 1))
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.sourceURL == f.urls[1] }
+        XCTAssertEqual(f.model.activePreview?.playlist?.totalCount, 3)
+        XCTAssertEqual(f.model.fileCardSnapshots.count, 1)
+        f.model.closePreviewFromPlayer()
+    }
+
+    @MainActor
+    func testConnectedPreviewFolderBookmarkSurvivesSourceAndModelReplacement() async throws {
+        let suite = "PreviewFolderReconnect-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let f = try await makePreviewQueueBrowserFixture(previewFolderDefaults: defaults)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: f.directory.path)
+            try? FileManager.default.removeItem(at: f.directory)
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o300], ofItemAtPath: f.directory.path)
+        f.model.openExternalPlayerFile(url: f.urls[0])
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        XCTAssertNotNil(f.model.activePreview?.folderAccessURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: f.directory.path)
+        XCTAssertNil(f.model.authorizeSingleFilePreviewFolder(f.directory, navigationOffset: 0))
+        XCTAssertEqual(f.model.activePreview?.sourceURL, f.urls[0], "Connecting a folder keeps the current video")
+        XCTAssertNil(f.model.activePreview?.folderAccessURL)
+        let bookmarks = try XCTUnwrap(defaults.array(forKey: "preview.authorizedFolderBookmarks") as? [Data])
+        XCTAssertEqual(bookmarks.count, 1)
+        var stale = false
+        let restored = try URL(resolvingBookmarkData: XCTUnwrap(bookmarks.first), options: [.withoutUI], bookmarkDataIsStale: &stale)
+        XCTAssertEqual(restored.standardizedFileURL.path, f.directory.standardizedFileURL.path)
+        f.model.closePreviewFromPlayer()
+        f.model.reset()
+        let replacement = HomeViewModel(environment: makeHomeViewModelTestEnvironment(
+            pendingSaveStore: FakePendingSaveStore(), mediaInspector: f.inspector
+        ), previewFolderDefaults: defaults)
+        replacement.openExternalPlayerFile(url: f.urls[2])
+        try await waitForReadyToStartState(in: replacement, timeout: 10)
+        XCTAssertNil(replacement.activePreview?.folderAccessURL)
+        XCTAssertEqual(replacement.activePreview?.playlist?.positionText, "3 / 3")
+        XCTAssertEqual(replacement.fileCardSnapshots.count, 1)
+        replacement.closePreviewFromPlayer()
+    }
+
+    @MainActor
+    func testInvalidAndUnrelatedFolderBookmarksDoNotGrantPreviewNavigation() async throws {
+        let suite = "PreviewFolderInvalid-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let f = try await makePreviewQueueBrowserFixture(previewFolderDefaults: defaults)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: f.directory.path)
+            try? FileManager.default.removeItem(at: f.directory)
+        }
+        let unrelated = f.directory.appendingPathComponent("unrelated")
+        try FileManager.default.createDirectory(at: unrelated, withIntermediateDirectories: false)
+        defaults.set([Data([0xff]), try unrelated.bookmarkData(options: [])], forKey: "preview.authorizedFolderBookmarks")
+        try FileManager.default.setAttributes([.posixPermissions: 0o300], ofItemAtPath: f.directory.path)
+        f.model.openExternalPlayerFile(url: f.urls[0])
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        XCTAssertNotNil(f.model.activePreview?.folderAccessURL)
+        XCTAssertNil(f.model.activePreview?.playlist)
+        XCTAssertEqual((defaults.array(forKey: "preview.authorizedFolderBookmarks") as? [Data])?.count, 1)
+        let original = try XCTUnwrap(f.model.activePreview)
+        XCTAssertNotNil(f.model.authorizeSingleFilePreviewFolder(unrelated, navigationOffset: 0))
+        XCTAssertEqual(f.model.activePreview, original)
+        f.model.closePreviewFromPlayer()
+    }
+
+    @MainActor
+    func testFolderPickerGrantIsRememberedForLaterSingleFilePreview() async throws {
+        let suite = "PreviewFolderSelected-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let f = try await makePreviewQueueBrowserFixture(previewFolderDefaults: defaults)
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        f.model.startFolderFlow(url: f.directory)
+        XCTAssertEqual(f.model.folderPreviewFileSnapshots.count, 3)
+        XCTAssertEqual((defaults.array(forKey: "preview.authorizedFolderBookmarks") as? [Data])?.count, 1)
+        f.model.dismissFolderPreviewBrowser()
+        f.model.openExternalPlayerFile(url: f.urls[1])
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        XCTAssertEqual(f.model.activePreview?.playlist?.positionText, "2 / 3")
+        XCTAssertNil(f.model.activePreview?.folderAccessURL)
+        XCTAssertEqual(f.model.fileCardSnapshots.count, 1)
+        f.model.closePreviewFromPlayer()
     }
 
     @MainActor
@@ -13947,7 +14178,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
 
         viewModel.startFilesFlow(urls: fileURLs)
-        try await waitForReadyToStartState(in: viewModel)
+        try await waitForReadyToStartState(in: viewModel, timeout: 10)
 
         viewModel.openPreviewForFileCard(id: fileURLs[1].absoluteString)
         try await waitForCondition(timeout: 2) {

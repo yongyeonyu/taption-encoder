@@ -352,7 +352,8 @@ struct HomeView: View {
                 isPreviewPictureInPictureActive = isActive
             },
             onPrevious: { viewModel.openPreviousPreview() },
-            onNext: { viewModel.openNextPreview() }
+            onNext: { viewModel.openNextPreview() },
+            onAuthorizeFolder: { viewModel.authorizeSingleFilePreviewFolder($0, navigationOffset: $1) }
         )
     }
 

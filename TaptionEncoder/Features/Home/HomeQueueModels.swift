@@ -115,29 +115,6 @@ enum BatteryEncodingGate {
     }
 }
 
-struct TaptionInspectedMediaCache {
-    private var assetsByURL: [URL: TaptionVideoAsset] = [:]
-
-    mutating func store(_ asset: TaptionVideoAsset, for url: URL) {
-        assetsByURL[url] = asset
-    }
-
-    func asset(
-        for url: URL,
-        currentFingerprint: TaptionMediaFingerprint
-    ) -> TaptionVideoAsset? {
-        guard let asset = assetsByURL[url],
-              asset.fingerprint == currentFingerprint else {
-            return nil
-        }
-        return asset
-    }
-
-    mutating func removeAll() {
-        assetsByURL.removeAll()
-    }
-}
-
 struct BatchItemRuntime {
     var asset: TaptionVideoAsset?
     var videoInfo: LoadedVideoInfo?
@@ -164,6 +141,28 @@ struct BatchItemRuntime {
     )
 }
 
+struct SingleFilePreviewContext {
+    let id = UUID()
+    var initialURL: URL
+    var fileURLs: [URL]
+    var queuedURLs: [URL]
+    var items: [URL: BatchItemRuntime] = [:]
+    var unavailableURLs: Set<URL> = []
+    var needsFolderAccess = false
+
+    var candidates: [URL] { fileURLs.filter { !unavailableURLs.contains($0) } }
+
+    func playlist(for url: URL) -> QueueVideoPreviewPlaylist? {
+        let urls = candidates
+        guard urls.count > 1, let index = urls.firstIndex(of: url) else { return nil }
+        let previous = index > 0 ? urls[index - 1] : nil
+        let next = index + 1 < urls.count ? urls[index + 1] : nil
+        return QueueVideoPreviewPlaylist(currentIndex: index, totalCount: urls.count,
+            previousID: previous?.absoluteString, previousName: previous?.lastPathComponent,
+            nextID: next?.absoluteString, nextName: next?.lastPathComponent)
+    }
+}
+
 struct FolderEncodingBatch {
     var folderURL: URL?
     var folderName: String
@@ -186,6 +185,7 @@ struct FolderEncodingBatch {
         sourceKind: HomeSourceKind,
         fileURLs: [URL]
     ) {
+        let fileURLs = MediaFileIdentity.uniqueURLs(fileURLs)
         self.folderURL = folderURL
         self.folderName = folderName
         self.sourceKind = sourceKind

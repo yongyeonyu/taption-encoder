@@ -37,9 +37,25 @@ actor FilePendingSaveStore: PendingSaveStoring {
     static let shared = FilePendingSaveStore()
 
     private let fileURL: URL
+    private let recoveryDirectoryURL: URL
+    private let isRegularFile: (URL) throws -> Bool
 
-    init(fileURL: URL = FilePendingSaveStore.defaultFileURL()) {
+    init(fileURL: URL = FilePendingSaveStore.defaultFileURL(),
+         recoveryDirectoryURL: URL = TaptionEncoderStorageLocations.pendingEncodedVideosDirectoryURL,
+         isRegularFile: @escaping (URL) throws -> Bool = FilePendingSaveStore.isRegularFile) {
         self.fileURL = fileURL
+        self.recoveryDirectoryURL = recoveryDirectoryURL
+        self.isRegularFile = isRegularFile
+    }
+
+    static func isRegularFile(at url: URL) throws -> Bool {
+        do { return try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true }
+        catch {
+            let error = error as NSError
+            if (error.domain == NSCocoaErrorDomain && [NSFileReadNoSuchFileError, NSFileNoSuchFileError].contains(error.code))
+                || (error.domain == NSPOSIXErrorDomain && error.code == 2) { return false }
+            throw error
+        }
     }
 
     func savePendingState(_ state: TaptionPendingSaveState) async throws {
@@ -64,14 +80,14 @@ actor FilePendingSaveStore: PendingSaveStoring {
         var validStates: [TaptionPendingSaveState] = []
 
         for state in states {
-            if FileManager.default.fileExists(atPath: state.temporaryOutputURL.path) {
+            if try isRegularFile(state.temporaryOutputURL) {
                 validStates.append(state)
                 continue
             }
 
-            let recoveredURL = TaptionEncoderStorageLocations.pendingEncodedVideosDirectoryURL
+            let recoveredURL = recoveryDirectoryURL
                 .appendingPathComponent(state.temporaryOutputURL.lastPathComponent)
-            if FileManager.default.fileExists(atPath: recoveredURL.path) {
+            if try isRegularFile(recoveredURL) {
                 var recoveredState = state
                 recoveredState.temporaryOutputURL = recoveredURL
                 validStates.append(recoveredState)
