@@ -213,3 +213,9 @@
 - 최종 Release `build analyze`: 모두 성공(`release-build-result.json`, `release-build.log`). 기존 AVAssetExportSession 호환 어댑터의 deprecated API 경고는 남아 있으며, 이 범위에서는 호환성 변경을 하지 않았습니다.
 - 실제 iPad Pro 12.9-inch 6세대(iPad14,6, iPadOS 27.0.1)에 최종 1.1.13(48) 설치 성공(`ipad-install48-final.json`). 기존 앱 데이터는 유지했습니다. 작업 전용 synthetic fixture 3개만 Documents/BOKKI-Review-RF14T0P10A에 추가했습니다.
 - 실기기 UI 첫 시도는 XCTest runner가 automation mode 활성화 시간 초과로 시작하지 못했습니다(`ipad-review48.xcresult`/summary). 앱 기능 테스트가 통과한 것으로 계산하지 않습니다. 잠금 해제 요청을 보냈으며, iPad 시뮬레이터 검사를 별도로 진행합니다.
+- iPad 시뮬레이터(iPad Pro 13-inch M5, iPadOS 27.0) UI: `IPadSimulator48.xcresult`, **2개 통과, 실패/스킵 0**. VLC/HEVC Alpha 재생·양방향 footer swipe·첫/마지막 경계·10초 이동·정보·native 공유 및 재열기/취소·Add 중복 방지·목록 복귀·portrait/landscape 배치를 검증했습니다. 화면은 작업용 합성 영상이며 원본/공유 대상에 외부 전송하지 않았습니다.
+- 실제 iPad는 최종 설치 메타데이터 `ipad-installed48-final.json`으로 1.1.13(48)을 확인했고 `ipad-launch48.json`에서 앱 실행 성공을 확인했습니다. 실기기 터치 검사는 앞서 기록한 자동화 연결 제한으로 미완료이며 시뮬레이터 결과와 구분합니다.
+- 배포 소스 커밋: `2e14c1d110a7e93c90ad289e35ba6133a0fa9036`, main 커밋/푸시·git clean 확인 후 동일 소스를 archive했습니다. `build-source.json`과 `post-archive-source-verification.json`의 소스 hash 일치.
+- `BOKKIEncoder-1.1.13-48.xcarchive` archive 및 App Store Connect export 성공. 앱·Live Activity·thumbnail extension 모두 1.1.13(48), Apple Distribution 서명·팀·배포 provisioning 검증 성공(`ipa-verification.json`). IPA 28,392,614 bytes, SHA256 `09ef456adcce7b01c828e0f633d0ddcc954dce0a04cb991c020499ec0d9481fd`.
+- Apple upload 성공(`upload-result.json`, `upload.log`). Delivery/build ID `9188d2c9-d649-4980-a13c-e5bc6b0a48ee`.
+- 2026-10-14 02:57 KST Apple 처리 **VALID / IN_BETA_TESTING** 확인(`testflight-ready.json`). 내부 beta group 1개에 빌드 48 포함 확인(`internal-groups48-verified.json`). 한국어/영어 TestFlight 안내 등록 후 내용 재조회 일치(`beta-notes-verified.json`). 외부 beta 심사/App Store 재심사는 이번 요청 범위에서 제출하지 않았습니다.
