@@ -149,6 +149,11 @@ struct SingleFilePreviewContext {
     var items: [URL: BatchItemRuntime] = [:]
     var unavailableURLs: Set<URL> = []
     var needsFolderAccess = false
+    var sourceKind: HomeSourceKind = .files
+    var sourceName: String? = nil
+    var photoVideos: [URL: PhotoLibraryVideo] = [:]
+
+    func displayName(for url: URL) -> String { photoVideos[url]?.fileName ?? url.lastPathComponent }
 
     var candidates: [URL] { fileURLs.filter { !unavailableURLs.contains($0) } }
 
@@ -158,8 +163,8 @@ struct SingleFilePreviewContext {
         let previous = index > 0 ? urls[index - 1] : nil
         let next = index + 1 < urls.count ? urls[index + 1] : nil
         return QueueVideoPreviewPlaylist(currentIndex: index, totalCount: urls.count,
-            previousID: previous?.absoluteString, previousName: previous?.lastPathComponent,
-            nextID: next?.absoluteString, nextName: next?.lastPathComponent)
+            previousID: previous?.absoluteString, previousName: previous.map(displayName),
+            nextID: next?.absoluteString, nextName: next.map(displayName))
     }
 }
 

@@ -246,3 +246,16 @@
 - App Store Connect export 성공 로그와 IPA의 독립 서명/프로파일 검증을 확인했습니다. export 이후 shell 보고용 status 변수에서 readonly 오류가 있었으나 완료된 export와 산출물에는 영향 없으며 후속 Python 검증으로 결과를 기록했습니다. 앱/두 확장 모두 Apple Distribution·4FWG8XXYM7 팀·배포 프로파일(get-task-allow false, ProvisionedDevices 없음) 검증 성공. IPA 28,392,647 bytes, SHA256 `c08ac0d8852bc74df864657927602e0080a05f05c623524e4e40c7c1aa191837`.
 - Apple 업로드 성공: delivery/build `a65d584f-a67f-4458-9ae5-8994a6dba70d`. 2026-10-14 03:28 KST **VALID / IN_BETA_TESTING** 확인, 내부 beta group 1개에 빌드 49 포함 확인. 한국어/영어 TestFlight 안내 등록 및 재조회 일치. App Store/외부 beta 심사 제출은 이번 요청 범위에 포함하지 않았습니다.
 - 새 생성 자료는 `/private/tmp/BOKKIEncoder-TF14B4J8Q1-4u_q66e3`에 보관하고, 이번 배포 요청으로 필수 입력을 복구한 상태이므로 즉시 빌드 불가로 기술한 직전 소스 보관 기록은 과거 상태입니다.
+
+
+## FR14A7L5Q3 — 폴더/앨범 자동 연결 미리보기 (2026-10-14)
+
+- File은 시스템 폴더 선택으로 최초 범위를 확보한 뒤 영상 하나를 선택합니다. Folder는 기존 폴더 목록, Album은 PhotoKit의 선택 앨범 목록을 그대로 연결합니다. 개별 파일 권한에서 부모 폴더 권한을 우회하거나 PHPicker의 단일 전송에서 원본 앨범을 추측하지 않습니다.
+- 처음 선택한 영상만 변환 목록에 넣고 이전/다음은 전체 원본 목록에서 탐색합니다. Add 후 닫기·큐에서 다시 열기에도 전체 목록을 유지합니다. 앨범은 재생할 영상만 원본 리소스로 가져오며 파일명을 보존합니다. 취소된 가져오기·이전 context가 새 화면을 덮지 않도록 보호하고, 공유 writer의 기다림은 즉시 취소할 수 있습니다.
+- Photos 전환에서 이전 파일의 폴더 scope/context를 해제해 잘못된 Connect folder 표시를 없앴습니다. 문서 선택창의 닫힘 전환을 마친 뒤 연결 목록을 표시하고 폴더 카드의 전체 터치 범위를 명시했습니다.
+- 최종 소스 전체 활성 검사: `Unit50-modal.xcresult`, **428개 통과, 실패/스킵 0**. 신규 8개는 단일 선택·큐 재열기·정확한 앨범 순서·지연 가져오기·미사용 영상·소스 전환·취소를 검증합니다. 탐색 중 encoder 호출 0회와 Stars 잔액 불변을 확인합니다.
+- 작업 전용 iPhone 18 Pro Max 시뮬레이터(F8DCF5A8-0DDA-477B-BF36-9E838052217C, iOS 27.0), 90초 합성 영상 A/B/C에서 실제 UI 검사: `UI-folders8.xcresult`의 File 검사, `UI-folderonly10.xcresult`의 Folder 검사, `UI-connected5.xcresult`의 Album 검사 **각 통과**. 파일명/위치 변경, 양방향 하단 스와이프, Add 상태, 닫기·다시 열기, 폴더 연결 요청 부재를 검증합니다. 지정 앨범에는 A/B만 넣고 외부 영상 C가 섞이지 않음을 확인했습니다.
+- 초기 UI 검사에서 unsigned 시뮬레이터의 Keychain/Photos 권한과 카드 좌표 클릭·전환 중 snapshot 문제가 있었습니다. Xcode의 시뮬레이터 서명을 사용하고 표준 버튼 동작 및 전환 안정화로 재검사했습니다. 실패한 시도를 통과로 계산하지 않습니다.
+- 생성 자료와 명령/로그/xcresult는 `/private/tmp/BOKKIEncoder-FR14A7L5Q3-m0jrt1ay`에 보관합니다. 실기기 설치와 UI 검사 결과는 별도 기록합니다.
+- 최초 네이티브 사진 권한 창에서 사진 선택을 누르고 합성 영상 B/C만 허용했습니다. `UI-permission11.xcresult`는 권한 진입까지만 검증한 진단 단계이며, 최종 `UI-limited12.xcresult`는 **제한 권한 실제 UI 검사 통과**: 허용한 B/C만 표시, 미허용 A 부재, 2개 목록의 양방향 스와이프와 닫기 후 1개 큐 유지 확인. 전면 접근 상태와 제한 접근 상태를 별도로 검사했습니다.
+- `UI-denied13.xcresult` **접근 거부 UI 검사 통과**: 설정 안내와 단일 영상 선택 fallback 표시, 정상 닫기 확인. 개인 기기의 사진 접근 권한은 변경하지 않았으며 작업 전용 시뮬레이터에서 검증했습니다.

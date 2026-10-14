@@ -96,7 +96,7 @@
 		<key>UISupportsDocumentBrowser</key>
 		<true/>
 		<key>NSPhotoLibraryUsageDescription</key>
-		<string>BOKKI Encoder needs access to selected videos for local conversion.</string>
+		<string>앨범의 영상을 선택하고 같은 앨범의 이전·다음 영상을 미리보기로 탐색하기 위해 사진 접근 권한이 필요합니다.</string>
 		<key>NSPhotoLibraryAddUsageDescription</key>
 		<string>BOKKI Encoder saves converted H.265 videos as new Photos assets.</string>
 		<key>NSSupportsLiveActivities</key>

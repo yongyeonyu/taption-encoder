@@ -4589,10 +4589,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("HomeSystemDocumentPickerPresenter("))
         XCTAssertTrue(homeViewText.contains("UIDocumentPickerViewController("))
         XCTAssertTrue(homeViewText.contains("forOpeningContentTypes: mode.allowedContentTypes"))
-        XCTAssertTrue(homeViewText.contains("return ImportableVideoTypes.all"))
+        XCTAssertFalse(homeViewText.contains("return ImportableVideoTypes.all"), "File browsing must acquire its containing folder scope first.")
         XCTAssertTrue(homeViewText.contains("return [.folder]"))
         XCTAssertTrue(homeViewText.contains("picker.allowsMultipleSelection = mode.allowsMultipleSelection"))
-        XCTAssertTrue(homeViewText.contains("return true"))
         XCTAssertTrue(homeViewText.contains("return false"))
         XCTAssertTrue(homeViewText.contains("UIDocumentPickerDelegate"))
         XCTAssertTrue(homeViewText.contains("documentPicker("))
@@ -4603,7 +4602,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("handleOutputFolderPickerResult"))
         XCTAssertTrue(homeViewText.contains("prepareFolderOutputDirectoryForStart"))
         XCTAssertTrue(homeViewText.contains("selectFolderOutputDirectory"))
-        XCTAssertTrue(homeViewText.contains("viewModel.handleFolderPickerSelection(urls: selectedURLs)"))
+        XCTAssertTrue(homeViewText.contains("viewModel.openConnectedFilesFolder(folder)"))
         XCTAssertTrue(homeViewText.contains("viewModel.handleFolderPickerSelection(urls: [folderURL])"))
         XCTAssertFalse(sourceBarText.contains("onSamples"))
         XCTAssertFalse(sourceBarText.contains("openSampleLibrary()"))
@@ -13097,7 +13096,8 @@ final class CodecRoutePlannerTests: XCTestCase {
     private func makePreviewQueueBrowserFixture(
         codec: TaptionVideoCodec = .h264,
         availableBytes: Int64 = 1_000_000,
-        previewFolderDefaults: UserDefaults? = nil
+        previewFolderDefaults: UserDefaults? = nil,
+        photoVideoLoader: any PhotoVideoLoading = PhotoKitVideoLoader()
     ) async throws -> (directory: URL, urls: [URL], model: HomeViewModel,
                        inspector: CountingMediaInspector, wallet: FakeStarWalletStore,
                        encoder: RecordingStartEncoder) {
@@ -13118,7 +13118,7 @@ final class CodecRoutePlannerTests: XCTestCase {
                 estimatedOutputBytes: 1_000, requiredWorkingBytes: 1_024, availableBytes: availableBytes
             )),
             starWalletStore: wallet
-        ), previewFolderDefaults: previewFolderDefaults ?? UserDefaults(suiteName: "PreviewFolderTests-\(UUID().uuidString)")!)
+        ), previewFolderDefaults: previewFolderDefaults ?? UserDefaults(suiteName: "PreviewFolderTests-\(UUID().uuidString)")!, photoVideoLoader: photoVideoLoader)
         await model.refreshStarsIfNeeded()
         return (directory, urls, model, inspector, wallet, encoder)
     }
@@ -13219,6 +13219,155 @@ final class CodecRoutePlannerTests: XCTestCase {
         model.closePreviewFromPlayer()
         XCTAssertNil(model.activePreview)
         XCTAssertEqual(model.fileCardSnapshots, cards)
+    }
+
+    @MainActor
+    func testConnectedFilePickerAutoLinksFolderAndQueuesOnlyChosenVideo() async throws {
+        let f = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        f.model.openConnectedFilesFolder(f.directory)
+        XCTAssertEqual(f.model.folderPreviewContext?.selectsSingleFile, true)
+        f.model.selectFolderPreviewFile(id: f.urls[1].absoluteString)
+        try await waitForCondition(timeout: 10) { f.model.activePreview?.sourceURL == f.urls[1] }
+        let preview = try XCTUnwrap(f.model.activePreview)
+        XCTAssertNil(preview.folderAccessURL)
+        XCTAssertEqual(preview.playlist?.totalCount, 3)
+        XCTAssertEqual(preview.playlist?.currentIndex, 1)
+        XCTAssertEqual(f.model.fileCardSnapshots.map(\.fileName), ["b.mp4"])
+        f.model.openNextPreview()
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.sourceURL == f.urls[2] }
+        XCTAssertEqual(f.model.fileCardSnapshots.count, 1)
+    }
+
+    @MainActor
+    func testConnectedFolderSurvivesOneAddedVideoAndQueueReopen() async throws {
+        let f = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        f.model.startFolderFlow(url: f.directory)
+        f.model.selectFolderPreviewFile(id: f.urls[1].absoluteString)
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.sourceURL == f.urls[1] }
+        XCTAssertTrue(f.model.addPreviewToList(try XCTUnwrap(f.model.activePreview)))
+        f.model.closePreviewFromPlayer()
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        XCTAssertEqual(f.model.fileCardSnapshots.count, 1)
+        f.model.openPreviewForFileCard(id: f.urls[1].absoluteString)
+        XCTAssertEqual(f.model.activePreview?.playlist?.totalCount, 3)
+        XCTAssertNil(f.model.activePreview?.folderAccessURL)
+        f.model.openPreviousPreview()
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.sourceURL == f.urls[0] }
+        XCTAssertEqual(f.model.fileCardSnapshots.count, 1)
+    }
+
+    @MainActor
+    func testAlbumAutoLinksExactOrderedListAndLoadsNeighboursOnlyWhenPlayed() async throws {
+        let loader = RecordingPhotoVideoLoader()
+        let f = try await makePreviewQueueBrowserFixture(photoVideoLoader: loader)
+        let videos = ["a", "b", "c"].map { PhotoLibraryVideo(id: $0, fileName: "\($0).mp4", duration: 10) }
+        defer { f.model.reset(); try? FileManager.default.removeItem(at: f.directory) }
+        f.model.startPhotoLibraryFlow(.init(albumName: "Trip", videos: videos, selectedID: "b"))
+        try await waitForCondition(timeout: 10) { f.model.activePreview?.displayName == "b.mp4" }
+        var calls = await loader.loadedIDs()
+        XCTAssertEqual(calls, ["b"])
+        XCTAssertEqual(f.model.activePreview?.playlist?.currentIndex, 1)
+        XCTAssertEqual(f.model.activePreview?.playlist?.totalCount, 3)
+        XCTAssertNil(f.model.activePreview?.folderAccessURL)
+        XCTAssertEqual(f.model.fileCardSnapshots.map(\.fileName), ["b.mp4"])
+        XCTAssertEqual(f.model.fileCardSnapshots.first?.sourceKind, .photos)
+        f.model.openNextPreview()
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.displayName == "c.mp4" }
+        XCTAssertEqual(f.model.activePreview?.playlist?.currentIndex, 2)
+        f.model.openPreviousPreview()
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.displayName == "b.mp4" }
+        calls = await loader.loadedIDs()
+        XCTAssertEqual(calls, ["b", "c"])
+        XCTAssertEqual(f.model.fileCardSnapshots.count, 1)
+        let wallet = await f.wallet.currentSnapshot(); XCTAssertEqual(wallet.balance, 3)
+        let encodes = await f.encoder.callCount(); XCTAssertEqual(encodes, 0)
+    }
+
+    @MainActor
+    func testAlbumAddedSubsetKeepsFullPlaylistAfterQueueReopen() async throws {
+        let loader = RecordingPhotoVideoLoader()
+        let f = try await makePreviewQueueBrowserFixture(photoVideoLoader: loader)
+        let videos = ["a", "b", "c"].map { PhotoLibraryVideo(id: $0, fileName: "\($0).mp4", duration: 10) }
+        defer { f.model.reset(); try? FileManager.default.removeItem(at: f.directory) }
+        f.model.startPhotoLibraryFlow(.init(albumName: "Trip", videos: videos, selectedID: "b"))
+        try await waitForCondition(timeout: 10) { f.model.activePreview?.displayName == "b.mp4" }
+        f.model.openNextPreview()
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.displayName == "c.mp4" }
+        XCTAssertTrue(f.model.addPreviewToList(try XCTUnwrap(f.model.activePreview)))
+        f.model.closePreviewFromPlayer()
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        XCTAssertEqual(f.model.fileCardSnapshots.map(\.fileName), ["b.mp4", "c.mp4"])
+        XCTAssertTrue(f.model.fileCardSnapshots.allSatisfy { $0.sourceKind == .photos })
+        let first = try XCTUnwrap(f.model.fileCardSnapshots.first)
+        f.model.openPreviewForFileCard(id: first.id)
+        XCTAssertEqual(f.model.activePreview?.displayName, "b.mp4")
+        XCTAssertEqual(f.model.activePreview?.playlist?.totalCount, 3)
+        f.model.openPreviousPreview()
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.displayName == "a.mp4" }
+        XCTAssertFalse(f.model.isPreviewAddedToList(try XCTUnwrap(f.model.activePreview)))
+        XCTAssertNil(f.model.activePreview?.folderAccessURL)
+    }
+
+    @MainActor
+    func testAlbumNavigationUsesSelectionOrderAndSkipsUnavailableVideo() async throws {
+        let loader = RecordingPhotoVideoLoader(unavailable: ["missing"])
+        let f = try await makePreviewQueueBrowserFixture(photoVideoLoader: loader)
+        defer { f.model.reset(); try? FileManager.default.removeItem(at: f.directory) }
+        let videos = ["z", "missing", "a"].map { PhotoLibraryVideo(id: $0, fileName: "\($0).mp4", duration: 10) }
+        f.model.startPhotoLibraryFlow(.init(albumName: "Custom", videos: videos, selectedID: "z"))
+        try await waitForCondition(timeout: 10) { f.model.activePreview?.displayName == "z.mp4" }
+        f.model.openNextPreview()
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.displayName == "a.mp4" }
+        XCTAssertEqual(f.model.activePreview?.playlist?.totalCount, 2)
+        XCTAssertEqual(f.model.activePreview?.playlist?.currentIndex, 1)
+        f.model.openPreviousPreview()
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.displayName == "z.mp4" }
+        XCTAssertEqual(f.model.fileCardSnapshots.map(\.fileName), ["z.mp4"])
+    }
+
+    @MainActor
+    func testAlbumFallbackClearsUnrelatedFileFolderAccessAndNeighbours() async throws {
+        let f = try await makePreviewQueueBrowserFixture()
+        defer { try? FileManager.default.removeItem(at: f.directory) }
+        f.model.openExternalPlayerFile(url: f.directory.appendingPathComponent("not-granted/b.mp4"))
+        try await waitForCondition(timeout: 10) { f.model.activePreview != nil }
+        XCTAssertNotNil(f.model.activePreview?.folderAccessURL)
+        f.model.startPhotosFlow(url: f.urls[0], displayName: "Photo.mp4")
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        f.model.openPreviewForFileCard(id: "Photo.mp4")
+        XCTAssertNil(f.model.activePreview?.folderAccessURL)
+        XCTAssertNil(f.model.activePreview?.playlist)
+    }
+
+    @MainActor
+    func testAlbumSupersededNeighbourCannotReplaceNewFolderPreview() async throws {
+        let loader = RecordingPhotoVideoLoader(delayed: ["slow"])
+        let f = try await makePreviewQueueBrowserFixture(photoVideoLoader: loader)
+        defer { f.model.reset(); try? FileManager.default.removeItem(at: f.directory) }
+        let videos = ["a", "slow"].map { PhotoLibraryVideo(id: $0, fileName: "\($0).mp4", duration: 10) }
+        f.model.startPhotoLibraryFlow(.init(albumName: "Old", videos: videos, selectedID: "a"))
+        try await waitForCondition(timeout: 10) { f.model.activePreview?.displayName == "a.mp4" }
+        f.model.openNextPreview()
+        f.model.openConnectedFilesFolder(f.directory)
+        f.model.selectFolderPreviewFile(id: f.urls[1].absoluteString)
+        try await waitForCondition(timeout: 10) { f.model.activePreview?.sourceURL == f.urls[1] }
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(f.model.activePreview?.sourceURL, f.urls[1])
+        XCTAssertEqual(f.model.activePreview?.playlist?.totalCount, 3)
+        XCTAssertNil(f.model.activePreview?.folderAccessURL)
+    }
+
+    func testSharedPhotoLoadWaiterCancelsWithoutWaitingForWriter() async throws {
+        let producer = Task<Void, Error> { try await Task.sleep(for: .seconds(30)) }
+        defer { producer.cancel() }
+        let wait = Task { try await PhotoVideoLoadWaiter.wait(for: producer) }
+        try await Task.sleep(for: .milliseconds(20))
+        wait.cancel()
+        do { try await wait.value; XCTFail("Cancelled photo wait succeeded") }
+        catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertFalse(producer.isCancelled, "A shared writer must not be cancelled by one view")
     }
 
     @MainActor
@@ -15811,5 +15960,21 @@ final class CodecRoutePlannerTests: XCTestCase {
         _ rhs: TaptionVideoContainer
     ) -> Bool {
         lhs.rawValue < rhs.rawValue
+    }
+}
+
+private actor RecordingPhotoVideoLoader: PhotoVideoLoading {
+    private var loaded: [String] = []
+    private let unavailable: Set<String>
+    private let delayed: Set<String>
+    init(unavailable: Set<String> = [], delayed: Set<String> = []) { self.unavailable = unavailable; self.delayed = delayed }
+    func loadedIDs() -> [String] { loaded }
+    func loadVideo(_ video: PhotoLibraryVideo, to destination: URL) async throws {
+        if FileManager.default.fileExists(atPath: destination.path) { return }
+        loaded.append(video.id)
+        if delayed.contains(video.id) { try await Task.sleep(for: .milliseconds(100)) }
+        if unavailable.contains(video.id) { throw PhotoLibraryVideoError.unavailable }
+        try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("source".utf8).write(to: destination)
     }
 }

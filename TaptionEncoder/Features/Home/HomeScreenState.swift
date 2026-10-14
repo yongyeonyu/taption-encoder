@@ -1113,6 +1113,7 @@ struct FolderPreviewContext: Identifiable, Equatable {
     var id: String
     var folderName: String
     var fileCount: Int
+    var selectsSingleFile = false
 
     var countText: String {
         fileCount == 1 ? "1 video" : "\(fileCount) videos"

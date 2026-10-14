@@ -77,6 +77,7 @@ final class HomeViewModel: ObservableObject {
 
     private let environment: AppEnvironment
     private let sourceDownloader: any VideoSourceDownloading
+    private let photoVideoLoader: any PhotoVideoLoading
     private let resourceMonitor: EncodingResourceMonitoring
     private let batteryPowerMonitor: any BatteryPowerMonitoring
     private let batterySettingsProvider: () -> BatteryEncodingSettings
@@ -130,10 +131,12 @@ final class HomeViewModel: ObservableObject {
         sourceDownloader: any VideoSourceDownloading = UbiquitousVideoDownloader(),
         batteryPowerMonitor: any BatteryPowerMonitoring = UIDeviceBatteryPowerMonitor(),
         batterySettingsProvider: @escaping () -> BatteryEncodingSettings = { BatteryEncodingSettings.load() },
-        previewFolderDefaults: UserDefaults = .standard
+        previewFolderDefaults: UserDefaults = .standard,
+        photoVideoLoader: any PhotoVideoLoading = PhotoKitVideoLoader()
     ) {
         self.environment = environment
         self.sourceDownloader = sourceDownloader
+        self.photoVideoLoader = photoVideoLoader
         self.resourceMonitor = environment.resourceMonitor
         self.batteryPowerMonitor = batteryPowerMonitor
         self.batterySettingsProvider = batterySettingsProvider
@@ -1698,7 +1701,8 @@ final class HomeViewModel: ObservableObject {
     private func startFilesFlow(
         url: URL,
         autoStartAfterPrepare: Bool,
-        autoOpenPreviewAfterPrepare: Bool = false
+        autoOpenPreviewAfterPrepare: Bool = false,
+        securityScopedRootURL: URL? = nil
     ) {
         AppLogger.info(
             "Single file flow started",
@@ -1725,7 +1729,7 @@ final class HomeViewModel: ObservableObject {
             displayName: url.lastPathComponent,
             url: url
         )
-        let authorizedFolders = storedPreviewFolderAccess(for: url)
+        let authorizedFolders = [securityScopedRootURL].compactMap { $0 } + storedPreviewFolderAccess(for: url)
         beginSecurityScopedAccessIfNeeded(for: authorizedFolders + [url, url.deletingLastPathComponent()])
         prepareSingleFilePreviewContext(for: url)
         prepareEncodingFlow(
@@ -1915,6 +1919,7 @@ final class HomeViewModel: ObservableObject {
             return
         }
         dismissPreview()
+        beginSecurityScopedAccessIfNeeded(for: [])
         selectionInspectionTask?.cancel()
         folderBatch = nil
         folderPreviewContext = nil
@@ -1928,6 +1933,55 @@ final class HomeViewModel: ObservableObject {
             url: url
         )
         prepareEncodingFlow(source: source, autoOpenPreviewAfterPrepare: false)
+    }
+
+    func startPhotoLibraryFlow(_ selection: PhotoLibrarySelection) {
+        guard state.canSelectSource, canStartNewSourceFlow() else { return }
+        var seen: Set<String> = []
+        let videos = selection.videos.filter { seen.insert($0.id).inserted }
+        guard let selected = videos.first(where: { $0.id == selection.selectedID }) else { return }
+        dismissPreview()
+        activeTask?.cancel()
+        selectionInspectionTask?.cancel()
+        folderBatch = nil
+        folderPreviewContext = nil
+        currentReview = nil
+        standaloneSelectedQueueIDs.removeAll()
+        resetMultiFileEncodingDecision()
+        lastBatchFileCards = []
+        beginSecurityScopedAccessIfNeeded(for: [])
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("TaptionAlbumImports", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let entries = videos.map { video in
+            (directory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+                .appendingPathComponent(URL(fileURLWithPath: video.fileName).lastPathComponent), video)
+        }
+        guard let selectedURL = entries.first(where: { $0.1.id == selected.id })?.0 else { return }
+        var context = SingleFilePreviewContext(initialURL: selectedURL, fileURLs: entries.map { $0.0 }, queuedURLs: [selectedURL])
+        context.sourceKind = .photos
+        context.sourceName = selection.albumName
+        context.photoVideos = Dictionary(uniqueKeysWithValues: entries)
+        singleFilePreviewContext = context
+        let source = HomeSelectedSource(kind: .photos, displayName: selected.fileName, url: selectedURL)
+        state = .importing(source)
+        activeTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                try await self.photoVideoLoader.loadVideo(selected, to: selectedURL)
+                guard !Task.isCancelled, self.singleFilePreviewContext?.id == context.id else { return }
+                self.prepareEncodingFlow(source: source, autoOpenPreviewAfterPrepare: true,
+                                         deferEncodingPreparationUntilStart: true, allowsBusyState: true)
+            } catch is CancellationError {
+                if self.singleFilePreviewContext?.id == context.id { self.state = .cancelled }
+            } catch {
+                guard !Task.isCancelled, self.singleFilePreviewContext?.id == context.id else { return }
+                self.fail(message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func sourceDisplayName(for url: URL) -> String {
+        singleFilePreviewContext?.displayName(for: url) ?? url.lastPathComponent
     }
 
     func toggleQueueFileSelection(id: String) {
@@ -2096,7 +2150,21 @@ final class HomeViewModel: ObservableObject {
         presentPreview(preview)
     }
 
+    func openConnectedFilesFolder(_ folderURL: URL) {
+        startFolderFlow(url: folderURL)
+        guard folderPreviewContext != nil else { return }
+        folderPreviewContext?.selectsSingleFile = true
+        folderBatch?.sourceKind = .files
+    }
+
     func selectFolderPreviewFile(id: String) {
+        if folderPreviewContext?.selectsSingleFile == true,
+           let batch = folderBatch, let folder = batch.folderURL,
+           let url = batch.fileURLs.first(where: { $0.absoluteString == id }) {
+            startFilesFlow(url: url, autoStartAfterPrepare: false,
+                           autoOpenPreviewAfterPrepare: true, securityScopedRootURL: folder)
+            return
+        }
         _ = openBatchPreviewForFileCard(id: id)
     }
 
@@ -2198,14 +2266,14 @@ final class HomeViewModel: ObservableObject {
             dismissPreview()
             let existing = folderBatch?.fileURLs ?? [(currentReview ?? state.preparedEncodingReview)?.source.url].compactMap { $0 }
             guard existing != context.queuedURLs else { return }
-            var batch = FolderEncodingBatch(folderURL: context.initialURL.deletingLastPathComponent(),
-                folderName: context.initialURL.deletingLastPathComponent().lastPathComponent,
-                sourceKind: .files, fileURLs: context.queuedURLs)
+            var batch = FolderEncodingBatch(folderURL: context.sourceKind == .photos ? nil : context.initialURL.deletingLastPathComponent(),
+                folderName: context.sourceName ?? context.initialURL.deletingLastPathComponent().lastPathComponent,
+                sourceKind: context.sourceKind, fileURLs: context.queuedURLs)
             for url in context.queuedURLs { batch.itemStates[url] = context.items[url] }
             folderBatch = batch
             currentReview = nil
             guard let first = batch.currentFileURL else { return }
-            prepareEncodingFlow(source: HomeSelectedSource(kind: .files, displayName: first.lastPathComponent, url: first),
+            prepareEncodingFlow(source: HomeSelectedSource(kind: context.sourceKind, displayName: context.displayName(for: first), url: first),
                 deferEncodingPreparationUntilStart: true, preinspectedAsset: context.items[first]?.asset)
             return
         }
@@ -2213,6 +2281,13 @@ final class HomeViewModel: ObservableObject {
         let addedURLs = previewAddedToListURLs
         dismissPreview()
         guard let batch = browserBatch, !addedURLs.isEmpty else { return }
+        if let initial = addedURLs.first {
+            var context = SingleFilePreviewContext(initialURL: initial, fileURLs: batch.fileURLs, queuedURLs: addedURLs)
+            context.sourceKind = batch.sourceKind
+            context.sourceName = batch.folderName
+            context.items = batch.itemStates
+            singleFilePreviewContext = context
+        }
 
         var queuedBatch = FolderEncodingBatch(
             folderURL: batch.folderURL,
@@ -2463,6 +2538,8 @@ final class HomeViewModel: ObservableObject {
         previewInspectionTask = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
+                if let video = context.photoVideos[url] { try await self.photoVideoLoader.loadVideo(video, to: url) }
+                try Task.checkCancellation()
                 let inspected = try await self.inspectVideoReusingCache(at: url)
                 guard !Task.isCancelled, self.singleFilePreviewContext?.id == context.id else { return }
                 let asset = inspected.asset
@@ -2471,14 +2548,14 @@ final class HomeViewModel: ObservableObject {
                     self.refreshSingleFilePlaylistAfterUnavailableItem(navigationOffset: navigationOffset)
                     return
                 }
-                let source = HomeSelectedSource(kind: .files, displayName: url.lastPathComponent, url: url)
+                let source = HomeSelectedSource(kind: context.sourceKind, displayName: context.displayName(for: url), url: url)
                 let route = TaptionCodecRoutePlanner.selectRoute(for: asset,
                     outputCodec: self.selectedOutput.videoCodec, requestedMode: .automatic)
                 let info = self.makeLoadedVideoInfo(source: source, asset: asset,
                     outputName: self.outputName(for: source), routeSelection: route)
                 self.cacheSingleFilePreviewItem(url: url, asset: asset, info: info)
                 self.presentPreview(QueueVideoPreview(id: url.absoluteString,
-                    displayName: url.lastPathComponent, sourceURL: url, videoInfo: info,
+                    displayName: context.displayName(for: url), sourceURL: url, videoInfo: info,
                     displaySize: asset.videoTrack?.displaySize,
                     playlist: self.singleFilePreviewContext?.playlist(for: url),
                     usesNativePlayback: asset.videoTrack?.codec == .hevcWithAlpha))
@@ -2618,7 +2695,9 @@ final class HomeViewModel: ObservableObject {
             videoInfo: review.videoInfo,
             displaySize: review.job.asset.videoTrack?.displaySize,
             playlist: singleFilePreviewContext?.playlist(for: review.source.url),
-            folderAccessURL: singleFilePreviewContext?.needsFolderAccess == true ? review.source.url.deletingLastPathComponent() : nil,
+            folderAccessURL: singleFilePreviewContext?.sourceKind != .photos
+                && singleFilePreviewContext?.initialURL == review.source.url
+                && singleFilePreviewContext?.needsFolderAccess == true ? review.source.url.deletingLastPathComponent() : nil,
             usesNativePlayback: review.job.asset.videoTrack?.codec == .hevcWithAlpha
         )
     }
@@ -2634,7 +2713,7 @@ final class HomeViewModel: ObservableObject {
 
         return QueueVideoPreview(
             id: url.absoluteString,
-            displayName: url.lastPathComponent,
+            displayName: videoInfo.fileName,
             sourceURL: url,
             videoInfo: videoInfo,
             displaySize: item.asset?.videoTrack?.displaySize,
@@ -4580,7 +4659,7 @@ final class HomeViewModel: ObservableObject {
         )
         let source = HomeSelectedSource(
             kind: batch.sourceKind,
-            displayName: url.lastPathComponent,
+            displayName: sourceDisplayName(for: url),
             url: url
         )
 
@@ -4728,7 +4807,7 @@ final class HomeViewModel: ObservableObject {
         )
         let source = HomeSelectedSource(
             kind: batch.sourceKind,
-            displayName: url.lastPathComponent,
+            displayName: sourceDisplayName(for: url),
             url: url
         )
         prepareEncodingFlow(

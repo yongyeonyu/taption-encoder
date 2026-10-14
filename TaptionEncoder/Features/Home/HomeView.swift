@@ -11,18 +11,15 @@ private enum HomeSystemDocumentPickerMode: String {
 
     var allowedContentTypes: [UTType] {
         switch self {
-        case .files:
-            return ImportableVideoTypes.all
-        case .folder, .outputFolder:
+        case .files, .folder, .outputFolder:
+            // Select the browsing scope once; choosing a video happens in the connected list.
             return [.folder]
         }
     }
 
     var allowsMultipleSelection: Bool {
         switch self {
-        case .files:
-            return true
-        case .folder, .outputFolder:
+        case .files, .folder, .outputFolder:
             return false
         }
     }
@@ -52,6 +49,7 @@ private struct HomeSystemDocumentPickerPresenter: UIViewControllerRepresentable 
     final class Coordinator: NSObject, UIDocumentPickerDelegate {
         var parent: HomeSystemDocumentPickerPresenter
         var presentedMode: HomeSystemDocumentPickerMode?
+        private var isCompleting = false
 
         init(parent: HomeSystemDocumentPickerPresenter) {
             self.parent = parent
@@ -72,11 +70,11 @@ private struct HomeSystemDocumentPickerPresenter: UIViewControllerRepresentable 
             _ controller: UIDocumentPickerViewController,
             didPickDocumentsAt urls: [URL]
         ) {
-            complete(.success(urls))
+            complete(.success(urls), from: controller)
         }
 
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-            complete(.success([]))
+            complete(.success([]), from: controller)
         }
 
         private func presentPicker(
@@ -133,13 +131,29 @@ private struct HomeSystemDocumentPickerPresenter: UIViewControllerRepresentable 
             return presenter
         }
 
-        private func complete(_ result: Result<[URL], Error>) {
-            guard let mode = presentedMode ?? parent.mode else {
+        private func complete(_ result: Result<[URL], Error>, from controller: UIDocumentPickerViewController) {
+            guard !isCompleting, let mode = presentedMode ?? parent.mode else {
                 return
             }
-            presentedMode = nil
-            parent.mode = nil
-            parent.onCompletion(mode, result)
+            isCompleting = true
+            // Present the connected browser only after UIKit's document picker
+            // has finished dismissing, so its transition cannot block touches.
+            let finish = { [self] in
+                isCompleting = false
+                presentedMode = nil
+                guard parent.mode == mode else { return }
+                parent.mode = nil
+                parent.onCompletion(mode, result)
+            }
+            if controller.isBeingDismissed, let transition = controller.transitionCoordinator {
+                if !transition.animate(alongsideTransition: nil, completion: { _ in finish() }) {
+                    DispatchQueue.main.async(execute: finish)
+                }
+            } else if controller.presentingViewController != nil {
+                controller.dismiss(animated: true, completion: finish)
+            } else {
+                DispatchQueue.main.async(execute: finish)
+            }
         }
     }
 }
@@ -151,6 +165,10 @@ struct HomeView: View {
     @State private var activeSystemDocumentPicker: HomeSystemDocumentPickerMode?
     @State private var isPhotosPickerPresented = false
     @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var photoImportTask: Task<Void, Never>?
+    @State private var isPhotoLibraryBrowserPresented = false
+    @State private var pendingPhotoLibrarySelection: PhotoLibrarySelection?
+    @State private var choosesSinglePhotoVideo = false
     @State private var activeMenuSheet: HomeMenuSheet?
     @State private var isOutputSizePopoverPresented = false
     @State private var isOutputSettingsPresented = false
@@ -289,6 +307,15 @@ struct HomeView: View {
         .multiFileMergeUnavailableAlert(viewModel: viewModel)
         .pendingSaveDestinationDialog(viewModel: viewModel)
         .savedFolderDialog(viewModel: viewModel)
+        .sheet(isPresented: $isPhotoLibraryBrowserPresented, onDismiss: completePhotoLibraryBrowserDismissal) {
+            PhotoLibraryBrowserView(onSelect: { selection in
+                pendingPhotoLibrarySelection = selection
+                isPhotoLibraryBrowserPresented = false
+            }, onChooseOneVideo: {
+                choosesSinglePhotoVideo = true
+                isPhotoLibraryBrowserPresented = false
+            })
+        }
         .photosPicker(
             isPresented: $isPhotosPickerPresented,
             selection: $selectedPhotoItem,
@@ -613,12 +640,14 @@ struct HomeView: View {
     }
 
     private func openFilesImportBrowser() {
+        cancelPendingPhotoImport()
         AppLogger.info("File button tapped", category: .ui)
         beginDocumentPickerAdSuppressionIfNeeded(reason: "filePicker")
         activeSystemDocumentPicker = .files
     }
 
     private func openFolderImportBrowser() {
+        cancelPendingPhotoImport()
         AppLogger.info("Folder button tapped", category: .ui)
         beginDocumentPickerAdSuppressionIfNeeded(reason: "folderPicker")
         activeSystemDocumentPicker = .folder
@@ -626,8 +655,28 @@ struct HomeView: View {
 
     private func presentPhotosPicker() {
         AppLogger.info("Album button tapped", category: .ui)
+        cancelPendingPhotoImport()
         beginPhotosPickerAdSuppressionIfNeeded()
-        isPhotosPickerPresented = true
+        isPhotoLibraryBrowserPresented = true
+    }
+
+    private func completePhotoLibraryBrowserDismissal() {
+        endPhotosPickerAdSuppressionIfNeeded()
+        if let selection = pendingPhotoLibrarySelection {
+            pendingPhotoLibrarySelection = nil
+            viewModel.startPhotoLibraryFlow(selection)
+        } else if choosesSinglePhotoVideo {
+            choosesSinglePhotoVideo = false
+            beginPhotosPickerAdSuppressionIfNeeded()
+            isPhotosPickerPresented = true
+        }
+    }
+
+    private func cancelPendingPhotoImport() {
+        photoImportTask?.cancel()
+        photoImportTask = nil
+        selectedPhotoItem = nil
+        endPhotosPickerAdSuppressionIfNeeded()
     }
 
     private func watchAdFromStarBadge() {
@@ -679,7 +728,7 @@ struct HomeView: View {
                     "names": selectedURLs.map(\.lastPathComponent).joined(separator: "|")
                 ]
             )
-            viewModel.handleFolderPickerSelection(urls: selectedURLs)
+            if let folder = selectedURLs.first { viewModel.openConnectedFilesFolder(folder) }
         case .failure(let error):
             AppLogger.warning(
                 "File picker selection failed",
@@ -735,24 +784,27 @@ struct HomeView: View {
     }
 
     private func handleSelectedPhotoItemChange(_ newItem: PhotosPickerItem?) {
-        guard let newItem else {
-            return
-        }
-
-        Task {
-            await importSelectedPhotoItem(newItem)
-        }
+        photoImportTask?.cancel()
+        guard let newItem else { return }
+        photoImportTask = Task { await importSelectedPhotoItem(newItem) }
     }
 
     private func importSelectedPhotoItem(_ item: PhotosPickerItem) async {
         do {
-            guard let importedVideo = try await item.loadTransferable(type: ImportedPhotoVideo.self) else {
+            let importedVideo = try await item.loadTransferable(type: ImportedPhotoVideo.self)
+            if Task.isCancelled {
+                if let importedVideo { try? FileManager.default.removeItem(at: importedVideo.url) }
+                return
+            }
+            guard let importedVideo else {
                 failPhotosImport(message: "The selected Photos video could not be imported.")
                 return
             }
-
             completePhotosImport(importedVideo)
+        } catch is CancellationError {
+            return
         } catch {
+            guard !Task.isCancelled else { return }
             failPhotosImport(error: error)
         }
     }
