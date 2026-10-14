@@ -275,3 +275,5 @@
 - HEVC Alpha 합성 영상은 AVAssetWriter로 60초/320x180/24fps MOV를 생성했습니다. 앱 실행 로그에서 HEVC with Alpha 네이티브 경로·첫 프레임·rate 1.0을 확인했습니다. 기존 A/B/C는 90초 H.264 합성 영상입니다. 개인 기기의 영상·사진 권한은 변경하지 않았습니다.
 - 밝기·음량의 UI 판정과 조절값 검증은 시뮬레이터 기준입니다. 시뮬레이터에는 물리 음량 장치가 없으므로 실제 iPhone/iPad 화면 밝기와 스피커 출력 변화를 검증했다고 보고하지 않습니다. 앞선 사용자 선택대로 이번에도 TestFlight 배포로 마무리합니다.
 - 검사 원본·명령·로그·합성 자료는 `/private/tmp/BOKKIEncoder-GS14P8V2C6-jwz9k7_9`에 보관합니다. 검사 후 제품/검사 소스 hash 일치 확인. Apple의 최신 빌드 50을 재조회해 CURRENT_PROJECT_VERSION 8곳을 51로 올렸으며 마케팅 버전 1.1.13을 유지합니다.
+- 배포 소스 main `2032fae048df1446a0c9cbfe1cddf8dc7cf72cb4` 커밋·푸시·clean 확인 후 Release archive 및 배포 export 성공. 앱/Live Activity/thumbnail extension 모두 **1.1.13(51)**, 서명 유효 및 추적 파일 133개 전후 hash 불변 확인. 배포 IPA는 Apple Distribution/4FWG8XXYM7 서명과 배포 프로파일, 암호화 신고 값을 별도로 검증했습니다.
+- IPA 28,540,758 bytes, SHA256 `0f71ff50bf88191683d9639562b4d37a9e01fe41a3896081dbda96ede68e6896`. 업로드 성공 delivery/build `e283540b-83c9-460a-87b6-a4150dd0bbba`. 2026-10-14 15:10 KST **VALID / IN_BETA_TESTING**, 내부 beta group 1개 포함, ko/en-US 변경 안내 등록·재조회 일치 확인. App Store/외부 beta 심사 제출과 실기기 설치·물리 출력 검사는 진행하지 않았습니다.
