@@ -32,11 +32,116 @@ private enum QueuePreviewDragMode: Equatable {
     case volume(startValue: Float)
     case previousItem
     case nextItem
+    case close
 }
 
-private struct QueuePreviewGestureFeedback: Equatable {
+struct QueuePreviewGestureFeedback: Equatable {
     var systemImage: String
     var text: String
+}
+
+struct QueuePreviewGestureExcludedFramesKey: PreferenceKey {
+    static var defaultValue: [CGRect] = []
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) { value += nextValue() }
+}
+
+struct QueuePreviewGestureExclusionRegion: View {
+    var body: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(key: QueuePreviewGestureExcludedFramesKey.self,
+                value: [proxy.frame(in: .named("preview.surface"))])
+        }
+    }
+}
+
+struct QueuePreviewSurfaceDragValue {
+    var startLocation: CGPoint
+    var translation: CGSize
+}
+
+// Reject control-bar touches before recognition, while still receiving drags over
+// playback buttons and inside the folder browser's scrolling presentation.
+struct QueuePreviewSurfacePanGesture: UIGestureRecognizerRepresentable {
+    var canStart: (CGPoint) -> Bool
+    var onChanged: (QueuePreviewSurfaceDragValue) -> Void
+    var onEnded: (QueuePreviewSurfaceDragValue) -> Void
+    var onCancelled: () -> Void
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator {
+        Coordinator(converter: converter, canStart: canStart)
+    }
+
+    func makeUIGestureRecognizer(context: Context) -> UIPanGestureRecognizer {
+        let recognizer = UIPanGestureRecognizer()
+        recognizer.maximumNumberOfTouches = 1
+        recognizer.delegate = context.coordinator
+        return recognizer
+    }
+
+    func updateUIGestureRecognizer(_ recognizer: UIPanGestureRecognizer, context: Context) {
+        context.coordinator.canStart = canStart
+    }
+
+    func handleUIGestureRecognizerAction(_ recognizer: UIPanGestureRecognizer, context: Context) {
+        let value = context.coordinator.value()
+        switch recognizer.state {
+        case .began, .changed: onChanged(value)
+        case .ended: onEnded(value)
+        case .cancelled, .failed: onCancelled()
+        default: break
+        }
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        let converter: CoordinateSpaceConverter
+        var canStart: (CGPoint) -> Bool
+
+        init(converter: CoordinateSpaceConverter, canStart: @escaping (CGPoint) -> Bool) {
+            self.converter = converter
+            self.canStart = canStart
+        }
+
+        func value() -> QueuePreviewSurfaceDragValue {
+            let location = converter.location(in: .named("preview.surface"))
+            let delta = converter.translation(in: .named("preview.surface")) ?? .zero
+            return QueuePreviewSurfaceDragValue(
+                startLocation: CGPoint(x: location.x - delta.x, y: location.y - delta.y),
+                translation: CGSize(width: delta.x, height: delta.y))
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            canStart(value().startLocation)
+        }
+
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                               shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            other is UIPanGestureRecognizer
+        }
+    }
+}
+
+struct QueuePreviewGestureFeedbackView: View {
+    var feedback: QueuePreviewGestureFeedback
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: feedback.systemImage)
+                .font(.system(size: 20, weight: .semibold))
+            Text(feedback.text)
+                .font(.headline.monospacedDigit().weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(.black.opacity(0.66), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.12), lineWidth: 1))
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(feedback.text)
+        .accessibilityIdentifier("preview.gesture.feedback")
+    }
 }
 
 struct QueueVideoPreviewView: View {
@@ -396,6 +501,7 @@ private struct VLCQueueVideoPreviewView: View {
     @State private var dragSeekPreviewPosition: Double?
     @State private var gestureFeedback: QueuePreviewGestureFeedback?
     @State private var gestureFeedbackTask: Task<Void, Never>?
+    @State private var gestureExcludedFrames: [CGRect] = []
     @State private var didAttachVideoSurface = false
     @State private var pipController: PiPController?
     @State private var didBeginVideoPlaybackAdSuppression = false
@@ -440,9 +546,10 @@ private struct VLCQueueVideoPreviewView: View {
                 centerPlayPauseOverlay
 
                 statusOverlay
+                    .allowsHitTesting(false)
 
                 if let gestureFeedback {
-                    gestureFeedbackOverlay(gestureFeedback)
+                    QueuePreviewGestureFeedbackView(feedback: gestureFeedback)
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 }
 
@@ -452,6 +559,10 @@ private struct VLCQueueVideoPreviewView: View {
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
+            .contentShape(Rectangle())
+            .coordinateSpace(name: "preview.surface")
+            .onPreferenceChange(QueuePreviewGestureExcludedFramesKey.self) { gestureExcludedFrames = $0 }
+            .gesture(surfacePanGesture(containerSize: proxy.size))
         }
         .background(
             Color.black
@@ -513,7 +624,6 @@ private struct VLCQueueVideoPreviewView: View {
             .ignoresSafeArea()
             .contentShape(Rectangle())
             .gesture(tapGesture(containerSize: containerSize))
-            .simultaneousGesture(dragGesture(containerSize: containerSize))
     }
 
     private var controlsBackdrop: some View {
@@ -542,6 +652,7 @@ private struct VLCQueueVideoPreviewView: View {
             .padding(.top, max(safeAreaInsets.top, 8))
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
+            .background(QueuePreviewGestureExclusionRegion())
             .background(
                 LinearGradient(
                     colors: [
@@ -638,6 +749,7 @@ private struct VLCQueueVideoPreviewView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 10)
         .background(.black.opacity(0.64), in: RoundedRectangle(cornerRadius: 18))
+        .background(QueuePreviewGestureExclusionRegion())
     }
 
     @ViewBuilder
@@ -667,26 +779,6 @@ private struct VLCQueueVideoPreviewView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .padding(.bottom, 18)
         }
-    }
-
-    private func gestureFeedbackOverlay(_ feedback: QueuePreviewGestureFeedback) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: feedback.systemImage)
-                .font(.system(size: 20, weight: .semibold))
-            Text(feedback.text)
-                .font(.headline.monospacedDigit().weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-        }
-        .foregroundStyle(Color.white)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color.black.opacity(0.66))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
-        )
     }
 
     private var displayedSliderPosition: Double {
@@ -1093,8 +1185,8 @@ private struct VLCQueueVideoPreviewView: View {
 
     private func tapGesture(containerSize: CGSize) -> some Gesture {
         ExclusiveGesture(
-            SpatialTapGesture(count: 2, coordinateSpace: .local),
-            SpatialTapGesture(count: 1, coordinateSpace: .local)
+            SpatialTapGesture(count: 2, coordinateSpace: .named("preview.surface")),
+            SpatialTapGesture(count: 1, coordinateSpace: .named("preview.surface"))
         )
         .onEnded { value in
             switch value {
@@ -1106,14 +1198,26 @@ private struct VLCQueueVideoPreviewView: View {
         }
     }
 
-    private func dragGesture(containerSize: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 18, coordinateSpace: .local)
-            .onChanged { value in
+    private func surfacePanGesture(containerSize: CGSize) -> QueuePreviewSurfacePanGesture {
+        QueuePreviewSurfacePanGesture(
+            canStart: { start in
+                !isScrubbing && QueuePreviewSurfaceGesturePolicy.canStart(
+                    start: start, size: containerSize,
+                    excludedFrames: areControlsVisible ? gestureExcludedFrames : []
+                )
+            },
+            onChanged: { value in
                 handleDragChanged(value, containerSize: containerSize)
-            }
-            .onEnded { value in
+            },
+            onEnded: { value in
+                guard dragMode != nil else { return }
                 handleDragEnded(value, containerSize: containerSize)
-            }
+            },
+            onCancelled: {
+                dragMode = nil
+                dragSeekPreviewPosition = nil
+                dismissGestureFeedbackAfterDelay()
+            })
     }
 
     private func handleDoubleTap(at location: CGPoint, containerSize: CGSize) {
@@ -1128,7 +1232,7 @@ private struct VLCQueueVideoPreviewView: View {
         }
     }
 
-    private func handleDragChanged(_ value: DragGesture.Value, containerSize: CGSize) {
+    private func handleDragChanged(_ value: QueuePreviewSurfaceDragValue, containerSize: CGSize) {
         if dragMode == nil {
             dragMode = resolvedDragMode(for: value, containerSize: containerSize)
         }
@@ -1161,7 +1265,7 @@ private struct VLCQueueVideoPreviewView: View {
             UIScreen.main.brightness = brightness
             showGestureFeedback(
                 systemImage: "sun.max.fill",
-                text: "\(Int((brightness * 100).rounded()))%",
+                text: "Brightness \(Int((brightness * 100).rounded()))%",
                 autoDismiss: false
             )
         case .volume(let startValue):
@@ -1173,7 +1277,7 @@ private struct VLCQueueVideoPreviewView: View {
             setPreviewOutputVolume(volume)
             showGestureFeedback(
                 systemImage: volume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill",
-                text: "\(Int((volume * 100).rounded()))%",
+                text: "Volume \(Int((volume * 100).rounded()))%",
                 autoDismiss: false
             )
         case .previousItem:
@@ -1188,15 +1292,25 @@ private struct VLCQueueVideoPreviewView: View {
                 text: preview.playlist?.nextName ?? "Next",
                 autoDismiss: false
             )
+        case .close:
+            if value.translation.height > 0 {
+                showGestureFeedback(systemImage: "chevron.down", text:
+                    QueuePreviewSurfaceGesturePolicy.shouldClose(translation: value.translation, size: containerSize)
+                        ? "Release to close" : "Swipe down to close", autoDismiss: false)
+            }
         }
     }
 
-    private func handleDragEnded(_ value: DragGesture.Value, containerSize: CGSize) {
+    private func handleDragEnded(_ value: QueuePreviewSurfaceDragValue, containerSize: CGSize) {
+        let shouldClose = dragMode == .close && QueuePreviewSurfaceGesturePolicy.shouldClose(
+            translation: value.translation, size: containerSize)
         defer {
             dragMode = nil
             dragSeekPreviewPosition = nil
-            dismissGestureFeedbackAfterDelay()
-            showControls(scheduleAutoHide: false)
+            if !shouldClose {
+                dismissGestureFeedbackAfterDelay()
+                showControls(scheduleAutoHide: false)
+            }
         }
 
         switch dragMode {
@@ -1215,17 +1329,20 @@ private struct VLCQueueVideoPreviewView: View {
             previousItem()
         case .nextItem:
             nextItem()
+        case .close:
+            if shouldClose { closePreview() }
         case .brightness, .volume, .none:
             return
         }
     }
 
     private func resolvedDragMode(
-        for value: DragGesture.Value,
+        for value: QueuePreviewSurfaceDragValue,
         containerSize: CGSize
     ) -> QueuePreviewDragMode? {
         let horizontalDistance = abs(value.translation.width)
         let verticalDistance = abs(value.translation.height)
+        guard max(horizontalDistance, verticalDistance) >= 18 else { return nil }
 
         if horizontalDistance > verticalDistance * 1.2 {
             let edgeWidth = min(max(containerSize.width * 0.18, 56), 96)
@@ -1245,14 +1362,13 @@ private struct VLCQueueVideoPreviewView: View {
             return .seek(startPosition: player.position)
         }
 
-        if verticalDistance > horizontalDistance * 1.2 {
-            if value.startLocation.x < containerSize.width / 2 {
-                return .brightness(startValue: UIScreen.main.brightness)
-            }
-            return .volume(startValue: systemVolumeController.volume)
+        switch QueuePreviewSurfaceGesturePolicy.verticalAction(
+            start: value.startLocation, translation: value.translation, size: containerSize) {
+        case .brightness: return .brightness(startValue: UIScreen.main.brightness)
+        case .volume: return .volume(startValue: systemVolumeController.volume)
+        case .close: return .close
+        case nil: return nil
         }
-
-        return nil
     }
 
     private func setPreviewOutputVolume(_ volume: Float) {
@@ -1942,7 +2058,7 @@ private struct VLCQueueMiniPlayerView: View {
 }
 
 @MainActor
-private final class QueuePreviewSystemVolumeController: ObservableObject {
+final class QueuePreviewSystemVolumeController: ObservableObject {
     @Published private(set) var volume: Float
 
     private let audioSession: AVAudioSession
@@ -1994,7 +2110,7 @@ private final class QueuePreviewSystemVolumeController: ObservableObject {
     }
 }
 
-private struct QueuePreviewSystemVolumeBridgeView: UIViewRepresentable {
+struct QueuePreviewSystemVolumeBridgeView: UIViewRepresentable {
     @ObservedObject var controller: QueuePreviewSystemVolumeController
 
     func makeUIView(context _: Context) -> MPVolumeView {

@@ -24,6 +24,12 @@ struct NativeQueueVideoPreviewView: View {
     @State private var areControlsVisible = false
     @State private var isScrubbing = false
     @State private var scrubSeconds = 0.0
+    @State private var verticalAction: QueuePreviewSurfaceVerticalAction?
+    @State private var gestureStartValue: Float = 0
+    @State private var gestureFeedback: QueuePreviewGestureFeedback?
+    @State private var gestureFeedbackTask: Task<Void, Never>?
+    @State private var gestureExcludedFrames: [CGRect] = []
+    @StateObject private var systemVolumeController = QueuePreviewSystemVolumeController()
 
     var body: some View {
         Group {
@@ -54,6 +60,7 @@ struct NativeQueueVideoPreviewView: View {
                             VStack {
                                 AdMobBannerSlotView(adUnitID: adUnitID, displayScale: 1)
                                     .padding(.top, max(proxy.safeAreaInsets.top, 8))
+                                    .background(QueuePreviewGestureExclusionRegion())
                                 Spacer(minLength: 0)
                             }
                             .zIndex(1)
@@ -73,7 +80,22 @@ struct NativeQueueVideoPreviewView: View {
                                 .zIndex(1)
                                 .transition(.opacity)
                         }
+                        if let gestureFeedback {
+                            QueuePreviewGestureFeedbackView(feedback: gestureFeedback)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .allowsHitTesting(false)
+                                .zIndex(2)
+                        }
+                        QueuePreviewSystemVolumeBridgeView(controller: systemVolumeController)
+                            .frame(width: 1, height: 1)
+                            .opacity(0.01)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
                     }
+                    .contentShape(Rectangle())
+                    .coordinateSpace(name: "preview.surface")
+                    .onPreferenceChange(QueuePreviewGestureExcludedFramesKey.self) { gestureExcludedFrames = $0 }
+                    .gesture(verticalGesture(size: proxy.size))
                 }
                 .background(.black)
             }
@@ -88,12 +110,16 @@ struct NativeQueueVideoPreviewView: View {
             areControlsVisible = false
             isScrubbing = false
             scrubSeconds = 0
+            verticalAction = nil
+            gestureFeedback = nil
+            gestureFeedbackTask?.cancel()
             await playback.start(preview: preview, isMiniPlayer: isMiniPlayer)
             #if DEBUG
             await debugHandoffIfRequested()
             #endif
         }
         .onDisappear {
+            gestureFeedbackTask?.cancel()
             playback.shutdown()
             onPictureInPictureActiveChanged(false)
             if didBeginAdSuppression {
@@ -130,7 +156,7 @@ struct NativeQueueVideoPreviewView: View {
     }
 
     private func toggleControls() {
-        guard !isMiniPlayer, !isScrubbing else { return }
+        guard !isMiniPlayer, !isScrubbing, verticalAction == nil else { return }
         withAnimation(.easeInOut(duration: 0.18)) {
             if playback.errorMessage != nil {
                 areControlsVisible = true
@@ -138,6 +164,72 @@ struct NativeQueueVideoPreviewView: View {
                 areControlsVisible.toggle()
             }
         }
+    }
+
+    private func verticalGesture(size: CGSize) -> QueuePreviewSurfacePanGesture {
+        QueuePreviewSurfacePanGesture(
+            canStart: { start in
+                !isScrubbing && QueuePreviewSurfaceGesturePolicy.canStart(
+                    start: start, size: size,
+                    excludedFrames: areControlsVisible ? gestureExcludedFrames : []
+                )
+            },
+            onChanged: { value in
+                if verticalAction == nil {
+                    verticalAction = QueuePreviewSurfaceGesturePolicy.verticalAction(
+                        start: value.startLocation, translation: value.translation, size: size)
+                    gestureStartValue = verticalAction == .brightness
+                        ? Float(UIScreen.main.brightness) : systemVolumeController.volume
+                }
+                guard let verticalAction else { return }
+                gestureFeedbackTask?.cancel()
+                let delta = QueuePreviewPlaybackMath.verticalAdjustmentDelta(
+                    translation: value.translation.height, containerHeight: size.height)
+                switch verticalAction {
+                case .brightness:
+                    let brightness = min(max(gestureStartValue + delta, 0), 1)
+                    UIScreen.main.brightness = CGFloat(brightness)
+                    gestureFeedback = QueuePreviewGestureFeedback(systemImage: "sun.max.fill",
+                        text: "Brightness \(Int((brightness * 100).rounded()))%")
+                case .volume:
+                    let volume = QueuePreviewSystemVolumeController.clampedVolume(gestureStartValue + delta)
+                    playback.player.isMuted = false
+                    playback.player.volume = 1
+                    systemVolumeController.setVolume(volume)
+                    gestureFeedback = QueuePreviewGestureFeedback(
+                        systemImage: volume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                        text: "Volume \(Int((volume * 100).rounded()))%")
+                case .close:
+                    if value.translation.height > 0 {
+                        gestureFeedback = QueuePreviewGestureFeedback(systemImage: "chevron.down",
+                            text: QueuePreviewSurfaceGesturePolicy.shouldClose(translation: value.translation, size: size)
+                                ? "Release to close" : "Swipe down to close")
+                    }
+                }
+            },
+            onEnded: { value in
+                guard let action = verticalAction else { return }
+                verticalAction = nil
+                if action == .close && QueuePreviewSurfaceGesturePolicy.shouldClose(translation: value.translation, size: size) {
+                    closePreview()
+                    return
+                }
+                areControlsVisible = true
+                gestureFeedbackTask = Task { @MainActor in
+                    do { try await Task.sleep(for: .milliseconds(650)) } catch { return }
+                    gestureFeedback = nil
+                }
+            },
+            onCancelled: {
+                verticalAction = nil
+                gestureFeedback = nil
+                gestureFeedbackTask?.cancel()
+            })
+    }
+
+    private func closePreview() {
+        playback.shutdown()
+        onClose()
     }
 
     private var centerPlaybackControls: some View {
@@ -198,7 +290,7 @@ struct NativeQueueVideoPreviewView: View {
                 QueuePreviewActionBar(
                     preview: preview, isAdded: isAddedToList,
                     canAdd: canAddToList && !playback.isLoading, canNavigate: !playback.isLoading,
-                    onAdd: onAddToList, onClose: onClose,
+                    onAdd: onAddToList, onClose: closePreview,
                     onPrevious: onPrevious, onNext: onNext, onAuthorizeFolder: onAuthorizeFolder
                 )
             }
@@ -206,6 +298,7 @@ struct NativeQueueVideoPreviewView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 10)
             .background(.black.opacity(0.64), in: RoundedRectangle(cornerRadius: 18))
+            .background(QueuePreviewGestureExclusionRegion())
         }
     }
 

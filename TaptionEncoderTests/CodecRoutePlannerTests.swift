@@ -4443,7 +4443,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(previewText.contains("QueuePreviewSystemVolumeBridgeView(controller: systemVolumeController)"))
         XCTAssertTrue(previewText.contains("return .volume(startValue: systemVolumeController.volume)"))
         XCTAssertTrue(previewText.contains("setPreviewOutputVolume(volume)"))
-        XCTAssertTrue(previewViewText.contains("private final class QueuePreviewSystemVolumeController"))
+        XCTAssertTrue(previewViewText.contains("final class QueuePreviewSystemVolumeController"))
         XCTAssertTrue(previewViewText.contains("MPVolumeView"))
         XCTAssertTrue(previewViewText.contains("outputVolume"))
         XCTAssertTrue(previewViewText.contains("volumeSlider.sendActions(for: .valueChanged)"))

@@ -1,6 +1,42 @@
 import Foundation
 import CoreGraphics
 
+enum QueuePreviewSurfaceVerticalAction: Equatable {
+    case brightness, volume, close
+}
+
+enum QueuePreviewSurfaceGesturePolicy {
+    // Lock to the region where the drag began, even if the finger crosses a boundary.
+    static func verticalAction(start: CGPoint, translation: CGSize, size: CGSize) -> QueuePreviewSurfaceVerticalAction? {
+        guard isInsideSurface(start, size: size),
+              translation.width.isFinite, translation.height.isFinite,
+              abs(translation.height) >= 18,
+              abs(translation.height) > abs(translation.width) * 1.2 else { return nil }
+        if start.x < size.width / 3 { return .brightness }
+        if start.x > size.width * 2 / 3 { return .volume }
+        return .close
+    }
+
+    static func shouldClose(translation: CGSize, size: CGSize) -> Bool {
+        guard size.width.isFinite, size.width > 0, size.height.isFinite, size.height > 0,
+              translation.width.isFinite, translation.height.isFinite else { return false }
+        let threshold = max(72, min(size.height * 0.12, 120))
+        return translation.height >= threshold && translation.height > abs(translation.width) * 1.2
+    }
+
+    static func canStart(start: CGPoint, size: CGSize, excludedFrames: [CGRect]) -> Bool {
+        guard isInsideSurface(start, size: size) else { return false }
+        // Use the controls' actual bounds so rotation and text size don't change routing.
+        return !excludedFrames.contains { $0.contains(start) }
+    }
+
+    private static func isInsideSurface(_ start: CGPoint, size: CGSize) -> Bool {
+        size.width.isFinite && size.width > 0 && size.height.isFinite && size.height > 0
+            && start.x.isFinite && start.y.isFinite
+            && start.x >= 0 && start.x <= size.width && start.y >= 0 && start.y <= size.height
+    }
+}
+
 enum QueuePreviewPlaybackMath {
     static let skipIntervalSeconds = 10.0
 

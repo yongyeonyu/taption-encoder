@@ -203,6 +203,69 @@ final class RefactoringRegressionTests: XCTestCase {
         XCTAssertEqual(QueuePreviewPlaybackMath.horizontalDragPosition(startPosition: 0.5, translation: 10, containerWidth: .infinity), 0.5)
     }
 
+    func testPreviewVerticalGesturesUseThreeStartRegions() {
+        let size = CGSize(width: 300, height: 800)
+        for y in [CGFloat(-100), 100] {
+            let drag = CGSize(width: 4, height: y)
+            XCTAssertEqual(QueuePreviewSurfaceGesturePolicy.verticalAction(start: CGPoint(x: 99, y: 400), translation: drag, size: size), .brightness)
+            for x in [CGFloat(100), 150, 200] {
+                XCTAssertEqual(QueuePreviewSurfaceGesturePolicy.verticalAction(start: CGPoint(x: x, y: 400), translation: drag, size: size), .close)
+            }
+            XCTAssertEqual(QueuePreviewSurfaceGesturePolicy.verticalAction(start: CGPoint(x: 201, y: 400), translation: drag, size: size), .volume)
+        }
+    }
+
+    func testPreviewCloseRequiresEnoughDownwardTravelInPortraitAndLandscape() {
+        for (size, threshold) in [(CGSize(width: 300, height: 800), CGFloat(96)),
+                                  (CGSize(width: 800, height: 300), 72),
+                                  (CGSize(width: 1000, height: 1400), 120)] {
+            XCTAssertFalse(QueuePreviewSurfaceGesturePolicy.shouldClose(translation: CGSize(width: 0, height: threshold - 1), size: size))
+            XCTAssertTrue(QueuePreviewSurfaceGesturePolicy.shouldClose(translation: CGSize(width: 5, height: threshold), size: size))
+            XCTAssertFalse(QueuePreviewSurfaceGesturePolicy.shouldClose(translation: CGSize(width: 0, height: -threshold * 2), size: size))
+            XCTAssertFalse(QueuePreviewSurfaceGesturePolicy.shouldClose(translation: CGSize(width: threshold, height: threshold), size: size))
+            XCTAssertFalse(QueuePreviewSurfaceGesturePolicy.shouldClose(translation: .zero, size: size))
+        }
+    }
+
+    func testPreviewVerticalPolicyIgnoresTapJitterAndHorizontalNavigation() {
+        for translation in [CGSize.zero, CGSize(width: 0, height: 17), CGSize(width: -100, height: 5),
+                            CGSize(width: 100, height: 80), CGSize(width: 30, height: 30)] {
+            XCTAssertNil(QueuePreviewSurfaceGesturePolicy.verticalAction(start: CGPoint(x: 150, y: 400), translation: translation, size: CGSize(width: 300, height: 800)))
+        }
+    }
+
+    func testPreviewSurfaceGestureExcludesVisibleFooterTimelineAndBanner() {
+        let size = CGSize(width: 300, height: 800)
+        for point in [CGPoint(x: 150, y: 30), CGPoint(x: 150, y: 650), CGPoint(x: 50, y: 750)] {
+            XCTAssertFalse(QueuePreviewSurfaceGesturePolicy.canStart(start: point, size: size, excludedFrames: [CGRect(x: 0, y: 0, width: 300, height: 80), CGRect(x: 0, y: 640, width: 300, height: 160)]))
+            XCTAssertTrue(QueuePreviewSurfaceGesturePolicy.canStart(start: point, size: size, excludedFrames: []))
+        }
+        XCTAssertTrue(QueuePreviewSurfaceGesturePolicy.canStart(start: CGPoint(x: 150, y: 400), size: size, excludedFrames: [CGRect(x: 0, y: 0, width: 300, height: 124), CGRect(x: 0, y: 606, width: 300, height: 194)]))
+    }
+
+    func testPreviewSurfaceGestureRejectsInvalidGeometry() {
+        let valid = CGSize(width: 300, height: 800), down = CGSize(width: 0, height: 150)
+        for point in [CGPoint(x: -1, y: 400), CGPoint(x: 301, y: 400), CGPoint(x: 150, y: -1),
+                      CGPoint(x: CGFloat.nan, y: 400), CGPoint(x: 150, y: CGFloat.infinity)] {
+            XCTAssertNil(QueuePreviewSurfaceGesturePolicy.verticalAction(start: point, translation: down, size: valid))
+            XCTAssertFalse(QueuePreviewSurfaceGesturePolicy.canStart(start: point, size: valid, excludedFrames: []))
+        }
+        for size in [CGSize.zero, CGSize(width: -100, height: 800), CGSize(width: CGFloat.infinity, height: 800), CGSize(width: 300, height: CGFloat.nan)] {
+            XCTAssertNil(QueuePreviewSurfaceGesturePolicy.verticalAction(start: CGPoint(x: 150, y: 400), translation: down, size: size))
+            XCTAssertFalse(QueuePreviewSurfaceGesturePolicy.shouldClose(translation: down, size: size))
+        }
+        XCTAssertFalse(QueuePreviewSurfaceGesturePolicy.shouldClose(translation: CGSize(width: CGFloat.nan, height: 200), size: valid))
+        XCTAssertFalse(QueuePreviewSurfaceGesturePolicy.shouldClose(translation: CGSize(width: 0, height: CGFloat.infinity), size: valid))
+    }
+
+    @MainActor
+    func testPreviewSideLevelAdjustmentRaisesUpAndLowersDown() {
+        XCTAssertEqual(QueuePreviewPlaybackMath.verticalAdjustmentDelta(translation: -200, containerHeight: 800), 0.25)
+        XCTAssertEqual(QueuePreviewPlaybackMath.verticalAdjustmentDelta(translation: 200, containerHeight: 800), -0.25)
+        XCTAssertEqual(QueuePreviewSystemVolumeController.clampedVolume(-0.5), 0)
+        XCTAssertEqual(QueuePreviewSystemVolumeController.clampedVolume(1.5), 1)
+    }
+
     func testDuplicateSelectionBuildsOneQueueEntryWithoutCrashing() {
         let url = URL(fileURLWithPath: "/tmp/folder/video.mp4")
         let alias = URL(fileURLWithPath: "/tmp/folder/../folder/video.mp4")
