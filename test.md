@@ -259,3 +259,7 @@
 - 생성 자료와 명령/로그/xcresult는 `/private/tmp/BOKKIEncoder-FR14A7L5Q3-m0jrt1ay`에 보관합니다. 실기기 설치와 UI 검사 결과는 별도 기록합니다.
 - 최초 네이티브 사진 권한 창에서 사진 선택을 누르고 합성 영상 B/C만 허용했습니다. `UI-permission11.xcresult`는 권한 진입까지만 검증한 진단 단계이며, 최종 `UI-limited12.xcresult`는 **제한 권한 실제 UI 검사 통과**: 허용한 B/C만 표시, 미허용 A 부재, 2개 목록의 양방향 스와이프와 닫기 후 1개 큐 유지 확인. 전면 접근 상태와 제한 접근 상태를 별도로 검사했습니다.
 - `UI-denied13.xcresult` **접근 거부 UI 검사 통과**: 설정 안내와 단일 영상 선택 fallback 표시, 정상 닫기 확인. 개인 기기의 사진 접근 권한은 변경하지 않았으며 작업 전용 시뮬레이터에서 검증했습니다.
+- 배포 소스 main `f7d62fb49261e167ed6b43420e6c914a9f8d6257` 푸시 및 clean 확인 후 Release archive/배포 export 성공. 앱·Live Activity·thumbnail extension 모두 **1.1.13(50)**, 서명·provisioning 확인 및 추적 파일 133개의 전후 hash 불변 확인.
+- 배포 IPA 28,493,750 bytes, SHA256 `d950a7ef552df0438c577d59f079ea436975067391bf1de4b562fa9d5cbae951`. Apple Distribution 서명과 팀, 암호화 신고 값을 검증했습니다.
+- Apple upload 성공, delivery/build ID `495cdce5-8224-4d97-b879-ffb2857d6e7e`. 2026-10-14 12:51 KST **VALID / IN_BETA_TESTING**, 내부 beta group 1개 포함, ko/en-US 변경 안내 등록·재조회 일치. App Store/외부 beta 심사는 제출하지 않았습니다.
+- 직접 설치 시도에서는 iPhone 11 Pro에 50 설치·버전 재조회 성공, 실행은 잠금 때문에 실패했습니다. iPad/18은 올바른 기기 식별자로 재확인한 결과 연결 assertion을 충족하지 못했습니다. iPad 최초 설치 명령의 식별자 치환 오류를 바로잡고 별도 `ipad-corrected-*50` 기록으로 재검사했으며 최초 실패를 연결 검사로 계산하지 않습니다. 사용자가 **TestFlight 배포로 마무리**를 선택해 추가 실기기 설치·터치 검사는 진행하지 않았습니다. 기존 개인 앱 데이터와 사진 권한은 변경하지 않았습니다.
