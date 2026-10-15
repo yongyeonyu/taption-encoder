@@ -215,6 +215,27 @@ final class RefactoringRegressionTests: XCTestCase {
         }
     }
 
+    func testScopeHandoffRetainsSharedFolderAndAcquiresBeforeReleasing() {
+        let folder = URL(fileURLWithPath: "/granted/folder", isDirectory: true)
+        let file = folder.appendingPathComponent("movie.mp4")
+        let other = URL(fileURLWithPath: "/another/movie.mp4")
+        var events: [String] = []
+        let scopes = SecurityScopedAccessStore(start: { events.append("start:" + $0.path); return true },
+            stop: { events.append("stop:" + $0.path) })
+        scopes.acquire(folder)
+        scopes.replace(with: [folder, file, folder])
+        XCTAssertEqual(events, ["start:" + folder.path, "start:" + file.path])
+        XCTAssertTrue(scopes.contains(folder))
+        scopes.replace(with: [other])
+        XCTAssertEqual(events[2], "start:" + other.path)
+        XCTAssertFalse(scopes.contains(folder))
+        XCTAssertFalse(scopes.contains(file))
+        XCTAssertTrue(scopes.contains(other))
+        scopes.replace(with: [])
+        XCTAssertEqual(scopes.count, 0)
+        XCTAssertEqual(events.filter { $0.hasPrefix("start:") }.count, events.filter { $0.hasPrefix("stop:") }.count)
+    }
+
     func testPreviewCloseRequiresEnoughDownwardTravelInPortraitAndLandscape() {
         for (size, threshold) in [(CGSize(width: 300, height: 800), CGFloat(96)),
                                   (CGSize(width: 800, height: 300), 72),

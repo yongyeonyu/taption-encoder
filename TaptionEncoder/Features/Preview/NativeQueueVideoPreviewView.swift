@@ -18,6 +18,7 @@ struct NativeQueueVideoPreviewView: View {
     var onPrevious: () -> Void = {}
     var onNext: () -> Void = {}
     var onAuthorizeFolder: (URL, Int) -> String? = { _, _ in nil }
+    var onRestoreFolderNavigation: (Int) -> Bool = { _ in false }
 
     @StateObject private var playback = NativeQueuePreviewPlayback()
     @State private var didBeginAdSuppression = false
@@ -291,7 +292,8 @@ struct NativeQueueVideoPreviewView: View {
                     preview: preview, isAdded: isAddedToList,
                     canAdd: canAddToList && !playback.isLoading, canNavigate: !playback.isLoading,
                     onAdd: onAddToList, onClose: closePreview,
-                    onPrevious: onPrevious, onNext: onNext, onAuthorizeFolder: onAuthorizeFolder
+                    onPrevious: onPrevious, onNext: onNext, onAuthorizeFolder: onAuthorizeFolder,
+                onRestoreFolderNavigation: onRestoreFolderNavigation
                 )
             }
             .tint(.white)

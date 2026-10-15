@@ -277,3 +277,17 @@
 - 검사 원본·명령·로그·합성 자료는 `/private/tmp/BOKKIEncoder-GS14P8V2C6-jwz9k7_9`에 보관합니다. 검사 후 제품/검사 소스 hash 일치 확인. Apple의 최신 빌드 50을 재조회해 CURRENT_PROJECT_VERSION 8곳을 51로 올렸으며 마케팅 버전 1.1.13을 유지합니다.
 - 배포 소스 main `2032fae048df1446a0c9cbfe1cddf8dc7cf72cb4` 커밋·푸시·clean 확인 후 Release archive 및 배포 export 성공. 앱/Live Activity/thumbnail extension 모두 **1.1.13(51)**, 서명 유효 및 추적 파일 133개 전후 hash 불변 확인. 배포 IPA는 Apple Distribution/4FWG8XXYM7 서명과 배포 프로파일, 암호화 신고 값을 별도로 검증했습니다.
 - IPA 28,540,758 bytes, SHA256 `0f71ff50bf88191683d9639562b4d37a9e01fe41a3896081dbda96ede68e6896`. 업로드 성공 delivery/build `e283540b-83c9-460a-87b6-a4150dd0bbba`. 2026-10-14 15:10 KST **VALID / IN_BETA_TESTING**, 내부 beta group 1개 포함, ko/en-US 변경 안내 등록·재조회 일치 확인. App Store/외부 beta 심사 제출과 실기기 설치·물리 출력 검사는 진행하지 않았습니다.
+
+
+## NV15F4D8K2 — 파일 탐색 연결 유실 및 자동 복구 (2026-10-15)
+
+- 사용자는 1.1.13(51)에서 하단 스와이프 시 `Connect the folder in ⓘ` 안내와 다음 파일 이동 실패를 확인했습니다. 사진 속 원본 영상의 최초 진입 경로는 질문한 상태이며 아직 답변이 없습니다. 연결된 iPad/iPhone 11 앱 로그만 읽어 복사했으며 해당 영상의 오류는 없었습니다. 원본 기기에서 직접 재현했다고 보고하지 않습니다.
+- File 폴더 목록에서 한 영상을 선택할 때 기존 목록을 버리고 폴더를 다시 스캔하던 경로를 수정했습니다. 이미 읽은 목록을 전달하고, 소스 전환 시 필요한 기존 폴더 scope를 해제·재취득하지 않도록 유지합니다. 다른 경로로 전환할 때에는 새 scope를 확보한 뒤 필요 없는 이전 scope만 해제합니다.
+- 최초 폴더 읽기 실패가 고정되던 상태도 수정했습니다. 하단 스와이프에서 이미 허용한 저장 권한으로 목록을 다시 읽고, 복구되면 그 스와이프 방향의 파일을 재생합니다. 복구에 실패하면 현재 재생과 목록을 보존하며 시스템 탐색창을 자동으로 띄우지 않습니다.
+- 별도의 소스 복사본(`Baseline51`, main 72d4afb)에 새 회귀 검사 1개만 추가해 실행했습니다. 폴더 선택 후 목록 읽기 권한을 일시적으로 제거하면 H.264/HEVC Alpha 모두 playlist가 nil·폴더 연결 필요 상태로 바뀌고 다음 영상으로 이동하지 못했습니다. `Baseline51-regression.xcresult`의 **실패 1개는 문제 재현을 위한 기대된 실패**입니다. 작업 중인 소스나 브랜치를 되돌리지 않았습니다.
+- 수정본 `Unit-navigation.xcresult`: **438개 통과, 실패/스킵 0**. 신규 4개는 공유 scope의 끊김 없는 이전, provider 재스캔 실패에도 원본 3개 목록 유지(H.264/Alpha), 스와이프 재조회 후 즉시 다음 파일 이동, 실제 권한 부재 시 현재 재생 보존을 검사합니다. 변환 호출 0회와 Stars 잔액 불변을 확인했습니다.
+- 작업 전용 iPhone 18 Pro Max 시뮬레이터(F8DCF5A8-0DDA-477B-BF36-9E838052217C, iOS 27.0)에서 실제 UI **6개 통과**: Album/File/Folder의 양방향 탐색·Add·큐 재열기, 폴더 선택 후 목록 읽기가 불가능해져도 B→C→B→A 이동, 최초 읽기 실패 후 복구된 폴더의 한 번 스와이프 이동, 계속 권한이 없는 경우 현재 영상 유지와 자동 picker 부재를 확인했습니다.
+- `UI-navigation.xcresult`는 5개 통과 및 Folder 검사 1개 도구 실패(native File View가 전환 중 중복되어 단일 요소 조회 실패)입니다. 검사 선택자만 firstMatch로 보정한 `UI-folder-retry.xcresult`에서 해당 Folder 검사 1개가 통과했습니다. 이 결과들을 합쳐 고유한 UI 검사 6개를 통과로 계산합니다. 초기 xctestrun 설정 형식 오류는 UI 검사 실행 전 도구 설정 오류로 구분했습니다.
+- 합성 영상 전용 `BOKKI-Review-NV15F4D8K2` 폴더에만 호스트가 0o300/0o700을 적용해 읽기 실패/복구를 제어했고 검사 종료 후 0o700 복구를 확인했습니다. 영상 SHA256은 원래 합성 입력과 일치합니다. 실제 표시 프레임과 파일명 A/1-of-3 전환을 screenshot으로 확인했습니다. 개인 기기 권한·원본 영상은 변경하지 않았습니다.
+- 외부 앱이 파일 1개의 권한만 전달하면 iOS는 부모 폴더 권한을 자동으로 주지 않습니다. 최초 폴더 승인 자체를 우회했다고 보고하지 않습니다. 기존 승인과 일시 오류를 자동 복구하는 범위이며, 실제 폴더 권한이 없다면 최초 한 번 연결이 필요합니다. 근거: https://developer.apple.com/documentation/uikit/providing-access-to-directories
+- 원본 명령·로그·xcresult·스크린샷·기대된 51 회귀 실패는 `/private/tmp/BOKKIEncoder-NV15F4D8K2-gdhefdom`에 보관합니다. 제품/검사 소스 hash 일치와 합성 폴더 권한 복구를 확인했습니다. Apple의 최신 빌드 51을 재조회해 프로젝트 build 8곳을 52로 올렸고 마케팅 버전은 1.1.13을 유지합니다.

@@ -380,7 +380,8 @@ struct HomeView: View {
             },
             onPrevious: { viewModel.openPreviousPreview() },
             onNext: { viewModel.openNextPreview() },
-            onAuthorizeFolder: { viewModel.authorizeSingleFilePreviewFolder($0, navigationOffset: $1) }
+            onAuthorizeFolder: { viewModel.authorizeSingleFilePreviewFolder($0, navigationOffset: $1) },
+            onRestoreFolderNavigation: { viewModel.restoreSingleFilePreviewNavigation(offset: $0) }
         )
     }
 

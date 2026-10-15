@@ -156,6 +156,7 @@ struct QueueVideoPreviewView: View {
     var onPrevious: () -> Void
     var onNext: () -> Void
     var onAuthorizeFolder: (URL, Int) -> String? = { _, _ in nil }
+    var onRestoreFolderNavigation: (Int) -> Bool = { _ in false }
 
     @ViewBuilder
     var body: some View {
@@ -174,7 +175,8 @@ struct QueueVideoPreviewView: View {
                 onAddToList: onAddToList,
                 onClose: onClose, onMinimize: onMinimize,
                 onPictureInPictureActiveChanged: onPictureInPictureActiveChanged,
-                onPrevious: onPrevious, onNext: onNext, onAuthorizeFolder: onAuthorizeFolder
+                onPrevious: onPrevious, onNext: onNext, onAuthorizeFolder: onAuthorizeFolder,
+                onRestoreFolderNavigation: onRestoreFolderNavigation
             )
         } else {
             VLCQueueVideoPreviewView(
@@ -183,7 +185,8 @@ struct QueueVideoPreviewView: View {
                 onAddToList: onAddToList,
                 onClose: onClose, onMinimize: onMinimize,
                 onPictureInPictureActiveChanged: onPictureInPictureActiveChanged,
-                onPrevious: onPrevious, onNext: onNext, onAuthorizeFolder: onAuthorizeFolder
+                onPrevious: onPrevious, onNext: onNext, onAuthorizeFolder: onAuthorizeFolder,
+                onRestoreFolderNavigation: onRestoreFolderNavigation
             )
         }
     }
@@ -262,6 +265,7 @@ struct QueuePreviewActionBar: View {
     var onPrevious: () -> Void
     var onNext: () -> Void
     var onAuthorizeFolder: (URL, Int) -> String? = { _, _ in nil }
+    var onRestoreFolderNavigation: (Int) -> Bool = { _ in false }
 
     @State private var showsInformation = false
     @State private var isSharing = false
@@ -317,7 +321,8 @@ struct QueuePreviewActionBar: View {
             switch direction {
             case .previous: onPrevious()
             case .next: onNext()
-            case .folderAccessRequired: showsFolderHint = true
+            case .folderAccessRequired:
+                showsFolderHint = !onRestoreFolderNavigation(value.translation.width < 0 ? 1 : -1)
             case nil: break
             }
         })
@@ -487,6 +492,7 @@ private struct VLCQueueVideoPreviewView: View {
     var onPrevious: () -> Void
     var onNext: () -> Void
     var onAuthorizeFolder: (URL, Int) -> String? = { _, _ in nil }
+    var onRestoreFolderNavigation: (Int) -> Bool = { _ in false }
 
     @State private var player = QueuePreviewPlayerFactory.makePreviewPlayer()
     @State private var playbackLifetime = QueuePreviewPlaybackLifetime()
@@ -743,7 +749,8 @@ private struct VLCQueueVideoPreviewView: View {
                 preview: preview, isAdded: isAddedToList,
                 canAdd: canAddToList && !isLoading, canNavigate: !isLoading,
                 onAdd: onAddToList, onClose: closePreview,
-                onPrevious: previousItem, onNext: nextItem, onAuthorizeFolder: onAuthorizeFolder
+                onPrevious: previousItem, onNext: nextItem, onAuthorizeFolder: onAuthorizeFolder,
+                onRestoreFolderNavigation: onRestoreFolderNavigation
             )
         }
         .padding(.horizontal, 10)

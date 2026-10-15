@@ -28,6 +28,13 @@ final class SecurityScopedAccessStore {
         if let original = acquired.removeValue(forKey: url.standardizedFileURL) { stop(original) }
     }
 
+    func replace(with urls: [URL]) {
+        // A picker-to-player handoff must not briefly revoke a shared folder grant.
+        let requested = Set(urls.map(\.standardizedFileURL))
+        for url in urls { acquire(url) }
+        for key in Array(acquired.keys) where !requested.contains(key) { release(key) }
+    }
+
     func releaseAll() {
         let urls = Array(acquired.values)
         acquired.removeAll()

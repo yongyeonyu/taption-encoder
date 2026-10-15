@@ -1702,7 +1702,8 @@ final class HomeViewModel: ObservableObject {
         url: URL,
         autoStartAfterPrepare: Bool,
         autoOpenPreviewAfterPrepare: Bool = false,
-        securityScopedRootURL: URL? = nil
+        securityScopedRootURL: URL? = nil,
+        knownPreviewURLs: [URL]? = nil
     ) {
         AppLogger.info(
             "Single file flow started",
@@ -1731,7 +1732,7 @@ final class HomeViewModel: ObservableObject {
         )
         let authorizedFolders = [securityScopedRootURL].compactMap { $0 } + storedPreviewFolderAccess(for: url)
         beginSecurityScopedAccessIfNeeded(for: authorizedFolders + [url, url.deletingLastPathComponent()])
-        prepareSingleFilePreviewContext(for: url)
+        prepareSingleFilePreviewContext(for: url, knownURLs: knownPreviewURLs)
         prepareEncodingFlow(
             source: source,
             autoStartAfterPrepare: autoStartAfterPrepare,
@@ -2162,7 +2163,8 @@ final class HomeViewModel: ObservableObject {
            let batch = folderBatch, let folder = batch.folderURL,
            let url = batch.fileURLs.first(where: { $0.absoluteString == id }) {
             startFilesFlow(url: url, autoStartAfterPrepare: false,
-                           autoOpenPreviewAfterPrepare: true, securityScopedRootURL: folder)
+                           autoOpenPreviewAfterPrepare: true, securityScopedRootURL: folder,
+                           knownPreviewURLs: batch.fileURLs)
             return
         }
         _ = openBatchPreviewForFileCard(id: id)
@@ -2455,9 +2457,16 @@ final class HomeViewModel: ObservableObject {
         requestEncodingStart(for: review, autoResumeAfterStarEarn: false)
     }
 
-    private func prepareSingleFilePreviewContext(for url: URL) {
+    private func prepareSingleFilePreviewContext(for url: URL, knownURLs: [URL]? = nil) {
         guard url.isFileURL else { return }
         var context = SingleFilePreviewContext(initialURL: url, fileURLs: [url], queuedURLs: [url])
+        if let knownURLs, knownURLs.contains(where: { $0.standardizedFileURL == url.standardizedFileURL }) {
+            context.fileURLs = MediaFileIdentity.uniqueURLs(knownURLs).map {
+                $0.standardizedFileURL == url.standardizedFileURL ? url : $0
+            }
+            singleFilePreviewContext = context
+            return
+        }
         do {
             context.fileURLs = try singleFilePreviewURLs(around: url)
         } catch {
@@ -2465,6 +2474,33 @@ final class HomeViewModel: ObservableObject {
             AppLogger.info("Single file preview needs folder access", category: .fileImport)
         }
         singleFilePreviewContext = context
+    }
+
+    /// Retry a failed folder read using grants already held or explicitly saved.
+    /// This never presents UI or obtains access to an unapproved directory.
+    func restoreSingleFilePreviewNavigation(offset: Int) -> Bool {
+        guard offset == -1 || offset == 1,
+              let context = singleFilePreviewContext, context.needsFolderAccess,
+              let currentURL = activePreview?.sourceURL, currentURL == context.initialURL else { return false }
+        let folders = storedPreviewFolderAccess(for: currentURL)
+        for folder in folders { securityScopedAccess.acquire(folder) }
+        securityScopedAccess.acquire(currentURL.deletingLastPathComponent())
+        do {
+            let urls = try singleFilePreviewURLs(around: currentURL)
+            singleFilePreviewContext?.fileURLs = urls
+            singleFilePreviewContext?.needsFolderAccess = false
+            activePreview?.playlist = singleFilePreviewContext?.playlist(for: currentURL)
+            activePreview?.folderAccessURL = nil
+            AppLogger.info("Preview folder navigation restored automatically", category: .fileImport,
+                metadata: ["count": "\(urls.count)", "savedGrants": "\(folders.count)"])
+            openAdjacentPreview(offset: offset)
+            return true
+        } catch {
+            let failure = error as NSError
+            AppLogger.warning("Preview folder navigation restore failed", category: .fileImport,
+                metadata: ["domain": failure.domain, "code": "\(failure.code)", "savedGrants": "\(folders.count)"])
+            return false
+        }
     }
 
     private func previewFolder(_ folderURL: URL, contains fileURL: URL) -> Bool {
@@ -7110,8 +7146,8 @@ final class HomeViewModel: ObservableObject {
         invalidateEncodingStart()
         preparationOperationID = nil
         dismissMiniPreview()
-        stopSecurityScopedAccess()
-        for url in urls { securityScopedAccess.acquire(url) }
+        singleFilePreviewContext = nil
+        securityScopedAccess.replace(with: urls)
         AppLogger.info(
             "Security scoped access started",
             category: .fileImport,

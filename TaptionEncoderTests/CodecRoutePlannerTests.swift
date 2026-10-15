@@ -13240,6 +13240,79 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
+    func testFilePickerHandoffKeepsSnapshotWhenProviderFolderRescanFails() async throws {
+        for codec: TaptionVideoCodec in [.h264, .hevcWithAlpha] {
+            let f = try await makePreviewQueueBrowserFixture(codec: codec)
+            defer {
+                try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: f.directory.path)
+                try? FileManager.default.removeItem(at: f.directory)
+            }
+            f.model.openConnectedFilesFolder(f.directory)
+            XCTAssertEqual(f.model.folderPreviewFileSnapshots.count, 3)
+            // The list was available when picked, but a subsequent provider scan fails.
+            try FileManager.default.setAttributes([.posixPermissions: 0o300], ofItemAtPath: f.directory.path)
+            f.model.selectFolderPreviewFile(id: f.urls[1].absoluteString)
+            try await waitForCondition(timeout: 10) { f.model.activePreview?.sourceURL == f.urls[1] }
+            XCTAssertEqual(f.model.activePreview?.playlist?.positionText, "2 / 3")
+            XCTAssertNil(f.model.activePreview?.folderAccessURL)
+            XCTAssertEqual(f.model.activePreview?.usesNativePlayback, codec == .hevcWithAlpha)
+            f.model.openNextPreview()
+            try await waitForCondition(timeout: 5) { f.model.activePreview?.sourceURL == f.urls[2] }
+            XCTAssertEqual(f.model.activePreview?.playlist?.positionText, "3 / 3")
+            f.model.openPreviousPreview()
+            try await waitForCondition(timeout: 5) { f.model.activePreview?.sourceURL == f.urls[1] }
+            XCTAssertEqual(f.model.fileCardSnapshots.count, 1)
+            f.model.closePreviewFromPlayer()
+        }
+    }
+
+    @MainActor
+    func testSwipeRestoresTransientlyUnavailableFolderAndNavigatesImmediately() async throws {
+        let f = try await makePreviewQueueBrowserFixture()
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: f.directory.path)
+            try? FileManager.default.removeItem(at: f.directory)
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o300], ofItemAtPath: f.directory.path)
+        f.model.openExternalPlayerFile(url: f.urls[1])
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        XCTAssertNotNil(f.model.activePreview?.folderAccessURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: f.directory.path)
+        XCTAssertTrue(f.model.restoreSingleFilePreviewNavigation(offset: 1))
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.sourceURL == f.urls[2] }
+        XCTAssertNil(f.model.activePreview?.folderAccessURL)
+        XCTAssertEqual(f.model.activePreview?.playlist?.positionText, "3 / 3")
+        f.model.openPreviousPreview()
+        try await waitForCondition(timeout: 5) { f.model.activePreview?.sourceURL == f.urls[1] }
+        XCTAssertEqual(f.model.fileCardSnapshots.count, 1)
+        let wallet = await f.wallet.currentSnapshot()
+        let encodeCalls = await f.encoder.callCount()
+        XCTAssertEqual(wallet.balance, 3)
+        XCTAssertEqual(encodeCalls, 0)
+        f.model.closePreviewFromPlayer()
+    }
+
+    @MainActor
+    func testSwipeCannotInventFolderPermissionOrReplaceCurrentPlayback() async throws {
+        let f = try await makePreviewQueueBrowserFixture()
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: f.directory.path)
+            try? FileManager.default.removeItem(at: f.directory)
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o300], ofItemAtPath: f.directory.path)
+        f.model.openExternalPlayerFile(url: f.urls[1])
+        try await waitForReadyToStartState(in: f.model, timeout: 10)
+        let original = try XCTUnwrap(f.model.activePreview)
+        XCTAssertFalse(f.model.restoreSingleFilePreviewNavigation(offset: 0))
+        XCTAssertFalse(f.model.restoreSingleFilePreviewNavigation(offset: 1))
+        XCTAssertFalse(f.model.restoreSingleFilePreviewNavigation(offset: -1))
+        XCTAssertEqual(f.model.activePreview, original)
+        XCTAssertNil(f.model.folderPreviewContext)
+        XCTAssertEqual(f.model.fileCardSnapshots.count, 1)
+        f.model.closePreviewFromPlayer()
+    }
+
+    @MainActor
     func testConnectedFolderSurvivesOneAddedVideoAndQueueReopen() async throws {
         let f = try await makePreviewQueueBrowserFixture()
         defer { try? FileManager.default.removeItem(at: f.directory) }
