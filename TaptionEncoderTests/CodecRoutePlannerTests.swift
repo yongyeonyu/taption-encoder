@@ -4547,7 +4547,84 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(progressViewText.contains("if showsWatchAdAction {\n                        watchAdButton"))
     }
 
-    func testFileAndFolderButtonsUseSystemPickersWithFolderSelection() throws {
+    @MainActor
+    func testDocumentPickerHandoffAcceptsBothCallbackOrdersAndRejectsStaleResults() throws {
+        let urls = [URL(fileURLWithPath: "/selected", isDirectory: true)]
+        for dismissalFirst in [false, true] {
+            let handoff = HomeDocumentPickerHandoff()
+            handoff.begin(.folder)
+            let id = try XCTUnwrap(handoff.requestID)
+            if dismissalFirst { XCTAssertNil(handoff.didDismiss()) }
+            let received = handoff.receive(.success(urls), requestID: id)
+            if !dismissalFirst { XCTAssertNil(received) }
+            let completed = try XCTUnwrap(dismissalFirst ? received : handoff.didDismiss())
+            XCTAssertEqual(completed.0, .folder)
+            XCTAssertEqual(try completed.1.get(), urls)
+            XCTAssertNil(handoff.didDismiss())
+            XCTAssertNil(handoff.receive(.success(urls), requestID: id))
+            handoff.begin(.files)
+            let nextID = try XCTUnwrap(handoff.requestID)
+            XCTAssertNil(handoff.receive(.success(urls), requestID: id), "A dismissed picker cannot replace the new request")
+            XCTAssertNil(handoff.receive(.success([]), requestID: nextID))
+            let cancelled = try XCTUnwrap(handoff.didDismiss())
+            XCTAssertEqual(cancelled.0, .files)
+            XCTAssertTrue(try cancelled.1.get().isEmpty)
+        }
+    }
+
+    @MainActor
+    func testNativeDocumentPickerUsesVideosForFilesAndDirectoriesForFolders() throws {
+        let location = try XCTUnwrap(VideoDocumentPicker.localDocumentsDirectory())
+        XCTAssertTrue(FileManager.default.fileExists(atPath: location.appendingPathComponent("Videos").path))
+        for mode in [HomeSystemDocumentPickerMode.files, .folder, .outputFolder] {
+            let picker = VideoDocumentPicker(contentTypes: mode.allowedContentTypes,
+                allowsMultipleSelection: mode.allowsMultipleSelection, directoryURL: location,
+                accessibilityIdentifier: "test.picker", onPick: { _ in }, onCancel: {}).makePicker()
+            let typeIdentifiers = mode.allowedContentTypes.map(\.identifier)
+            XCTAssertEqual(picker.directoryURL, location)
+            XCTAssertEqual(picker.documentPickerMode, .open)
+            if mode == .files {
+                XCTAssertTrue(picker.allowsMultipleSelection)
+                XCTAssertFalse(typeIdentifiers.contains(UTType.folder.identifier))
+                XCTAssertTrue(typeIdentifiers.contains(UTType.mpeg4Movie.identifier))
+                XCTAssertTrue(typeIdentifiers.contains(UTType.quickTimeMovie.identifier))
+            } else {
+                XCTAssertFalse(picker.allowsMultipleSelection)
+                XCTAssertEqual(typeIdentifiers, [UTType.folder.identifier])
+            }
+        }
+    }
+
+    @MainActor
+    func testNativeDocumentPickerUpdatePreservesNavigationAndCompletesOnce() {
+        let initial = URL(fileURLWithPath: "/initial", isDirectory: true)
+        let navigated = URL(fileURLWithPath: "/other-location", isDirectory: true)
+        let selected = [navigated.appendingPathComponent("a.mp4"), navigated.appendingPathComponent("b.mp4")]
+        var picks: [[URL]] = []
+        var cancels = 0
+        var view = VideoDocumentPicker(contentTypes: [.movie], allowsMultipleSelection: true,
+            directoryURL: initial, accessibilityIdentifier: "test.picker", onPick: { _ in XCTFail("Stale callback") }, onCancel: {})
+        let picker = view.makePicker()
+        let coordinator = view.makeCoordinator()
+        picker.directoryURL = navigated
+        view.onPick = { picks.append($0) }
+        view.onCancel = { cancels += 1 }
+        view.updatePicker(picker, coordinator: coordinator)
+        XCTAssertEqual(picker.directoryURL, navigated, "SwiftUI refresh must not reset the active location")
+        coordinator.documentPicker(picker, didPickDocumentsAt: selected)
+        coordinator.documentPickerWasCancelled(picker)
+        coordinator.documentPicker(picker, didPickDocumentsAt: selected)
+        XCTAssertEqual(picks, [selected])
+        XCTAssertEqual(cancels, 0)
+        let cancelled = view.makeCoordinator()
+        cancelled.documentPickerWasCancelled(picker)
+        cancelled.documentPickerWasCancelled(picker)
+        cancelled.documentPicker(picker, didPickDocumentsAt: selected)
+        XCTAssertEqual(picks, [selected])
+        XCTAssertEqual(cancels, 1)
+    }
+
+    func testFileAndFolderButtonsUseDistinctSystemPickers() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -4557,6 +4634,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         let stateURL = rootURL.appendingPathComponent("TaptionEncoder/Features/Home/HomeScreenState.swift")
         let projectURL = rootURL.appendingPathComponent("TaptionEncoder.xcodeproj/project.pbxproj")
         let homeViewText = try String(contentsOf: homeViewURL, encoding: .utf8)
+        let pickerText = try String(contentsOf: rootURL.appendingPathComponent("TaptionEncoder/Features/Preview/QueuePreviewModalPresenters.swift"), encoding: .utf8)
         let loadedFilesText = try String(contentsOf: loadedFilesURL, encoding: .utf8)
         let sourceActionBarText = try String(contentsOf: sourceActionBarURL, encoding: .utf8)
         let stateText = try String(contentsOf: stateURL, encoding: .utf8)
@@ -4573,7 +4651,7 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(homeViewText.contains("@State private var isImportBrowserLocationPickerPresented"))
         XCTAssertFalse(homeViewText.contains("@State private var didRequestStartupImportBrowserAccess"))
         XCTAssertTrue(homeViewText.contains("@State private var activeSystemDocumentPicker: HomeSystemDocumentPickerMode?"))
-        XCTAssertTrue(homeViewText.contains("private enum HomeSystemDocumentPickerMode: String"))
+        XCTAssertTrue(homeViewText.contains("enum HomeSystemDocumentPickerMode: String"))
         XCTAssertTrue(homeViewText.contains("case files"))
         XCTAssertTrue(homeViewText.contains("case folder"))
         XCTAssertTrue(homeViewText.contains("case outputFolder"))
@@ -4586,23 +4664,24 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("activeSystemDocumentPicker = .files"))
         XCTAssertTrue(homeViewText.contains("activeSystemDocumentPicker = .folder"))
         XCTAssertFalse(homeViewText.contains(".fileImporter("))
-        XCTAssertTrue(homeViewText.contains("HomeSystemDocumentPickerPresenter("))
-        XCTAssertTrue(homeViewText.contains("UIDocumentPickerViewController("))
-        XCTAssertTrue(homeViewText.contains("forOpeningContentTypes: mode.allowedContentTypes"))
-        XCTAssertFalse(homeViewText.contains("return ImportableVideoTypes.all"), "File browsing must acquire its containing folder scope first.")
+        XCTAssertTrue(homeViewText.contains(".sheet(item: $activeSystemDocumentPicker"))
+        XCTAssertTrue(homeViewText.contains("VideoDocumentPicker(contentTypes: mode.allowedContentTypes"))
+        XCTAssertTrue(pickerText.contains("UIDocumentPickerViewController("))
+        XCTAssertTrue(pickerText.contains("forOpeningContentTypes: contentTypes"))
+        XCTAssertTrue(homeViewText.contains("return ImportableVideoTypes.all"))
         XCTAssertTrue(homeViewText.contains("return [.folder]"))
-        XCTAssertTrue(homeViewText.contains("picker.allowsMultipleSelection = mode.allowsMultipleSelection"))
-        XCTAssertTrue(homeViewText.contains("return false"))
-        XCTAssertTrue(homeViewText.contains("UIDocumentPickerDelegate"))
-        XCTAssertTrue(homeViewText.contains("documentPicker("))
-        XCTAssertTrue(homeViewText.contains("documentPickerWasCancelled"))
+        XCTAssertTrue(homeViewText.contains("allowsMultipleSelection: mode.allowsMultipleSelection"))
+        XCTAssertTrue(pickerText.contains("UIDocumentPickerDelegate"))
+        XCTAssertTrue(pickerText.contains("documentPicker("))
+        XCTAssertTrue(pickerText.contains("documentPickerWasCancelled"))
         XCTAssertTrue(homeViewText.contains("handleSystemDocumentPickerResult"))
         XCTAssertTrue(homeViewText.contains("handleFilePickerResult"))
         XCTAssertTrue(homeViewText.contains("handleFolderPickerResult"))
         XCTAssertTrue(homeViewText.contains("handleOutputFolderPickerResult"))
         XCTAssertTrue(homeViewText.contains("prepareFolderOutputDirectoryForStart"))
         XCTAssertTrue(homeViewText.contains("selectFolderOutputDirectory"))
-        XCTAssertTrue(homeViewText.contains("viewModel.openConnectedFilesFolder(folder)"))
+        XCTAssertTrue(homeViewText.contains("viewModel.openExternalPlayerFile(url: file)"))
+        XCTAssertTrue(homeViewText.contains("viewModel.startFilesFlow(urls: selectedURLs)"))
         XCTAssertTrue(homeViewText.contains("viewModel.handleFolderPickerSelection(urls: [folderURL])"))
         XCTAssertFalse(sourceBarText.contains("onSamples"))
         XCTAssertFalse(sourceBarText.contains("openSampleLibrary()"))
@@ -4620,7 +4699,6 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(homeViewText.contains("handleImportBrowserDismiss"))
         XCTAssertFalse(homeViewText.contains("presentPendingImportPickerIfNeeded"))
         XCTAssertFalse(homeViewText.contains("openImportBrowserLocation"))
-        XCTAssertFalse(homeViewText.contains("VideoDocumentPicker("))
         XCTAssertFalse(homeViewText.contains("PendingSaveExportPicker("))
         XCTAssertFalse(homeViewText.contains("recoverFolderAccessForPendingSave(url:"))
         let exitButtonStart = try XCTUnwrap(homeViewText.range(of: "private func exitButton"))
@@ -13267,10 +13345,11 @@ final class CodecRoutePlannerTests: XCTestCase {
     }
 
     @MainActor
-    func testInitialVideoFolderRequestPersistsOnceAcrossModelReplacement() async throws {
+    func testMissingVideoFolderPermissionRequestsOncePerLaunchUntilConnected() async throws {
         let suite = "InitialFolderRequest-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: "preview.folderAccessRequestShown") // Legacy decline must not suppress future launches.
         let f = try await makePreviewQueueBrowserFixture(previewFolderDefaults: defaults)
         defer { f.model.reset(); try? FileManager.default.removeItem(at: f.directory) }
         XCTAssertTrue(f.model.consumeInitialVideoFolderAccessRequest())
@@ -13280,7 +13359,15 @@ final class CodecRoutePlannerTests: XCTestCase {
         let replacement = HomeViewModel(environment: makeHomeViewModelTestEnvironment(
             pendingSaveStore: FakePendingSaveStore(), mediaInspector: f.inspector
         ), previewFolderDefaults: defaults)
-        XCTAssertFalse(replacement.consumeInitialVideoFolderAccessRequest(), "Not now remains respected after restarting")
+        defer { replacement.reset() }
+        XCTAssertTrue(replacement.consumeInitialVideoFolderAccessRequest(), "Missing permission must be requested on the next launch")
+        XCTAssertFalse(replacement.consumeInitialVideoFolderAccessRequest())
+        XCTAssertNil(replacement.connectVideoFolder(f.directory))
+        let connected = HomeViewModel(environment: makeHomeViewModelTestEnvironment(
+            pendingSaveStore: FakePendingSaveStore(), mediaInspector: f.inspector
+        ), previewFolderDefaults: defaults)
+        defer { connected.reset() }
+        XCTAssertFalse(connected.consumeInitialVideoFolderAccessRequest(), "A remembered grant skips the startup request")
     }
 
     @MainActor
@@ -13319,6 +13406,114 @@ final class CodecRoutePlannerTests: XCTestCase {
         }
         XCTAssertTrue(bookmarks.folders(containing: f.directory.appendingPathExtension("outside").appendingPathComponent("a.mp4")).isEmpty,
                       "A saved parent never grants unrelated locations")
+    }
+
+    @MainActor
+    func testMultipleParentFolderGrantsRestoreNavigationAcrossModelReplacement() async throws {
+        let suite = "MultipleFolderGrants-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let f = try await makePreviewQueueBrowserFixture(previewFolderDefaults: defaults)
+        defer { f.model.reset(); try? FileManager.default.removeItem(at: f.directory) }
+        var parents: [URL] = []
+        var selections: [URL] = []
+        for name in ["Library A", "Library B"] {
+            let parent = f.directory.appendingPathComponent(name, isDirectory: true)
+            let child = parent.appendingPathComponent("Trip", isDirectory: true)
+            try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+            for source in f.urls {
+                try FileManager.default.copyItem(at: source, to: child.appendingPathComponent(source.lastPathComponent))
+            }
+            parents.append(parent)
+            selections.append(child.appendingPathComponent(f.urls[1].lastPathComponent))
+        }
+        XCTAssertNil(f.model.connectVideoFolder(parents[0]))
+        XCTAssertNil(f.model.connectVideoFolders([parents[1], parents[0], parents[1]]))
+        XCTAssertEqual(Set(f.model.connectedVideoFolders.map(MediaFileIdentity.canonicalURL)), Set(parents.map(MediaFileIdentity.canonicalURL)))
+        XCTAssertTrue(f.model.fileCardSnapshots.isEmpty)
+        XCTAssertNil(f.model.activePreview)
+        let wallet = await f.wallet.currentSnapshot()
+        let encodeCalls = await f.encoder.callCount()
+        XCTAssertEqual(wallet.balance, 3)
+        XCTAssertEqual(encodeCalls, 0)
+
+        let replacement = HomeViewModel(environment: makeHomeViewModelTestEnvironment(
+            pendingSaveStore: FakePendingSaveStore(), mediaInspector: f.inspector
+        ), previewFolderDefaults: defaults)
+        defer { replacement.reset() }
+        XCTAssertEqual(replacement.connectedVideoFolders.count, 2)
+        XCTAssertFalse(replacement.consumeInitialVideoFolderAccessRequest())
+        let bookmarks = PreviewFolderBookmarkStore(defaults: defaults)
+        XCTAssertTrue(bookmarks.folders(containing: f.urls[0]).isEmpty, "Separate parent grants never imply device-wide access")
+        for selected in selections {
+            replacement.openExternalPlayerFile(url: selected)
+            try await waitForCondition(timeout: 10) { replacement.activePreview?.sourceURL == selected }
+            XCTAssertNil(replacement.activePreview?.folderAccessURL)
+            XCTAssertEqual(replacement.activePreview?.playlist?.positionText, "2 / 3")
+            replacement.openNextPreview()
+            try await waitForCondition(timeout: 5) { replacement.activePreview?.playlist?.positionText == "3 / 3" }
+            replacement.openPreviousPreview()
+            try await waitForCondition(timeout: 5) { replacement.activePreview?.sourceURL == selected }
+            replacement.closePreviewFromPlayer()
+        }
+    }
+
+    @MainActor
+    func testMultipleFolderConnectionFailureAndCancellationPreserveExistingGrants() async throws {
+        let suite = "MultipleFolderValidation-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let f = try await makePreviewQueueBrowserFixture(previewFolderDefaults: defaults)
+        defer { f.model.reset(); try? FileManager.default.removeItem(at: f.directory) }
+        let existing = f.directory.appendingPathComponent("Existing", isDirectory: true)
+        let valid = f.directory.appendingPathComponent("New", isDirectory: true)
+        for folder in [existing, valid] { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false) }
+        XCTAssertNil(f.model.connectVideoFolder(existing))
+        let saved = try XCTUnwrap(defaults.array(forKey: PreviewFolderBookmarkStore.key) as? [Data])
+        XCTAssertNil(f.model.connectVideoFolders([]), "Cancelling creates no permission")
+        XCTAssertNotNil(f.model.connectVideoFolders([valid, f.urls[0]]))
+        XCTAssertNotNil(f.model.connectVideoFolders([valid, f.directory.appendingPathComponent("Missing")]))
+        XCTAssertNotNil(f.model.connectVideoFolders([valid, try XCTUnwrap(URL(string: "https://example.com/videos"))]))
+        XCTAssertEqual(defaults.array(forKey: PreviewFolderBookmarkStore.key) as? [Data], saved)
+        XCTAssertEqual(f.model.connectedVideoFolders.map(MediaFileIdentity.canonicalURL), [MediaFileIdentity.canonicalURL(existing)])
+        XCTAssertTrue(f.model.fileCardSnapshots.isEmpty)
+        XCTAssertNil(f.model.activePreview)
+    }
+
+    @MainActor
+    func testFolderBookmarkBatchCreationFailureDoesNotPartiallyPersist() throws {
+        let suite = "FolderBookmarkBatchFailure-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folders = ["Existing", "New", "Fail"].map { root.appendingPathComponent($0, isDirectory: true) }
+        for folder in folders { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false) }
+        var store = PreviewFolderBookmarkStore(defaults: defaults)
+        XCTAssertTrue(store.remember(folders[0]))
+        let saved = try XCTUnwrap(defaults.array(forKey: PreviewFolderBookmarkStore.key) as? [Data])
+        store.create = { folder in folder.lastPathComponent == "Fail" ? nil : try? folder.bookmarkData(options: []) }
+        XCTAssertFalse(store.remember(Array(folders.dropFirst())))
+        XCTAssertEqual(defaults.array(forKey: PreviewFolderBookmarkStore.key) as? [Data], saved)
+    }
+
+    @MainActor
+    func testFolderBookmarkBatchRetainsEverySelectedAndPreviouslySavedFolder() throws {
+        let suite = "FolderBookmarkBatchCapacity-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let folders = (0..<24).map { root.appendingPathComponent("Library \($0)", isDirectory: true) }
+        for folder in folders { try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false) }
+        let store = PreviewFolderBookmarkStore(defaults: defaults)
+        XCTAssertTrue(store.remember(folders[0]))
+        XCTAssertTrue(store.remember(Array(folders.dropFirst()) + [folders[1], folders[2]]))
+        let restored = PreviewFolderBookmarkStore(defaults: defaults).authorizedFolders()
+        XCTAssertEqual(restored.count, folders.count, "Adding folders must never silently discard earlier permissions")
+        XCTAssertEqual(Set(restored.map(MediaFileIdentity.canonicalURL)), Set(folders.map(MediaFileIdentity.canonicalURL)))
     }
 
     @MainActor

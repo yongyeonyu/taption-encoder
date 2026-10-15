@@ -3,7 +3,6 @@ import Foundation
 /// Persisted folder grants never invoke UI during restoration.
 struct PreviewFolderBookmarkStore {
     static let key = "preview.authorizedFolderBookmarks"
-    private static let requestShownKey = "preview.folderAccessRequestShown"
     struct Resolution { var url: URL; var isStale: Bool }
     var defaults: UserDefaults
     var resolve: (Data) -> Resolution? = { data in
@@ -18,20 +17,27 @@ struct PreviewFolderBookmarkStore {
         reconciled().filter { MediaFileIdentity.folder($0.1, contains: file) }.map { $0.1 }
     }
 
-    func consumeInitialRequest() -> Bool {
-        guard !defaults.bool(forKey: Self.requestShownKey), reconciled().isEmpty else { return false }
-        markRequestShown()
-        return true
-    }
-
-    func markRequestShown() { defaults.set(true, forKey: Self.requestShownKey) }
+    func authorizedFolders() -> [URL] { reconciled().map { $0.1 } }
 
     @discardableResult
     func remember(_ folder: URL) -> Bool {
-        guard let bookmark = create(folder) else { return false }
-        let path = MediaFileIdentity.canonicalURL(folder)
-        let other = reconciled().filter { MediaFileIdentity.canonicalURL($0.1) != path }.map { $0.0 }
-        defaults.set(Array(([bookmark] + other).prefix(20)), forKey: Self.key)
+        remember([folder])
+    }
+
+    /// Persist the whole selection together and retain every previously saved grant.
+    @discardableResult
+    func remember(_ folders: [URL]) -> Bool {
+        guard !folders.isEmpty else { return true }
+        var paths: Set<URL> = []
+        var bookmarks: [Data] = []
+        for folder in folders {
+            guard folder.isFileURL else { return false }
+            guard paths.insert(MediaFileIdentity.canonicalURL(folder)).inserted else { continue }
+            guard let bookmark = create(folder) else { return false }
+            bookmarks.append(bookmark)
+        }
+        let other = reconciled().filter { !paths.contains(MediaFileIdentity.canonicalURL($0.1)) }.map { $0.0 }
+        defaults.set(bookmarks + other, forKey: Self.key)
         return true
     }
 

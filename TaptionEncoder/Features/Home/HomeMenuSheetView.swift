@@ -4,6 +4,7 @@ import UIKit
 enum HomeMenuSheet: String, Identifiable {
     case help
     case batterySettings
+    case folderAccess
 
     var id: String { rawValue }
 
@@ -13,6 +14,8 @@ enum HomeMenuSheet: String, Identifiable {
             return "Help"
         case .batterySettings:
             return "Battery Settings"
+        case .folderAccess:
+            return "Folder Access"
         }
     }
 }
@@ -20,6 +23,8 @@ enum HomeMenuSheet: String, Identifiable {
 struct HomeMenuSheetView: View {
     var sheet: HomeMenuSheet
     var onOptimizationProfileChanged: (TaptionEncodingOptimizationProfile) -> Void = { _ in }
+    var loadVideoFolders: () -> [URL] = { [] }
+    var onConnectVideoFolders: ([URL]) -> String? = { _ in "Folder access is unavailable." }
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -51,6 +56,92 @@ struct HomeMenuSheetView: View {
             BatterySettingsSheetContentView(
                 onOptimizationProfileChanged: onOptimizationProfileChanged
             )
+        case .folderAccess:
+            VideoFolderAccessSettingsView(loadFolders: loadVideoFolders, onConnect: onConnectVideoFolders)
+        }
+    }
+}
+
+struct VideoFolderAccessSettingsView: View {
+    var loadFolders: () -> [URL]
+    var onConnect: ([URL]) -> String?
+    @State private var folders: [URL] = []
+    @State private var showsPicker = false
+    @State private var connectionError: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Allow access to your video folders")
+                    .font(.headline)
+                    .foregroundStyle(TaptionTheme.primaryText)
+                Text("Select a parent folder to allow access to everything inside it, including subfolders. BOKKI remembers your selection for future playback and previous/next navigation.")
+                    .foregroundStyle(TaptionTheme.mutedText)
+                Text("iOS requires you to select each storage location. Access to every folder on the device cannot be granted at once.")
+                    .font(.footnote)
+                    .foregroundStyle(TaptionTheme.mutedText)
+
+                Button {
+                    showsPicker = true
+                } label: {
+                    Label(folders.isEmpty ? "Allow Folder Access" : "Add Folders", systemImage: "folder.badge.plus")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(TaptionTheme.accent)
+                .foregroundStyle(TaptionTheme.appBackground)
+                .accessibilityIdentifier("folderAccess.add")
+
+                Text("Tap Browse at the bottom to choose On My iPhone, iCloud Drive, or another location. Open the desired folder and tap Open at the top right. You can also select several folders together.")
+                    .font(.footnote)
+                    .foregroundStyle(TaptionTheme.mutedText)
+
+                Text("Connected Folders (\(folders.count))")
+                    .font(.headline)
+                    .foregroundStyle(TaptionTheme.primaryText)
+                    .accessibilityIdentifier("folderAccess.count")
+                if folders.isEmpty {
+                    Text("No folders connected yet.")
+                        .foregroundStyle(TaptionTheme.mutedText)
+                }
+                ForEach(folders, id: \.self) { folder in
+                    Label {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(folder.lastPathComponent)
+                                .foregroundStyle(TaptionTheme.primaryText)
+                            Text("Includes all subfolders")
+                                .font(.caption)
+                                .foregroundStyle(TaptionTheme.mutedText)
+                        }
+                    } icon: {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(TaptionTheme.accent)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(TaptionTheme.surface, in: RoundedRectangle(cornerRadius: 8))
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("folderAccess.connected")
+                }
+            }
+            .padding(18)
+        }
+        .onAppear { folders = loadFolders() }
+        .sheet(isPresented: $showsPicker) {
+            QueuePreviewFolderAccessPresenter(directoryURL: nil, isPresented: $showsPicker,
+                allowsMultipleSelection: true) { urls in
+                guard !urls.isEmpty else { return }
+                connectionError = onConnect(urls)
+                folders = loadFolders()
+            }
+        }
+        .alert("Folder Access", isPresented: Binding(
+            get: { connectionError != nil }, set: { if !$0 { connectionError = nil } }
+        )) {
+            Button("OK", role: .cancel) { connectionError = nil }
+        } message: {
+            Text(connectionError ?? "")
         }
     }
 }

@@ -82,6 +82,7 @@ final class HomeViewModel: ObservableObject {
     private let batteryPowerMonitor: any BatteryPowerMonitoring
     private let batterySettingsProvider: () -> BatteryEncodingSettings
     private let previewFolderBookmarks: PreviewFolderBookmarkStore
+    private var hasRequestedInitialFolderAccess = false
     private var activeTask: Task<Void, Never>?
     private var encodingStartTask: Task<Void, Never>?
     private var encodingStartOperationID: UUID?
@@ -2479,25 +2480,39 @@ final class HomeViewModel: ObservableObject {
     func consumeInitialVideoFolderAccessRequest() -> Bool {
         guard case .idle = state, activePreview == nil, miniPlayerPreview == nil,
               folderPreviewContext == nil, fileCardSnapshots.isEmpty else { return false }
-        return previewFolderBookmarks.consumeInitialRequest()
+        guard !hasRequestedInitialFolderAccess, previewFolderBookmarks.authorizedFolders().isEmpty else { return false }
+        hasRequestedInitialFolderAccess = true
+        return true
     }
 
     /// The selected parent grant covers its descendants without importing them.
     func connectVideoFolder(_ folderURL: URL) -> String? {
-        guard folderURL.isFileURL else { return "Choose a folder containing your videos." }
-        let didStart = folderURL.startAccessingSecurityScopedResource()
-        defer { if didStart { folderURL.stopAccessingSecurityScopedResource() } }
+        connectVideoFolders([folderURL])
+    }
+
+    var connectedVideoFolders: [URL] { previewFolderBookmarks.authorizedFolders() }
+
+    /// A selection grants its descendants; it never grants unrelated device locations.
+    func connectVideoFolders(_ folderURLs: [URL]) -> String? {
+        guard !folderURLs.isEmpty else { return nil }
+        guard folderURLs.allSatisfy(\.isFileURL) else { return "Choose folders containing your videos." }
+        var seen: Set<URL> = []
+        let folders = folderURLs.filter { seen.insert(MediaFileIdentity.canonicalURL($0)).inserted }
+        let scoped = folders.filter { $0.startAccessingSecurityScopedResource() }
+        defer { for folder in scoped { folder.stopAccessingSecurityScopedResource() } }
         do {
-            guard try folderURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
-                return "Choose a folder containing your videos."
+            for folder in folders {
+                guard try folder.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
+                    return "Choose folders containing your videos. No new folder access was saved."
+                }
+                _ = try videoFileURLs(in: folder)
             }
-            _ = try videoFileURLs(in: folderURL)
-            guard previewFolderBookmarks.remember(folderURL) else {
-                return "This folder's access could not be saved. Try connecting it again."
+            guard previewFolderBookmarks.remember(folders) else {
+                return "Folder access could not be saved. Try selecting the folders again."
             }
             return nil
         } catch {
-            return "This folder could not be read. Select your video folder again."
+            return "A selected folder could not be read. No new folder access was saved. Select your video folders again."
         }
     }
 
@@ -2509,7 +2524,7 @@ final class HomeViewModel: ObservableObject {
               context.initialURL == preview.sourceURL, context.needsFolderAccess,
               !context.hasRequestedFolderAccess else { return false }
         singleFilePreviewContext?.hasRequestedFolderAccess = true
-        previewFolderBookmarks.markRequestShown()
+        hasRequestedInitialFolderAccess = true
         return true
     }
 

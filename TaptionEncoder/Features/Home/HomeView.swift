@@ -4,157 +4,54 @@ import PhotosUI
 import UniformTypeIdentifiers
 import UIKit
 
-private enum HomeSystemDocumentPickerMode: String {
+enum HomeSystemDocumentPickerMode: String, Identifiable {
     case files
     case folder
     case outputFolder
 
+    var id: String { rawValue }
     var allowedContentTypes: [UTType] {
         switch self {
-        case .files, .folder, .outputFolder:
-            // Select the browsing scope once; choosing a video happens in the connected list.
-            return [.folder]
+        case .files: return ImportableVideoTypes.all
+        case .folder, .outputFolder: return [.folder]
         }
     }
-
-    var allowsMultipleSelection: Bool {
-        switch self {
-        case .files, .folder, .outputFolder:
-            return false
-        }
-    }
+    var allowsMultipleSelection: Bool { self == .files }
 }
 
-private struct HomeSystemDocumentPickerPresenter: UIViewControllerRepresentable {
-    @Binding var mode: HomeSystemDocumentPickerMode?
-    var onCompletion: (HomeSystemDocumentPickerMode, Result<[URL], Error>) -> Void
+/// UIKit may finish its automatic dismissal before or after delivering the selection.
+@MainActor
+final class HomeDocumentPickerHandoff: ObservableObject {
+    typealias Selection = (HomeSystemDocumentPickerMode, Result<[URL], Error>)
+    private(set) var requestID: UUID?
+    private var mode: HomeSystemDocumentPickerMode?
+    private var selection: Selection?
+    private var isDismissed = false
 
-    func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
+    func begin(_ mode: HomeSystemDocumentPickerMode) {
+        requestID = UUID()
+        self.mode = mode
+        selection = nil
+        isDismissed = false
     }
 
-    func makeUIViewController(context: Context) -> UIViewController {
-        UIViewController()
+    func receive(_ result: Result<[URL], Error>, requestID: UUID?) -> Selection? {
+        guard let requestID, requestID == self.requestID, let mode, selection == nil else { return nil }
+        selection = (mode, result)
+        return takeIfReady()
     }
 
-    func updateUIViewController(_ viewController: UIViewController, context: Context) {
-        context.coordinator.parent = self
-        guard let mode else {
-            return
-        }
-
-        context.coordinator.present(mode: mode, anchoredBy: viewController)
+    func didDismiss() -> Selection? {
+        isDismissed = true
+        return takeIfReady()
     }
 
-    final class Coordinator: NSObject, UIDocumentPickerDelegate {
-        var parent: HomeSystemDocumentPickerPresenter
-        var presentedMode: HomeSystemDocumentPickerMode?
-        private var isCompleting = false
-
-        init(parent: HomeSystemDocumentPickerPresenter) {
-            self.parent = parent
-        }
-
-        func present(mode: HomeSystemDocumentPickerMode, anchoredBy anchor: UIViewController) {
-            guard presentedMode != mode else {
-                return
-            }
-
-            presentedMode = mode
-            DispatchQueue.main.async { [weak self, weak anchor] in
-                self?.presentPicker(mode: mode, anchoredBy: anchor)
-            }
-        }
-
-        func documentPicker(
-            _ controller: UIDocumentPickerViewController,
-            didPickDocumentsAt urls: [URL]
-        ) {
-            complete(.success(urls), from: controller)
-        }
-
-        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-            complete(.success([]), from: controller)
-        }
-
-        private func presentPicker(
-            mode: HomeSystemDocumentPickerMode,
-            anchoredBy anchor: UIViewController?
-        ) {
-            guard parent.mode == mode else {
-                presentedMode = nil
-                return
-            }
-
-            let picker = UIDocumentPickerViewController(
-                forOpeningContentTypes: mode.allowedContentTypes,
-                asCopy: false
-            )
-            picker.allowsMultipleSelection = mode.allowsMultipleSelection
-            picker.delegate = self
-            if #available(iOS 14.0, *) {
-                picker.shouldShowFileExtensions = true
-            }
-
-            guard let presenter = Self.topMostPresenter(preferredAnchor: anchor) else {
-                AppLogger.warning(
-                    "System document picker presenter unavailable",
-                    category: .fileImport,
-                    metadata: ["mode": mode.rawValue]
-                )
-                presentedMode = nil
-                parent.mode = nil
-                return
-            }
-
-            presenter.present(picker, animated: true)
-        }
-
-        private static func topMostPresenter(preferredAnchor anchor: UIViewController?) -> UIViewController? {
-            let anchorRoot = anchor?.view.window?.rootViewController
-            let sceneRoot = UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .filter { $0.activationState == .foregroundActive || $0.activationState == .foregroundInactive }
-                .flatMap(\.windows)
-                .first { $0.isKeyWindow }?
-                .rootViewController
-
-            guard var presenter = anchorRoot ?? sceneRoot else {
-                return nil
-            }
-
-            while let presented = presenter.presentedViewController,
-                  !presented.isBeingDismissed {
-                presenter = presented
-            }
-
-            return presenter
-        }
-
-        private func complete(_ result: Result<[URL], Error>, from controller: UIDocumentPickerViewController) {
-            guard !isCompleting, let mode = presentedMode ?? parent.mode else {
-                return
-            }
-            isCompleting = true
-            // Present the connected browser only after UIKit's document picker
-            // has finished dismissing, so its transition cannot block touches.
-            let finish = { [self] in
-                isCompleting = false
-                presentedMode = nil
-                guard parent.mode == mode else { return }
-                parent.mode = nil
-                parent.onCompletion(mode, result)
-            }
-            if controller.isBeingDismissed, let transition = controller.transitionCoordinator {
-                if !transition.animate(alongsideTransition: nil, completion: { _ in finish() }) {
-                    DispatchQueue.main.async(execute: finish)
-                }
-            } else if controller.presentingViewController != nil {
-                controller.dismiss(animated: true, completion: finish)
-            } else {
-                DispatchQueue.main.async(execute: finish)
-            }
-        }
+    private func takeIfReady() -> Selection? {
+        guard isDismissed, let selection else { return nil }
+        self.selection = nil
+        mode = nil
+        requestID = nil
+        return selection
     }
 }
 
@@ -163,6 +60,7 @@ struct HomeView: View {
     @State private var activeImportBrowser: HomeImportBrowserMode?
     @State private var didCompleteImportBrowserSelection = false
     @State private var activeSystemDocumentPicker: HomeSystemDocumentPickerMode?
+    @StateObject private var documentPickerHandoff = HomeDocumentPickerHandoff()
     @State private var isPhotosPickerPresented = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var photoImportTask: Task<Void, Never>?
@@ -280,7 +178,9 @@ struct HomeView: View {
         .sheet(item: $activeMenuSheet) { sheet in
             HomeMenuSheetView(
                 sheet: sheet,
-                onOptimizationProfileChanged: { viewModel.selectEncodingOptimizationProfile($0) }
+                onOptimizationProfileChanged: { viewModel.selectEncodingOptimizationProfile($0) },
+                loadVideoFolders: { viewModel.connectedVideoFolders },
+                onConnectVideoFolders: { viewModel.connectVideoFolders($0) }
             )
         }
         .sheet(isPresented: $isOutputSettingsPresented) {
@@ -323,13 +223,18 @@ struct HomeView: View {
             matching: .videos,
             preferredItemEncoding: .current
         )
-        .background(
-            HomeSystemDocumentPickerPresenter(
-                mode: $activeSystemDocumentPicker,
-                onCompletion: handleSystemDocumentPickerResult
-            )
-            .frame(width: 0, height: 0)
-        )
+        .sheet(item: $activeSystemDocumentPicker, onDismiss: completeSystemDocumentPickerDismissal) { mode in
+            let requestID = documentPickerHandoff.requestID
+            VideoDocumentPicker(contentTypes: mode.allowedContentTypes,
+                allowsMultipleSelection: mode.allowsMultipleSelection,
+                directoryURL: VideoDocumentPicker.localDocumentsDirectory(),
+                accessibilityIdentifier: "picker.home." + mode.rawValue, onPick: { urls in
+                    receiveSystemDocumentPickerResult(.success(urls), requestID: requestID)
+                }, onCancel: {
+                    receiveSystemDocumentPickerResult(.success([]), requestID: requestID)
+                })
+                .ignoresSafeArea()
+        }
         .onChange(of: selectedPhotoItem) { _, newItem in
             handleSelectedPhotoItemChange(newItem)
         }
@@ -656,6 +561,7 @@ struct HomeView: View {
         cancelPendingPhotoImport()
         AppLogger.info("File button tapped", category: .ui)
         beginDocumentPickerAdSuppressionIfNeeded(reason: "filePicker")
+        documentPickerHandoff.begin(.files)
         activeSystemDocumentPicker = .files
     }
 
@@ -663,6 +569,7 @@ struct HomeView: View {
         cancelPendingPhotoImport()
         AppLogger.info("Folder button tapped", category: .ui)
         beginDocumentPickerAdSuppressionIfNeeded(reason: "folderPicker")
+        documentPickerHandoff.begin(.folder)
         activeSystemDocumentPicker = .folder
     }
 
@@ -705,10 +612,25 @@ struct HomeView: View {
     private func startPreparedEncoding() {
         guard viewModel.prepareFolderOutputDirectoryForStart() else {
             beginDocumentPickerAdSuppressionIfNeeded(reason: "outputFolderPicker")
-            activeSystemDocumentPicker = .outputFolder
+            documentPickerHandoff.begin(.outputFolder)
+        activeSystemDocumentPicker = .outputFolder
             return
         }
         viewModel.startPreparedEncoding()
+    }
+
+    private func receiveSystemDocumentPickerResult(_ result: Result<[URL], Error>, requestID: UUID?) {
+        let completed = documentPickerHandoff.receive(result, requestID: requestID)
+        activeSystemDocumentPicker = nil
+        if let (mode, result) = completed { handleSystemDocumentPickerResult(mode: mode, result: result) }
+    }
+
+    private func completeSystemDocumentPickerDismissal() {
+        if let (mode, result) = documentPickerHandoff.didDismiss() {
+            handleSystemDocumentPickerResult(mode: mode, result: result)
+        } else {
+            endDocumentPickerAdSuppressionIfNeeded(reason: "dismissed")
+        }
     }
 
     private func handleSystemDocumentPickerResult(
@@ -741,7 +663,11 @@ struct HomeView: View {
                     "names": selectedURLs.map(\.lastPathComponent).joined(separator: "|")
                 ]
             )
-            if let folder = selectedURLs.first { viewModel.openConnectedFilesFolder(folder) }
+            if selectedURLs.count == 1, let file = selectedURLs.first {
+                viewModel.openExternalPlayerFile(url: file)
+            } else {
+                viewModel.startFilesFlow(urls: selectedURLs)
+            }
         case .failure(let error):
             AppLogger.warning(
                 "File picker selection failed",
@@ -1048,6 +974,13 @@ struct HomeView: View {
     private func header(metrics: HomeLayoutMetrics) -> some View {
         HStack(spacing: 10 * metrics.contentScale) {
             Menu {
+                Button {
+                    activeMenuSheet = .folderAccess
+                } label: {
+                    Label("Folder Access", systemImage: "folder.badge.plus")
+                }
+                .accessibilityIdentifier("menu.folderAccess")
+
                 Button {
                     activeMenuSheet = .help
                 } label: {

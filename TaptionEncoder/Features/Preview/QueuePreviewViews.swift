@@ -219,7 +219,7 @@ private struct VideoFolderAccessRequestModifier: ViewModifier {
 
     private var title: String {
         if case .failure = prompt { return "Folder access" }
-        return isInitialRequest ? "Connect a video folder" : "Connect this folder?"
+        return isInitialRequest ? "Allow folder access" : "Connect this folder?"
     }
 
     func body(content: Content) -> some View {
@@ -240,15 +240,14 @@ private struct VideoFolderAccessRequestModifier: ViewModifier {
             } message: { value in
                 switch value {
                 case .request:
-                    Text("Choose a parent folder containing your videos. BOKKI can browse that folder and its subfolders, and remembers your choice. Folders elsewhere need a separate connection.")
+                    Text("Tap Browse at the bottom to choose On My iPhone, iCloud Drive, or another location. Open a parent folder containing your videos, then tap Open at the top right to allow access to that folder and all its subfolders. BOKKI remembers your permission. Add other locations in Menu → Folder Access.")
                 case .failure(let message): Text(message)
                 }
             }
-            .background {
+            .sheet(isPresented: $showsPicker) {
                 QueuePreviewFolderAccessPresenter(directoryURL: directoryURL, isPresented: $showsPicker) { url in
                     if let url, let error = onConnect(url) { prompt = .failure(error) }
                 }
-                .allowsHitTesting(false)
             }
     }
 }
@@ -416,14 +415,13 @@ struct QueuePreviewActionBar: View {
                 showsInformation = false
             }
         }
-        .background {
+        .sheet(isPresented: $showsFolderAccess) {
             QueuePreviewFolderAccessPresenter(directoryURL: preview.folderAccessURL, isPresented: $showsFolderAccess) { url in
                 if let url {
                     errorTitle = "Folder access"
                     shareError = onAuthorizeFolder(url, 0)
                 }
             }
-            .allowsHitTesting(false)
         }
         .alert(errorTitle, isPresented: Binding(
             get: { shareError != nil },
@@ -454,7 +452,7 @@ struct QueuePreviewInformationSheet: View {
                         LabeledContent("Folder", value: preview.folderAccessURL?.lastPathComponent ?? "")
                         Button("Connect folder", action: onConnectFolder)
                             .accessibilityIdentifier("preview.folder.connect")
-                        Text("Choose a parent folder containing this video once to browse its videos and subfolders.")
+                Text("Tap Browse at the bottom to switch between On My iPhone, iCloud Drive, and other locations. Open the folder containing this video, then tap Open at the top right. This connects the folder and its subfolders.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
