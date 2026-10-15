@@ -149,6 +149,7 @@ struct SingleFilePreviewContext {
     var items: [URL: BatchItemRuntime] = [:]
     var unavailableURLs: Set<URL> = []
     var needsFolderAccess = false
+    var hasRequestedFolderAccess = false
     var sourceKind: HomeSourceKind = .files
     var sourceName: String? = nil
     var photoVideos: [URL: PhotoLibraryVideo] = [:]

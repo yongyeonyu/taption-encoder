@@ -3,6 +3,7 @@ import Foundation
 /// Persisted folder grants never invoke UI during restoration.
 struct PreviewFolderBookmarkStore {
     static let key = "preview.authorizedFolderBookmarks"
+    private static let requestShownKey = "preview.folderAccessRequestShown"
     struct Resolution { var url: URL; var isStale: Bool }
     var defaults: UserDefaults
     var resolve: (Data) -> Resolution? = { data in
@@ -17,11 +18,21 @@ struct PreviewFolderBookmarkStore {
         reconciled().filter { MediaFileIdentity.folder($0.1, contains: file) }.map { $0.1 }
     }
 
-    func remember(_ folder: URL) {
-        guard let bookmark = create(folder) else { return }
+    func consumeInitialRequest() -> Bool {
+        guard !defaults.bool(forKey: Self.requestShownKey), reconciled().isEmpty else { return false }
+        markRequestShown()
+        return true
+    }
+
+    func markRequestShown() { defaults.set(true, forKey: Self.requestShownKey) }
+
+    @discardableResult
+    func remember(_ folder: URL) -> Bool {
+        guard let bookmark = create(folder) else { return false }
         let path = MediaFileIdentity.canonicalURL(folder)
         let other = reconciled().filter { MediaFileIdentity.canonicalURL($0.1) != path }.map { $0.0 }
         defaults.set(Array(([bookmark] + other).prefix(20)), forKey: Self.key)
+        return true
     }
 
     private func reconciled() -> [(Data, URL)] {

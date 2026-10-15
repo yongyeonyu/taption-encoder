@@ -157,6 +157,7 @@ struct QueueVideoPreviewView: View {
     var onNext: () -> Void
     var onAuthorizeFolder: (URL, Int) -> String? = { _, _ in nil }
     var onRestoreFolderNavigation: (Int) -> Bool = { _ in false }
+    var onRequestFolderAccess: () -> Bool = { false }
 
     @ViewBuilder
     var body: some View {
@@ -164,6 +165,8 @@ struct QueueVideoPreviewView: View {
         ZStack { playerView }
             .onAppear { AppOrientationController.shared.activatePreviewOrientations() }
             .onDisappear { AppOrientationController.shared.restorePortrait() }
+            .videoFolderAccessRequest(id: preview.id, directoryURL: preview.folderAccessURL,
+                onRequest: onRequestFolderAccess, onConnect: { onAuthorizeFolder($0, 0) })
     }
 
     @ViewBuilder
@@ -189,6 +192,64 @@ struct QueueVideoPreviewView: View {
                 onRestoreFolderNavigation: onRestoreFolderNavigation
             )
         }
+    }
+}
+
+extension View {
+    func videoFolderAccessRequest(id: String?, directoryURL: URL?, isInitialRequest: Bool = false,
+                                  onRequest: @escaping () -> Bool, onConnect: @escaping (URL) -> String?) -> some View {
+        modifier(VideoFolderAccessRequestModifier(requestID: id, directoryURL: directoryURL,
+            isInitialRequest: isInitialRequest, onRequest: onRequest, onConnect: onConnect))
+    }
+}
+
+private struct VideoFolderAccessRequestModifier: ViewModifier {
+    var requestID: String?
+    var directoryURL: URL?
+    var isInitialRequest: Bool
+    var onRequest: () -> Bool
+    var onConnect: (URL) -> String?
+    @State private var prompt: Prompt?
+    @State private var showsPicker = false
+
+    private enum Prompt {
+        case request
+        case failure(String)
+    }
+
+    private var title: String {
+        if case .failure = prompt { return "Folder access" }
+        return isInitialRequest ? "Connect a video folder" : "Connect this folder?"
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .task(id: requestID) {
+                showsPicker = false
+                prompt = requestID != nil && onRequest() ? .request : nil
+            }
+            .alert(title, isPresented: Binding(get: { prompt != nil }, set: { if !$0 { prompt = nil } }),
+                   presenting: prompt) { value in
+                switch value {
+                case .request:
+                    Button("Connect folder") { showsPicker = true }
+                    Button("Not now", role: .cancel) {}
+                case .failure:
+                    Button("OK", role: .cancel) {}
+                }
+            } message: { value in
+                switch value {
+                case .request:
+                    Text("Choose a parent folder containing your videos. BOKKI can browse that folder and its subfolders, and remembers your choice. Folders elsewhere need a separate connection.")
+                case .failure(let message): Text(message)
+                }
+            }
+            .background {
+                QueuePreviewFolderAccessPresenter(directoryURL: directoryURL, isPresented: $showsPicker) { url in
+                    if let url, let error = onConnect(url) { prompt = .failure(error) }
+                }
+                .allowsHitTesting(false)
+            }
     }
 }
 
@@ -393,7 +454,7 @@ struct QueuePreviewInformationSheet: View {
                         LabeledContent("Folder", value: preview.folderAccessURL?.lastPathComponent ?? "")
                         Button("Connect folder", action: onConnectFolder)
                             .accessibilityIdentifier("preview.folder.connect")
-                        Text("Choose the folder containing this video once to browse its other videos.")
+                        Text("Choose a parent folder containing this video once to browse its videos and subfolders.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }

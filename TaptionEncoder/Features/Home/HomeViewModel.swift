@@ -2476,6 +2476,43 @@ final class HomeViewModel: ObservableObject {
         singleFilePreviewContext = context
     }
 
+    func consumeInitialVideoFolderAccessRequest() -> Bool {
+        guard case .idle = state, activePreview == nil, miniPlayerPreview == nil,
+              folderPreviewContext == nil, fileCardSnapshots.isEmpty else { return false }
+        return previewFolderBookmarks.consumeInitialRequest()
+    }
+
+    /// The selected parent grant covers its descendants without importing them.
+    func connectVideoFolder(_ folderURL: URL) -> String? {
+        guard folderURL.isFileURL else { return "Choose a folder containing your videos." }
+        let didStart = folderURL.startAccessingSecurityScopedResource()
+        defer { if didStart { folderURL.stopAccessingSecurityScopedResource() } }
+        do {
+            guard try folderURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true else {
+                return "Choose a folder containing your videos."
+            }
+            _ = try videoFileURLs(in: folderURL)
+            guard previewFolderBookmarks.remember(folderURL) else {
+                return "This folder's access could not be saved. Try connecting it again."
+            }
+            return nil
+        } catch {
+            return "This folder could not be read. Select your video folder again."
+        }
+    }
+
+    /// Ask once per source flow, including when controls are initially hidden.
+    /// Declining the request keeps playback and the manual information-menu action.
+    func consumePreviewFolderAccessRequest(for previewID: String) -> Bool {
+        guard let preview = activePreview, preview.id == previewID, preview.folderAccessURL != nil,
+              let context = singleFilePreviewContext, context.sourceKind != .photos,
+              context.initialURL == preview.sourceURL, context.needsFolderAccess,
+              !context.hasRequestedFolderAccess else { return false }
+        singleFilePreviewContext?.hasRequestedFolderAccess = true
+        previewFolderBookmarks.markRequestShown()
+        return true
+    }
+
     /// Retry a failed folder read using grants already held or explicitly saved.
     /// This never presents UI or obtains access to an unapproved directory.
     func restoreSingleFilePreviewNavigation(offset: Int) -> Bool {

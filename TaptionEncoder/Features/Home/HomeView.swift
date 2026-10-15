@@ -178,6 +178,7 @@ struct HomeView: View {
     @State private var lastExternalVideoOpenDate: Date?
     @State private var isDocumentPickerAdSuppressed = false
     @State private var isPhotosPickerAdSuppressed = false
+    @State private var canRequestInitialFolderAccess = false
     #if DEBUG
     @State private var didOpenDebugPreviewFile = false
     @State private var didOpenDebugPreviewSample = false
@@ -356,7 +357,17 @@ struct HomeView: View {
             openDebugPreviewSampleIfRequested()
             openDebugSampleLibraryIfRequested()
             #endif
+            canRequestInitialFolderAccess = true
         }
+        .videoFolderAccessRequest(
+            id: canRequestInitialFolderAccess && !viewModel.state.isBusy && viewModel.activePreview == nil
+                && activeSystemDocumentPicker == nil && activeImportBrowser == nil && activeMenuSheet == nil
+                && !isPhotoLibraryBrowserPresented && !isPhotosPickerPresented && !isOutputSettingsPresented
+                ? "initial-video-folder" : nil,
+            directoryURL: nil, isInitialRequest: true,
+            onRequest: { viewModel.consumeInitialVideoFolderAccessRequest() },
+            onConnect: { viewModel.connectVideoFolder($0) }
+        )
     }
 
     private func queueVideoPreviewOverlay(preview: QueueVideoPreview) -> some View {
@@ -381,7 +392,8 @@ struct HomeView: View {
             onPrevious: { viewModel.openPreviousPreview() },
             onNext: { viewModel.openNextPreview() },
             onAuthorizeFolder: { viewModel.authorizeSingleFilePreviewFolder($0, navigationOffset: $1) },
-            onRestoreFolderNavigation: { viewModel.restoreSingleFilePreviewNavigation(offset: $0) }
+            onRestoreFolderNavigation: { viewModel.restoreSingleFilePreviewNavigation(offset: $0) },
+            onRequestFolderAccess: { viewModel.consumePreviewFolderAccessRequest(for: preview.id) }
         )
     }
 
