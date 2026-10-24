@@ -190,6 +190,43 @@ enum TaptionEncodingOptimizationProfile: String, Codable, Equatable, CaseIterabl
     }
 }
 
+/// How a picture that does not have the output frame's shape is placed in that frame.
+///
+/// A standard preset (1080p, 720p, 4K ...) is a fixed frame, so a source with a different shape has to be
+/// placed in it. Which of the three placements is right is the user's call, not the encoder's guess.
+enum TaptionVideoScaleMode: String, Codable, Equatable, CaseIterable {
+    /// Whole picture, black bars where the shapes differ (letterbox / pillarbox).
+    case fit
+    /// Frame filled edge to edge, the overflow is cropped away.
+    case fill
+    /// Picture stretched to the frame; the shape changes.
+    case stretch
+
+    var menuTitle: String {
+        switch self {
+        case .fit:
+            return "Fit"
+        case .fill:
+            return "Fill"
+        case .stretch:
+            return "Stretch"
+        }
+    }
+
+    var detailText: String {
+        switch self {
+        case .fit:
+            return "Keeps the whole picture and adds black bars where the shapes differ."
+        case .fill:
+            return "Fills the frame and crops the parts that overflow."
+        case .stretch:
+            return "Stretches the picture to the frame. The shape changes."
+        }
+    }
+
+    static let `default` = TaptionVideoScaleMode.fit
+}
+
 struct TaptionAdvancedOutputOptions: Codable, Equatable {
     var resizeTo: TaptionPixelSize?
     var frameRate: TaptionRationalFrameRate?
@@ -197,6 +234,8 @@ struct TaptionAdvancedOutputOptions: Codable, Equatable {
     var color: TaptionColorDescription?
     var rotationDegrees: Int?
     var optimizationProfile: TaptionEncodingOptimizationProfile?
+    /// Only meaningful together with `resizeTo`. `nil` behaves like `.fit`.
+    var scaleMode: TaptionVideoScaleMode?
 
     init(
         resizeTo: TaptionPixelSize? = nil,
@@ -204,7 +243,8 @@ struct TaptionAdvancedOutputOptions: Codable, Equatable {
         targetBitrate: Int? = nil,
         color: TaptionColorDescription? = nil,
         rotationDegrees: Int? = nil,
-        optimizationProfile: TaptionEncodingOptimizationProfile? = nil
+        optimizationProfile: TaptionEncodingOptimizationProfile? = nil,
+        scaleMode: TaptionVideoScaleMode? = nil
     ) {
         self.resizeTo = resizeTo
         self.frameRate = frameRate
@@ -212,9 +252,14 @@ struct TaptionAdvancedOutputOptions: Codable, Equatable {
         self.color = color
         self.rotationDegrees = rotationDegrees
         self.optimizationProfile = optimizationProfile
+        self.scaleMode = scaleMode
     }
 
     static let preserveSource = TaptionAdvancedOutputOptions()
+
+    var resolvedScaleMode: TaptionVideoScaleMode {
+        scaleMode ?? .default
+    }
 }
 
 struct TaptionVideoOutputPolicy: Codable, Equatable {
@@ -501,6 +546,9 @@ enum TaptionSourcePreservingExecutionAudit {
         if let displaySize = options.resizeTo {
             metadata["preserveResolution"] = "\(displaySize.width)x\(displaySize.height)"
         }
+        if let scaleMode = options.scaleMode {
+            metadata["scaleMode"] = scaleMode.rawValue
+        }
         if let frameRate = options.frameRate {
             metadata["preserveFrameRate"] = "\(frameRate.numerator)/\(frameRate.denominator)"
         }
@@ -528,6 +576,15 @@ enum TaptionSourcePreservingExecutionAudit {
             )
         }
 
+        // The plan asks for a specific output. When the user changed the resolution, the frame rate or the
+        // colour, the *plan* is the expected result and the source is only the fallback. Comparing the output
+        // against the untouched source made every intentional change look like an encoder failure.
+        let options = plan.outputPolicy.advancedOptions
+        let expectedSize = options.resizeTo ?? requirements.displaySize
+        let expectedFrameRate = options.frameRate ?? requirements.frameRate
+        let expectedColor = options.color ?? requirements.color
+        let expectedRotation = options.rotationDegrees ?? requirements.rotationDegrees
+
         var failures: [String] = []
         var warnings: [String] = []
         var metadata: [String: String] = [
@@ -538,7 +595,7 @@ enum TaptionSourcePreservingExecutionAudit {
             throw TaptionSourcePreservingVerificationError.failed("Source-preserving output verification failed: missing output video track.")
         }
 
-        if let expectedSize = requirements.displaySize {
+        if let expectedSize {
             metadata["expectedResolution"] = "\(expectedSize.width)x\(expectedSize.height)"
             metadata["actualResolution"] = "\(outputTrack.displaySize.width)x\(outputTrack.displaySize.height)"
             if !sizesMatch(expectedSize, outputTrack.displaySize) {
@@ -546,7 +603,7 @@ enum TaptionSourcePreservingExecutionAudit {
             }
         }
 
-        if let expectedFrameRate = requirements.frameRate {
+        if let expectedFrameRate {
             metadata["expectedFrameRate"] = frameRateString(expectedFrameRate)
             if let actualFrameRate = outputTrack.nominalFrameRate {
                 metadata["actualFrameRate"] = frameRateString(actualFrameRate)
@@ -558,17 +615,17 @@ enum TaptionSourcePreservingExecutionAudit {
             }
         }
 
-        if let expectedColor = requirements.color {
+        if let expectedColor {
             metadata["expectedColor"] = colorString(expectedColor)
             metadata["actualColor"] = colorString(outputTrack.color)
             failures += colorFailures(expected: expectedColor, actual: outputTrack.color)
         }
 
-        if let expectedRotation = requirements.rotationDegrees {
+        if let expectedRotation {
             metadata["expectedOrientation"] = "\(expectedRotation)"
             metadata["actualOrientation"] = "\(outputTrack.rotationDegrees)"
             let normalizedOrientationPreserved = expectedRotation != 0
-                && requirements.displaySize.map { sizesMatch($0, outputTrack.displaySize) } == true
+                && expectedSize.map { sizesMatch($0, outputTrack.displaySize) } == true
             if outputTrack.rotationDegrees != expectedRotation,
                !normalizedOrientationPreserved {
                 failures.append("orientation expected \(expectedRotation) degrees but got \(outputTrack.rotationDegrees) degrees")
@@ -733,7 +790,8 @@ enum TaptionSourcePreservingOutputPolicyResolver {
             targetBitrate: requestedOptions.targetBitrate ?? videoTrack.estimatedBitrate,
             color: requestedOptions.color ?? videoTrack.color,
             rotationDegrees: requestedOptions.rotationDegrees ?? videoTrack.rotationDegrees,
-            optimizationProfile: requestedOptions.optimizationProfile
+            optimizationProfile: requestedOptions.optimizationProfile,
+            scaleMode: requestedOptions.scaleMode
         )
     }
 }
@@ -1046,6 +1104,8 @@ struct TaptionEncodingResult: Codable, Equatable {
     var usedBackend: TaptionEncodingBackend
     var usedMode: TaptionEncoderMode
     var pendingSaveState: TaptionPendingSaveState?
+    /// True when the compressed samples were copied instead of re-encoded, so the picture is bit-identical.
+    var usedLosslessCopy: Bool?
 
     init(
         planID: UUID,
@@ -1053,7 +1113,8 @@ struct TaptionEncodingResult: Codable, Equatable {
         finalOutputURL: URL? = nil,
         usedBackend: TaptionEncodingBackend,
         usedMode: TaptionEncoderMode,
-        pendingSaveState: TaptionPendingSaveState? = nil
+        pendingSaveState: TaptionPendingSaveState? = nil,
+        usedLosslessCopy: Bool? = nil
     ) {
         self.planID = planID
         self.temporaryOutputURL = temporaryOutputURL
@@ -1061,6 +1122,7 @@ struct TaptionEncodingResult: Codable, Equatable {
         self.usedBackend = usedBackend
         self.usedMode = usedMode
         self.pendingSaveState = pendingSaveState
+        self.usedLosslessCopy = usedLosslessCopy
     }
 }
 

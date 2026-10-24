@@ -287,23 +287,7 @@ struct AVFoundationMediaInspector: MediaInspecting {
     }
 
     private func colorDescription(from descriptions: [CMFormatDescription]) -> TaptionColorDescription {
-        guard let description = descriptions.first,
-              let extensions = CMFormatDescriptionGetExtensions(description) as? [String: Any] else {
-            return TaptionColorDescription()
-        }
-
-        let primaries = extensions[kCMFormatDescriptionExtension_ColorPrimaries as String] as? String
-        let transfer = extensions[kCMFormatDescriptionExtension_TransferFunction as String] as? String
-        let matrix = extensions[kCMFormatDescriptionExtension_YCbCrMatrix as String] as? String
-
-        return TaptionColorDescription(
-            primaries: mapColorPrimaries(primaries),
-            transfer: mapColorTransfer(transfer),
-            matrix: mapColorMatrix(matrix),
-            bitDepth: nil,
-            isHDR: transfer == string(kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ)
-                || transfer == string(kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG)
-        )
+        TaptionVideoColorDescriptionProbe.colorDescription(from: descriptions)
     }
 
     private func frameRate(from value: Float) -> TaptionRationalFrameRate? {
@@ -350,53 +334,6 @@ struct AVFoundationMediaInspector: MediaInspecting {
         ], encoding: .ascii)?
             .trimmingCharacters(in: .controlCharacters.union(.whitespacesAndNewlines))
             .lowercased() ?? ""
-    }
-
-    private func mapColorPrimaries(_ value: String?) -> TaptionColorPrimaries {
-        switch value {
-        case string(kCMFormatDescriptionColorPrimaries_ITU_R_709_2):
-            return .bt709
-        case string(kCMFormatDescriptionColorPrimaries_ITU_R_2020):
-            return .bt2020
-        case string(kCMFormatDescriptionColorPrimaries_P3_D65):
-            return .p3D65
-        case string(kCMFormatDescriptionColorPrimaries_SMPTE_C):
-            return .smpteC
-        default:
-            return .unknown
-        }
-    }
-
-    private func mapColorTransfer(_ value: String?) -> TaptionColorTransfer {
-        switch value {
-        case string(kCMFormatDescriptionTransferFunction_ITU_R_709_2):
-            return .bt709
-        case string(kCMFormatDescriptionTransferFunction_sRGB):
-            return .sRGB
-        case string(kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ):
-            return .pq
-        case string(kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG):
-            return .hlg
-        default:
-            return .unknown
-        }
-    }
-
-    private func mapColorMatrix(_ value: String?) -> TaptionColorMatrix {
-        switch value {
-        case string(kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2):
-            return .bt709
-        case string(kCMFormatDescriptionYCbCrMatrix_ITU_R_2020):
-            return .bt2020NonConstantLuminance
-        case string(kCMFormatDescriptionYCbCrMatrix_SMPTE_240M_1995):
-            return .smpte240M
-        default:
-            return .unknown
-        }
-    }
-
-    private func string(_ value: CFString) -> String {
-        value as String
     }
 
     private func shouldFallbackToSoftwareInspection(for url: URL, error: Error) -> Bool {
@@ -1207,6 +1144,175 @@ enum TaptionAudioFormatDescriptionParser {
         ], encoding: .ascii)?
             .trimmingCharacters(in: .controlCharacters.union(.whitespacesAndNewlines))
             .lowercased() ?? ""
+    }
+}
+
+/// How many bits each colour component actually carries.
+///
+/// This used to be hard-coded to `nil` at the call site, which quietly disabled every 10-bit decision downstream:
+/// the sized writer's `(color?.bitDepth ?? 8) <= 8` gate never fired, the FFmpeg planner never emitted
+/// `-pix_fmt yuv420p10le`, and the output audit never compared depths because it needs both sides. A 10-bit
+/// source was therefore flattened to 8-bit without anyone noticing.
+///
+/// `kCMFormatDescriptionExtension_BitsPerComponent` is the direct answer, but CoreMedia's own header warns it
+/// "often isn't" present, so there is a fallback: the codec configuration record always states the profile, and
+/// the profile implies the depth. For HEVC the second byte of `hvcC` is
+/// `general_profile_space(2) general_tier_flag(1) general_profile_idc(5)`, and 2 is Main 10. For H.264 the second
+/// byte of `avcC` is `profile_idc`, and 110 / 122 / 244 are the High 10 / High 4:2:2 / High 4:4:4 profiles.
+enum TaptionVideoBitDepthProbe {
+    static func bitDepth(of description: CMFormatDescription) -> Int? {
+        let extensions = CMFormatDescriptionGetExtensions(description) as? [String: Any]
+
+        if let declared = extensions?[kCMFormatDescriptionExtension_BitsPerComponent as String] as? NSNumber,
+           declared.intValue > 0 {
+            return declared.intValue
+        }
+
+        return bitDepthFromCodecConfiguration(description)
+    }
+
+    /// True when the source carries more than 8 bits per component.
+    static func isHighBitDepth(_ descriptions: [CMFormatDescription]) -> Bool {
+        descriptions.contains { (bitDepth(of: $0) ?? 8) > 8 }
+    }
+
+    /// The fallback, exposed so a test can prove it agrees with the declared extension rather than returning `nil`.
+    static func bitDepthFromCodecConfiguration(_ description: CMFormatDescription) -> Int? {
+        let extensions = CMFormatDescriptionGetExtensions(description) as? [String: Any]
+        let subtype = fourCharacterCode(CMFormatDescriptionGetMediaSubType(description))
+        let atomName: String
+        switch subtype {
+        case "hvc1", "hev1", "dvh1", "dvhe", "muxa":
+            atomName = "hvcC"
+        case "avc1", "avc3":
+            atomName = "avcC"
+        default:
+            return nil
+        }
+
+        guard let atoms = extensions?[kCMFormatDescriptionExtension_SampleDescriptionExtensionAtoms as String]
+            as? [String: Any],
+              let payload = atomPayload(atoms[atomName]),
+              payload.count >= 2 else {
+            return nil
+        }
+
+        let profile = Int(payload[payload.startIndex + 1])
+        if atomName == "hvcC" {
+            // Range extensions (4) and screen content coding (9) can be either depth, so they stay unknown.
+            switch profile & 0x1F {
+            case 2:
+                return 10
+            case 1, 3:
+                return 8
+            default:
+                return nil
+            }
+        }
+        switch profile {
+        case 110, 122, 244:
+            return 10
+        case 44, 66, 77, 88, 100:
+            return 8
+        default:
+            return nil
+        }
+    }
+
+    /// The atoms dictionary holds either the payload directly or an array of payloads.
+    private static func atomPayload(_ value: Any?) -> Data? {
+        if let data = value as? Data {
+            return data
+        }
+        if let array = value as? [Any], let first = array.first as? Data {
+            return first
+        }
+        return nil
+    }
+
+    private static func fourCharacterCode(_ code: FourCharCode) -> String {
+        String(bytes: [
+            UInt8((code >> 24) & 0xFF),
+            UInt8((code >> 16) & 0xFF),
+            UInt8((code >> 8) & 0xFF),
+            UInt8(code & 0xFF)
+        ], encoding: .ascii)?
+            .trimmingCharacters(in: .controlCharacters.union(.whitespacesAndNewlines))
+            .lowercased() ?? ""
+    }
+}
+
+/// Reads the colour description a file declares, including its bit depth.
+///
+/// The inspector and the encoder both need this, and they must agree: what the app reports to the user is what the
+/// writer then stamps onto the output. Keeping two copies of the mapping is how the two drifted apart in the first
+/// place, so there is one.
+enum TaptionVideoColorDescriptionProbe {
+    static func colorDescription(from descriptions: [CMFormatDescription]) -> TaptionColorDescription {
+        guard let description = descriptions.first,
+              let extensions = CMFormatDescriptionGetExtensions(description) as? [String: Any] else {
+            return TaptionColorDescription()
+        }
+
+        let primaries = extensions[kCMFormatDescriptionExtension_ColorPrimaries as String] as? String
+        let transfer = extensions[kCMFormatDescriptionExtension_TransferFunction as String] as? String
+        let matrix = extensions[kCMFormatDescriptionExtension_YCbCrMatrix as String] as? String
+
+        return TaptionColorDescription(
+            primaries: mapColorPrimaries(primaries),
+            transfer: mapColorTransfer(transfer),
+            matrix: mapColorMatrix(matrix),
+            bitDepth: TaptionVideoBitDepthProbe.bitDepth(of: description),
+            isHDR: transfer == (kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ as String)
+                || transfer == (kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG as String)
+        )
+    }
+
+    private static func mapColorPrimaries(_ value: String?) -> TaptionColorPrimaries {
+        switch value {
+        case string(kCMFormatDescriptionColorPrimaries_ITU_R_709_2):
+            return .bt709
+        case string(kCMFormatDescriptionColorPrimaries_ITU_R_2020):
+            return .bt2020
+        case string(kCMFormatDescriptionColorPrimaries_P3_D65):
+            return .p3D65
+        case string(kCMFormatDescriptionColorPrimaries_SMPTE_C):
+            return .smpteC
+        default:
+            return .unknown
+        }
+    }
+
+    private static func mapColorTransfer(_ value: String?) -> TaptionColorTransfer {
+        switch value {
+        case string(kCMFormatDescriptionTransferFunction_ITU_R_709_2):
+            return .bt709
+        case string(kCMFormatDescriptionTransferFunction_sRGB):
+            return .sRGB
+        case string(kCMFormatDescriptionTransferFunction_SMPTE_ST_2084_PQ):
+            return .pq
+        case string(kCMFormatDescriptionTransferFunction_ITU_R_2100_HLG):
+            return .hlg
+        default:
+            return .unknown
+        }
+    }
+
+    private static func mapColorMatrix(_ value: String?) -> TaptionColorMatrix {
+        switch value {
+        case string(kCMFormatDescriptionYCbCrMatrix_ITU_R_709_2):
+            return .bt709
+        case string(kCMFormatDescriptionYCbCrMatrix_ITU_R_2020):
+            return .bt2020NonConstantLuminance
+        case string(kCMFormatDescriptionYCbCrMatrix_SMPTE_240M_1995):
+            return .smpte240M
+        default:
+            return .unknown
+        }
+    }
+
+    private static func string(_ value: CFString) -> String {
+        value as String
     }
 }
 

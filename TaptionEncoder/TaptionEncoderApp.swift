@@ -68,42 +68,98 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 final class AppOrientationController {
     static let shared = AppOrientationController()
 
-    private(set) var supportedOrientations: UIInterfaceOrientationMask
+    /// Set while a full-screen preview is up, `nil` while the home policy applies.
+    ///
+    /// Keeping the preview mask separate matters: the home policy is derived from the live window
+    /// size, so unfolding the device mid-playback would otherwise snap the preview back to portrait.
+    private var previewOrientations: UIInterfaceOrientationMask?
 
-    private init() {
-        supportedOrientations = Self.homeOrientations(for: UIDevice.current.userInterfaceIdiom)
+    /// What `application(_:supportedInterfaceOrientationsFor:)` should answer right now.
+    ///
+    /// The home branch is computed, not cached, so it is correct the first time UIKit asks — which
+    /// is the case that matters at launch on an already-unfolded foldable.
+    var supportedOrientations: UIInterfaceOrientationMask {
+        if let previewOrientations {
+            return previewOrientations
+        }
+        return Self.homeOrientations(
+            for: UIDevice.current.userInterfaceIdiom,
+            size: Self.activeWindowSize()
+        )
     }
 
-    static func homeOrientations(for userInterfaceIdiom: UIUserInterfaceIdiom) -> UIInterfaceOrientationMask {
-        userInterfaceIdiom == .pad
+    /// Home orientations for an idiom, optionally refined by the window geometry.
+    ///
+    /// The idiom alone is not enough any more. An unfolded foldable still reports
+    /// `UIUserInterfaceIdiom.phone`, yet it is laid out like an iPad (see
+    /// `HomeLayoutMetrics.usesWideLayout`), so it should also rotate like one. Pass the current
+    /// window size to get that behaviour; omit it and only real iPads unlock landscape.
+    static func homeOrientations(
+        for userInterfaceIdiom: UIUserInterfaceIdiom,
+        size: CGSize? = nil
+    ) -> UIInterfaceOrientationMask {
+        let isWide = size.map {
+            HomeLayoutMetrics.usesWideLayout(size: $0, userInterfaceIdiom: userInterfaceIdiom)
+        } ?? (userInterfaceIdiom == .pad)
+
+        return isWide
             ? [.portrait, .landscapeLeft, .landscapeRight]
             : .portrait
     }
 
     func activatePreviewOrientations(requestGeometryUpdate: Bool = true) {
-        setSupportedOrientations(
+        apply(
             [.portrait, .landscapeLeft, .landscapeRight],
+            preview: true,
             requestGeometryUpdate: requestGeometryUpdate
         )
     }
 
     func restorePortrait(requestGeometryUpdate: Bool = true) {
-        setSupportedOrientations(
-            Self.homeOrientations(for: UIDevice.current.userInterfaceIdiom),
+        apply(
+            Self.homeOrientations(
+                for: UIDevice.current.userInterfaceIdiom,
+                size: Self.activeWindowSize()
+            ),
+            preview: false,
             requestGeometryUpdate: requestGeometryUpdate
         )
     }
 
-    private func setSupportedOrientations(
-        _ orientations: UIInterfaceOrientationMask,
-        requestGeometryUpdate: Bool
-    ) {
-        guard supportedOrientations != orientations else {
+    /// Re-applies the home policy after the window changed shape.
+    ///
+    /// Unfolding a foldable crosses the wide-layout threshold while the app is already running, and
+    /// the system does not re-ask for supported orientations on its own. Called from the home
+    /// screen whenever its layout class changes.
+    func refreshHomeOrientationsForCurrentGeometry() {
+        guard previewOrientations == nil else {
             return
         }
-        supportedOrientations = orientations
+        restorePortrait()
+    }
 
-        guard requestGeometryUpdate else {
+    /// Size of the foreground window, in the current interface orientation.
+    private static func activeWindowSize() -> CGSize? {
+        let windowScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let scene = windowScenes.first { $0.activationState == .foregroundActive } ?? windowScenes.first
+        guard let scene else {
+            return nil
+        }
+        if let window = scene.windows.first(where: \.isKeyWindow) {
+            return window.bounds.size
+        }
+        return scene.coordinateSpace.bounds.size
+    }
+
+    private func apply(
+        _ orientations: UIInterfaceOrientationMask,
+        preview: Bool,
+        requestGeometryUpdate: Bool
+    ) {
+        let previous = supportedOrientations
+        previewOrientations = preview ? orientations : nil
+
+        guard requestGeometryUpdate, previous != orientations else {
             return
         }
 

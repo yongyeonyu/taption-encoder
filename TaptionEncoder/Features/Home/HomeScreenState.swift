@@ -284,6 +284,46 @@ enum TaptionOutputResolutionPreset: String, Codable, Equatable, CaseIterable {
         }
         return TaptionPixelSize(width: referenceSize.height, height: referenceSize.width)
     }
+
+    /// The exact frame this preset produces, turned to match the source's orientation.
+    ///
+    /// A preset is a *standard* frame (1920×1080, 3840×2160 ...). Fitting the source's shape inside that frame
+    /// produced sizes nobody asked for (a 4:3 source became 1440×1080), which then failed the output check
+    /// because the file was no longer the size the preset promised.
+    func standardSize(for sourceSize: TaptionPixelSize?) -> TaptionPixelSize? {
+        guard let referenceSize else {
+            return nil
+        }
+        guard let sourceSize,
+              sourceSize.width > 0,
+              sourceSize.height > 0 else {
+            return referenceSize
+        }
+        return alignedReferenceSize(for: sourceSize) ?? referenceSize
+    }
+
+    /// True when the preset's frame has a different shape than the source, so a fit/fill/stretch choice is needed.
+    func needsScaleModeChoice(for sourceSize: TaptionPixelSize?) -> Bool {
+        guard let sourceSize,
+              sourceSize.width > 0,
+              sourceSize.height > 0,
+              let targetSize = standardSize(for: sourceSize) else {
+            return false
+        }
+        // Compare shapes with a little tolerance so 1918×1080 or 1080×1918 are not treated as different shapes.
+        let sourceRatio = Double(sourceSize.width) / Double(sourceSize.height)
+        let targetRatio = Double(targetSize.width) / Double(targetSize.height)
+        return abs(sourceRatio - targetRatio) > 0.01
+    }
+
+    /// True when the preset enlarges the picture instead of shrinking it.
+    func upscales(sourceSize: TaptionPixelSize?) -> Bool {
+        guard let sourceSize,
+              let targetSize = standardSize(for: sourceSize) else {
+            return false
+        }
+        return targetSize.width * targetSize.height > sourceSize.width * sourceSize.height
+    }
 }
 
 enum TaptionOutputSizePreset: String, Codable, Equatable, CaseIterable {
@@ -332,6 +372,7 @@ struct TaptionOutputSelection: Identifiable, Equatable {
     var sizePreset: TaptionOutputSizePreset
     var targetSizeMB: Double?
     var optimizationProfile: TaptionEncodingOptimizationProfile
+    var scaleMode: TaptionVideoScaleMode
 
     init(
         videoCodec: TaptionVideoCodec = .hevc,
@@ -340,7 +381,8 @@ struct TaptionOutputSelection: Identifiable, Equatable {
         resolutionPreset: TaptionOutputResolutionPreset = .source,
         sizePreset: TaptionOutputSizePreset = .auto,
         targetSizeMB: Double? = nil,
-        optimizationProfile: TaptionEncodingOptimizationProfile = .balanced
+        optimizationProfile: TaptionEncodingOptimizationProfile = .balanced,
+        scaleMode: TaptionVideoScaleMode = .default
     ) {
         self.videoCodec = videoCodec
         self.audioCodec = audioCodec
@@ -349,11 +391,12 @@ struct TaptionOutputSelection: Identifiable, Equatable {
         self.sizePreset = sizePreset
         self.targetSizeMB = targetSizeMB
         self.optimizationProfile = optimizationProfile
+        self.scaleMode = scaleMode
     }
 
     var id: String {
         let sizeValue = targetSizeMB.map { String(Int($0.rounded())) } ?? "auto"
-        return "\(videoCodec.rawValue)-\(audioCodec.rawValue)-\(container.rawValue)-\(resolutionPreset.rawValue)-\(sizePreset.rawValue)-\(sizeValue)-\(optimizationProfile.rawValue)"
+        return "\(videoCodec.rawValue)-\(audioCodec.rawValue)-\(container.rawValue)-\(resolutionPreset.rawValue)-\(sizePreset.rawValue)-\(sizeValue)-\(optimizationProfile.rawValue)-\(scaleMode.rawValue)"
     }
 
     func outputPolicy(for asset: TaptionVideoAsset? = nil) -> TaptionVideoOutputPolicy {
@@ -367,9 +410,18 @@ struct TaptionOutputSelection: Identifiable, Equatable {
                 resizeTo: resolvedResizeTarget(for: asset?.videoTrack),
                 frameRate: resolvedFrameRate(for: asset?.videoTrack),
                 targetBitrate: resolvedTargetBitrate(for: asset),
-                optimizationProfile: optimizationProfile
+                optimizationProfile: optimizationProfile,
+                scaleMode: resolvedScaleMode(for: asset?.videoTrack)
             )
         )
+    }
+
+    /// The scale mode only means something when the target frame has a different shape than the source.
+    private func resolvedScaleMode(for track: TaptionVideoTrackInfo?) -> TaptionVideoScaleMode? {
+        guard resolutionPreset.needsScaleModeChoice(for: track?.displaySize) else {
+            return nil
+        }
+        return scaleMode
     }
 
     var summary: String {
@@ -504,37 +556,15 @@ struct TaptionOutputSelection: Identifiable, Equatable {
             return fittedMaximum == track.displaySize ? nil : fittedMaximum
         }
 
-        let baseSize = baseResizeSize(for: track)
-        guard let track else {
-            return baseSize
+        // A standard preset means exactly that frame. It is no longer fitted into the source's shape and no
+        // longer clamped to the source's size: both produced sizes the preset did not promise, and the output
+        // check then rejected the finished file.
+        guard let targetSize = resolutionPreset.standardSize(for: track?.displaySize) else {
+            return nil
         }
-
-        return clampToSourceBounds(baseSize, sourceSize: track.displaySize)
-    }
-
-    private func baseResizeSize(for track: TaptionVideoTrackInfo?) -> TaptionPixelSize {
-        if let referenceSize = resolutionPreset.referenceSize {
-            guard let track else {
-                return referenceSize
-            }
-            return fittedSize(
-                sourceSize: track.displaySize,
-                boundingSize: resolutionPreset.alignedReferenceSize(for: track.displaySize) ?? referenceSize
-            )
-        }
-
-        return track?.displaySize ?? TaptionPixelSize(width: 1920, height: 1080)
-    }
-
-    private func clampToSourceBounds(
-        _ size: TaptionPixelSize,
-        sourceSize: TaptionPixelSize
-    ) -> TaptionPixelSize {
-        let maxWidth = max(2, evenDimension(Double(sourceSize.width)))
-        let maxHeight = max(2, evenDimension(Double(sourceSize.height)))
         return TaptionPixelSize(
-            width: min(size.width, maxWidth),
-            height: min(size.height, maxHeight)
+            width: evenDimension(Double(targetSize.width)),
+            height: evenDimension(Double(targetSize.height))
         )
     }
 

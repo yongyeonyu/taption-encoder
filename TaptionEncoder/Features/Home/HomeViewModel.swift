@@ -571,7 +571,9 @@ final class HomeViewModel: ObservableObject {
 
     var selectedResolutionAspectRatioText: String {
         let sourceSize = selectedAssetForOutputConfiguration?.videoTrack?.displaySize
-        let size = sourceSize ?? selectedOutput.resolutionPreset.referenceSize
+        // Show the shape of the frame that will actually be written, so a fit/fill/stretch difference is visible
+        // before the file is encoded.
+        let size = selectedOutput.resolutionPreset.standardSize(for: sourceSize) ?? sourceSize
         guard let size, size.width > 0, size.height > 0 else {
             return "--"
         }
@@ -932,7 +934,17 @@ final class HomeViewModel: ObservableObject {
     }
 
     func outputResolutionMenuTitle(_ preset: TaptionOutputResolutionPreset) -> String {
-        preset.menuTitle
+        guard preset != .source,
+              let size = preset.standardSize(
+                for: selectedAssetForOutputConfiguration?.videoTrack?.displaySize
+              ) else {
+            return preset.menuTitle
+        }
+        let sizeText = "\(size.width)x\(size.height)"
+        if resolutionPresetUpscales(preset) {
+            return "\(preset.menuTitle) · \(sizeText) · Upscale"
+        }
+        return "\(preset.menuTitle) · \(sizeText)"
     }
 
     func outputSizeMenuTitle(_ preset: TaptionOutputSizePreset) -> String {
@@ -984,12 +996,55 @@ final class HomeViewModel: ObservableObject {
         _ preset: TaptionOutputResolutionPreset,
         for asset: TaptionVideoAsset? = nil
     ) -> Bool {
-        guard let sourceSize = asset?.videoTrack?.displaySize,
-              let referenceSize = preset.alignedReferenceSize(for: sourceSize) else {
-            return true
+        // Every standard preset is now reachable. Refusing the presets that were larger than the source hid the
+        // only way to turn an odd-sized video into 1080p or 4K, and the encoder can enlarge a picture perfectly
+        // well. `resolutionPresetUpscales` marks the ones that enlarge so the menu can say so.
+        true
+    }
+
+    func resolutionPresetUpscales(
+        _ preset: TaptionOutputResolutionPreset,
+        for asset: TaptionVideoAsset? = nil
+    ) -> Bool {
+        preset.upscales(sourceSize: (asset ?? selectedAssetForOutputConfiguration)?.videoTrack?.displaySize)
+    }
+
+    var selectedScaleMode: TaptionVideoScaleMode {
+        selectedOutput.scaleMode
+    }
+
+    var selectedScaleModeDetail: String {
+        selectedOutput.scaleMode.detailText
+    }
+
+    /// The fit/fill/stretch choice only exists when the target frame has a different shape than the source.
+    var showsScaleModeControl: Bool {
+        selectedOutput.resolutionPreset.needsScaleModeChoice(
+            for: selectedAssetForOutputConfiguration?.videoTrack?.displaySize
+        )
+    }
+
+    var selectedOutputFrameSizeText: String? {
+        guard let size = selectedOutput.resolutionPreset.standardSize(
+            for: selectedAssetForOutputConfiguration?.videoTrack?.displaySize
+        ) else {
+            return nil
         }
-        return referenceSize.width <= sourceSize.width
-            && referenceSize.height <= sourceSize.height
+        return "\(size.width)x\(size.height)"
+    }
+    func selectScaleMode(_ mode: TaptionVideoScaleMode) {
+        guard canChangeOutputSelection,
+              selectedOutput.scaleMode != mode else {
+            return
+        }
+
+        selectedOutput.scaleMode = mode
+        AppLogger.info(
+            "Output scale mode selected",
+            category: .ui,
+            metadata: ["scaleMode": mode.rawValue]
+        )
+        refreshPreparedSourceAfterOutputChange()
     }
 
     var pendingSaveRecoveryJob: PendingSaveJob? {
@@ -2646,7 +2701,7 @@ final class HomeViewModel: ObservableObject {
                     displayName: context.displayName(for: url), sourceURL: url, videoInfo: info,
                     displaySize: asset.videoTrack?.displaySize,
                     playlist: self.singleFilePreviewContext?.playlist(for: url),
-                    usesNativePlayback: asset.videoTrack?.codec == .hevcWithAlpha))
+                    usesNativePlayback: usesNativePlayback(for: asset)))
             } catch {
                 guard !Task.isCancelled, self.singleFilePreviewContext?.id == context.id else { return }
                 self.singleFilePreviewContext?.unavailableURLs.insert(url)
@@ -2786,7 +2841,7 @@ final class HomeViewModel: ObservableObject {
             folderAccessURL: singleFilePreviewContext?.sourceKind != .photos
                 && singleFilePreviewContext?.initialURL == review.source.url
                 && singleFilePreviewContext?.needsFolderAccess == true ? review.source.url.deletingLastPathComponent() : nil,
-            usesNativePlayback: review.job.asset.videoTrack?.codec == .hevcWithAlpha
+            usesNativePlayback: usesNativePlayback(for: review.job.asset)
         )
     }
 
@@ -2806,8 +2861,16 @@ final class HomeViewModel: ObservableObject {
             videoInfo: videoInfo,
             displaySize: item.asset?.videoTrack?.displaySize,
             playlist: batchPreviewPlaylist(for: url, in: batch),
-            usesNativePlayback: item.asset?.videoTrack?.codec == .hevcWithAlpha
+            usesNativePlayback: item.asset.map(usesNativePlayback(for:)) ?? false
         )
+    }
+
+    /// The preview has two engines and the choice is not cosmetic: libVLC's iOS video output cannot
+    /// decode tracks that carry a second sample description (Dolby Vision profile 8), and it does
+    /// not carry HDR through, so those files go to `AVPlayer`. See
+    /// `QueuePreviewPlaybackRoutePlanner` for the full rule.
+    private func usesNativePlayback(for asset: TaptionVideoAsset) -> Bool {
+        QueuePreviewPlaybackRoutePlanner.route(for: asset.videoTrack, container: asset.container) == .native
     }
 
     private func batchPreviewPlaylist(

@@ -203,8 +203,237 @@ struct AVFoundationSourcePreservingVisualQualityVerifier: SourcePreservingVisual
     }
 }
 
-struct DisabledSourcePreservingOutputVerifier: SourcePreservingOutputVerifying {
-    func verify(
+/// Decides whether a plan should skip encoding altogether and copy the compressed samples instead.
+///
+/// A stream copy keeps every frame byte for byte. It is the only genuinely lossless result, it finishes in
+/// seconds instead of minutes, and it is *better* than re-encoding whenever the plan does not actually ask for
+/// anything smaller than the source. The moment the plan asks for a different frame, frame rate, colour or a
+/// smaller file, a copy would break that promise and encoding is the right path again.
+enum TaptionLosslessCopyPlanner {
+    static func isEligible(plan: TaptionEncodingPlan) -> Bool {
+        guard plan.codecRoute?.sourceCodec == .hevc,
+              plan.codecRoute?.outputCodec == .hevc,
+              plan.outputPolicy.videoCodec == .hevc,
+              [.mp4, .mov].contains(plan.outputPolicy.container),
+              let requirements = plan.sourcePreservationRequirements else {
+            return false
+        }
+
+        let options = plan.outputPolicy.advancedOptions
+
+        if let targetSize = options.resizeTo,
+           let sourceSize = requirements.displaySize,
+           !sizesMatch(targetSize, sourceSize) {
+            return false
+        }
+        if let targetFrameRate = options.frameRate {
+            guard let sourceFrameRate = requirements.frameRate,
+                  abs(targetFrameRate.value - sourceFrameRate.value) <= 0.1 else {
+                return false
+            }
+        }
+        if let color = options.color,
+           color != requirements.color {
+            return false
+        }
+        if let rotation = options.rotationDegrees,
+           let sourceRotation = requirements.rotationDegrees,
+           rotation != sourceRotation {
+            return false
+        }
+        if let audioPlan = plan.audioPlan,
+           !(audioPlan.shouldCopy && audioPlan.isRunnableInCurrentBuild) {
+            return false
+        }
+
+        // Only when the requested size target is at least the source's own bitrate. Asking for a smaller file is
+        // the whole point of an encoder, and a copy cannot deliver it.
+        guard let sourceBitrate = requirements.targetBitrate,
+              sourceBitrate > 0 else {
+            return false
+        }
+        if let targetBitrate = options.targetBitrate,
+           Double(targetBitrate) < Double(sourceBitrate) * 1.15 {
+            return false
+        }
+        return true
+    }
+
+    private static func sizesMatch(_ lhs: TaptionPixelSize, _ rhs: TaptionPixelSize) -> Bool {
+        abs(lhs.width - rhs.width) <= 1 && abs(lhs.height - rhs.height) <= 1
+    }
+}
+
+/// Re-wraps a movie's compressed samples into a new container without decoding or re-encoding.
+///
+/// Both the reader output and the writer input use `nil` output settings, so every sample is passed through byte
+/// for byte. The movie and video timescales are carried over so frame times and edit-list offsets stay exact, and
+/// MOV keeps the source's metadata.
+enum TaptionLosslessCopyExecutor {
+    static func copy(
+        sourceURL: URL,
+        outputURL: URL,
+        container: TaptionVideoContainer,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws {
+        let startedAt = Date()
+        let asset = AVURLAsset(url: sourceURL)
+        let assetDuration = try await asset.load(.duration)
+        let duration = assetDuration.seconds
+        let tracks = try await asset.load(.tracks)
+
+        try FileManager.default.createDirectory(
+            at: outputURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? FileManager.default.removeItem(at: outputURL)
+
+        let reader = try AVAssetReader(asset: asset)
+        let writer = try AVAssetWriter(
+            outputURL: outputURL,
+            fileType: container == .mov ? .mov : .mp4
+        )
+        writer.shouldOptimizeForNetworkUse = false
+        if assetDuration.timescale > 0 {
+            writer.movieTimeScale = assetDuration.timescale
+        }
+        if container == .mov {
+            writer.metadata = try await asset.load(.metadata)
+        }
+
+        var pipes: [Pipe] = []
+        for track in tracks {
+            let type = track.mediaType
+            guard type == .video || type == .audio else { continue }
+            let formats = try await track.load(.formatDescriptions)
+            let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+            output.alwaysCopiesSampleData = false
+            guard reader.canAdd(output) else { continue }
+
+            let input = AVAssetWriterInput(
+                mediaType: type,
+                outputSettings: nil,
+                sourceFormatHint: formats.first
+            )
+            input.expectsMediaDataInRealTime = false
+            if type == .video {
+                // The writer otherwise defaults to a 600 timescale, which rounds frame times like 1001/30000 s.
+                let timescale = try await track.load(.naturalTimeScale)
+                if timescale > 0 {
+                    input.mediaTimeScale = timescale
+                }
+                input.transform = try await track.load(.preferredTransform)
+            }
+            if let tag = try? await track.load(.extendedLanguageTag) {
+                input.extendedLanguageTag = tag
+            }
+            guard writer.canAdd(input) else { continue }
+
+            reader.add(output)
+            writer.add(input)
+            pipes.append(Pipe(output: output, input: input, isVideo: type == .video))
+        }
+        guard !pipes.isEmpty else {
+            throw TaptionVideoCoreError.exportFailed("There are no video or audio tracks to copy.")
+        }
+
+        progress(TaptionEncodingProgress(
+            stage: .preparing,
+            fractionCompleted: 0,
+            elapsedTime: 0,
+            estimatedRemainingTime: nil
+        ))
+
+        guard reader.startReading() else {
+            throw reader.error ?? TaptionVideoCoreError.exportFailed("The source could not be read for a lossless copy.")
+        }
+        guard writer.startWriting() else {
+            reader.cancelReading()
+            throw writer.error ?? TaptionVideoCoreError.exportFailed("The lossless copy output could not be created.")
+        }
+        writer.startSession(atSourceTime: .zero)
+
+        let emitter = EncodingProgressEmitter(
+            coalescer: EncodingProgressCoalescer(minimumFractionDelta: 0.01, minimumTimeInterval: 0.25),
+            progress: { snapshot in
+                var reported = snapshot
+                reported.elapsedTime = Date().timeIntervalSince(startedAt)
+                progress(reported)
+            }
+        )
+
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                let group = DispatchGroup()
+                for pipe in pipes {
+                    group.enter()
+                    let queue = DispatchQueue(label: "taption.losslessCopy.\(pipe.input.mediaType.rawValue)")
+                    pipe.input.requestMediaDataWhenReady(on: queue) {
+                        while pipe.input.isReadyForMoreMediaData {
+                            guard let sample = pipe.output.copyNextSampleBuffer() else {
+                                pipe.input.markAsFinished()
+                                group.leave()
+                                return
+                            }
+                            if pipe.isVideo, duration > 0 {
+                                let seconds = CMSampleBufferGetPresentationTimeStamp(sample).seconds
+                                if seconds.isFinite {
+                                    emitter.submit(TaptionEncodingProgress(
+                                        stage: .encoding,
+                                        fractionCompleted: min(max(seconds / duration, 0), 0.99)
+                                    ))
+                                }
+                            }
+                            if !pipe.input.append(sample) {
+                                pipe.input.markAsFinished()
+                                group.leave()
+                                return
+                            }
+                        }
+                    }
+                }
+                group.notify(queue: .global()) {
+                    continuation.resume()
+                }
+            }
+        } onCancel: {
+            reader.cancelReading()
+        }
+
+        if reader.status == .cancelled || Task.isCancelled {
+            writer.cancelWriting()
+            try? FileManager.default.removeItem(at: outputURL)
+            throw CancellationError()
+        }
+        if reader.status == .failed {
+            writer.cancelWriting()
+            try? FileManager.default.removeItem(at: outputURL)
+            throw reader.error ?? TaptionVideoCoreError.exportFailed("The source could not be read for a lossless copy.")
+        }
+
+        await writer.finishWriting()
+        guard writer.status == .completed,
+              FileManager.default.fileExists(atPath: outputURL.path) else {
+            try? FileManager.default.removeItem(at: outputURL)
+            throw writer.error ?? TaptionVideoCoreError.exportFailed("The lossless copy could not be finished.")
+        }
+
+        progress(TaptionEncodingProgress(
+            stage: .waitingForSaveGate,
+            fractionCompleted: 1,
+            elapsedTime: Date().timeIntervalSince(startedAt),
+            estimatedRemainingTime: 0
+        ))
+    }
+
+    private struct Pipe: @unchecked Sendable {
+        let output: AVAssetReaderTrackOutput
+        let input: AVAssetWriterInput
+        let isVideo: Bool
+    }
+}
+
+struct DisabledSourcePreservingOutputVerifier: SourcePreservingOutputVerifying {    func verify(
         plan: TaptionEncodingPlan,
         outputURL: URL
     ) async throws -> TaptionSourcePreservingOutputVerificationReport {
@@ -316,6 +545,49 @@ final class AVFoundationHEVCEncoderService: EncoderServicing {
 
         let executionKind = plan.codecExecutionKind ?? .software
         try TaptionSourcePreservingExecutionAudit.validate(plan: plan)
+
+        if TaptionLosslessCopyPlanner.isEligible(plan: plan),
+           !shouldUseSoftwareCommandPlan(for: plan) {
+            do {
+                try await TaptionLosslessCopyExecutor.copy(
+                    sourceURL: sourceURL,
+                    outputURL: temporaryOutputURL,
+                    container: plan.outputPolicy.container,
+                    progress: progress
+                )
+                try await verifyCompletedOutput(plan: plan, outputURL: temporaryOutputURL)
+                AppLogger.info(
+                    "Lossless stream copy completed",
+                    category: .encoding,
+                    metadata: [
+                        "plan": plan.id.uuidString,
+                        "source": sourceURL.lastPathComponent,
+                        "output": temporaryOutputURL.lastPathComponent
+                    ]
+                )
+                return TaptionEncodingResult(
+                    planID: plan.id,
+                    temporaryOutputURL: temporaryOutputURL,
+                    finalOutputURL: plan.finalOutputURL,
+                    usedBackend: .appleVideoToolbox,
+                    usedMode: .hardware,
+                    usedLosslessCopy: true
+                )
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                AppLogger.warning(
+                    "Lossless stream copy failed; encoding instead",
+                    category: .encoding,
+                    metadata: [
+                        "plan": plan.id.uuidString,
+                        "error": error.localizedDescription
+                    ]
+                )
+                try? FileManager.default.removeItem(at: temporaryOutputURL)
+            }
+        }
+
         let request = TaptionCodecTranscodeRequest(
             sourceURL: sourceURL,
             outputURL: temporaryOutputURL,

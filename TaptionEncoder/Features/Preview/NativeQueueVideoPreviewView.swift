@@ -19,6 +19,8 @@ struct NativeQueueVideoPreviewView: View {
     var onNext: () -> Void = {}
     var onAuthorizeFolder: (URL, Int) -> String? = { _, _ in nil }
     var onRestoreFolderNavigation: (Int) -> Bool = { _ in false }
+    /// Called when `AVPlayer` cannot present the file, so the parent can fall back to libVLC.
+    var onPlaybackUnavailable: () -> Void = {}
 
     @StateObject private var playback = NativeQueuePreviewPlayback()
     @State private var didBeginAdSuppression = false
@@ -114,10 +116,12 @@ struct NativeQueueVideoPreviewView: View {
             verticalAction = nil
             gestureFeedback = nil
             gestureFeedbackTask?.cancel()
+            playback.onPlaybackUnavailable = onPlaybackUnavailable
             await playback.start(preview: preview, isMiniPlayer: isMiniPlayer)
             #if DEBUG
             await debugHandoffIfRequested()
             #endif
+            await watchForUnreadyPlayback()
         }
         .onDisappear {
             gestureFeedbackTask?.cancel()
@@ -335,6 +339,26 @@ struct NativeQueueVideoPreviewView: View {
         .padding(isMiniPlayer ? 6 : 0)
     }
 
+    /// `AVPlayerItem` can sit at `.unknown` indefinitely for a file the system cannot open, and an
+    /// unchanged status is indistinguishable from a slow start. Waiting forever is what turns a
+    /// playable-but-unsupported file into an endless spinner, so the wait is bounded and the file is
+    /// handed to libVLC instead.
+    private func watchForUnreadyPlayback() async {
+        for _ in 0..<80 {
+            if Task.isCancelled { return }
+            if !playback.isLoading { return }
+            do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+        }
+        guard playback.isLoading, playback.errorMessage == nil else { return }
+        AppLogger.warning(
+            "Native queue preview never became ready",
+            category: .ui,
+            metadata: ["name": preview.displayName, "codec": preview.codecBadge]
+        )
+        playback.reportUnavailable("Preview unavailable. This file needs a different player.")
+        onPlaybackUnavailable()
+    }
+
     #if DEBUG
     @MainActor
     private func debugHandoffIfRequested() async {
@@ -366,6 +390,8 @@ private final class NativeQueuePreviewPlayback: ObservableObject {
     let player = AVPlayer()
     @Published private(set) var isLoading = true
     @Published private(set) var errorMessage: String?
+    /// Set by the view. Called when this engine cannot present the file, so the parent can switch.
+    var onPlaybackUnavailable: (() -> Void)?
     private var itemObservation: NSKeyValueObservation?
     private var sessionID: String?
     private var displayName = ""
@@ -416,6 +442,7 @@ private final class NativeQueuePreviewPlayback: ObservableObject {
                         "name": self.displayName,
                         "error": item.error?.localizedDescription ?? "Unknown playback error"
                     ])
+                    self.onPlaybackUnavailable?()
                 } else if item.status == .readyToPlay,
                           let snapshot = self.requestedSnapshot, !self.didRequestRestoration {
                     self.didRequestRestoration = true
@@ -451,6 +478,14 @@ private final class NativeQueuePreviewPlayback: ObservableObject {
             }
         }
         #endif
+    }
+
+    /// Records that this engine cannot present the file. Idempotent, so the item observer and the
+    /// readiness watchdog cannot both overwrite a message that already explains the failure.
+    func reportUnavailable(_ message: String) {
+        guard errorMessage == nil else { return }
+        isLoading = false
+        errorMessage = message
     }
 
     func snapshot() -> QueuePreviewPlaybackSnapshot {

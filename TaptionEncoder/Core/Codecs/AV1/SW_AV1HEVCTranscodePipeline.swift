@@ -1,6 +1,7 @@
 import AudioToolbox
 import CLibVLC
 @preconcurrency import AVFoundation
+import CoreImage
 import CoreMedia
 import CoreVideo
 import Darwin
@@ -381,6 +382,13 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
     nonisolated(unsafe) private let videoInput: AVAssetWriterInput
     nonisolated(unsafe) private let adaptor: AVAssetWriterInputPixelBufferAdaptor
     private let targetSize: CGSize
+    private let decodeSize: CGSize
+    /// The shape the decoded picture is meant to be shown with, which differs from `decodeSize` when the source
+    /// has a sample aspect ratio other than 1:1 (anamorphic DV and VC-1, for example).
+    private let sourceDisplaySize: CGSize
+    private let needsFrameComposition: Bool
+    private let scaleMode: TaptionVideoScaleMode
+    private let decimationRatio: Double
     private let frameDuration: CMTime
     private let expectedFrameCount: Int
     private let limitsToExpectedFrameCount: Bool
@@ -401,16 +409,22 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
     nonisolated(unsafe) private var didWriteAnyFrame = false
     nonisolated(unsafe) private var pendingError: Error?
     nonisolated(unsafe) private var cancellationRequested = false
+    nonisolated(unsafe) private var compositionContext: CIContext?
+    nonisolated(unsafe) private var receivedFrameCountStorage = 0
 
     init(
         writer: AVAssetWriter,
         videoInput: AVAssetWriterInput,
         adaptor: AVAssetWriterInputPixelBufferAdaptor,
         targetSize: CGSize,
+        decodeSize: CGSize?,
+        displaySize: CGSize? = nil,
+        scaleMode: TaptionVideoScaleMode,
         frameDuration: CMTime,
         expectedFrameCount: Int,
         limitsToExpectedFrameCount: Bool,
         allowsLegacyFrameHoldToPreserveDuration: Bool,
+        decimationRatio: Double = 1,
         progressFrameStride: Int = 1,
         maximumPendingFrameCount: Int = 1,
         backpressureSleepMicroseconds: UInt32 = 2_000,
@@ -420,6 +434,13 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
         self.videoInput = videoInput
         self.adaptor = adaptor
         self.targetSize = targetSize
+        self.decodeSize = decodeSize ?? targetSize
+        self.sourceDisplaySize = displaySize ?? decodeSize ?? targetSize
+        self.needsFrameComposition = decodeSize != nil
+        self.scaleMode = scaleMode
+        self.decimationRatio = decimationRatio.isFinite
+            ? min(max(decimationRatio, 0.01), 1)
+            : 1
         self.frameDuration = frameDuration
         self.expectedFrameCount = expectedFrameCount
         self.limitsToExpectedFrameCount = limitsToExpectedFrameCount
@@ -483,8 +504,8 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
     }
 
     nonisolated func prepareDecodePoolFormat() -> (width: UInt32, height: UInt32, pitch: UInt32)? {
-        let width = Int(max(targetSize.width.rounded(), 2))
-        let height = Int(max(targetSize.height.rounded(), 2))
+        let width = Int(max(decodeSize.width.rounded(), 2))
+        let height = Int(max(decodeSize.height.rounded(), 2))
 
         let pool: CVPixelBufferPool? = {
             stateLock.lock()
@@ -541,7 +562,108 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
         return pixelBuffer
     }
 
+    /// Places a decoded picture in the target frame.
+    ///
+    /// The decoder fills a buffer that already has the source's own shape, so the three placements are decided
+    /// here: `fit` keeps the whole picture and blacks out the rest of the frame, `fill` scales until the frame is
+    /// covered and lets the overflow fall outside it, `stretch` maps the picture onto the frame without keeping
+    /// its shape.
+    nonisolated private func frameForWriting(from decoded: CVPixelBuffer) -> CVPixelBuffer? {
+        guard needsFrameComposition else {
+            return decoded
+        }
+        guard let pool = adaptor.pixelBufferPool else {
+            return nil
+        }
+        var output: CVPixelBuffer?
+        guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &output) == kCVReturnSuccess,
+              let output else {
+            return nil
+        }
+
+        let bounds = CGRect(origin: .zero, size: targetSize)
+        // The placement is decided on the shape the picture is *shown* with, not on the decoded buffer's shape:
+        // an anamorphic source carries its width in the sample aspect ratio rather than in its coded pixels.
+        let widthRatio = targetSize.width / max(sourceDisplaySize.width, 1)
+        let heightRatio = targetSize.height / max(sourceDisplaySize.height, 1)
+        let displayScaleX: CGFloat
+        let displayScaleY: CGFloat
+        switch scaleMode {
+        case .fit:
+            let scale = min(widthRatio, heightRatio)
+            displayScaleX = scale
+            displayScaleY = scale
+        case .fill:
+            let scale = max(widthRatio, heightRatio)
+            displayScaleX = scale
+            displayScaleY = scale
+        case .stretch:
+            displayScaleX = widthRatio
+            displayScaleY = heightRatio
+        }
+        let displayedSize = CGSize(
+            width: sourceDisplaySize.width * displayScaleX,
+            height: sourceDisplaySize.height * displayScaleY
+        )
+        // Folding the sample aspect ratio into the scale lets the output declare square pixels, which is what
+        // the frame it was asked for promises.
+        let scaleX = displayScaleX * (sourceDisplaySize.width / max(decodeSize.width, 1))
+        let scaleY = displayScaleY * (sourceDisplaySize.height / max(decodeSize.height, 1))
+        let transform = CGAffineTransform(scaleX: scaleX, y: scaleY)
+            .concatenating(CGAffineTransform(
+                translationX: (targetSize.width - displayedSize.width) / 2,
+                y: (targetSize.height - displayedSize.height) / 2
+            ))
+        let placed = CIImage(cvPixelBuffer: decoded).transformed(by: transform)
+        // The backdrop is what shows through the bars, and what the `fill` overflow is cropped against.
+        let backdrop = CIImage(color: .black).cropped(to: bounds)
+        compositionContextForRendering().render(
+            placed.composited(over: backdrop),
+            to: output,
+            bounds: bounds,
+            colorSpace: CGColorSpaceCreateDeviceRGB()
+        )
+        return output
+    }
+
+    /// Created on first use: a `CIContext` is expensive and must not be rebuilt per frame.
+    nonisolated private func compositionContextForRendering() -> CIContext {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        if let compositionContext {
+            return compositionContext
+        }
+        let created = CIContext(options: [.cacheIntermediates: false])
+        compositionContext = created
+        return created
+    }
+
+    /// Whether a decoded frame lands in a new output time slot, and so should be written.
+    ///
+    /// An integer stride cannot express a rate that is not a whole divisor of the source's (50 → 30, 48 → 30), so
+    /// the slots are counted in time instead: the ratio maps decode time onto output time, and every frame that
+    /// starts a new slot is kept. The written rate is then exact for any ratio, because the writer spaces the
+    /// kept frames at 1 / output rate.
+    nonisolated static func keepsDecodedFrame(index: Int, ratio: Double) -> Bool {
+        guard index > 0 else { return true }
+        let slot = Int((Double(index) * ratio).rounded(.down))
+        let previousSlot = Int((Double(index - 1) * ratio).rounded(.down))
+        return slot != previousSlot
+    }
+
     nonisolated func appendDecodedPixelBuffer(_ pixelBuffer: CVPixelBuffer) {
+        // A frame-rate cap is reached by dropping frames before they take a queue slot, so a 60 fps decode feeding
+        // a 30 fps output does not double the duration.
+        if decimationRatio < 1 {
+            stateLock.lock()
+            let receivedIndex = receivedFrameCountStorage
+            receivedFrameCountStorage += 1
+            stateLock.unlock()
+            guard Self.keepsDecodedFrame(index: receivedIndex, ratio: decimationRatio) else {
+                return
+            }
+        }
+
         while frameQueueSlots.wait(timeout: .now() + .milliseconds(50)) != .success {
             stateLock.lock()
             let shouldAbort = cancellationRequested || pendingError != nil
@@ -594,8 +716,22 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
             let frameIndex = currentFrameCountStorage
             stateLock.unlock()
 
+            guard let frame = frameForWriting(from: pixelBufferBox.pixelBuffer) else {
+                stateLock.lock()
+                pendingError = NSError(
+                    domain: "TaptionEncoder",
+                    code: -112,
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Failed to place a software-decoded frame in the output frame."
+                    ]
+                )
+                stateLock.unlock()
+                return
+            }
+
             let presentationTime = CMTimeMultiply(frameDuration, multiplier: Int32(frameIndex))
-            guard adaptor.append(pixelBufferBox.pixelBuffer, withPresentationTime: presentationTime) else {
+            guard adaptor.append(frame, withPresentationTime: presentationTime) else {
                 let error = writer.error ?? NSError(
                     domain: "TaptionEncoder",
                     code: -108,
@@ -610,7 +746,7 @@ final class SW_AV1FrameWriterContext: @unchecked Sendable {
             stateLock.lock()
             currentFrameCountStorage += 1
             didWriteAnyFrame = true
-            lastPixelBufferStorage = pixelBufferBox.pixelBuffer
+            lastPixelBufferStorage = frame
             let progress = Double(currentFrameCountStorage) / Double(max(expectedFrameCount, 1))
             let shouldReportProgress = currentFrameCountStorage == 1
                 || currentFrameCountStorage % progressFrameStride == 0
