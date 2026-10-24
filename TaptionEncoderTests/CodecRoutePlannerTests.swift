@@ -355,7 +355,14 @@ final class CodecRoutePlannerTests: XCTestCase {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+        // The palette moved out of ProgressCard.swift into the design system; this test guards the
+        // values, not the file they used to live in.
         let themeText = try String(
+            contentsOf: rootURL.appendingPathComponent(
+                "TaptionEncoder/Shared/DesignSystem/TaptionDesignSystem.swift"),
+            encoding: .utf8
+        )
+        let cardText = try String(
             contentsOf: rootURL.appendingPathComponent("TaptionEncoder/Shared/UI/ProgressCard.swift"),
             encoding: .utf8
         )
@@ -384,6 +391,9 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(themeText.contains("0xEBA58B"))
         XCTAssertTrue(themeText.contains("0x91CBB6"))
         XCTAssertTrue(themeText.contains("0xE5C184"))
+        // The card must take its radius from the token, not a literal 8.
+        XCTAssertTrue(cardText.contains("TaptionRadius.card"))
+        XCTAssertFalse(cardText.contains("cornerRadius: 8"))
         XCTAssertTrue(primaryButtonText.contains("TaptionTheme.accentButtonText"))
         XCTAssertTrue(homeText.contains(".foregroundStyle(TaptionTheme.reward)"))
         XCTAssertTrue(homeText.contains(".background(TaptionTheme.coral)"))
@@ -13601,10 +13611,77 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertTrue(phoneLandscape.usesScrollableLayout)
         XCTAssertLessThan(phonePortrait.horizontalPadding, unfolded.horizontalPadding)
 
-        // The threshold sits between the two populations: no phone's short side reaches it, and an
-        // unfolded foldable's does.
-        XCTAssertLessThan(393, HomeLayoutMetrics.wideLayoutMinimumShortSide)
-        XCTAssertGreaterThanOrEqual(744, HomeLayoutMetrics.wideLayoutMinimumShortSide)
+        // The threshold sits in the gap between the two Duo poses: the folded outer display stays
+        // compact, the unfolded inner display goes wide. 466 and 626 are the measured short sides.
+        XCTAssertFalse(
+            HomeLayoutMetrics.usesWideLayout(
+                size: CGSize(width: 466, height: 678), userInterfaceIdiom: .phone),
+            "The folded Duo (466 pt) keeps the phone layout.")
+        XCTAssertTrue(
+            HomeLayoutMetrics.usesWideLayout(
+                size: CGSize(width: 626, height: 890), userInterfaceIdiom: .phone),
+            "The unfolded Duo (626 pt) gets the iPad layout.")
+        XCTAssertLessThan(440, HomeLayoutMetrics.wideLayoutMinimumShortSide)
+        XCTAssertGreaterThanOrEqual(626, HomeLayoutMetrics.wideLayoutMinimumShortSide)
+    }
+
+    /// The folded Duo is a phone that is wider and shorter than any iPhone. It must scale down to
+    /// fit rather than switch layout classes or start scrolling.
+    func testFoldedDuoScalesDownWithoutSwitchingLayout() {
+        let outer = HomeLayoutMetrics(
+            size: CGSize(width: 466, height: 678),
+            reservesFailureLogArea: false,
+            userInterfaceIdiom: .phone
+        )
+        let phone = HomeLayoutMetrics(
+            size: CGSize(width: 393, height: 852),
+            reservesFailureLogArea: false,
+            userInterfaceIdiom: .phone
+        )
+
+        XCTAssertFalse(outer.usesWideLayout, "The outer display is a phone screen, not an iPad one.")
+        XCTAssertFalse(outer.usesPadLandscapeColumns)
+        XCTAssertFalse(
+            outer.usesScrollableLayout,
+            "678 pt of height is short but not scroll-short; scrolling would hide the output picker.")
+        XCTAssertLessThan(outer.contentScale, phone.contentScale, "Shorter height means smaller type.")
+        XCTAssertGreaterThanOrEqual(outer.contentScale, 0.72, "Scaling has a floor, so text stays legible.")
+        XCTAssertLessThanOrEqual(
+            outer.canvasWidth, 430,
+            "The outer display keeps the phone content column instead of stretching to 466.")
+        XCTAssertGreaterThan(outer.filePanelHeight, 0, "The file panel must keep positive height.")
+    }
+
+    /// Unfolding must not merely widen the phone layout — it has to become the iPad arrangement.
+    func testUnfoldedDuoTakesTheIPadArrangement() {
+        let inner = HomeLayoutMetrics(
+            size: CGSize(width: 626, height: 890),
+            reservesFailureLogArea: false,
+            userInterfaceIdiom: .phone
+        )
+        let phone = HomeLayoutMetrics(
+            size: CGSize(width: 393, height: 852),
+            reservesFailureLogArea: false,
+            userInterfaceIdiom: .phone
+        )
+
+        XCTAssertTrue(inner.usesWideLayout)
+        XCTAssertFalse(inner.usesPadLandscapeColumns, "Portrait, so one column.")
+        XCTAssertGreaterThanOrEqual(inner.horizontalPadding, 28)
+        XCTAssertGreaterThan(inner.horizontalPadding, phone.horizontalPadding)
+        XCTAssertGreaterThan(inner.canvasWidth, phone.canvasWidth)
+        XCTAssertLessThanOrEqual(inner.canvasWidth, 626, "The canvas never exceeds the panel width.")
+        XCTAssertGreaterThan(inner.filePanelHeight, 0)
+
+        // Rotating the unfolded panel keeps it wide and switches to the two-column iPad landscape.
+        let innerLandscape = HomeLayoutMetrics(
+            size: CGSize(width: 890, height: 626),
+            reservesFailureLogArea: false,
+            userInterfaceIdiom: .phone
+        )
+        XCTAssertTrue(innerLandscape.usesWideLayout)
+        XCTAssertTrue(innerLandscape.usesPadLandscapeColumns)
+        XCTAssertGreaterThan(innerLandscape.columnWidth, 0)
     }
 
     /// Rotation follows the layout class, not the idiom: if a screen is arranged like an iPad it
@@ -13639,6 +13716,23 @@ final class CodecRoutePlannerTests: XCTestCase {
                 size: CGSize(width: 852, height: 393)
             ),
             .portrait
+        )
+
+        // The folded Duo is wide but short — still a phone, so still portrait-only.
+        XCTAssertEqual(
+            AppOrientationController.homeOrientations(
+                for: .phone,
+                size: CGSize(width: 466, height: 678)
+            ),
+            .portrait
+        )
+        // Unfolded to 626 pt, the same device must rotate like an iPad.
+        XCTAssertEqual(
+            AppOrientationController.homeOrientations(
+                for: .phone,
+                size: CGSize(width: 626, height: 890)
+            ),
+            unfolded
         )
 
         // Omitting the size keeps the old idiom-only behaviour, which the preview flow relies on.
@@ -18262,5 +18356,71 @@ private actor RecordingPhotoVideoLoader: PhotoVideoLoading {
         if unavailable.contains(video.id) { throw PhotoLibraryVideoError.unavailable }
         try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("source".utf8).write(to: destination)
+    }
+}
+
+/// Renders the home screen at the exact App Store screenshot sizes for iPhone Duo.
+///
+/// Xcode 27.0 ships no Duo device type, so `simctl io screenshot` cannot produce these images on
+/// this machine. This renders the same views at the same point sizes instead, which is the closest
+/// honest substitute: the pixels come from the real `HomeView`, not from a mock.
+///
+/// It stays inert unless a marker file exists, so ordinary runs and CI skip it.
+@MainActor
+final class DuoAppStoreScreenshotTests: XCTestCase {
+    /// Point sizes are the required pixel sizes divided by 3.
+    /// Outer 1398 x 2034, inner 2007 x 2853 — both from Apple's screenshot specification table.
+    private let cases: [(name: String, points: CGSize, pixels: CGSize)] = [
+        ("outer", CGSize(width: 466, height: 678), CGSize(width: 1398, height: 2034)),
+        ("inner", CGSize(width: 669, height: 951), CGSize(width: 2007, height: 2853)),
+    ]
+
+    func testRenderDuoScreenshotsWhenRequested() throws {
+        let marker = URL(fileURLWithPath: "/tmp/taption-render-duo")
+        guard FileManager.default.fileExists(atPath: marker.path) else {
+            throw XCTSkip("Create /tmp/taption-render-duo to render the Duo screenshots.")
+        }
+
+        let output = URL(fileURLWithPath: "/tmp/taption-duo-shots")
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+
+        for item in cases {
+            let frame = CGRect(origin: .zero, size: item.points)
+            let window = UIWindow(frame: frame)
+            let host = UIHostingController(rootView: HomeView())
+            host.view.frame = frame
+            window.rootViewController = host
+            window.makeKeyAndVisible()
+            window.layoutIfNeeded()
+
+            // SwiftUI lays out on the next run-loop turn, and the banner/queue settle after that.
+            RunLoop.current.run(until: Date().addingTimeInterval(1.5))
+
+            // A first launch raises the folder-access alert, which composites as a stray overlay in
+            // an offscreen render (UIKit presents it in its own window). Screenshots must show the
+            // screen, not a prompt about a folder that only exists on a real device.
+            for _ in 0..<3 where host.presentedViewController != nil {
+                host.dismiss(animated: false)
+                RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+            }
+
+            window.layoutIfNeeded()
+
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 3
+            format.opaque = true
+            let renderer = UIGraphicsImageRenderer(size: item.points, format: format)
+            let image = renderer.image { context in
+                window.layer.render(in: context.cgContext)
+            }
+
+            let data = try XCTUnwrap(image.pngData(), "PNG encoding failed for \(item.name)")
+            XCTAssertEqual(image.size.width * image.scale, item.pixels.width)
+            XCTAssertEqual(image.size.height * image.scale, item.pixels.height)
+
+            let file = output.appendingPathComponent("duo-\(item.name)-\(Int(item.pixels.width))x\(Int(item.pixels.height)).png")
+            try data.write(to: file)
+            print("rendered \(file.path) \(Int(item.pixels.width))x\(Int(item.pixels.height))")
+        }
     }
 }
