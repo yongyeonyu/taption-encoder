@@ -294,6 +294,16 @@ todo: warning
 | 周 | 动作 | 验收 |
 | --- | --- | --- |
 | W1 | 落地 PR 模板、CI；分支保护已启用（见 §6）；清走根目录的 `temp.md` / `test.md` / `ui-proposal.md` | 第一个 PR 走完全流程 |
+
+> **W1 已完成（2026-10-24）。** `ui-proposal.md` 移入 `design/`；`temp.md` / `test.md` 移到仓库
+> 之外的 `~/Documents/taption_encoder-notes/`，并在 `.gitignore` 里加了 `/temp.md`、`/test.md`，
+> 防止以后又在根目录生成同名文件被误提交。
+>
+> 注意：这两个文件在移出前已经在公开历史里存在过（`test.md` 32 个提交、`temp.md` 31 个）。
+> `git rm` 只影响 HEAD，历史里仍然可读。实测扫描过它们的内容，暴露的是 **7 个模拟器 UUID 和
+> 本地 `/private/tmp/...` 路径**，没有 token、邮箱、真机 UDID 或签名资产。如果要连历史一起清，
+> 需要 `git filter-repo` + 强推（所有 SHA 变化、所有 clone 失效），这是另一个决定。
+
 | W2 | 拆两个巨型文件的第一刀：`HomeViewModel` 按职责切出导入 / 编码 / 预览三个协调者（**先只搬不改**）；`CodecRoutePlannerTests` 按主题拆成 8–10 个文件（含 pbxproj 注册） | 两个文件都 < 2,000 行，测试数量不变 |
 | W3 | SwiftFormat + SwiftLint 基线，全仓库格式化一次 | CI 能拦住新增违规 |
 | W4 | 第一次回顾：看 4 周数据，调整级别定义与清单 | 输出修订版本文档 |

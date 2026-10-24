@@ -16,3 +16,8 @@ build/
 /Samples/Downloaded/
 # Local assistant workspace: internal notes and memory, never part of the product.
 .workbuddy-ai/
+# Internal QA journals. They live in ~/Documents/taption_encoder-notes/ now; the
+# ignore rules are here so a stray copy in the repo root cannot be committed
+# again by accident. This repository is public.
+/temp.md
+/test.md
