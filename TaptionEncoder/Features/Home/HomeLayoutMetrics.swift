@@ -4,12 +4,21 @@ import UIKit
 struct HomeLayoutMetrics {
     /// Short side, in points, at which the layout switches to the wide (iPad) arrangement.
     ///
-    /// The idiom cannot answer this. A foldable iPhone keeps `UIUserInterfaceIdiom.phone` while it is
-    /// unfolded, but its short side grows past every phone's (393 pt at most, landscape included)
-    /// and into iPad mini territory (744 pt). Keying the wide layout on the short side means an
-    /// unfolded foldable gets the iPad layout without the app knowing any product name, and every
-    /// existing phone stays on the phone layout.
-    static let wideLayoutMinimumShortSide: CGFloat = 700
+    /// The idiom cannot answer this. A foldable iPhone keeps `UIUserInterfaceIdiom.phone` in both
+    /// poses, so the layout class has to come from the geometry:
+    ///
+    /// | Device | Points | Short side | Layout |
+    /// | --- | --- | --- | --- |
+    /// | iPhone Duo, folded (outer) | 466 × 678 | 466 | compact — the phone UI, scaled |
+    /// | iPhone 18 Pro Max | 440 × 956 | 440 | compact |
+    /// | iPhone Duo, unfolded (inner) | 626 × 890 | 626 | **wide** — the iPad UI |
+    /// | iPad mini | 744 × 1133 | 744 | wide |
+    ///
+    /// 600 sits in the gap between 466 and 626, so no iPhone — landscape included, where the short
+    /// side tops out at 440 — can reach it, and an unfolded Duo cannot miss it. Keying on the short
+    /// side means the app never has to know a product name, and a future foldable with a different
+    /// panel is handled by the same rule.
+    static let wideLayoutMinimumShortSide: CGFloat = 600
 
     /// Whether this geometry gets the wide (iPad) arrangement.
     ///

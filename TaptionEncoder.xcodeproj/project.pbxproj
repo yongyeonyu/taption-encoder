@@ -47,6 +47,7 @@
 		4A2B3C4D5E6F701000000006 /* PrimaryActionButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000106 /* PrimaryActionButton.swift */; };
 		4A2B3C4D5E6F701000000007 /* StatusBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000107 /* StatusBanner.swift */; };
 		4A2B3C4D5E6F701000000008 /* ProgressCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000108 /* ProgressCard.swift */; };
+		4A2B3C4D5E6F70100000000A /* TaptionDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000118 /* TaptionDesignSystem.swift */; };
 		4A2B3C4D5E6F701000000009 /* HomeLayoutMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000109 /* HomeLayoutMetrics.swift */; };
 		4A2B3C4D5E6F701000000011 /* ImportedPhotoVideo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000111 /* ImportedPhotoVideo.swift */; };
 		4A2B3C4D5E6F701000000012 /* ImportableVideoTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A2B3C4D5E6F701000000112 /* ImportableVideoTypes.swift */; };
@@ -193,6 +194,7 @@
 		4A2B3C4D5E6F701000000106 /* PrimaryActionButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrimaryActionButton.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000107 /* StatusBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBanner.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000108 /* ProgressCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressCard.swift; sourceTree = "<group>"; };
+		4A2B3C4D5E6F701000000118 /* TaptionDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionDesignSystem.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000109 /* HomeLayoutMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeLayoutMetrics.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000111 /* ImportedPhotoVideo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportedPhotoVideo.swift; sourceTree = "<group>"; };
 		4A2B3C4D5E6F701000000112 /* ImportableVideoTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportableVideoTypes.swift; sourceTree = "<group>"; };
@@ -530,9 +532,18 @@
 				6F9AD24C5B4AFB08C2E9FC4E /* MediaDisplayFormatting.swift */,
 				4A2B3C4D5E6F701000000116 /* SampleThumbnailCatalog.swift */,
 				4A2B3C4D5E6F701000000204 /* UI */,
+				4A2B3C4D5E6F701000000205 /* DesignSystem */,
 				DC8DF6E21BFD6329F71C4664 /* LiveActivity */,
 			);
 			path = Shared;
+			sourceTree = "<group>";
+		};
+		4A2B3C4D5E6F701000000205 /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				4A2B3C4D5E6F701000000118 /* TaptionDesignSystem.swift */,
+			);
+			path = DesignSystem;
 			sourceTree = "<group>";
 		};
 		4A2B3C4D5E6F701000000204 /* UI */ = {
@@ -884,6 +895,7 @@
 				4A2B3C4D5E6F701000000006 /* PrimaryActionButton.swift in Sources */,
 				4A2B3C4D5E6F701000000007 /* StatusBanner.swift in Sources */,
 				4A2B3C4D5E6F701000000008 /* ProgressCard.swift in Sources */,
+				4A2B3C4D5E6F70100000000A /* TaptionDesignSystem.swift in Sources */,
 				4A2B3C4D5E6F701000000009 /* HomeLayoutMetrics.swift in Sources */,
 				4A2B3C4D5E6F701000000011 /* ImportedPhotoVideo.swift in Sources */,
 				4A2B3C4D5E6F701000000012 /* ImportableVideoTypes.swift in Sources */,
