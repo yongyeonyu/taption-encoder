@@ -318,7 +318,22 @@ enum SW_FFmpegCodecCommandPlanner {
               resizeTo.isValid else {
             return []
         }
-        return ["-vf", "scale=\(resizeTo.width):\(resizeTo.height)"]
+        let width = resizeTo.width
+        let height = resizeTo.height
+        let filter: String
+        switch options.resolvedScaleMode {
+        case .fit:
+            // Whole picture, centred, black bars where the shapes differ.
+            filter = "scale=\(width):\(height):force_original_aspect_ratio=decrease,"
+                + "pad=\(width):\(height):-1:-1:color=black,setsar=1"
+        case .fill:
+            // Frame filled edge to edge, the overflow cropped away.
+            filter = "scale=\(width):\(height):force_original_aspect_ratio=increase,"
+                + "crop=\(width):\(height),setsar=1"
+        case .stretch:
+            filter = "scale=\(width):\(height),setsar=1"
+        }
+        return ["-vf", filter]
     }
 
     private static func videoQualityArguments(

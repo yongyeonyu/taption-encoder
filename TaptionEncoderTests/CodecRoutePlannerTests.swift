@@ -1,5 +1,6 @@
 import AVFoundation
 import AudioToolbox
+import CoreImage
 import CoreMedia
 import SwiftUI
 import SwiftVLC
@@ -2059,7 +2060,7 @@ final class CodecRoutePlannerTests: XCTestCase {
             )
         )
 
-        XCTAssertTrue(plan.arguments.contains("scale=1280:720"))
+        XCTAssertTrue(plan.arguments.contains("scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:-1:-1:color=black,setsar=1"))
         XCTAssertTrue(plan.arguments.contains("30000/1001"))
         XCTAssertTrue(plan.arguments.contains("8000000"))
         XCTAssertTrue(plan.arguments.contains("libx265"))
@@ -2456,7 +2457,13 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertEqual(exportedIconFiles, ["AppIcon60x60"])
         XCTAssertEqual(plist["LSSupportsOpeningDocumentsInPlace"] as? Bool, true)
         XCTAssertEqual(plist["UIFileSharingEnabled"] as? Bool, true)
-        XCTAssertEqual(plist["UISupportsDocumentBrowser"] as? Bool, true)
+        // The app browses with its own folder pickers, not UIDocumentBrowserViewController. Advertising
+        // `UISupportsDocumentBrowser` makes iOS treat the app as a document-browser app (and changes how Files
+        // hands files over), so 1.1.13 removed it on purpose. Keep it out.
+        XCTAssertNil(
+            plist["UISupportsDocumentBrowser"],
+            "BOKKI Encoder is not a document-browser app; LSSupportsOpeningDocumentsInPlace is what Files needs."
+        )
         XCTAssertEqual(
             Set(try XCTUnwrap(plist["UIBackgroundModes"] as? [String])),
             ["audio", "processing"]
@@ -2861,6 +2868,149 @@ final class CodecRoutePlannerTests: XCTestCase {
         #else
         throw XCTSkip("Preview drawable smoke test is simulator-scoped.")
         #endif
+    }
+
+    /// libVLC's iOS video output cannot decode a track that carries a second sample description —
+    /// which is how Dolby Vision profile 8 stores its base layer — and it does not carry HDR
+    /// through its sample-buffer output. In that state `hasVideoOutput` still reports `true`,
+    /// because a video track is selected, so the engine choice has to come from the track's colour
+    /// description rather than from a playback probe. This is the regression guard for a 4K60
+    /// HEVC Main 10 HLG recording that previewed as a black screen.
+    func testPreviewRoutesHDRAndTenBitSourcesToTheNativePlayer() {
+        func track(
+            _ codec: TaptionVideoCodec,
+            _ color: TaptionColorDescription
+        ) -> TaptionVideoTrackInfo {
+            TaptionVideoTrackInfo(
+                codec: codec,
+                naturalSize: TaptionPixelSize(width: 3840, height: 2160),
+                displaySize: TaptionPixelSize(width: 3840, height: 2160),
+                color: color
+            )
+        }
+
+        let sdr8 = TaptionColorDescription(bitDepth: 8)
+        let hlg10 = TaptionColorDescription(
+            primaries: .bt2020, transfer: .hlg, matrix: .bt2020NonConstantLuminance,
+            bitDepth: 10, isHDR: true)
+        let pq10 = TaptionColorDescription(
+            primaries: .bt2020, transfer: .pq, matrix: .bt2020NonConstantLuminance,
+            bitDepth: 10, isHDR: true)
+        // Ten bits without an HDR transfer is still beyond libVLC's display path.
+        let tenBitSDR = TaptionColorDescription(bitDepth: 10)
+
+        XCTAssertEqual(
+            QueuePreviewPlaybackRoutePlanner.route(for: track(.hevc, hlg10), container: .mov),
+            .native, "HLG on BT.2020 is the reported black-screen case.")
+        XCTAssertEqual(
+            QueuePreviewPlaybackRoutePlanner.route(for: track(.hevc, pq10), container: .mp4),
+            .native)
+        XCTAssertEqual(
+            QueuePreviewPlaybackRoutePlanner.route(for: track(.hevc, tenBitSDR), container: .mov),
+            .native)
+        XCTAssertEqual(
+            QueuePreviewPlaybackRoutePlanner.route(for: track(.dolbyVisionHEVC, sdr8), container: .mp4),
+            .native, "Dolby Vision keeps a second sample description libVLC cannot decode.")
+
+        // Unchanged: HEVC Alpha needs Apple's compositor, and only in QuickTime files.
+        XCTAssertEqual(
+            QueuePreviewPlaybackRoutePlanner.route(for: track(.hevcWithAlpha, sdr8), container: .mov),
+            .native)
+        XCTAssertEqual(
+            QueuePreviewPlaybackRoutePlanner.route(for: track(.hevcWithAlpha, sdr8), container: .mp4),
+            .vlc)
+
+        // Everything else keeps libVLC, which reads far more containers than AVFoundation.
+        XCTAssertEqual(
+            QueuePreviewPlaybackRoutePlanner.route(for: track(.hevc, sdr8), container: .mov),
+            .vlc)
+        XCTAssertEqual(
+            QueuePreviewPlaybackRoutePlanner.route(for: track(.h264, sdr8), container: .mp4),
+            .vlc)
+        XCTAssertEqual(
+            QueuePreviewPlaybackRoutePlanner.route(for: track(.av1, sdr8), container: .mkv),
+            .vlc)
+        XCTAssertEqual(
+            QueuePreviewPlaybackRoutePlanner.route(for: track(.hevc, hlg10), container: .mkv),
+            .vlc, "AVFoundation cannot open Matroska, so native would have nothing to read.")
+        XCTAssertEqual(QueuePreviewPlaybackRoutePlanner.route(for: nil, container: .mov), .vlc)
+    }
+
+    /// Proves the engine the planner now chooses for the reported file actually presents frames.
+    ///
+    /// `export-58107AEB-…MOV` is an iPhone HDR recording that came through the passthrough path:
+    /// 3840×2160 HEVC Main 10 at 60 fps, HLG (`arib-std-b67`) on BT.2020, a Dolby Vision `dvvC`
+    /// record, **two** `hvc1` sample descriptions on one video track, and six `mebx` metadata
+    /// tracks. libVLC decodes it as `kVTVideoDecoderBadDataErr` on a physical device and discards
+    /// every frame, which is why this route exists.
+    ///
+    /// Point `TAPTION_PLAYBACK_FIXTURE` at a different file to reuse the harness.
+    @MainActor
+    func testNativePlayerPresentsFramesForTenBitHLGDolbyVisionOutput() async throws {
+        let fixtureURL = playbackFixtureURL(
+            fileName: "export-58107AEB-7F8A-4E21-AB1E-79AA4E5540CA.MOV")
+        guard FileManager.default.fileExists(atPath: fixtureURL.path) else {
+            throw XCTSkip("No playback fixture at \(fixtureURL.path)")
+        }
+
+        let inspected = try await AVFoundationMediaInspector().inspectVideo(at: fixtureURL)
+        let inspectedTrack = try XCTUnwrap(inspected.videoTrack)
+        XCTAssertEqual(inspectedTrack.color.bitDepth, 10)
+        XCTAssertTrue(inspectedTrack.color.isHDR)
+        XCTAssertEqual(
+            QueuePreviewPlaybackRoutePlanner.route(for: inspectedTrack, container: inspected.container),
+            .native)
+
+        let asset = AVURLAsset(url: fixtureURL)
+        let item = AVPlayerItem(asset: asset)
+        let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+        ])
+        XCTAssertTrue(output.suppressesPlayerRendering == false)
+        item.add(output)
+
+        let player = AVPlayer(playerItem: item)
+        player.isMuted = true
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 240, height: 426))
+        window.rootViewController = UIViewController()
+        window.makeKeyAndVisible()
+        let layer = AVPlayerLayer(player: player)
+        layer.frame = window.bounds
+        window.rootViewController?.view.layer.addSublayer(layer)
+        addTeardownBlock {
+            Task { @MainActor in
+                player.pause()
+                window.isHidden = true
+            }
+        }
+        player.play()
+
+        var metrics: (nonBlackRatio: Double, standardDeviation: Double)?
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline, metrics == nil {
+            let hostTime = output.itemTime(forHostTime: CACurrentMediaTime())
+            if output.hasNewPixelBuffer(forItemTime: hostTime),
+               let buffer = output.copyPixelBuffer(forItemTime: hostTime, itemTimeForDisplay: nil),
+               let data = try? pngData(from: buffer) {
+                metrics = try visiblePixelMetrics(fromPNGData: data)
+            }
+            if metrics == nil {
+                try await Task.sleep(nanoseconds: 100_000_000)
+            }
+        }
+
+        let diagnostics = "status=\(item.status.rawValue) "
+            + "error=\(String(describing: item.error)) "
+            + "presentationSize=\(item.presentationSize) "
+            + "time=\(player.currentTime().seconds)"
+        let measured = try XCTUnwrap(
+            metrics, "AVPlayer produced no frame for a 10-bit HLG Dolby Vision file. \(diagnostics)")
+        XCTAssertGreaterThan(
+            measured.nonBlackRatio, 0.02,
+            "AVPlayer rendered a black frame for a 10-bit HLG Dolby Vision file. \(diagnostics)")
+        XCTAssertGreaterThan(
+            measured.standardDeviation, 3.0,
+            "AVPlayer rendered a flat frame for a 10-bit HLG Dolby Vision file. \(diagnostics)")
     }
 
     @MainActor
@@ -5507,6 +5657,26 @@ final class CodecRoutePlannerTests: XCTestCase {
             videoDurationSeconds: 0,
             audioDurationSeconds: nil
         ))
+    }
+
+    /// A frame-rate ceiling has to be reachable for rates that are not a whole divisor of the source's rate,
+    /// because the UI only ever offers a ceiling (battery saver asks for 30) and sources run at 50, 48 and 60.
+    func testDecodedFrameDecimationKeepsTheRequestedRate() {
+        func keptCount(ratio: Double, frameCount: Int) -> Int {
+            (0..<frameCount).reduce(into: 0) { kept, index in
+                if SW_AV1FrameWriterContext.keepsDecodedFrame(index: index, ratio: ratio) {
+                    kept += 1
+                }
+            }
+        }
+
+        // Half the frames for 60 → 30, and the first frame is always kept so the clip does not start empty.
+        XCTAssertEqual(keptCount(ratio: 0.5, frameCount: 1_000), 500)
+        XCTAssertEqual(keptCount(ratio: 0.6, frameCount: 1_000), 600)
+        XCTAssertEqual(keptCount(ratio: 0.8, frameCount: 1_000), 800)
+        XCTAssertTrue(SW_AV1FrameWriterContext.keepsDecodedFrame(index: 0, ratio: 0.5))
+        // No ceiling means nothing is dropped.
+        XCTAssertEqual(keptCount(ratio: 1, frameCount: 240), 240)
     }
 
     func testFFmpegDecodeBridgeWriterHoldsLastFrameThroughDeclaredDuration() {
@@ -9073,6 +9243,290 @@ final class CodecRoutePlannerTests: XCTestCase {
         }
     }
 
+    /// The bundled decode bridge never runs the planned command line, so its `-vf` resize was inert and a source
+    /// that was not already a standard frame kept its own size. Every legacy codec routed through the bridge then
+    /// failed the output check with `resolution expected … but got …`.
+    func testBundledFFmpegDecodeBridgeHonoursAStandardResolutionRequest() async throws {
+        struct BridgeResizeCase: Sendable {
+            var target: TaptionPixelSize
+            var scaleMode: TaptionVideoScaleMode
+            var outputFileName: String
+        }
+
+        let sourceURL = try bundledTestFixtureURL(resourceName: "VC-1 Raw", extension: "vc1")
+        // 720×480 coded, 873×480 displayed: the source is anamorphic, so this also covers folding the sample
+        // aspect ratio into the placement instead of carrying it into the output.
+        let cases = [
+            BridgeResizeCase(
+                target: TaptionPixelSize(width: 1280, height: 720),
+                scaleMode: .fit,
+                outputFileName: "vc1-bridge-resize-fit-720p.mp4"
+            ),
+            BridgeResizeCase(
+                target: TaptionPixelSize(width: 640, height: 480),
+                scaleMode: .fill,
+                outputFileName: "vc1-bridge-resize-fill-480p.mp4"
+            ),
+            BridgeResizeCase(
+                target: TaptionPixelSize(width: 320, height: 240),
+                scaleMode: .stretch,
+                outputFileName: "vc1-bridge-resize-stretch-240p.mp4"
+            )
+        ]
+
+        for bridgeCase in cases {
+            let outputURL = temporaryTestURL(fileName: bridgeCase.outputFileName)
+            try? FileManager.default.removeItem(at: outputURL)
+            defer { try? FileManager.default.removeItem(at: outputURL) }
+
+            let request = TaptionCodecTranscodeRequest(
+                sourceURL: sourceURL,
+                outputURL: outputURL,
+                route: TaptionCodecRoute(sourceCodec: .vc1, outputCodec: .hevc),
+                options: TaptionCodecTranscodeOptions(
+                    outputPolicy: TaptionVideoOutputPolicy(
+                        videoCodec: .hevc,
+                        audioCodec: .aac,
+                        container: .mp4,
+                        advancedOptions: TaptionAdvancedOutputOptions(
+                            resizeTo: bridgeCase.target,
+                            optimizationProfile: .performance,
+                            scaleMode: bridgeCase.scaleMode
+                        )
+                    ),
+                    preserveAudioWhenPossible: false
+                )
+            )
+
+            let result = try await SW_FFmpegDecodeBridgeFallbackTranscoder.transcode(
+                request: request,
+                progress: { _ in }
+            )
+            let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: outputURL)
+            let label = "\(bridgeCase.scaleMode.rawValue) \(bridgeCase.target.width)x\(bridgeCase.target.height)"
+
+            XCTAssertEqual(result.usedBackend, .ffmpegFamily, label)
+            XCTAssertEqual(outputAsset.videoTrack?.codec, .hevc, label)
+            XCTAssertEqual(outputAsset.videoTrack?.displaySize, bridgeCase.target, label)
+            // Square pixels in the output: the picture was placed in the requested frame, so the source's
+            // sample aspect ratio must not stretch it again.
+            XCTAssertEqual(outputAsset.videoTrack?.naturalSize, bridgeCase.target, label)
+            XCTAssertEqual(outputAsset.duration ?? 0, 46.0 / 25.0, accuracy: 0.35, label)
+            try await assertDecodedVideoSignalPresent(at: outputURL)
+        }
+    }
+
+    /// The reported failure, end to end: a legacy codec whose frame is not a standard one was asked for 1080p,
+    /// produced a source-sized file, and then failed the output check with
+    /// `resolution expected 1920x1080 but got 720x480`.
+    func testLegacyCodecSourcePassesTheOutputCheckAfterAStandardResolutionRequest() async throws {
+        let sourceURL = try bundledTestFixtureURL(resourceName: "VC-1 Raw", extension: "vc1")
+        let outputURL = temporaryTestURL(fileName: "vc1-bridge-1080p-verified.mp4")
+        try? FileManager.default.removeItem(at: outputURL)
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+
+        let asset = TaptionVideoAsset(
+            displayName: sourceURL.lastPathComponent,
+            location: TaptionVideoAssetLocation(kind: .file),
+            container: .rawElementaryStream,
+            duration: 46.0 / 25.0,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .vc1,
+                naturalSize: TaptionPixelSize(width: 720, height: 480),
+                displaySize: TaptionPixelSize(width: 720, height: 480),
+                // The fixture really is 25 fps (46 frames over 1.84 s); the audit compares against this value.
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 25),
+                estimatedBitrate: 2_000_000
+            ),
+            audioTracks: []
+        )
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: asset,
+            sourceURL: sourceURL,
+            temporaryOutputURL: outputURL,
+            outputPolicy: TaptionVideoOutputPolicy(
+                videoCodec: .hevc,
+                audioCodec: .aac,
+                container: .mp4,
+                advancedOptions: TaptionAdvancedOutputOptions(
+                    resizeTo: TaptionPixelSize(width: 1920, height: 1080),
+                    optimizationProfile: .performance,
+                    scaleMode: .fit
+                )
+            ),
+            savePolicy: TaptionSavePolicy(destination: .temporaryOnly, saveGate: .none)
+        )
+        let service = AVFoundationHEVCEncoderService(
+            softwareExecutor: SW_FFmpegCommandExecutor(
+                readinessReport: readyBroadSoftwareBackendReport(),
+                runner: FakeFFmpegCommandRunner { _ in
+                    XCTFail("Bundled bridge routes must bypass the broad backend runner.")
+                    return SW_FFmpegCommandRunResult(exitCode: 1)
+                }
+            ),
+            outputVerifier: DisabledSourcePreservingOutputVerifier()
+        )
+
+        let result = try await service.encode(plan: plan, progress: { _ in })
+        let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: result.temporaryOutputURL)
+        XCTAssertEqual(
+            outputAsset.videoTrack?.displaySize,
+            TaptionPixelSize(width: 1920, height: 1080)
+        )
+
+        // The audit that raised the user-visible error. It has to accept the intentional frame change.
+        let report = try TaptionSourcePreservingExecutionAudit.verifyOutput(
+            plan: plan,
+            outputAsset: outputAsset
+        )
+        XCTAssertTrue(
+            report.failures.isEmpty,
+            report.failures.joined(separator: "; ")
+        )
+        try await assertDecodedVideoSignalPresent(at: result.temporaryOutputURL)
+    }
+
+    /// The lossless path was only covered on its planner side. This runs the copy itself: the encoded samples
+    /// have to arrive byte for byte, because that is the entire promise of the feature.
+    func testLosslessCopyCarriesTheEncodedSamplesThroughUnchanged() async throws {
+        let sourceURL = temporaryTestURL(fileName: "lossless-copy-source.mp4")
+        let outputURL = temporaryTestURL(fileName: "lossless-copy-output.mp4")
+        try? FileManager.default.removeItem(at: sourceURL)
+        try? FileManager.default.removeItem(at: outputURL)
+        defer {
+            try? FileManager.default.removeItem(at: sourceURL)
+            try? FileManager.default.removeItem(at: outputURL)
+        }
+        try await writeEvidenceVideo(
+            size: CGSize(width: 320, height: 240),
+            seconds: 1,
+            fill: .noise,
+            to: sourceURL
+        )
+
+        var reportedFractions: [Double] = []
+        try await TaptionLosslessCopyExecutor.copy(
+            sourceURL: sourceURL,
+            outputURL: outputURL,
+            container: .mp4,
+            progress: { reportedFractions.append($0.fractionCompleted) }
+        )
+
+        let sourceAsset = try await AVFoundationMediaInspector().inspectVideo(at: sourceURL)
+        let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: outputURL)
+        XCTAssertEqual(outputAsset.videoTrack?.codec, sourceAsset.videoTrack?.codec)
+        XCTAssertEqual(outputAsset.videoTrack?.displaySize, sourceAsset.videoTrack?.displaySize)
+        XCTAssertEqual(outputAsset.duration ?? 0, sourceAsset.duration ?? 0, accuracy: 0.02)
+        XCTAssertFalse(reportedFractions.isEmpty)
+
+        let sourceSamples = try await encodedVideoSampleData(at: sourceURL)
+        let outputSamples = try await encodedVideoSampleData(at: outputURL)
+        XCTAssertEqual(outputSamples.count, sourceSamples.count)
+        XCTAssertEqual(outputSamples, sourceSamples)
+    }
+
+    /// A source whose audio is not AAC used to send the whole file back to `AVAssetExportSession`, which ignores
+    /// the bitrate the plan derived. The writer now decodes the audio to PCM and encodes it to AAC instead.
+    func testSizedWriterEncodeKeepsTheExplicitBitrateForANonAACSource() async throws {
+        let directory = temporaryDirectoryURL()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let sourceURL = directory.appendingPathComponent("pcm-audio-source.mov")
+        try await writeEvidenceVideo(
+            size: CGSize(width: 1280, height: 720),
+            seconds: 1.2,
+            fill: .noise,
+            to: sourceURL,
+            withPCMAudio: true
+        )
+
+        let sourceAsset = try await AVFoundationMediaInspector().inspectVideo(at: sourceURL)
+        XCTAssertEqual(sourceAsset.audioTracks.first?.codec, .pcm)
+        XCTAssertEqual(sourceAsset.audioTracks.count, 1)
+
+        func encode(bitrate: Int, fileName: String) async throws -> (url: URL, output: TaptionCodecTranscodeOutput) {
+            let outputURL = directory.appendingPathComponent(fileName)
+            let output = try await HW_AppleHEVCCodecAlgorithm.transcode(
+                request: TaptionCodecTranscodeRequest(
+                    sourceURL: sourceURL,
+                    outputURL: outputURL,
+                    route: TaptionCodecRoute(sourceCodec: .h264, outputCodec: .hevc),
+                    options: TaptionCodecTranscodeOptions(
+                        outputPolicy: TaptionVideoOutputPolicy(
+                            videoCodec: .hevc,
+                            audioCodec: .aac,
+                            container: .mp4,
+                            advancedOptions: TaptionAdvancedOutputOptions(targetBitrate: bitrate)
+                        ),
+                        preserveAudioWhenPossible: true
+                    )
+                ),
+                progress: { _ in }
+            )
+            return (outputURL, output)
+        }
+
+        let low = try await encode(bitrate: 700_000, fileName: "non-aac-low.mp4")
+        let high = try await encode(bitrate: 9_000_000, fileName: "non-aac-high.mp4")
+
+        for run in [low, high] {
+            let asset = try await AVFoundationMediaInspector().inspectVideo(at: run.url)
+            XCTAssertEqual(asset.videoTrack?.codec, .hevc, run.url.lastPathComponent)
+            XCTAssertEqual(asset.audioTracks.count, 1, run.url.lastPathComponent)
+            XCTAssertEqual(asset.audioTracks.first?.codec, .aac, run.url.lastPathComponent)
+            XCTAssertEqual(asset.audioTracks.first?.sampleRate ?? 0, 44_100, accuracy: 1)
+            XCTAssertEqual(asset.audioTracks.first?.channelCount, 1)
+            XCTAssertEqual(run.output.outputAudioTrackCount, 1)
+            XCTAssertEqual(run.output.usedMode, .hardware)
+        }
+
+        // A source that already carries AAC still has to be copied through untouched, which is the other branch
+        // of the same plan. The file produced above is a HEVC + AAC source, so it doubles as the input here.
+        let passthroughURL = directory.appendingPathComponent("aac-passthrough.mp4")
+        let passthrough = try await HW_AppleHEVCCodecAlgorithm.transcode(
+            request: TaptionCodecTranscodeRequest(
+                sourceURL: low.url,
+                outputURL: passthroughURL,
+                route: TaptionCodecRoute(sourceCodec: .hevc, outputCodec: .hevc),
+                options: TaptionCodecTranscodeOptions(
+                    outputPolicy: TaptionVideoOutputPolicy(
+                        videoCodec: .hevc,
+                        audioCodec: .aac,
+                        container: .mp4,
+                        advancedOptions: TaptionAdvancedOutputOptions(targetBitrate: 2_000_000)
+                    ),
+                    preserveAudioWhenPossible: true
+                )
+            ),
+            progress: { _ in }
+        )
+        let passthroughAsset = try await AVFoundationMediaInspector().inspectVideo(at: passthroughURL)
+        XCTAssertEqual(passthroughAsset.videoTrack?.codec, .hevc)
+        XCTAssertEqual(passthroughAsset.videoTrack?.displaySize, TaptionPixelSize(width: 1280, height: 720))
+        XCTAssertEqual(passthroughAsset.audioTracks.count, 1)
+        XCTAssertEqual(passthroughAsset.audioTracks.first?.codec, .aac)
+        XCTAssertEqual(passthroughAsset.audioTracks.first?.sampleRate ?? 0, 44_100, accuracy: 1)
+        XCTAssertEqual(passthrough.outputAudioTrackCount, 1)
+
+        // The export-session fallback ignores the requested bitrate entirely, so two very different sizes are the
+        // proof that this path ran rather than fell back. The simulator's HEVC encoder does not honour the average
+        // bitrate at all (it spends ~16 Mbps on 720p noise whatever is asked for), so this check only means
+        // something on a device — the audio assertions above hold in both places.
+        #if !targetEnvironment(simulator)
+        func byteCount(_ url: URL) throws -> Int {
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            return (attributes[.size] as? NSNumber)?.intValue ?? 0
+        }
+        let lowBytes = try byteCount(low.url)
+        let highBytes = try byteCount(high.url)
+        XCTAssertGreaterThan(
+            highBytes,
+            lowBytes * 2,
+            "low=\(lowBytes) high=\(highBytes) — the bitrate did not reach the encoder"
+        )
+        #endif
+    }
+
     func testBundledY41PProfilesPreserveVideoAudioSignals() async throws {
         let sourceURL = try bundledTestFixtureURL(resourceName: "Y41P", extension: "avi")
         for profile in [TaptionEncodingOptimizationProfile.balanced, .performance] {
@@ -9499,9 +9953,15 @@ final class CodecRoutePlannerTests: XCTestCase {
             displaySize: TaptionPixelSize(width: 1080, height: 1920)
         )
 
+        // Every standard preset stays selectable: an odd-sized video has to be able to become 1080p or 4K.
         XCTAssertTrue(viewModel.resolutionPresetIsAvailable(TaptionOutputResolutionPreset.fullHD, for: portraitAsset))
         XCTAssertTrue(viewModel.resolutionPresetIsAvailable(TaptionOutputResolutionPreset.hd720, for: portraitAsset))
-        XCTAssertFalse(viewModel.resolutionPresetIsAvailable(TaptionOutputResolutionPreset.qhd1440, for: portraitAsset))
+        XCTAssertTrue(viewModel.resolutionPresetIsAvailable(TaptionOutputResolutionPreset.qhd1440, for: portraitAsset))
+
+        // The orientation still decides whether a preset is the same size, smaller, or an enlargement.
+        XCTAssertFalse(viewModel.resolutionPresetUpscales(TaptionOutputResolutionPreset.fullHD, for: portraitAsset))
+        XCTAssertFalse(viewModel.resolutionPresetUpscales(TaptionOutputResolutionPreset.hd720, for: portraitAsset))
+        XCTAssertTrue(viewModel.resolutionPresetUpscales(TaptionOutputResolutionPreset.qhd1440, for: portraitAsset))
     }
 
     @MainActor
@@ -13088,6 +13548,107 @@ final class CodecRoutePlannerTests: XCTestCase {
         XCTAssertFalse(phoneLandscape.usesPadLandscapeColumns)
     }
 
+    /// An unfolded foldable iPhone still reports `.phone`. It has to get the iPad layout anyway, so
+    /// the layout is chosen from the short side rather than from the idiom — and every existing
+    /// phone, landscape included, has to stay on the phone layout.
+    func testUnfoldedFoldableGetsTheWideLayoutWhilePhonesDoNot() {
+        // iPad mini's short side is 744 pt; an unfolded foldable lands in the same range.
+        let unfolded = HomeLayoutMetrics(
+            size: CGSize(width: 744, height: 1133),
+            reservesFailureLogArea: false,
+            userInterfaceIdiom: .phone
+        )
+        let unfoldedLandscape = HomeLayoutMetrics(
+            size: CGSize(width: 1133, height: 744),
+            reservesFailureLogArea: false,
+            userInterfaceIdiom: .phone
+        )
+        let phonePortrait = HomeLayoutMetrics(
+            size: CGSize(width: 393, height: 852),
+            reservesFailureLogArea: false,
+            userInterfaceIdiom: .phone
+        )
+        let phoneLandscape = HomeLayoutMetrics(
+            size: CGSize(width: 852, height: 393),
+            reservesFailureLogArea: false,
+            userInterfaceIdiom: .phone
+        )
+        let padPortrait = HomeLayoutMetrics(
+            size: CGSize(width: 834, height: 1194),
+            reservesFailureLogArea: false,
+            userInterfaceIdiom: .pad
+        )
+
+        // Unfolded: wide padding, wide canvas, no compact scrolling, and columns only when landscape.
+        XCTAssertTrue(unfolded.usesWideLayout)
+        XCTAssertTrue(unfoldedLandscape.usesWideLayout)
+        XCTAssertTrue(padPortrait.usesWideLayout)
+        XCTAssertFalse(phonePortrait.usesWideLayout)
+        XCTAssertFalse(phoneLandscape.usesWideLayout)
+        XCTAssertGreaterThanOrEqual(unfolded.horizontalPadding, 28, "Wide layouts keep the 28 pt floor.")
+        XCTAssertGreaterThan(unfolded.horizontalPadding, phonePortrait.horizontalPadding)
+        XCTAssertFalse(unfolded.usesPadLandscapeColumns)
+        XCTAssertTrue(unfoldedLandscape.usesPadLandscapeColumns)
+        XCTAssertFalse(unfolded.usesScrollableLayout)
+        XCTAssertGreaterThan(unfolded.canvasWidth, phonePortrait.canvasWidth)
+        XCTAssertLessThanOrEqual(
+            unfolded.canvasWidth, padPortrait.canvasWidth,
+            "The unfolded canvas never exceeds the iPad portrait canvas.")
+
+        // Phones are untouched, including the compact landscape that must keep scrolling.
+        XCTAssertFalse(phonePortrait.usesPadLandscapeColumns)
+        XCTAssertFalse(phoneLandscape.usesPadLandscapeColumns)
+        XCTAssertTrue(phoneLandscape.usesScrollableLayout)
+        XCTAssertLessThan(phonePortrait.horizontalPadding, unfolded.horizontalPadding)
+
+        // The threshold sits between the two populations: no phone's short side reaches it, and an
+        // unfolded foldable's does.
+        XCTAssertLessThan(393, HomeLayoutMetrics.wideLayoutMinimumShortSide)
+        XCTAssertGreaterThanOrEqual(744, HomeLayoutMetrics.wideLayoutMinimumShortSide)
+    }
+
+    /// Rotation follows the layout class, not the idiom: if a screen is arranged like an iPad it
+    /// should also be able to turn like one, and a folded phone must stay portrait.
+    @MainActor
+    func testUnfoldedFoldableRotatesLikeIPadWhileFoldedPhonesStayPortrait() {
+        let unfolded = AppOrientationController.homeOrientations(
+            for: .phone,
+            size: CGSize(width: 744, height: 1133)
+        )
+        XCTAssertTrue(unfolded.contains(.portrait))
+        XCTAssertTrue(unfolded.contains(.landscapeLeft))
+        XCTAssertTrue(unfolded.contains(.landscapeRight))
+
+        // Landscape geometry has to reach the same answer, otherwise the policy would flip-flop.
+        let unfoldedLandscape = AppOrientationController.homeOrientations(
+            for: .phone,
+            size: CGSize(width: 1133, height: 744)
+        )
+        XCTAssertEqual(unfoldedLandscape, unfolded)
+
+        XCTAssertEqual(
+            AppOrientationController.homeOrientations(
+                for: .phone,
+                size: CGSize(width: 393, height: 852)
+            ),
+            .portrait
+        )
+        XCTAssertEqual(
+            AppOrientationController.homeOrientations(
+                for: .phone,
+                size: CGSize(width: 852, height: 393)
+            ),
+            .portrait
+        )
+
+        // Omitting the size keeps the old idiom-only behaviour, which the preview flow relies on.
+        XCTAssertEqual(AppOrientationController.homeOrientations(for: .phone), .portrait)
+        XCTAssertEqual(
+            AppOrientationController.homeOrientations(for: .pad, size: CGSize(width: 834, height: 1194)),
+            AppOrientationController.homeOrientations(for: .pad)
+        )
+    }
+
     func testIPadLandscapeKeepsQueueInLeftColumnAndOutputActionsInRightColumn() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -15864,6 +16425,44 @@ final class CodecRoutePlannerTests: XCTestCase {
             .appendingPathComponent("\(UUID().uuidString)-\(fileName)")
     }
 
+    /// Resolves a playback fixture: `TAPTION_PLAYBACK_FIXTURE` wins, then `<host home>/Downloads/<fileName>`,
+    /// then the app container's Documents folder.
+    ///
+    /// Playback regressions are reported against real files, so the fixture lives outside the
+    /// repository rather than bloating it with a 100 MB asset. `SIMULATOR_HOST_HOME` is the only way
+    /// to reach the host home from a simulated app (`NSHomeDirectory()` returns the app container).
+    /// A physical device has no host filesystem, so the same file is pushed into Documents first:
+    ///
+    /// ```
+    /// xcrun devicectl device copy to --device <id> --source <file> \
+    ///   --destination "Documents/<fileName>" --domain-type appDataContainer \
+    ///   --domain-identifier <bundle id>
+    /// ```
+    private func playbackFixtureURL(fileName: String) -> URL {
+        let candidates: [URL] = [
+            ProcessInfo.processInfo.environment["TAPTION_PLAYBACK_FIXTURE"]
+                .flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) },
+            URL(fileURLWithPath: ProcessInfo.processInfo.environment["SIMULATOR_HOST_HOME"]
+                ?? NSHomeDirectory(), isDirectory: true)
+                .appendingPathComponent("Downloads", isDirectory: true)
+                .appendingPathComponent(fileName),
+            FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent(fileName)
+        ].compactMap { $0 }
+
+        return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
+            ?? candidates[0]
+    }
+
+    /// Converts a decoded frame to PNG so it can be measured by `visiblePixelMetrics(fromPNGData:)`,
+    /// which keeps one definition of "this frame shows something".
+    private func pngData(from pixelBuffer: CVPixelBuffer) throws -> Data {
+        let image = CIImage(cvPixelBuffer: pixelBuffer)
+        let context = CIContext(options: [.workingColorSpace: NSNull()])
+        let cgImage = try XCTUnwrap(context.createCGImage(image, from: image.extent))
+        return try XCTUnwrap(UIImage(cgImage: cgImage).pngData())
+    }
+
     private func assertDecodedAudioSignalPresent(
         at url: URL,
         minimumPeakAmplitude: Int32 = 32
@@ -16231,6 +16830,529 @@ final class CodecRoutePlannerTests: XCTestCase {
         )
     }
 
+    // MARK: - Standard resolution frames and fit / fill / stretch
+
+    func testStandardPresetProducesTheExactStandardFrame() {
+        // A 4:3 source used to be fitted inside 1920x1080, which produced 1440x1080 — a size the "1080p"
+        // preset never promised.
+        let selection = TaptionOutputSelection(resolutionPreset: .fullHD)
+        let policy = selection.outputPolicy(
+            for: makeAsset(
+                sourceCodec: .h264,
+                displaySize: TaptionPixelSize(width: 2880, height: 2160)
+            )
+        )
+
+        XCTAssertEqual(policy.advancedOptions.resizeTo, TaptionPixelSize(width: 1920, height: 1080))
+        XCTAssertEqual(policy.advancedOptions.scaleMode, .fit)
+    }
+
+    func testStandardPresetTurnsWithAPortraitSource() {
+        let selection = TaptionOutputSelection(resolutionPreset: .fullHD)
+        let policy = selection.outputPolicy(
+            for: makeAsset(
+                sourceCodec: .h264,
+                displaySize: TaptionPixelSize(width: 1440, height: 1080)
+            )
+        )
+
+        // Landscape source, landscape frame.
+        XCTAssertEqual(policy.advancedOptions.resizeTo, TaptionPixelSize(width: 1920, height: 1080))
+
+        let portraitPolicy = selection.outputPolicy(
+            for: makeAsset(
+                sourceCodec: .h264,
+                displaySize: TaptionPixelSize(width: 1080, height: 1440)
+            )
+        )
+        XCTAssertEqual(portraitPolicy.advancedOptions.resizeTo, TaptionPixelSize(width: 1080, height: 1920))
+    }
+
+    func testStandardPresetCanEnlargeASmallerSource() {
+        let selection = TaptionOutputSelection(resolutionPreset: .uhd4k)
+        let policy = selection.outputPolicy(
+            for: makeAsset(
+                sourceCodec: .h264,
+                displaySize: TaptionPixelSize(width: 640, height: 360)
+            )
+        )
+
+        XCTAssertEqual(policy.advancedOptions.resizeTo, TaptionPixelSize(width: 3840, height: 2160))
+    }
+
+    func testScaleModeIsOnlyCarriedWhenTheFrameShapeDiffers() {
+        let squareSource = makeAsset(
+            sourceCodec: .h264,
+            displaySize: TaptionPixelSize(width: 1080, height: 1080)
+        )
+        let fillPolicy = TaptionOutputSelection(
+            resolutionPreset: .fullHD,
+            scaleMode: .fill
+        ).outputPolicy(for: squareSource)
+        XCTAssertEqual(fillPolicy.advancedOptions.resizeTo, TaptionPixelSize(width: 1920, height: 1080))
+        XCTAssertEqual(fillPolicy.advancedOptions.scaleMode, .fill)
+
+        // 16:9 source into a 16:9 frame: nothing to decide.
+        let wideSource = makeAsset(
+            sourceCodec: .h264,
+            displaySize: TaptionPixelSize(width: 3840, height: 2160)
+        )
+        let widePolicy = TaptionOutputSelection(
+            resolutionPreset: .fullHD,
+            scaleMode: .fill
+        ).outputPolicy(for: wideSource)
+        XCTAssertNil(widePolicy.advancedOptions.scaleMode)
+
+        XCTAssertTrue(TaptionOutputResolutionPreset.fullHD.needsScaleModeChoice(for: squareSource.videoTrack?.displaySize))
+        XCTAssertFalse(TaptionOutputResolutionPreset.fullHD.needsScaleModeChoice(for: wideSource.videoTrack?.displaySize))
+        XCTAssertFalse(TaptionOutputResolutionPreset.source.needsScaleModeChoice(for: squareSource.videoTrack?.displaySize))
+    }
+
+    func testOutputVerificationAcceptsAnIntentionalResize() throws {
+        // This is the reported failure: changing a non-standard video to a standard frame used to fail the
+        // output check because the file was compared against the untouched source.
+        let sourceAsset = makeAsset(
+            sourceCodec: .h264,
+            displaySize: TaptionPixelSize(width: 2880, height: 2160),
+            videoBitrate: 20_000_000
+        )
+        let selection = TaptionOutputSelection(resolutionPreset: .fullHD, scaleMode: .fill)
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: sourceAsset,
+            sourceURL: URL(fileURLWithPath: "/tmp/source.mp4"),
+            temporaryOutputURL: URL(fileURLWithPath: "/tmp/output.mp4"),
+            outputPolicy: selection.outputPolicy(for: sourceAsset)
+        )
+
+        let outputAsset = TaptionVideoAsset(
+            displayName: "output.mp4",
+            location: TaptionVideoAssetLocation(kind: .temporary),
+            container: .mp4,
+            duration: 1,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .hevc,
+                naturalSize: TaptionPixelSize(width: 1920, height: 1080),
+                displaySize: TaptionPixelSize(width: 1920, height: 1080),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 30),
+                color: TaptionColorDescription(),
+                rotationDegrees: 0
+            ),
+            audioTracks: [
+                TaptionAudioTrackInfo(codec: .aac, channelCount: 2, sampleRate: 48_000)
+            ]
+        )
+
+        let report = try TaptionSourcePreservingExecutionAudit.verifyOutput(
+            plan: plan,
+            outputAsset: outputAsset
+        )
+        XCTAssertTrue(report.isPassing)
+        XCTAssertEqual(report.metadata["expectedResolution"], "1920x1080")
+        XCTAssertEqual(report.metadata["actualResolution"], "1920x1080")
+    }
+
+    func testOutputVerificationStillRejectsAFrameThePlanDidNotAskFor() {
+        let sourceAsset = makeAsset(
+            sourceCodec: .h264,
+            displaySize: TaptionPixelSize(width: 1920, height: 1080)
+        )
+        let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+            asset: sourceAsset,
+            sourceURL: URL(fileURLWithPath: "/tmp/source.mp4"),
+            temporaryOutputURL: URL(fileURLWithPath: "/tmp/output.mp4"),
+            outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4)
+        )
+        let outputAsset = TaptionVideoAsset(
+            displayName: "output.mp4",
+            location: TaptionVideoAssetLocation(kind: .temporary),
+            container: .mp4,
+            duration: 1,
+            videoTrack: TaptionVideoTrackInfo(
+                codec: .hevc,
+                naturalSize: TaptionPixelSize(width: 1280, height: 720),
+                displaySize: TaptionPixelSize(width: 1280, height: 720),
+                nominalFrameRate: TaptionRationalFrameRate(numerator: 30),
+                rotationDegrees: 0
+            ),
+            audioTracks: [
+                TaptionAudioTrackInfo(codec: .aac, channelCount: 2, sampleRate: 48_000)
+            ]
+        )
+
+        XCTAssertThrowsError(
+            try TaptionSourcePreservingExecutionAudit.verifyOutput(plan: plan, outputAsset: outputAsset)
+        )
+    }
+
+    func testFFmpegFilterFollowsTheSelectedScaleMode() throws {
+        func filter(_ mode: TaptionVideoScaleMode) throws -> String {
+            let plan = try SW_FFmpegCodecCommandPlanner.makeVideoCommandPlan(
+                request: TaptionCodecTranscodeRequest(
+                    sourceURL: URL(fileURLWithPath: "/tmp/source.webm"),
+                    outputURL: URL(fileURLWithPath: "/tmp/output.mp4"),
+                    route: TaptionCodecRoute(sourceCodec: .vp9, outputCodec: .hevc),
+                    options: TaptionCodecTranscodeOptions(
+                        outputPolicy: TaptionVideoOutputPolicy(
+                            videoCodec: .hevc,
+                            container: .mp4,
+                            advancedOptions: TaptionAdvancedOutputOptions(
+                                resizeTo: TaptionPixelSize(width: 1920, height: 1080),
+                                scaleMode: mode
+                            )
+                        )
+                    )
+                )
+            )
+            let index = try XCTUnwrap(plan.arguments.firstIndex(of: "-vf"))
+            return plan.arguments[index + 1]
+        }
+
+        XCTAssertEqual(
+            try filter(.fit),
+            "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1:color=black,setsar=1"
+        )
+        XCTAssertEqual(
+            try filter(.fill),
+            "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1"
+        )
+        XCTAssertEqual(try filter(.stretch), "scale=1920:1080,setsar=1")
+    }
+
+    // MARK: - Explicit-bitrate writer path
+
+    func testSizedWriterEncodeOnlyTakesFramesItCanWriteFaithfully() {
+        func accepts(
+            sourceCodec: TaptionVideoCodec = .hevc,
+            color: TaptionColorDescription = TaptionColorDescription(),
+            profile: TaptionHEVCProfile = .automatic,
+            container: TaptionVideoContainer = .mp4,
+            audioCodec: TaptionAudioCodec = .aac
+        ) -> Bool {
+            HW_AppleHEVCCodecAlgorithm.requestsSizedWriterEncode(
+                TaptionCodecTranscodeRequest(
+                    sourceURL: URL(fileURLWithPath: "/tmp/source.mp4"),
+                    outputURL: URL(fileURLWithPath: "/tmp/output.mp4"),
+                    route: TaptionCodecRoute(sourceCodec: sourceCodec, outputCodec: .hevc),
+                    options: TaptionCodecTranscodeOptions(
+                        outputPolicy: TaptionVideoOutputPolicy(
+                            videoCodec: .hevc,
+                            audioCodec: audioCodec,
+                            container: container,
+                            profile: profile,
+                            advancedOptions: TaptionAdvancedOutputOptions(color: color)
+                        )
+                    )
+                )
+            )
+        }
+
+        XCTAssertTrue(accepts())
+        // An HDR or 10-bit source is no longer turned away here: `resolvedOptions` copies the source's colour into
+        // the request, so this predicate cannot tell "the file is HDR" from "the user asked for HDR". That decision
+        // needs the source and the composition, so the writer makes it — see the HDR encode test.
+        XCTAssertTrue(accepts(color: TaptionColorDescription(bitDepth: 10)))
+        XCTAssertTrue(accepts(color: TaptionColorDescription(bitDepth: 10, isHDR: true)))
+        // An explicit Main 10 profile is still a request this writer does not answer.
+        XCTAssertFalse(accepts(profile: .main10))
+        // The writer produces AAC (copying it through, or decoding the source to PCM and encoding it). An audio
+        // codec it cannot produce is still the export session's job.
+        XCTAssertFalse(accepts(audioCodec: .opus))
+        // Nor can it write a container it does not support.
+        XCTAssertFalse(accepts(container: .mkv))
+        // AV1 hardware decode runs through this same writer, so the bitrate has to reach it as well.
+        XCTAssertTrue(accepts(sourceCodec: .av1))
+        // A codec the hardware writer cannot read at all still belongs to the export session.
+        XCTAssertFalse(accepts(sourceCodec: .mpeg2))
+        // VP9 is in the set for a future hardware route; today `validate` rejects it before this guard is reached.
+        XCTAssertTrue(HW_AppleHEVCCodecAlgorithm.explicitBitrateSourceCodecs.contains(.vp9))
+    }
+
+    /// The inspector used to report `bitDepth: nil` for every file, which quietly disabled the 10-bit decisions
+    /// downstream. This pins the value it now reports, and pins the fallback that covers files where CoreMedia
+    /// omits `BitsPerComponent` — the two have to agree.
+    func testInspectorReportsTheBitDepthTheFileDeclares() async throws {
+        let directory = try makeEvidenceDirectory(named: "bit-depth")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let sourceURL = directory.appendingPathComponent("source.mp4")
+        try await writeEvidenceVideo(
+            size: CGSize(width: 320, height: 240),
+            seconds: 0.6,
+            fill: .white,
+            to: sourceURL
+        )
+
+        func descriptions(at url: URL) async throws -> [CMFormatDescription] {
+            let tracks = try await AVURLAsset(url: url).loadTracks(withMediaType: .video)
+            let track = try XCTUnwrap(tracks.first)
+            return try await track.load(.formatDescriptions)
+        }
+
+        // The fixture is H.264, so this also exercises the `avcC` fallback rather than the declared extension.
+        let sourceDescriptions = try await descriptions(at: sourceURL)
+        let sourceAsset = try await AVFoundationMediaInspector().inspectVideo(at: sourceURL)
+        XCTAssertEqual(sourceAsset.videoTrack?.color.bitDepth, 8)
+        XCTAssertEqual(
+            sourceDescriptions.first.flatMap(TaptionVideoBitDepthProbe.bitDepthFromCodecConfiguration),
+            8,
+            "The avcC profile byte has to resolve to the same depth as the declared extension."
+        )
+        XCTAssertFalse(TaptionVideoBitDepthProbe.isHighBitDepth(sourceDescriptions))
+
+        // The sized writer emits HEVC, so the `hvcC` fallback is covered too.
+        let outputURL = directory.appendingPathComponent("output.mp4")
+        _ = try await HW_AppleHEVCCodecAlgorithm.transcode(
+            request: TaptionCodecTranscodeRequest(
+                sourceURL: sourceURL,
+                outputURL: outputURL,
+                route: TaptionCodecRoute(sourceCodec: .h264, outputCodec: .hevc),
+                options: TaptionCodecTranscodeOptions(
+                    outputPolicy: TaptionVideoOutputPolicy(
+                        videoCodec: .hevc,
+                        container: .mp4,
+                        advancedOptions: TaptionAdvancedOutputOptions(targetBitrate: 1_500_000)
+                    ),
+                    preserveAudioWhenPossible: false
+                )
+            ),
+            progress: { _ in }
+        )
+        let outputDescriptions = try await descriptions(at: outputURL)
+        let outputAsset = try await AVFoundationMediaInspector().inspectVideo(at: outputURL)
+        XCTAssertEqual(outputAsset.videoTrack?.color.bitDepth, 8)
+        XCTAssertEqual(
+            outputDescriptions.first.flatMap(TaptionVideoBitDepthProbe.bitDepthFromCodecConfiguration),
+            8
+        )
+        XCTAssertFalse(outputAsset.videoTrack?.color.isHDR ?? true)
+    }
+
+    /// A source with no audio must still reach the sized writer.
+    ///
+    /// The plan enum's "no audio" case was called `none`, and `return .none` in a function returning
+    /// `SizedWriterAudioPlan?` binds to `Optional.none` — `nil`, meaning "cannot do this, use the export session".
+    /// Every silent source therefore lost its bitrate without any error, which is the same defect the sized writer
+    /// exists to fix. This runs in the simulator because the bug was in the decision, not in the encoding.
+    func testSizedWriterTreatsAMissingAudioTrackAsNoAudioRatherThanGivingUp() async throws {
+        let directory = try makeEvidenceDirectory(named: "silent-audio-plan")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let sourceURL = directory.appendingPathComponent("silent.mp4")
+        try await writeEvidenceVideo(
+            size: CGSize(width: 320, height: 240),
+            seconds: 0.4,
+            fill: .white,
+            to: sourceURL
+        )
+        let asset = AVURLAsset(url: sourceURL)
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        XCTAssertTrue(audioTracks.isEmpty)
+
+        func plan(preserveAudio: Bool) async throws -> HW_AppleHEVCCodecAlgorithm.SizedWriterAudioPlan? {
+            try await HW_AppleHEVCCodecAlgorithm.sizedWriterAudioPlan(
+                for: TaptionCodecTranscodeRequest(
+                    sourceURL: sourceURL,
+                    outputURL: directory.appendingPathComponent("out.mp4"),
+                    route: TaptionCodecRoute(sourceCodec: .h264, outputCodec: .hevc),
+                    options: TaptionCodecTranscodeOptions(
+                        outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4),
+                        preserveAudioWhenPossible: preserveAudio
+                    )
+                ),
+                asset: asset
+            )
+        }
+
+        let preserving = try await plan(preserveAudio: true)
+        let notPreserving = try await plan(preserveAudio: false)
+        // `nil` here would mean the export session takes over and the requested bitrate is discarded.
+        XCTAssertNotNil(preserving)
+        XCTAssertNotNil(notPreserving)
+        guard case .noAudio = try XCTUnwrap(preserving),
+              case .noAudio = try XCTUnwrap(notPreserving) else {
+            return XCTFail("A silent source has no audio to plan for, in both modes.")
+        }
+    }
+
+    /// VP9 has no VideoToolbox decoder, so the entry in `explicitBitrateSourceCodecs` cannot be reached: `validate`
+    /// refuses the route before the sized writer is ever considered. Recording that here means the entry is either
+    /// removed deliberately or starts working deliberately — it cannot rot unnoticed.
+    func testVP9NeverReachesTheSizedWriterBecauseTheRouteIsRejected() async throws {
+        let route = TaptionCodecRoute(sourceCodec: .vp9, outputCodec: .hevc)
+        let request = TaptionCodecTranscodeRequest(
+            sourceURL: URL(fileURLWithPath: "/tmp/never-read.webm"),
+            outputURL: URL(fileURLWithPath: "/tmp/never-written.mp4"),
+            route: route,
+            options: TaptionCodecTranscodeOptions(
+                outputPolicy: TaptionVideoOutputPolicy(videoCodec: .hevc, container: .mp4)
+            )
+        )
+        // The guard would say yes, which is exactly why the route check has to be the thing that says no.
+        XCTAssertTrue(HW_AppleHEVCCodecAlgorithm.requestsSizedWriterEncode(request))
+
+        do {
+            _ = try await HW_AppleHEVCCodecAlgorithm.transcode(request: request, progress: { _ in })
+            XCTFail("A VP9 route has no hardware decoder, so the encode must not start.")
+        } catch let error as TaptionCodecTranscodingRegistryError {
+            XCTAssertEqual(error, .routeNotImplemented(route))
+        }
+    }
+
+    func testSizedWriterEncodeUsesTheBitrateThePlanDerivedFromTheFrame() {
+        let source = makeAsset(
+            sourceCodec: .h264,
+            displaySize: TaptionPixelSize(width: 1920, height: 1080),
+            videoBitrate: 8_000_000
+        )
+
+        func bitrate(_ preset: TaptionOutputResolutionPreset) -> Int? {
+            TaptionOutputSelection(resolutionPreset: preset)
+                .outputPolicy(for: source)
+                .advancedOptions
+                .targetBitrate
+        }
+
+        let highDefinition = bitrate(.hd720)
+        let fullHighDefinition = bitrate(.fullHD)
+        let ultraHighDefinition = bitrate(.uhd4k)
+
+        // The point of the explicit-bitrate path: these numbers have to differ, or the resolution choice would
+        // only change the pixel count and the file would still be encoded at the preset's fixed bitrate.
+        let hd = highDefinition ?? 0
+        let fhd = fullHighDefinition ?? 0
+        let uhd = ultraHighDefinition ?? 0
+        XCTAssertGreaterThan(fhd, hd)
+        XCTAssertGreaterThan(uhd, fhd)
+    }
+
+    func testSoftwareFallbackDecodesAtTheSourceShapeSoThePlacementStaysOurs() throws {
+        // libvlc decides on its own whether to letterbox or stretch the buffer it is handed, and that choice is not
+        // in the API this app links against. Asking for a buffer that already has the source's shape moves the
+        // placement decision back to us.
+        let asset = makeAsset(
+            sourceCodec: .av1,
+            displaySize: TaptionPixelSize(width: 2880, height: 2160)
+        )
+
+        func configuration(_ mode: TaptionVideoScaleMode) throws -> SW_AV1HEVCTranscodeConfiguration {
+            try SW_AV1HEVCTranscodeConfiguration.make(
+                asset: asset,
+                outputURL: URL(fileURLWithPath: "/tmp/output.mp4"),
+                options: TaptionCodecTranscodeOptions(
+                    outputPolicy: TaptionVideoOutputPolicy(
+                        videoCodec: .hevc,
+                        container: .mp4,
+                        advancedOptions: TaptionAdvancedOutputOptions(
+                            resizeTo: TaptionPixelSize(width: 1920, height: 1080),
+                            scaleMode: mode
+                        )
+                    )
+                )
+            )
+        }
+
+        let fit = try configuration(.fit)
+        XCTAssertEqual(fit.targetSize, CGSize(width: 1920, height: 1080))
+        XCTAssertEqual(try XCTUnwrap(fit.decodeSize), CGSize(width: 1440, height: 1080))
+        XCTAssertTrue(fit.needsFrameComposition)
+
+        // Fill has to cover the frame before it is cropped, so the decode buffer is larger than the frame.
+        let fill = try configuration(.fill)
+        XCTAssertEqual(try XCTUnwrap(fill.decodeSize), CGSize(width: 1920, height: 1440))
+
+        // Stretch is applied when the picture is placed, so the buffer only has to keep the source's shape.
+        let stretch = try configuration(.stretch)
+        XCTAssertEqual(try XCTUnwrap(stretch.decodeSize), CGSize(width: 1440, height: 1080))
+    }
+
+    func testSoftwareFallbackSkipsCompositionWhenTheShapeAlreadyMatches() throws {
+        let asset = makeAsset(
+            sourceCodec: .av1,
+            displaySize: TaptionPixelSize(width: 3840, height: 2160)
+        )
+
+        let configuration = try SW_AV1HEVCTranscodeConfiguration.make(
+            asset: asset,
+            outputURL: URL(fileURLWithPath: "/tmp/output.mp4"),
+            options: TaptionCodecTranscodeOptions(
+                outputPolicy: TaptionVideoOutputPolicy(
+                    videoCodec: .hevc,
+                    container: .mp4,
+                    advancedOptions: TaptionAdvancedOutputOptions(
+                        resizeTo: TaptionPixelSize(width: 1920, height: 1080),
+                        scaleMode: .fill
+                    )
+                )
+            )
+        )
+
+        // 16:9 into 16:9: the decoder output already is the frame, so no per-frame compositing is added.
+        XCTAssertNil(configuration.decodeSize)
+        XCTAssertFalse(configuration.needsFrameComposition)
+    }
+
+    // MARK: - Lossless copy
+
+    func testLosslessCopyIsUsedOnlyWhenThePlanChangesNothingAndAsksForNoSmallerFile() {
+        let hevcSource = makeAsset(
+            sourceCodec: .hevc,
+            displaySize: TaptionPixelSize(width: 1920, height: 1080),
+            videoBitrate: 8_000_000
+        )
+
+        func plan(targetBitrate: Int?, resizeTo: TaptionPixelSize?, source: TaptionVideoAsset) -> TaptionEncodingPlan {
+            TaptionEncodingPlanner.makeSingleAssetPlan(
+                asset: source,
+                sourceURL: URL(fileURLWithPath: "/tmp/source.mp4"),
+                temporaryOutputURL: URL(fileURLWithPath: "/tmp/output.mp4"),
+                outputPolicy: TaptionVideoOutputPolicy(
+                    videoCodec: .hevc,
+                    container: .mp4,
+                    advancedOptions: TaptionAdvancedOutputOptions(
+                        resizeTo: resizeTo,
+                        targetBitrate: targetBitrate
+                    )
+                )
+            )
+        }
+
+        XCTAssertTrue(
+            TaptionLosslessCopyPlanner.isEligible(
+                plan: plan(targetBitrate: 12_000_000, resizeTo: nil, source: hevcSource)
+            )
+        )
+        // Asking for a smaller file is the whole point of an encoder: a copy cannot deliver it.
+        XCTAssertFalse(
+            TaptionLosslessCopyPlanner.isEligible(
+                plan: plan(targetBitrate: 4_000_000, resizeTo: nil, source: hevcSource)
+            )
+        )
+        // A different frame is not a copy.
+        XCTAssertFalse(
+            TaptionLosslessCopyPlanner.isEligible(
+                plan: plan(
+                    targetBitrate: 12_000_000,
+                    resizeTo: TaptionPixelSize(width: 1280, height: 720),
+                    source: hevcSource
+                )
+            )
+        )
+        // A different source codec is not a copy either.
+        XCTAssertFalse(
+            TaptionLosslessCopyPlanner.isEligible(
+                plan: plan(
+                    targetBitrate: 40_000_000,
+                    resizeTo: nil,
+                    source: makeAsset(
+                        sourceCodec: .h264,
+                        displaySize: TaptionPixelSize(width: 1920, height: 1080),
+                        videoBitrate: 8_000_000
+                    )
+                )
+            )
+        )
+    }
+
     private func makeAsset(
         sourceCodec: TaptionVideoCodec,
         displaySize: TaptionPixelSize = TaptionPixelSize(width: 1920, height: 1080),
@@ -16353,6 +17475,777 @@ final class CodecRoutePlannerTests: XCTestCase {
         _ rhs: TaptionVideoContainer
     ) -> Bool {
         lhs.rawValue < rhs.rawValue
+    }
+
+    // MARK: - Device-only encoder evidence
+
+    // These two need a real HEVC encoder, so they are skipped in the simulator and run on a device:
+    //   xcodebuild test-without-building -destination 'platform=iOS,id=<UDID>' \
+    //     -only-testing:TaptionEncoderTests/CodecRoutePlannerTests/testHardwareEncodePlacesTheFrameAccordingToTheScaleMode
+
+    func testHardwareEncodePlacesTheFrameAccordingToTheScaleMode() async throws {
+        #if targetEnvironment(simulator)
+        throw XCTSkip("Needs a device HEVC encoder.")
+        #else
+        let directory = try makeEvidenceDirectory(named: "scale-mode")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        // A 4:3 source in a 16:9 frame: the three placements have to look different at the frame's left edge.
+        let sourceURL = directory.appendingPathComponent("source.mp4")
+        try await writeEvidenceVideo(
+            size: CGSize(width: 640, height: 480),
+            seconds: 1.2,
+            fill: .white,
+            to: sourceURL
+        )
+
+        func encode(_ mode: TaptionVideoScaleMode) async throws -> URL {
+            let outputURL = directory.appendingPathComponent("out-\(mode.rawValue).mp4")
+            _ = try await HW_AppleHEVCCodecAlgorithm.transcode(
+                request: TaptionCodecTranscodeRequest(
+                    sourceURL: sourceURL,
+                    outputURL: outputURL,
+                    route: TaptionCodecRoute(sourceCodec: .h264, outputCodec: .hevc),
+                    options: TaptionCodecTranscodeOptions(
+                        outputPolicy: TaptionVideoOutputPolicy(
+                            videoCodec: .hevc,
+                            container: .mp4,
+                            advancedOptions: TaptionAdvancedOutputOptions(
+                                resizeTo: TaptionPixelSize(width: 1280, height: 720),
+                                targetBitrate: 4_000_000,
+                                scaleMode: mode
+                            )
+                        ),
+                        preserveAudioWhenPossible: false
+                    )
+                ),
+                progress: { _ in }
+            )
+            return outputURL
+        }
+
+        let fit = try await encode(.fit)
+        let fill = try await encode(.fill)
+        let stretch = try await encode(.stretch)
+
+        // Every mode still has to produce the frame that was asked for.
+        for url in [fit, fill, stretch] {
+            let track = try await AVURLAsset(url: url).loadTracks(withMediaType: .video).first
+            XCTAssertEqual(
+                try XCTUnwrap(track).naturalSize,
+                CGSize(width: 1280, height: 720),
+                "\(url.lastPathComponent) did not come out at the requested frame"
+            )
+        }
+
+        let fitEdge = try await averagePixelValue(in: fit, x: 4, y: 360)
+        let fillEdge = try await averagePixelValue(in: fill, x: 4, y: 360)
+        let stretchEdge = try await averagePixelValue(in: stretch, x: 4, y: 360)
+        print("SCALE-MODE EVIDENCE left-edge(0-255) fit=\(fitEdge) fill=\(fillEdge) stretch=\(stretchEdge)")
+
+        XCTAssertLessThan(fitEdge, 40, "fit should leave a black bar beside the 4:3 picture")
+        XCTAssertGreaterThan(fillEdge, 200, "fill should put picture at the frame's edge")
+        XCTAssertGreaterThan(stretchEdge, 200, "stretch should put picture at the frame's edge")
+        #endif
+    }
+
+    func testHardwareEncodeUsesTheRequestedBitrate() async throws {
+        #if targetEnvironment(simulator)
+        throw XCTSkip("Needs a device HEVC encoder.")
+        #else
+        let directory = try makeEvidenceDirectory(named: "bitrate")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        // Noise, because a flat picture would compress to almost nothing at any bitrate setting and the test would
+        // pass even if the number never reached the encoder.
+        let sourceURL = directory.appendingPathComponent("source.mp4")
+        try await writeEvidenceVideo(
+            size: CGSize(width: 640, height: 480),
+            seconds: 1.5,
+            fill: .noise,
+            to: sourceURL
+        )
+
+        func encodedFileSize(bitrate: Int) async throws -> Int {
+            let outputURL = directory.appendingPathComponent("out-\(bitrate).mp4")
+            _ = try await HW_AppleHEVCCodecAlgorithm.transcode(
+                request: TaptionCodecTranscodeRequest(
+                    sourceURL: sourceURL,
+                    outputURL: outputURL,
+                    route: TaptionCodecRoute(sourceCodec: .h264, outputCodec: .hevc),
+                    options: TaptionCodecTranscodeOptions(
+                        outputPolicy: TaptionVideoOutputPolicy(
+                            videoCodec: .hevc,
+                            container: .mp4,
+                            advancedOptions: TaptionAdvancedOutputOptions(targetBitrate: bitrate)
+                        ),
+                        // No audio, on purpose: this used to be the case that quietly left this path entirely.
+                        preserveAudioWhenPossible: false
+                    )
+                ),
+                progress: { _ in }
+            )
+            let attributes = try FileManager.default.attributesOfItem(atPath: outputURL.path)
+            return (attributes[.size] as? NSNumber)?.intValue ?? 0
+        }
+
+        let small = try await encodedFileSize(bitrate: 700_000)
+        let large = try await encodedFileSize(bitrate: 9_000_000)
+        print("BITRATE EVIDENCE 700kbps=\(small)B 9Mbps=\(large)B ratio=\(Double(large) / Double(max(small, 1)))")
+
+        XCTAssertGreaterThan(small, 0)
+        // The export-session fallback ignored the number entirely, so both sizes used to land on the preset's
+        // value. A factor of two is far below the 12.8x asked for, so it only passes if the bitrate took effect.
+        XCTAssertGreaterThan(
+            large,
+            small * 2,
+            "the plan's bitrate has to reach the encoder (small=\(small) large=\(large))"
+        )
+        #endif
+    }
+
+    /// HDR and 10-bit sources used to be turned away from the sized writer, which handed the plan's bitrate back to
+    /// a preset table. They are now written as Main 10 with the source's own colour tags — so both the bitrate and
+    /// the colour survive, which is what this pins down.
+    func testSizedWriterKeepsHDRAndTheBitrateForA10BitSource() async throws {
+        #if targetEnvironment(simulator)
+        throw XCTSkip("Needs a device HEVC 10-bit encoder; the simulator encoder ignores the profile and the bitrate.")
+        #else
+        let directory = try makeEvidenceDirectory(named: "hdr-bitrate")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let sourceURL = directory.appendingPathComponent("hlg-source.mp4")
+        try await writeHLGEvidenceVideo(
+            size: CGSize(width: 640, height: 360),
+            seconds: 1.5,
+            to: sourceURL
+        )
+
+        // If the fixture is not actually HDR, everything below would pass for the wrong reason.
+        let sourceAsset = try await AVFoundationMediaInspector().inspectVideo(at: sourceURL)
+        let sourceColor = try XCTUnwrap(sourceAsset.videoTrack?.color)
+        XCTAssertEqual(sourceColor.bitDepth, 10)
+        XCTAssertEqual(sourceColor.primaries, .bt2020)
+        XCTAssertEqual(sourceColor.transfer, .hlg)
+        XCTAssertTrue(sourceColor.isHDR)
+
+        func encode(_ bitrate: Int) async throws -> URL {
+            let outputURL = directory.appendingPathComponent("hdr-\(bitrate).mp4")
+            _ = try await HW_AppleHEVCCodecAlgorithm.transcode(
+                request: TaptionCodecTranscodeRequest(
+                    sourceURL: sourceURL,
+                    outputURL: outputURL,
+                    route: TaptionCodecRoute(sourceCodec: .hevc, outputCodec: .hevc),
+                    options: TaptionCodecTranscodeOptions(
+                        outputPolicy: TaptionVideoOutputPolicy(
+                            videoCodec: .hevc,
+                            container: .mp4,
+                            // Exactly what `TaptionSourcePreservingOutputPolicyResolver` hands over in the app:
+                            // the source's own colour, because the user asked for nothing in particular. Passing
+                            // nothing here instead would have hidden the fact that the old guard turned this away.
+                            advancedOptions: TaptionAdvancedOutputOptions(
+                                targetBitrate: bitrate,
+                                color: sourceColor
+                            )
+                        ),
+                        preserveAudioWhenPossible: false
+                    )
+                ),
+                progress: { _ in }
+            )
+            return outputURL
+        }
+
+        let smallURL = try await encode(700_000)
+        let largeURL = try await encode(9_000_000)
+
+        for url in [smallURL, largeURL] {
+            let asset = try await AVFoundationMediaInspector().inspectVideo(at: url)
+            XCTAssertEqual(asset.videoTrack?.codec, .hevc, url.lastPathComponent)
+            // The whole point: the extra precision and the HDR tags have to come out the other side.
+            XCTAssertEqual(asset.videoTrack?.color.bitDepth, 10, "\(url.lastPathComponent) lost the 10-bit depth")
+            XCTAssertEqual(asset.videoTrack?.color.transfer, .hlg, url.lastPathComponent)
+            XCTAssertEqual(asset.videoTrack?.color.primaries, .bt2020, url.lastPathComponent)
+            XCTAssertTrue(asset.videoTrack?.color.isHDR ?? false, url.lastPathComponent)
+            XCTAssertEqual(asset.videoTrack?.displaySize, TaptionPixelSize(width: 640, height: 360))
+        }
+
+        func byteCount(_ url: URL) throws -> Int {
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            return (attributes[.size] as? NSNumber)?.intValue ?? 0
+        }
+        let smallBytes = try byteCount(smallURL)
+        let largeBytes = try byteCount(largeURL)
+        print("HDR BITRATE EVIDENCE 700kbps=\(smallBytes)B 9Mbps=\(largeBytes)B")
+        XCTAssertGreaterThan(
+            largeBytes,
+            smallBytes * 2,
+            "the bitrate has to reach the encoder for an HDR source too (small=\(smallBytes) large=\(largeBytes))"
+        )
+        #endif
+    }
+
+    func testHardwareEncodeUsesTheRequestedBitrateForAnAV1Source() async throws {
+        #if targetEnvironment(simulator)
+        throw XCTSkip("Needs a device AV1 decoder.")
+        #else
+        // The fixture is pushed into the app container before the run, because an AV1 file cannot be produced by
+        // this app or by the test bundle itself:
+        //   ffmpeg -f lavfi -i "testsrc2=size=640x480:rate=30:duration=1.5" \
+        //     -c:v libsvtav1 -preset 10 -crf 40 -pix_fmt yuv420p /tmp/av1-fixture.mp4
+        //   xcrun devicectl device copy to --domain-type=appDataContainer \
+        //     --domain-identifier=com.taption.encoder --source=/tmp/av1-fixture.mp4 \
+        //     --destination=Documents/av1-fixture.mp4
+        let documents = try XCTUnwrap(
+            FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        )
+        let sourceURL = documents.appendingPathComponent("av1-fixture.mp4")
+        try XCTSkipUnless(
+            FileManager.default.fileExists(atPath: sourceURL.path),
+            "Push the AV1 fixture into the app container first."
+        )
+
+        let directory = try makeEvidenceDirectory(named: "av1-bitrate")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        func encodedFileSize(bitrate: Int) async throws -> Int {
+            let outputURL = directory.appendingPathComponent("out-\(bitrate).mp4")
+            _ = try await HW_AV1HEVCCodecAlgorithm.transcode(
+                request: TaptionCodecTranscodeRequest(
+                    sourceURL: sourceURL,
+                    outputURL: outputURL,
+                    route: TaptionCodecRoute(sourceCodec: .av1, outputCodec: .hevc),
+                    options: TaptionCodecTranscodeOptions(
+                        outputPolicy: TaptionVideoOutputPolicy(
+                            videoCodec: .hevc,
+                            container: .mp4,
+                            advancedOptions: TaptionAdvancedOutputOptions(targetBitrate: bitrate)
+                        ),
+                        preserveAudioWhenPossible: false
+                    )
+                ),
+                progress: { _ in }
+            )
+            let attributes = try FileManager.default.attributesOfItem(atPath: outputURL.path)
+            return (attributes[.size] as? NSNumber)?.intValue ?? 0
+        }
+
+        let small = try await encodedFileSize(bitrate: 700_000)
+        let large = try await encodedFileSize(bitrate: 9_000_000)
+        print("AV1 BITRATE EVIDENCE 700kbps=\(small)B 9Mbps=\(large)B ratio=\(Double(large) / Double(max(small, 1)))")
+
+        XCTAssertGreaterThan(small, 0)
+        XCTAssertGreaterThan(
+            large,
+            small * 2,
+            "the plan's bitrate has to reach an AV1 encode too (small=\(small) large=\(large))"
+        )
+        #endif
+    }
+
+    private func makeEvidenceDirectory(named name: String) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(name)-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private enum EvidenceFill {
+        case white
+        case noise
+    }
+
+    /// The compressed samples of the video track, exactly as stored in the file.
+    private func encodedVideoSampleData(at url: URL) async throws -> [Data] {
+        let asset = AVURLAsset(url: url)
+        let tracks = try await asset.loadTracks(withMediaType: .video)
+        let track = try XCTUnwrap(tracks.first)
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+        output.alwaysCopiesSampleData = false
+        XCTAssertTrue(reader.canAdd(output))
+        reader.add(output)
+        XCTAssertTrue(reader.startReading())
+
+        var samples: [Data] = []
+        while let sample = output.copyNextSampleBuffer() {
+            guard let blockBuffer = CMSampleBufferGetDataBuffer(sample) else { continue }
+            var length = 0
+            var pointer: UnsafeMutablePointer<CChar>?
+            guard CMBlockBufferGetDataPointer(
+                blockBuffer,
+                atOffset: 0,
+                lengthAtOffsetOut: nil,
+                totalLengthOut: &length,
+                dataPointerOut: &pointer
+            ) == kCMBlockBufferNoErr,
+                  let pointer,
+                  length > 0 else {
+                continue
+            }
+            samples.append(Data(bytes: pointer, count: length))
+        }
+        return samples
+    }
+
+    private func writeEvidenceVideo(
+        size: CGSize,
+        seconds: Double,
+        fill: EvidenceFill,
+        to url: URL,
+        withPCMAudio: Bool = false
+    ) async throws {
+        try? FileManager.default.removeItem(at: url)
+        let width = Int(size.width)
+        let height = Int(size.height)
+        let frameRate: Int32 = 30
+        let fileType: AVFileType = url.pathExtension.lowercased() == "mov" ? .mov : .mp4
+        let writer = try AVAssetWriter(outputURL: url, fileType: fileType)
+        let input = AVAssetWriterInput(
+            mediaType: .video,
+            outputSettings: [
+                AVVideoCodecKey: AVVideoCodecType.h264,
+                AVVideoWidthKey: width,
+                AVVideoHeightKey: height
+            ]
+        )
+        input.expectsMediaDataInRealTime = false
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: input,
+            sourcePixelBufferAttributes: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferWidthKey as String: width,
+                kCVPixelBufferHeightKey as String: height
+            ]
+        )
+        guard writer.canAdd(input) else {
+            throw NSError(
+                domain: "TaptionEncoderTests",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "Could not add the fixture video input."]
+            )
+        }
+        writer.add(input)
+
+        // Linear PCM audio: the codec the sized writer has to re-encode rather than pass through.
+        let audioInput: AVAssetWriterInput? = withPCMAudio
+            ? AVAssetWriterInput(
+                mediaType: .audio,
+                outputSettings: [
+                    AVFormatIDKey: kAudioFormatLinearPCM,
+                    AVSampleRateKey: 44_100.0,
+                    AVNumberOfChannelsKey: 1,
+                    AVLinearPCMBitDepthKey: 16,
+                    AVLinearPCMIsFloatKey: false,
+                    AVLinearPCMIsBigEndianKey: false,
+                    AVLinearPCMIsNonInterleaved: false
+                ]
+            )
+            : nil
+        if let audioInput {
+            audioInput.expectsMediaDataInRealTime = false
+            guard writer.canAdd(audioInput) else {
+                throw NSError(
+                    domain: "TaptionEncoderTests",
+                    code: -7,
+                    userInfo: [NSLocalizedDescriptionKey: "Could not add the fixture audio input."]
+                )
+            }
+            writer.add(audioInput)
+        }
+
+        guard writer.startWriting() else {
+            throw writer.error ?? NSError(
+                domain: "TaptionEncoderTests",
+                code: -2,
+                userInfo: [NSLocalizedDescriptionKey: "Could not start the fixture writer."]
+            )
+        }
+        writer.startSession(atSourceTime: .zero)
+
+        let frameCount = max(1, Int(seconds * Double(frameRate)))
+        for index in 0..<frameCount {
+            while !input.isReadyForMoreMediaData {
+                try await Task.sleep(nanoseconds: 5_000_000)
+            }
+            guard let pool = adaptor.pixelBufferPool else {
+                throw NSError(
+                    domain: "TaptionEncoderTests",
+                    code: -3,
+                    userInfo: [NSLocalizedDescriptionKey: "The fixture pixel buffer pool is missing."]
+                )
+            }
+            var pixelBuffer: CVPixelBuffer?
+            guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pixelBuffer) == kCVReturnSuccess,
+                  let pixelBuffer else {
+                throw NSError(
+                    domain: "TaptionEncoderTests",
+                    code: -4,
+                    userInfo: [NSLocalizedDescriptionKey: "Could not create a fixture frame."]
+                )
+            }
+            CVPixelBufferLockBaseAddress(pixelBuffer, [])
+            if let base = CVPixelBufferGetBaseAddress(pixelBuffer) {
+                let stride = CVPixelBufferGetBytesPerRow(pixelBuffer)
+                let bytes = base.assumingMemoryBound(to: UInt8.self)
+                switch fill {
+                case .white:
+                    memset(bytes, 0xFF, stride * height)
+                case .noise:
+                    // A different pattern on every frame, so the encoder cannot reuse the previous picture.
+                    var seed = UInt32(truncatingIfNeeded: 0x1234_5678 &+ UInt32(index) &* 7919)
+                    for y in 0..<height {
+                        let row = bytes.advanced(by: y * stride)
+                        for x in 0..<width {
+                            seed = seed &* 1_664_525 &+ 1_013_904_223
+                            let value = UInt8(truncatingIfNeeded: seed >> 16)
+                            row[x * 4] = value
+                            row[x * 4 + 1] = value
+                            row[x * 4 + 2] = value
+                            row[x * 4 + 3] = 255
+                        }
+                    }
+                }
+            }
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+            guard adaptor.append(
+                pixelBuffer,
+                withPresentationTime: CMTime(value: CMTimeValue(index), timescale: frameRate)
+            ) else {
+                throw writer.error ?? NSError(
+                    domain: "TaptionEncoderTests",
+                    code: -5,
+                    userInfo: [NSLocalizedDescriptionKey: "Could not append a fixture frame."]
+                )
+            }
+        }
+
+        if let audioInput {
+            try await appendPCMToneAudio(
+                to: audioInput,
+                seconds: seconds,
+                sampleRate: 44_100,
+                writer: writer
+            )
+        }
+
+        input.markAsFinished()
+        await writer.finishWriting()
+        guard writer.status == .completed else {
+            throw writer.error ?? NSError(
+                domain: "TaptionEncoderTests",
+                code: -6,
+                userInfo: [NSLocalizedDescriptionKey: "The fixture writer did not finish."]
+            )
+        }
+    }
+
+    /// Writes a 10-bit BT.2020/HLG fixture, the shape a phone HDR recording has.
+    ///
+    /// The picture is noise on purpose: a flat colour compresses to almost nothing at any bitrate, so a bitrate
+    /// assertion against a flat fixture passes without the bitrate ever reaching the encoder.
+    private func writeHLGEvidenceVideo(
+        size: CGSize,
+        seconds: Double,
+        to url: URL
+    ) async throws {
+        try? FileManager.default.removeItem(at: url)
+        let width = Int(size.width)
+        let height = Int(size.height)
+        let frameRate: Int32 = 30
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
+        let input = AVAssetWriterInput(
+            mediaType: .video,
+            outputSettings: [
+                AVVideoCodecKey: AVVideoCodecType.hevc,
+                AVVideoWidthKey: width,
+                AVVideoHeightKey: height,
+                AVVideoColorPropertiesKey: [
+                    AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_2020,
+                    AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_2100_HLG,
+                    AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_2020
+                ],
+                AVVideoCompressionPropertiesKey: [
+                    AVVideoProfileLevelKey: kVTProfileLevel_HEVC_Main10_AutoLevel,
+                    // The fixture has to be encoded at a high bitrate of its own. At the writer's default it
+                    // comes out around 250 kbps, and a blurred source is easy enough to re-encode that the
+                    // encoder underspends both targets and the two outputs land on the same size.
+                    AVVideoAverageBitRateKey: 20_000_000
+                ]
+            ]
+        )
+        input.expectsMediaDataInRealTime = false
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: input,
+            sourcePixelBufferAttributes: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange,
+                kCVPixelBufferWidthKey as String: width,
+                kCVPixelBufferHeightKey as String: height
+            ]
+        )
+        guard writer.canAdd(input) else {
+            throw NSError(
+                domain: "TaptionEncoderTests",
+                code: -11,
+                userInfo: [NSLocalizedDescriptionKey: "Could not add the HDR fixture video input."]
+            )
+        }
+        writer.add(input)
+        guard writer.startWriting() else {
+            throw writer.error ?? NSError(
+                domain: "TaptionEncoderTests",
+                code: -12,
+                userInfo: [NSLocalizedDescriptionKey: "Could not start the HDR fixture writer."]
+            )
+        }
+        writer.startSession(atSourceTime: .zero)
+
+        let frameCount = max(1, Int(seconds * Double(frameRate)))
+        for index in 0..<frameCount {
+            while !input.isReadyForMoreMediaData {
+                try await Task.sleep(nanoseconds: 5_000_000)
+            }
+            guard let pool = adaptor.pixelBufferPool else {
+                throw NSError(
+                    domain: "TaptionEncoderTests",
+                    code: -13,
+                    userInfo: [NSLocalizedDescriptionKey: "The HDR fixture pixel buffer pool is missing."]
+                )
+            }
+            var pixelBuffer: CVPixelBuffer?
+            guard CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pixelBuffer) == kCVReturnSuccess,
+                  let pixelBuffer else {
+                throw NSError(
+                    domain: "TaptionEncoderTests",
+                    code: -14,
+                    userInfo: [NSLocalizedDescriptionKey: "Could not create an HDR fixture frame."]
+                )
+            }
+            CVPixelBufferLockBaseAddress(pixelBuffer, [])
+            if let lumaBase = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0) {
+                let lumaStride = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
+                var seed = UInt32(truncatingIfNeeded: 0x0BAD_F00D &+ UInt32(index) &* 7919)
+                for y in 0..<height {
+                    let row = lumaBase.advanced(by: y * lumaStride).assumingMemoryBound(to: UInt16.self)
+                    for x in 0..<width {
+                        seed = seed &* 1_664_525 &+ 1_013_904_223
+                        // Video-range 10-bit luma, so the values are legal for a limited-range file.
+                        row[x] = UInt16(64 + (seed >> 16) % 876)
+                    }
+                }
+            }
+            if let chromaBase = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1) {
+                let chromaStride = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
+                let chromaWidth = (width + 1) / 2
+                for y in 0..<((height + 1) / 2) {
+                    let row = chromaBase.advanced(by: y * chromaStride).assumingMemoryBound(to: UInt16.self)
+                    for x in 0..<chromaWidth {
+                        row[x * 2] = 512
+                        row[x * 2 + 1] = 512
+                    }
+                }
+            }
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
+            guard adaptor.append(
+                pixelBuffer,
+                withPresentationTime: CMTime(value: CMTimeValue(index), timescale: frameRate)
+            ) else {
+                throw writer.error ?? NSError(
+                    domain: "TaptionEncoderTests",
+                    code: -15,
+                    userInfo: [NSLocalizedDescriptionKey: "Could not append an HDR fixture frame."]
+                )
+            }
+        }
+
+        input.markAsFinished()
+        await writer.finishWriting()
+        guard writer.status == .completed else {
+            throw writer.error ?? NSError(
+                domain: "TaptionEncoderTests",
+                code: -16,
+                userInfo: [NSLocalizedDescriptionKey: "The HDR fixture writer did not finish."]
+            )
+        }
+    }
+
+    /// Writes a mono 16-bit PCM tone, so the fixture carries real audio the encoder has to deal with.
+    private func appendPCMToneAudio(
+        to input: AVAssetWriterInput,
+        seconds: Double,
+        sampleRate: Double,
+        writer: AVAssetWriter
+    ) async throws {
+        var streamDescription = AudioStreamBasicDescription(
+            mSampleRate: sampleRate,
+            mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
+            mBytesPerPacket: 2,
+            mFramesPerPacket: 1,
+            mBytesPerFrame: 2,
+            mChannelsPerFrame: 1,
+            mBitsPerChannel: 16,
+            mReserved: 0
+        )
+        var formatDescription: CMAudioFormatDescription?
+        let formatStatus = CMAudioFormatDescriptionCreate(
+            allocator: kCFAllocatorDefault,
+            asbd: &streamDescription,
+            layoutSize: 0,
+            layout: nil,
+            magicCookieSize: 0,
+            magicCookie: nil,
+            extensions: nil,
+            formatDescriptionOut: &formatDescription
+        )
+        guard formatStatus == noErr, let formatDescription else {
+            throw NSError(
+                domain: "TaptionEncoderTests",
+                code: -8,
+                userInfo: [NSLocalizedDescriptionKey: "Could not describe the fixture PCM format."]
+            )
+        }
+
+        let timescale = CMTimeScale(sampleRate)
+        let totalFrames = max(1, Int(seconds * sampleRate))
+        let chunkFrames = 1_024
+        var written = 0
+        while written < totalFrames {
+            while !input.isReadyForMoreMediaData {
+                try await Task.sleep(nanoseconds: 5_000_000)
+                if writer.status == .failed || writer.status == .cancelled {
+                    throw writer.error ?? NSError(
+                        domain: "TaptionEncoderTests",
+                        code: -9,
+                        userInfo: [NSLocalizedDescriptionKey: "The fixture writer stopped during audio."]
+                    )
+                }
+            }
+            let frames = min(chunkFrames, totalFrames - written)
+            let byteCount = frames * MemoryLayout<Int16>.size
+            var samples = [Int16](repeating: 0, count: frames)
+            for index in 0..<frames {
+                let phase = 2 * Double.pi * 440 * Double(written + index) / sampleRate
+                samples[index] = Int16(sin(phase) * 12_000)
+            }
+
+            var blockBuffer: CMBlockBuffer?
+            let blockStatus = samples.withUnsafeBytes { raw -> OSStatus in
+                var created: CMBlockBuffer?
+                let createStatus = CMBlockBufferCreateWithMemoryBlock(
+                    allocator: kCFAllocatorDefault,
+                    memoryBlock: nil,
+                    blockLength: byteCount,
+                    blockAllocator: kCFAllocatorDefault,
+                    customBlockSource: nil,
+                    offsetToData: 0,
+                    dataLength: byteCount,
+                    flags: 0,
+                    blockBufferOut: &created
+                )
+                guard createStatus == kCMBlockBufferNoErr, let created else {
+                    return createStatus
+                }
+                let copyStatus = CMBlockBufferReplaceDataBytes(
+                    with: raw.baseAddress!,
+                    blockBuffer: created,
+                    offsetIntoDestination: 0,
+                    dataLength: byteCount
+                )
+                blockBuffer = created
+                return copyStatus
+            }
+            guard blockStatus == kCMBlockBufferNoErr, let blockBuffer else {
+                throw NSError(
+                    domain: "TaptionEncoderTests",
+                    code: -10,
+                    userInfo: [NSLocalizedDescriptionKey: "Could not build a fixture audio block."]
+                )
+            }
+
+            var timing = CMSampleTimingInfo(
+                duration: CMTime(value: 1, timescale: timescale),
+                presentationTimeStamp: CMTime(value: CMTimeValue(written), timescale: timescale),
+                decodeTimeStamp: .invalid
+            )
+            var sampleBuffer: CMSampleBuffer?
+            let sampleStatus = CMSampleBufferCreateReady(
+                allocator: kCFAllocatorDefault,
+                dataBuffer: blockBuffer,
+                formatDescription: formatDescription,
+                sampleCount: frames,
+                sampleTimingEntryCount: 1,
+                sampleTimingArray: &timing,
+                sampleSizeEntryCount: 0,
+                sampleSizeArray: nil,
+                sampleBufferOut: &sampleBuffer
+            )
+            guard sampleStatus == noErr,
+                  let sampleBuffer,
+                  input.append(sampleBuffer) else {
+                throw NSError(
+                    domain: "TaptionEncoderTests",
+                    code: -11,
+                    userInfo: [NSLocalizedDescriptionKey: "Could not append fixture audio."]
+                )
+            }
+            written += frames
+        }
+        input.markAsFinished()
+    }
+
+    /// Average of the RGB channels at one point of the fifth frame, on a 0...255 scale.
+    private func averagePixelValue(in url: URL, x: Int, y: Int) async throws -> Double {
+        let asset = AVURLAsset(url: url)
+        let tracks = try await asset.loadTracks(withMediaType: .video)
+        let track = try XCTUnwrap(tracks.first)
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(
+            track: track,
+            outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
+        )
+        reader.add(output)
+        guard reader.startReading() else {
+            throw reader.error ?? NSError(
+                domain: "TaptionEncoderTests",
+                code: -7,
+                userInfo: [NSLocalizedDescriptionKey: "Could not read the encoded file back."]
+            )
+        }
+        defer { reader.cancelReading() }
+
+        // Skip the first frames: the opening keyframe is not necessarily representative of the placement.
+        var sampleBuffer = output.copyNextSampleBuffer()
+        for _ in 0..<4 {
+            sampleBuffer = output.copyNextSampleBuffer()
+        }
+        guard let sampleBuffer,
+              let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            throw NSError(
+                domain: "TaptionEncoderTests",
+                code: -8,
+                userInfo: [NSLocalizedDescriptionKey: "The encoded file produced no frames."]
+            )
+        }
+
+        CVPixelBufferLockBaseAddress(imageBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(imageBuffer, .readOnly) }
+        let width = CVPixelBufferGetWidth(imageBuffer)
+        let height = CVPixelBufferGetHeight(imageBuffer)
+        guard let base = CVPixelBufferGetBaseAddress(imageBuffer) else {
+            throw NSError(
+                domain: "TaptionEncoderTests",
+                code: -9,
+                userInfo: [NSLocalizedDescriptionKey: "The decoded frame has no base address."]
+            )
+        }
+        let stride = CVPixelBufferGetBytesPerRow(imageBuffer)
+        let bytes = base.assumingMemoryBound(to: UInt8.self)
+        let sampleX = min(max(x, 0), width - 1)
+        let sampleY = min(max(y, 0), height - 1)
+        let offset = sampleY * stride + sampleX * 4
+        // BGRA.
+        return (Double(bytes[offset]) + Double(bytes[offset + 1]) + Double(bytes[offset + 2])) / 3
     }
 }
 

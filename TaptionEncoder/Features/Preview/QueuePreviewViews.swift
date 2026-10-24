@@ -159,19 +159,47 @@ struct QueueVideoPreviewView: View {
     var onRestoreFolderNavigation: (Int) -> Bool = { _ in false }
     var onRequestFolderAccess: () -> Bool = { false }
 
+    /// Set once, by whichever engine reports that it cannot present frames. Keeping it optional is
+    /// what stops the two engines from handing the same file back and forth: a file gets exactly one
+    /// switch, and the second engine's error message is what the user sees.
+    @State private var engineOverride: QueuePreviewPlaybackRoute?
+
     @ViewBuilder
     var body: some View {
         // Keep orientation ownership stable while swiping between VLC and native playback.
         ZStack { playerView }
             .onAppear { AppOrientationController.shared.activatePreviewOrientations() }
             .onDisappear { AppOrientationController.shared.restorePortrait() }
+            .onChange(of: preview.id) { _, _ in engineOverride = nil }
             .videoFolderAccessRequest(id: preview.id, directoryURL: preview.folderAccessURL,
                 onRequest: onRequestFolderAccess, onConnect: { onAuthorizeFolder($0, 0) })
     }
 
+    private var route: QueuePreviewPlaybackRoute {
+        engineOverride ?? QueuePreviewPlaybackRoutePlanner.route(for: preview)
+    }
+
+    /// A file gets one engine switch. Asking for the engine that already failed is refused, so the
+    /// failure message from that engine stays on screen instead of the view flickering forever.
+    private func switchEngine(to requested: QueuePreviewPlaybackRoute) {
+        guard engineOverride == nil, requested != route else { return }
+        AppLogger.warning(
+            "Queue preview switching engines after a failed presentation",
+            category: .ui,
+            metadata: [
+                "name": preview.displayName,
+                "codec": preview.codecBadge,
+                "from": route == .native ? "native" : "vlc",
+                "to": requested == .native ? "native" : "vlc"
+            ]
+        )
+        engineOverride = requested
+    }
+
     @ViewBuilder
     private var playerView: some View {
-        if preview.usesNativePlayback {
+        switch route {
+        case .native:
             NativeQueueVideoPreviewView(
                 preview: preview, adUnitID: adUnitID,
                 isAddedToList: isAddedToList, canAddToList: canAddToList,
@@ -179,9 +207,10 @@ struct QueueVideoPreviewView: View {
                 onClose: onClose, onMinimize: onMinimize,
                 onPictureInPictureActiveChanged: onPictureInPictureActiveChanged,
                 onPrevious: onPrevious, onNext: onNext, onAuthorizeFolder: onAuthorizeFolder,
-                onRestoreFolderNavigation: onRestoreFolderNavigation
+                onRestoreFolderNavigation: onRestoreFolderNavigation,
+                onPlaybackUnavailable: { switchEngine(to: .vlc) }
             )
-        } else {
+        case .vlc:
             VLCQueueVideoPreviewView(
                 preview: preview, adUnitID: adUnitID,
                 isAddedToList: isAddedToList, canAddToList: canAddToList,
@@ -189,7 +218,8 @@ struct QueueVideoPreviewView: View {
                 onClose: onClose, onMinimize: onMinimize,
                 onPictureInPictureActiveChanged: onPictureInPictureActiveChanged,
                 onPrevious: onPrevious, onNext: onNext, onAuthorizeFolder: onAuthorizeFolder,
-                onRestoreFolderNavigation: onRestoreFolderNavigation
+                onRestoreFolderNavigation: onRestoreFolderNavigation,
+                onPlaybackUnavailable: { switchEngine(to: .native) }
             )
         }
     }
@@ -552,6 +582,9 @@ private struct VLCQueueVideoPreviewView: View {
     var onNext: () -> Void
     var onAuthorizeFolder: (URL, Int) -> String? = { _, _ in nil }
     var onRestoreFolderNavigation: (Int) -> Bool = { _ in false }
+    /// Called when libVLC opens the file but never presents a frame, so the parent can try the
+    /// native engine. The error message is set as well, so a refused switch still explains itself.
+    var onPlaybackUnavailable: () -> Void = {}
 
     @State private var player = QueuePreviewPlayerFactory.makePreviewPlayer()
     @State private var playbackLifetime = QueuePreviewPlaybackLifetime()
@@ -926,6 +959,7 @@ private struct VLCQueueVideoPreviewView: View {
                 )
                 isLoading = false
                 showControls(scheduleAutoHide: false)
+                onPlaybackUnavailable()
                 return
             }
             try await restorePlaybackSnapshot(operationID: operationID)
@@ -951,6 +985,7 @@ private struct VLCQueueVideoPreviewView: View {
                     "error": String(describing: error)
                 ]
             )
+            onPlaybackUnavailable()
         }
     }
 
@@ -1689,23 +1724,41 @@ struct QueueMiniPlayerView: View {
     var onClose: () -> Void
     var onExpand: (QueuePreviewPlaybackSnapshot) -> Void
 
+    /// One engine switch per file, for the same reason as `QueueVideoPreviewView`: whichever engine
+    /// cannot present frames gets replaced once, and the other engine's message is what remains.
+    @State private var engineOverride: QueuePreviewPlaybackRoute?
+
     @ViewBuilder
     var body: some View {
-        if preview.usesNativePlayback {
-            NativeQueueVideoPreviewView(
-                preview: preview, isMiniPlayer: true,
-                onClose: onClose, onMinimize: onExpand
-            )
-        } else {
-            VLCQueueMiniPlayerView(preview: preview, onClose: onClose, onExpand: onExpand)
+        Group {
+            switch engineOverride ?? QueuePreviewPlaybackRoutePlanner.route(for: preview) {
+            case .native:
+                NativeQueueVideoPreviewView(
+                    preview: preview, isMiniPlayer: true,
+                    onClose: onClose, onMinimize: onExpand,
+                    onPlaybackUnavailable: { switchEngine(to: .vlc) }
+                )
+            case .vlc:
+                VLCQueueMiniPlayerView(
+                    preview: preview, onClose: onClose, onExpand: onExpand,
+                    onPlaybackUnavailable: { switchEngine(to: .native) }
+                )
+            }
         }
+        .onChange(of: preview.id) { _, _ in engineOverride = nil }
+    }
+
+    private func switchEngine(to requested: QueuePreviewPlaybackRoute) {
+        guard engineOverride == nil,
+              requested != QueuePreviewPlaybackRoutePlanner.route(for: preview) else { return }
+        engineOverride = requested
     }
 }
-
 private struct VLCQueueMiniPlayerView: View {
     var preview: QueueVideoPreview
     var onClose: () -> Void
     var onExpand: (QueuePreviewPlaybackSnapshot) -> Void
+    var onPlaybackUnavailable: () -> Void = {}
 
     @State private var player = QueuePreviewPlayerFactory.makePreviewPlayer()
     @State private var playbackLifetime = QueuePreviewPlaybackLifetime()
@@ -1892,6 +1945,7 @@ private struct VLCQueueMiniPlayerView: View {
                     ]
                 )
                 isLoading = false
+                onPlaybackUnavailable()
                 return
             }
             try await restoreMiniPlaybackSnapshot(operationID: operationID)
@@ -1919,6 +1973,7 @@ private struct VLCQueueMiniPlayerView: View {
                     "error": String(describing: error)
                 ]
             )
+            onPlaybackUnavailable()
         }
     }
 
@@ -2620,6 +2675,63 @@ enum QueuePreviewDebugHandoff {
     }
 }
 #endif
+
+/// Which engine presents the queue preview.
+///
+/// Two engines, and neither covers everything:
+///
+/// - `.vlc` — libVLC. Reads every container the encoder reads, which is why it is the default.
+///   On iOS it renders through its sample-buffer output, and its VideoToolbox session rejects
+///   tracks that carry more than one sample description with differing parameter sets. Dolby
+///   Vision profile 8 keeps a second `hvc1` entry for the base layer, so the decoder reports
+///   `kVTVideoDecoderBadDataErr`, restarts, and discards every frame. The video output still
+///   exists, so `hasVideoOutput` reports `true` while the screen stays black — a track-level
+///   probe cannot detect this.
+/// - `.native` — `AVPlayerViewController`. Parses those tracks the way Photos and Files do, and
+///   presents HDR with the system's own tone mapping.
+///
+/// So the split follows *what the system understands better*, not preference: HDR, more than
+/// eight bits per component, and alpha composition go native; everything else keeps libVLC's far
+/// wider container support.
+enum QueuePreviewPlaybackRoute: Equatable {
+    case native
+    case vlc
+}
+
+enum QueuePreviewPlaybackRoutePlanner {
+    /// Containers `AVFoundation` opens. Outside this set the native engine has nothing to read,
+    /// so libVLC stays the only option even for HDR sources.
+    static let nativeReadableContainers: Set<TaptionVideoContainer> = [.mp4, .mov, .m4v]
+
+    static func route(
+        for track: TaptionVideoTrackInfo?,
+        container: TaptionVideoContainer
+    ) -> QueuePreviewPlaybackRoute {
+        guard let track else { return .vlc }
+
+        // Unchanged behaviour: only Apple's compositor renders HEVC Alpha correctly, and only in
+        // QuickTime files.
+        if track.codec == .hevcWithAlpha {
+            return container == .mov ? .native : .vlc
+        }
+
+        guard nativeReadableContainers.contains(container) else { return .vlc }
+
+        if track.codec == .dolbyVisionHEVC {
+            return .native
+        }
+
+        if track.color.isHDR || (track.color.bitDepth ?? 8) > 8 {
+            return .native
+        }
+
+        return .vlc
+    }
+
+    static func route(for preview: QueueVideoPreview) -> QueuePreviewPlaybackRoute {
+        preview.usesNativePlayback ? .native : .vlc
+    }
+}
 
 enum QueuePreviewPlayerFactory {
     static let softwareDecodeInstance = makeSoftwareDecodeInstance(applicationName: "BOKKI Encoder Preview")

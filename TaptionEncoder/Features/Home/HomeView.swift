@@ -127,6 +127,12 @@ struct HomeView: View {
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+            .onChange(of: metrics.usesWideLayout) { _, _ in
+                // Folding or unfolding changes the layout class while the app is running, and UIKit
+                // does not re-ask for supported orientations by itself. Re-applying the policy here
+                // is what lets an unfolded foldable rotate like the iPad it now looks like.
+                AppOrientationController.shared.refreshHomeOrientationsForCurrentGeometry()
+            }
         }
         .sheet(
             item: $activeImportBrowser,
@@ -1078,7 +1084,7 @@ struct HomeView: View {
                         .font(.system(size: 16 * metrics.contentScale, weight: .medium))
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
-                    Text("H.265 / HEVC · \(viewModel.selectedOutput.audioCodec.displayName)")
+                    Text("H.265 / HEVC · \(viewModel.selectedOutputFrameSizeText.map { "\($0) · " } ?? "")\(viewModel.selectedOutput.audioCodec.displayName)")
                         .font(.system(size: 12 * metrics.contentScale))
                         .foregroundStyle(TaptionTheme.mutedText)
                 }
@@ -1106,6 +1112,9 @@ struct HomeView: View {
                         Text("Resolution & Size")
                             .font(.headline)
                         outputSelector(metrics: metrics)
+                        if viewModel.showsScaleModeControl {
+                            scaleModeSelector(metrics: metrics)
+                        }
                         Text("Format & Audio")
                             .font(.headline)
                         HStack(spacing: 10) {
@@ -1227,6 +1236,38 @@ struct HomeView: View {
             outputSizeControl(metrics: metrics)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// Shown only when the chosen frame has a different shape than the source: fit, fill (crop) or stretch.
+    private func scaleModeSelector(metrics: HomeLayoutMetrics) -> some View {
+        VStack(alignment: .leading, spacing: 8 * metrics.contentScale) {
+            HStack(spacing: 8 * metrics.contentScale) {
+                ForEach(TaptionVideoScaleMode.allCases, id: \.self) { mode in
+                    let isSelected = viewModel.selectedScaleMode == mode
+                    Button {
+                        viewModel.selectScaleMode(mode)
+                    } label: {
+                        Text(mode.menuTitle)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(
+                                isSelected ? TaptionTheme.accentButtonText : TaptionTheme.primaryText
+                            )
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 7)
+                            .background(isSelected ? TaptionTheme.accent : TaptionTheme.elevatedSurface)
+                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!viewModel.canChangeOutputSelection)
+                    .accessibilityIdentifier("output.scaleMode.\(mode.rawValue)")
+                }
+            }
+
+            Text(viewModel.selectedScaleModeDetail)
+                .font(.caption)
+                .foregroundStyle(TaptionTheme.mutedText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private func outputSizeControl(metrics: HomeLayoutMetrics) -> some View {

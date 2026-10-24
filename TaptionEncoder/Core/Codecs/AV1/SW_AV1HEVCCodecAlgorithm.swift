@@ -7,7 +7,12 @@ import Darwin
 import Foundation
 
 struct SW_AV1HEVCTranscodeConfiguration {
+    /// The frame that is written to the file.
     let targetSize: CGSize
+    /// The size the decoder is asked to fill. It always keeps the source's shape, so the placement decision is ours
+    /// and not libvlc's; `nil` means "the decoder output already is the target frame".
+    let decodeSize: CGSize?
+    let scaleMode: TaptionVideoScaleMode
     let targetBitrate: Int
     let frameDuration: CMTime
     let expectedFrameCount: Int
@@ -18,6 +23,11 @@ struct SW_AV1HEVCTranscodeConfiguration {
     let outputFileType: AVFileType
     let optimizationProfile: TaptionEncodingOptimizationProfile
     let color: TaptionColorDescription
+
+    /// True when the decoded picture has to be placed in the target frame instead of being written as it is.
+    var needsFrameComposition: Bool {
+        decodeSize != nil
+    }
 
     static func make(
         asset: TaptionVideoAsset,
@@ -36,6 +46,12 @@ struct SW_AV1HEVCTranscodeConfiguration {
             height: CGFloat(max(videoTrack.displaySize.height, 2))
         )
         let targetSize = evenSize(requestedSize ?? displaySize)
+        let scaleMode = options.outputPolicy.advancedOptions.resolvedScaleMode
+        let decodeSize = decodeSize(
+            sourceSize: evenSize(displaySize),
+            targetSize: targetSize,
+            scaleMode: scaleMode
+        )
         let fps = normalizedFPS(
             options.outputPolicy.advancedOptions.frameRate?.value
                 ?? videoTrack.nominalFrameRate?.value
@@ -54,6 +70,8 @@ struct SW_AV1HEVCTranscodeConfiguration {
 
         return SW_AV1HEVCTranscodeConfiguration(
             targetSize: targetSize,
+            decodeSize: decodeSize,
+            scaleMode: scaleMode,
             targetBitrate: targetBitrate,
             frameDuration: CMTime(seconds: 1.0 / fps, preferredTimescale: 600),
             expectedFrameCount: expectedFrameCount,
@@ -65,6 +83,63 @@ struct SW_AV1HEVCTranscodeConfiguration {
             optimizationProfile: options.outputPolicy.advancedOptions.optimizationProfile ?? .balanced,
             color: options.outputPolicy.advancedOptions.color ?? videoTrack.color
         )
+    }
+
+    /// The buffer libvlc draws into, or `nil` when it can draw straight into the target frame.
+    ///
+    /// libvlc decides on its own whether to letterbox or stretch whatever buffer it is handed, and that choice is
+    /// not exposed by the API this app links against. Asking for a buffer that already has the source's shape takes
+    /// the decision away from libvlc: whatever it does inside that buffer is correct, and the placement in the
+    /// target frame becomes ours.
+    private static func decodeSize(
+        sourceSize: CGSize,
+        targetSize: CGSize,
+        scaleMode: TaptionVideoScaleMode
+    ) -> CGSize? {
+        guard !sizesAreEquivalent(sourceSize, targetSize) else {
+            return nil
+        }
+
+        let scaled: CGSize
+        switch scaleMode {
+        case .fit:
+            scaled = aspectPreservingSize(sourceSize, fittingInto: targetSize)
+        case .fill:
+            scaled = aspectPreservingSize(sourceSize, covering: targetSize)
+        case .stretch:
+            // Stretch is applied when the picture is placed, so the decode buffer only has to keep the shape.
+            scaled = aspectPreservingSize(sourceSize, fittingInto: targetSize)
+        }
+        let capped = CGSize(
+            width: min(scaled.width, sourceSize.width),
+            height: min(scaled.height, sourceSize.height)
+        )
+        let result = evenSize(capped)
+        guard result.width >= 2, result.height >= 2 else {
+            return nil
+        }
+        return sizesAreEquivalent(result, targetSize) ? nil : result
+    }
+
+    private static func aspectPreservingSize(_ size: CGSize, fittingInto bounds: CGSize) -> CGSize {
+        guard size.width > 0, size.height > 0, bounds.width > 0, bounds.height > 0 else {
+            return bounds
+        }
+        let scale = min(bounds.width / size.width, bounds.height / size.height)
+        return CGSize(width: size.width * scale, height: size.height * scale)
+    }
+
+    private static func aspectPreservingSize(_ size: CGSize, covering bounds: CGSize) -> CGSize {
+        guard size.width > 0, size.height > 0, bounds.width > 0, bounds.height > 0 else {
+            return bounds
+        }
+        let scale = max(bounds.width / size.width, bounds.height / size.height)
+        return CGSize(width: size.width * scale, height: size.height * scale)
+    }
+
+    private static func sizesAreEquivalent(_ lhs: CGSize, _ rhs: CGSize) -> Bool {
+        abs(lhs.width.rounded() - rhs.width.rounded()) < 1
+            && abs(lhs.height.rounded() - rhs.height.rounded()) < 1
     }
 
     private static func avFileType(for container: TaptionVideoContainer) -> AVFileType {
@@ -1889,6 +1964,8 @@ extension SW_AV1HEVCTranscoder {
             videoInput: videoInput,
             adaptor: adaptor,
             targetSize: configuration.targetSize,
+            decodeSize: configuration.decodeSize,
+            scaleMode: configuration.scaleMode,
             frameDuration: configuration.frameDuration,
             expectedFrameCount: configuration.expectedFrameCount,
             limitsToExpectedFrameCount: configuration.limitsToExpectedFrameCount,

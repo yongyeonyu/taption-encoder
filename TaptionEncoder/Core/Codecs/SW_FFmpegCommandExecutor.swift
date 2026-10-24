@@ -783,6 +783,13 @@ struct SW_FFmpegDecodeBridgeCommandRunner: SW_FFmpegCommandRunning {
     var outputAudioCodec: TaptionAudioCodec
     var optimizationProfile: TaptionEncodingOptimizationProfile
     var color: TaptionColorDescription
+    /// The frame the output should have. The bridge never runs an FFmpeg filter chain, so the command plan's
+    /// `-vf` argument is inert here and the frame has to be described to the writer directly.
+    var resizeTo: TaptionPixelSize?
+    /// A frame-rate ceiling. Only rates below the source's can be honoured: the bridge decodes the source's
+    /// frames and has none to spare for a higher rate.
+    var frameRate: TaptionRationalFrameRate?
+    var scaleMode: TaptionVideoScaleMode
 
     init(
         maximumFrameCount: Int32 = 0,
@@ -790,7 +797,10 @@ struct SW_FFmpegDecodeBridgeCommandRunner: SW_FFmpegCommandRunning {
         preserveAudioWhenPossible: Bool = false,
         outputAudioCodec: TaptionAudioCodec = .aac,
         optimizationProfile: TaptionEncodingOptimizationProfile = .balanced,
-        color: TaptionColorDescription = TaptionColorDescription()
+        color: TaptionColorDescription = TaptionColorDescription(),
+        resizeTo: TaptionPixelSize? = nil,
+        frameRate: TaptionRationalFrameRate? = nil,
+        scaleMode: TaptionVideoScaleMode = .default
     ) {
         self.maximumFrameCount = maximumFrameCount
         self.targetBitrate = targetBitrate
@@ -798,6 +808,9 @@ struct SW_FFmpegDecodeBridgeCommandRunner: SW_FFmpegCommandRunning {
         self.outputAudioCodec = outputAudioCodec
         self.optimizationProfile = optimizationProfile
         self.color = color
+        self.resizeTo = resizeTo
+        self.frameRate = frameRate
+        self.scaleMode = scaleMode
     }
 
     func run(commandPlan: SW_FFmpegCommandPlan) async throws -> SW_FFmpegCommandRunResult {
@@ -808,7 +821,10 @@ struct SW_FFmpegDecodeBridgeCommandRunner: SW_FFmpegCommandRunning {
             preserveAudioWhenPossible: preserveAudioWhenPossible,
             outputAudioCodec: outputAudioCodec,
             optimizationProfile: optimizationProfile,
-            color: color
+            color: color,
+            resizeTo: resizeTo,
+            frameRate: frameRate,
+            scaleMode: scaleMode
         )
         return SW_FFmpegCommandRunResult(
             exitCode: 0,
@@ -842,13 +858,17 @@ enum SW_FFmpegDecodeBridgeFallbackTranscoder {
             ?? TaptionColorDescription()
         progress(TaptionEncodingProgress(stage: .preparing, fractionCompleted: 0))
         progress(TaptionEncodingProgress(stage: .encoding, fractionCompleted: 0.01))
+        let advancedOptions = request.options.outputPolicy.advancedOptions
         let result = try await SW_FFmpegDecodeBridgeCommandRunner(
-            targetBitrate: request.options.outputPolicy.advancedOptions.targetBitrate,
+            targetBitrate: advancedOptions.targetBitrate,
             preserveAudioWhenPossible: request.options.preserveAudioWhenPossible,
             outputAudioCodec: request.options.outputPolicy.audioCodec,
-            optimizationProfile: request.options.outputPolicy.advancedOptions.optimizationProfile
+            optimizationProfile: advancedOptions.optimizationProfile
                 ?? .balanced,
-            color: outputColor
+            color: outputColor,
+            resizeTo: advancedOptions.resizeTo,
+            frameRate: advancedOptions.frameRate,
+            scaleMode: advancedOptions.resolvedScaleMode
         ).run(commandPlan: commandPlan)
         guard result.exitCode == 0 else {
             throw SW_FFmpegCommandExecutionError.commandFailed(
@@ -1079,7 +1099,10 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
         preserveAudioWhenPossible: Bool,
         outputAudioCodec: TaptionAudioCodec,
         optimizationProfile: TaptionEncodingOptimizationProfile,
-        color: TaptionColorDescription
+        color: TaptionColorDescription,
+        resizeTo: TaptionPixelSize? = nil,
+        frameRate requestedFrameRate: TaptionRationalFrameRate? = nil,
+        scaleMode: TaptionVideoScaleMode = .default
     ) async throws -> SW_FFmpegDecodeBridgeRunReport {
         guard [.mp4, .mov].contains(TaptionVideoContainer.inferred(from: commandPlan.outputURL)) else {
             throw SW_FFmpegDecodeBridgeRunnerError.unsupportedOutput(commandPlan.outputURL)
@@ -1100,10 +1123,38 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
         )
         try? FileManager.default.removeItem(at: commandPlan.outputURL)
 
-        let targetSize = CGSize(width: Int(probe.width), height: Int(probe.height))
-        let usesDirectNV12 = Int(probe.width).isMultiple(of: 2)
-            && Int(probe.height).isMultiple(of: 2)
-        let frameRate = normalizedFrameRate(probe.averageFrameRate)
+        // The bridge decodes at the source's own shape and the writer places the picture in the output frame.
+        // Sizing the decode buffer to the source is what makes a resolution change possible at all: the decoder
+        // can only fill a buffer that matches the picture it produced, so asking it for the target frame would
+        // be rejected outright.
+        let sourceSize = CGSize(width: Int(probe.width), height: Int(probe.height))
+        // An anamorphic source stores its width in the sample aspect ratio, not in its coded pixels, so the
+        // placement has to be decided on the shape the picture is shown with.
+        let sourceGeometry = SW_FFmpegDecodeBridgeVideoGeometry(
+            codedSize: TaptionPixelSize(width: Int(probe.width), height: Int(probe.height)),
+            sampleAspectRatioHorizontalSpacing: Int(probe.sampleAspectRatioNumerator),
+            sampleAspectRatioVerticalSpacing: Int(probe.sampleAspectRatioDenominator)
+        )
+        let sourceDisplaySize = CGSize(
+            width: sourceGeometry.displaySize.width,
+            height: sourceGeometry.displaySize.height
+        )
+        let resizedSize = resizedTargetSize(
+            resizeTo,
+            sourceSize: sourceSize,
+            sourceDisplaySize: sourceDisplaySize
+        )
+        let targetSize = resizedSize ?? sourceSize
+        let resizesFrame = resizedSize != nil
+        let sourceFrameRate = normalizedFrameRate(probe.averageFrameRate)
+        let framePlan = outputFramePlan(
+            sourceFrameRate: sourceFrameRate,
+            requestedFrameRate: requestedFrameRate
+        )
+        let frameRate = framePlan.frameRate
+        let usesDirectNV12 = !resizesFrame
+            && Int(targetSize.width).isMultiple(of: 2)
+            && Int(targetSize.height).isMultiple(of: 2)
         let frameDuration = CMTime(seconds: 1.0 / frameRate, preferredTimescale: 600)
         let expectedFrameCount = SW_FFmpegDecodeBridgeWriterMetadata.expectedFrameCount(
             durationSeconds: probe.durationSeconds,
@@ -1124,8 +1175,10 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
                 frameRate: frameRate,
                 optimizationProfile: optimizationProfile,
                 color: color,
-                pixelAspectRatioHorizontalSpacing: Int(probe.sampleAspectRatioNumerator),
-                pixelAspectRatioVerticalSpacing: Int(probe.sampleAspectRatioDenominator)
+                // A resized frame is already the exact output frame, so the source's sample aspect ratio must
+                // not stretch it a second time. Only a straight copy keeps the original ratio.
+                pixelAspectRatioHorizontalSpacing: resizesFrame ? 1 : Int(probe.sampleAspectRatioNumerator),
+                pixelAspectRatioVerticalSpacing: resizesFrame ? 1 : Int(probe.sampleAspectRatioDenominator)
             )
         )
         videoInput.expectsMediaDataInRealTime = false
@@ -1187,10 +1240,17 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
             videoInput: videoInput,
             adaptor: adaptor,
             targetSize: targetSize,
+            // A resize is placed here rather than by an FFmpeg filter, because this path decodes through the
+            // bundled C bridge and never runs the planned command line. Without a resize the decoded frame is
+            // already the output frame and there is nothing to place.
+            decodeSize: resizesFrame ? sourceSize : nil,
+            displaySize: resizesFrame ? sourceDisplaySize : nil,
+            scaleMode: scaleMode,
             frameDuration: frameDuration,
             expectedFrameCount: expectedFrameCount,
             limitsToExpectedFrameCount: limitsToExpectedFrameCount,
             allowsLegacyFrameHoldToPreserveDuration: limitsToExpectedFrameCount,
+            decimationRatio: framePlan.decimationRatio,
             maximumPendingFrameCount: optimizationProfile.softwareFramePipelineDepth,
             backpressureSleepMicroseconds: optimizationProfile.writerBackpressureSleepMicroseconds,
             progressHandler: { _ in }
@@ -1232,9 +1292,11 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
 
         return SW_FFmpegDecodeBridgeRunReport(
             frameCount: max(decodeResult.frameCount, context.currentFrameCount),
-            width: decodeResult.width,
-            height: decodeResult.height,
-            averageFrameRate: normalizedFrameRate(decodeResult.averageFrameRate),
+            // The written frame, not the decoded one: with a resize the two differ, and this value is what the
+            // run log reports as `size=`.
+            width: Int(targetSize.width.rounded()),
+            height: Int(targetSize.height.rounded()),
+            averageFrameRate: normalizedFrameRate(frameRate),
             codecName: decodeResult.codecName,
             pixelFormatName: decodeResult.pixelFormatName,
             outputPixelFormatName: usesDirectNV12 ? "nv12" : "bgra",
@@ -1519,6 +1581,60 @@ private enum SW_FFmpegDecodeBridgeHEVCTranscoder {
             return 30
         }
         return rawValue
+    }
+
+    /// The frame to write, or `nil` when the source's own frame is already what was asked for.
+    ///
+    /// `nil` keeps the fast direct-NV12 path, which can only be used when the decoded picture and the written
+    /// frame are the same size. A real resize therefore always goes through the BGRA path and is placed by
+    /// `SW_AV1FrameWriterContext`, exactly as the VLC route does.
+    private static func resizedTargetSize(
+        _ requested: TaptionPixelSize?,
+        sourceSize: CGSize,
+        sourceDisplaySize: CGSize
+    ) -> CGSize? {
+        guard let requested,
+              requested.isValid else {
+            return nil
+        }
+        // HEVC codes whole 2×2 blocks and the writer pool cannot allocate an odd frame.
+        let width = evenDimension(requested.width)
+        let height = evenDimension(requested.height)
+        // "Keep the source" reaches here as one of two sizes, because the plan fills its target from whichever
+        // size the app measured: the coded frame or the shape the picture is shown with. Matching either one
+        // means the frame must not change, so an anamorphic source keeps its width in the sample aspect ratio
+        // instead of being written out as square pixels.
+        for unchanged in [sourceSize, sourceDisplaySize]
+        where width == Int(unchanged.width.rounded()) && height == Int(unchanged.height.rounded()) {
+            return nil
+        }
+        return CGSize(width: width, height: height)
+    }
+
+    private static func evenDimension(_ value: Int) -> Int {
+        let clamped = max(2, value)
+        return clamped.isMultiple(of: 2) ? clamped : clamped - 1
+    }
+
+    /// The written frame rate and the fraction of decoded frames to keep to reach it.
+    ///
+    /// Only a ceiling can be honoured: the bridge has no frame to give when a higher rate is requested, and
+    /// padding the tail (the legacy hold path) does not raise a rate either. A request at or above the source's
+    /// rate therefore leaves the source rate alone.
+    private static func outputFramePlan(
+        sourceFrameRate: Double,
+        requestedFrameRate: TaptionRationalFrameRate?
+    ) -> (frameRate: Double, decimationRatio: Double) {
+        guard let requestedFrameRate else {
+            return (sourceFrameRate, 1)
+        }
+        let requested = requestedFrameRate.value
+        guard requested.isFinite,
+              requested >= 1,
+              requested < sourceFrameRate else {
+            return (sourceFrameRate, 1)
+        }
+        return (requested, requested / sourceFrameRate)
     }
 
     private static func stringFromCStringBuffer<T>(_ buffer: T) -> String {

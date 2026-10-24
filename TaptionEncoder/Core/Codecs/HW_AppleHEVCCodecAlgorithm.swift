@@ -126,6 +126,28 @@ enum HW_AppleHEVCCodecAlgorithm {
                 try? FileManager.default.removeItem(at: request.outputURL)
             }
         }
+        // The export session below cannot be told a bitrate, so it is only the fallback now. This path writes the
+        // bitrate the plan asked for, which is what makes a resolution or file-size choice actually matter.
+        do {
+            if let output = try await transcodeWithSizedWriterIfEligible(
+                request: request,
+                progress: progress
+            ) {
+                return output
+            }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            AppLogger.warning(
+                "Apple native sized writer path failed; using export fallback",
+                category: .encoding,
+                metadata: [
+                    "source": request.sourceURL.lastPathComponent,
+                    "error": error.localizedDescription
+                ]
+            )
+            try? FileManager.default.removeItem(at: request.outputURL)
+        }
         let startedAt = Date()
         let trace = TaptionEncodingPerformanceTrace(
             name: "hw_hevc_transcode",
@@ -174,7 +196,8 @@ enum HW_AppleHEVCCodecAlgorithm {
             exportSession.videoComposition = try await videoCompositionIfNeeded(
                 for: asset,
                 targetSize: resolvedTargetSize,
-                targetFrameRate: request.options.outputPolicy.advancedOptions.frameRate
+                targetFrameRate: request.options.outputPolicy.advancedOptions.frameRate,
+                scaleMode: request.options.outputPolicy.advancedOptions.resolvedScaleMode
             )
             trace.mark(
                 "export_session_configured",
@@ -553,8 +576,437 @@ enum HW_AppleHEVCCodecAlgorithm {
             && (color?.bitDepth ?? 8) <= 8
     }
 
+    /// Source codecs this path can read.
+    ///
+    /// AV1 is here because it reaches this algorithm through `HW_AV1HEVCCodecAlgorithm`, and leaving it out meant an
+    /// AV1 file on a device with hardware AV1 decode still went back to the preset's fixed bitrate. A device without
+    /// that decoder makes the reader fail, which falls back to the export session below.
+    ///
+    /// VP9 is listed for the same reason but cannot reach this path, and there is nothing to add to change that:
+    /// VideoToolbox ships no VP9 decoder at all, so the registry registers VP9 to H.265 as a software route only and
+    /// `validate` rejects it before the sized writer is considered. The entry keeps the guard correct if a hardware
+    /// route ever appears and costs nothing while there is none. `testVP9NeverReachesTheSizedWriterBecauseTheRouteIsRejected`
+    /// holds that arrangement in place.
+    static let explicitBitrateSourceCodecs: Set<TaptionVideoCodec> = [.h264, .hevc, .proRes, .av1, .vp9]
+
+    /// True when this source can be written by `AVAssetWriter` with an explicit bitrate.
+    ///
+    /// A source whose audio is not AAC is still eligible: the writer decodes it to PCM and encodes it to AAC, so
+    /// the bitrate the plan derived is kept.
+    ///
+    /// The colour of the request is deliberately *not* checked here. `TaptionSourcePreservingOutputPolicyResolver`
+    /// fills the request's colour from the source, so an HDR file looks like an HDR request even when the user asked
+    /// for nothing — testing it here turned every HDR source away and handed its bitrate back to a preset. The
+    /// writer can write HDR and 10-bit as HEVC Main 10 with the source's own tags, but only while the picture is not
+    /// resized, so that decision needs the source and the composition and is made in
+    /// `transcodeWithSizedWriterIfEligible`. What remains here is what is knowable from the request alone. What is
+    /// left to `AVAssetExportSession` is an audio codec other than AAC on the output, a resize combined with HDR or
+    /// 10-bit, a 10-bit output requested from an 8-bit source, and containers beyond MP4/MOV.
+    static func requestsSizedWriterEncode(_ request: TaptionCodecTranscodeRequest) -> Bool {
+        let policy = request.options.outputPolicy
+        return explicitBitrateSourceCodecs.contains(request.route.sourceCodec)
+            && [.mp4, .mov].contains(policy.container)
+            && policy.audioCodec == .aac
+            && policy.profile != .main10
+    }
+
+    /// Encodes at the bitrate the plan asked for, applying the requested frame and scale mode.
+    ///
+    /// `AVAssetExportSession` takes its bitrate from a fixed preset table. That made the resolution choice cosmetic:
+    /// a 4K output was rendered at 3840×2160 and then squeezed into the preset's bitrate, while a 720p output still
+    /// paid for the 1080p one. The app already derives a bitrate from the requested frame, the frame rate and the
+    /// quality preset, so this path hands that number to the encoder instead of letting the preset guess.
+    ///
+    /// Returns `nil` when the source cannot use this path; the caller then falls back to the export session.
+    private static func transcodeWithSizedWriterIfEligible(
+        request: TaptionCodecTranscodeRequest,
+        progress: @escaping (TaptionEncodingProgress) -> Void
+    ) async throws -> TaptionCodecTranscodeOutput? {
+        guard requestsSizedWriterEncode(request) else {
+            return nil
+        }
+
+        let outputPolicy = request.options.outputPolicy
+        let options = outputPolicy.advancedOptions
+        let asset = AVURLAsset(url: request.sourceURL)
+        let videoTracks = try await asset.loadTracks(withMediaType: .video)
+        guard videoTracks.count == 1,
+              let videoTrack = videoTracks.first else {
+            return nil
+        }
+
+        let naturalSize = try await videoTrack.load(.naturalSize)
+        let preferredTransform = try await videoTrack.load(.preferredTransform)
+        let nominalFrameRate = try await videoTrack.load(.nominalFrameRate)
+        let timeRange = try await videoTrack.load(.timeRange)
+        let formatDescriptions = try await videoTrack.load(.formatDescriptions)
+        let sourceColor = TaptionVideoColorDescriptionProbe.colorDescription(from: formatDescriptions)
+
+        let displayedRect = CGRect(origin: .zero, size: naturalSize).applying(preferredTransform)
+        let displayedSize = CGSize(width: abs(displayedRect.width), height: abs(displayedRect.height))
+        guard displayedSize.width >= 2,
+              displayedSize.height >= 2 else {
+            return nil
+        }
+
+        let targetSize = try await resolvedTargetSize(for: request, asset: asset)
+        let composition = try await videoCompositionIfNeeded(
+            for: asset,
+            targetSize: targetSize,
+            targetFrameRate: options.frameRate,
+            scaleMode: options.resolvedScaleMode
+        )
+        // HDR and 10-bit sources used to be turned away here, which handed the bitrate back to a preset table.
+        // They are written as HEVC Main 10 with the source's own colour tags instead — but only while the picture
+        // is not resized. A resize goes through `AVMutableVideoComposition`, whose render pipeline in this path is
+        // 8-bit SDR, so an HDR source sent through it would be tone-mapped without saying so. Those keep going to
+        // the export session, which applies Apple's tone mapping deliberately.
+        let writesHighBitDepth = sourceColor.isHDR || (sourceColor.bitDepth ?? 8) > 8
+        guard !writesHighBitDepth || composition == nil else {
+            return nil
+        }
+        // A request for a deeper picture than the source has cannot be honoured by re-encoding it — the precision
+        // is not there to begin with — so that stays the export session's job as well.
+        let requestedHighBitDepth = options.color?.isHDR == true || (options.color?.bitDepth ?? 8) > 8
+        guard !requestedHighBitDepth || writesHighBitDepth else {
+            return nil
+        }
+        let renderSize = composition?.renderSize ?? evenSize(naturalSize)
+        guard renderSize.width >= 2,
+              renderSize.height >= 2 else {
+            return nil
+        }
+        // Without a composition the encoder receives the track's own (unrotated) frames, so an odd natural size
+        // would not fit an even frame. Leave those to the export session.
+        if composition == nil {
+            let naturalWidth = Int(naturalSize.width.rounded())
+            let naturalHeight = Int(naturalSize.height.rounded())
+            guard naturalWidth.isMultiple(of: 2), naturalHeight.isMultiple(of: 2) else {
+                return nil
+            }
+        }
+        let width = Int(renderSize.width.rounded())
+        let height = Int(renderSize.height.rounded())
+
+        let requestedFrameRate = options.frameRate?.value
+        let frameRate = requestedFrameRate.map(normalizedFrameRate)
+            ?? normalizedFrameRate(Double(nominalFrameRate))
+        guard frameRate.isFinite, frameRate > 0 else {
+            return nil
+        }
+
+        // Audio is either copied untouched (the source already carries AAC) or decoded to PCM and encoded to AAC.
+        // A non-AAC source used to send the whole file back to the export session, which then ignored the bitrate
+        // the plan had worked out — the same defect the video path was fixed for.
+        let audioPlan = try await sizedWriterAudioPlan(for: request, asset: asset)
+        guard let audioPlan else {
+            return nil
+        }
+
+        let startedAt = Date()
+        let trace = TaptionEncodingPerformanceTrace(
+            name: "hw_sized_hevc_writer",
+            category: .encoding,
+            metadata: [
+                "source": request.sourceURL.lastPathComponent,
+                "output": request.outputURL.lastPathComponent,
+                "size": "\(width)x\(height)",
+                "frameRate": String(format: "%.3f", frameRate),
+                "scaleMode": composition == nil ? "unchanged" : options.resolvedScaleMode.rawValue
+            ]
+        )
+        let progressEmitter = EncodingProgressEmitter(progress: progress)
+        progressEmitter.submit(TaptionEncodingProgress(
+            stage: .preparing,
+            fractionCompleted: 0,
+            elapsedTime: 0,
+            estimatedRemainingTime: nil
+        ), force: true)
+
+        try FileManager.default.createDirectory(
+            at: request.outputURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? FileManager.default.removeItem(at: request.outputURL)
+
+        let reader = try AVAssetReader(asset: asset)
+        // A 10-bit source must reach the encoder in 10 bits, otherwise the extra precision is thrown away before
+        // the encoder ever sees it and `Main10` would be a label on 8-bit data.
+        let readerPixelFormat = writesHighBitDepth
+            ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        let videoSettings: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: readerPixelFormat,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any]
+        ]
+        let videoOutput: AVAssetReaderOutput
+        if let composition {
+            let compositionOutput = AVAssetReaderVideoCompositionOutput(
+                videoTracks: [videoTrack],
+                videoSettings: videoSettings
+            )
+            compositionOutput.videoComposition = composition
+            compositionOutput.alwaysCopiesSampleData = false
+            videoOutput = compositionOutput
+        } else {
+            let trackOutput = AVAssetReaderTrackOutput(
+                track: videoTrack,
+                outputSettings: videoSettings
+            )
+            trackOutput.alwaysCopiesSampleData = false
+            videoOutput = trackOutput
+        }
+        guard reader.canAdd(videoOutput) else {
+            throw TaptionVideoCoreError.exportFailed("Sized-encode video reader output could not be added.")
+        }
+        reader.add(videoOutput)
+
+        let audioOutput: AVAssetReaderOutput?
+        switch audioPlan {
+        case .noAudio:
+            audioOutput = nil
+        case let .passthrough(track, _):
+            let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+            output.alwaysCopiesSampleData = false
+            audioOutput = output
+        case let .reencode(track, sampleRate, channelCount):
+            let output = AVAssetReaderTrackOutput(
+                track: track,
+                outputSettings: [
+                    AVFormatIDKey: kAudioFormatLinearPCM,
+                    AVLinearPCMBitDepthKey: 16,
+                    AVLinearPCMIsFloatKey: false,
+                    AVLinearPCMIsBigEndianKey: false,
+                    AVLinearPCMIsNonInterleaved: false,
+                    AVNumberOfChannelsKey: channelCount,
+                    AVSampleRateKey: sampleRate
+                ]
+            )
+            output.alwaysCopiesSampleData = false
+            audioOutput = output
+        }
+        if let audioOutput {
+            guard reader.canAdd(audioOutput) else {
+                throw TaptionVideoCoreError.exportFailed("Sized-encode audio reader output could not be added.")
+            }
+            reader.add(audioOutput)
+        }
+
+        let writer = try AVAssetWriter(
+            outputURL: request.outputURL,
+            fileType: avFileType(for: outputPolicy.container, supportedFileTypes: [.mp4, .mov])
+        )
+        writer.shouldOptimizeForNetworkUse = (options.optimizationProfile ?? .balanced) != .performance
+        writer.metadata = try await asset.load(.metadata)
+
+        let targetBitrate = options.targetBitrate
+            ?? max(2_000_000, Int(Double(width * height) * frameRate * 0.25))
+        let sourceFrameCount = max(1, Int((timeRange.duration.seconds * frameRate).rounded()))
+        var compressionProperties: [String: Any] = [
+            AVVideoAverageBitRateKey: targetBitrate,
+            AVVideoExpectedSourceFrameRateKey: Int(frameRate.rounded()),
+            AVVideoMaxKeyFrameIntervalKey: Int(frameRate.rounded()),
+            AVVideoProfileLevelKey: writesHighBitDepth
+                ? kVTProfileLevel_HEVC_Main10_AutoLevel
+                : kVTProfileLevel_HEVC_Main_AutoLevel
+        ]
+        TaptionHEVCWriterPerformanceHints.apply(
+            to: &compressionProperties,
+            optimizationProfile: options.optimizationProfile ?? .balanced,
+            sourceFrameCount: sourceFrameCount
+        )
+        var videoOutputSettings: [String: Any] = [
+            AVVideoCodecKey: AVVideoCodecType.hevc,
+            AVVideoWidthKey: width,
+            AVVideoHeightKey: height,
+            AVVideoCompressionPropertiesKey: compressionProperties
+        ]
+        // Without these the encoder would tag the output BT.709 and a player would read HDR values as SDR, which
+        // looks washed out rather than broken. The tags come from the source, not from the request, because the
+        // pixels going in are the source's own.
+        if writesHighBitDepth,
+           let colorProperties = SW_AV1HEVCWriterColorProperties.make(for: sourceColor) {
+            videoOutputSettings[AVVideoColorPropertiesKey] = colorProperties
+        }
+        let videoInput = AVAssetWriterInput(
+            mediaType: .video,
+            outputSettings: videoOutputSettings
+        )
+        videoInput.expectsMediaDataInRealTime = false
+        videoInput.performsMultiPassEncodingIfSupported = false
+        // A composition has already rotated and scaled the picture, so the writer must not transform it again.
+        videoInput.transform = composition == nil ? preferredTransform : .identity
+        guard writer.canAdd(videoInput) else {
+            throw TaptionVideoCoreError.exportFailed("Sized-encode HEVC writer input could not be added.")
+        }
+        writer.add(videoInput)
+
+        let audioInput: AVAssetWriterInput?
+        switch audioPlan {
+        case .noAudio:
+            audioInput = nil
+        case let .passthrough(_, formatHint):
+            audioInput = AVAssetWriterInput(
+                mediaType: .audio,
+                outputSettings: nil,
+                sourceFormatHint: formatHint
+            )
+        case let .reencode(_, sampleRate, channelCount):
+            audioInput = AVAssetWriterInput(
+                mediaType: .audio,
+                outputSettings: [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC,
+                    AVNumberOfChannelsKey: channelCount,
+                    AVSampleRateKey: sampleRate,
+                    AVEncoderBitRateKey: min(max(channelCount * 96_000, 96_000), 512_000)
+                ]
+            )
+        }
+        if let audioInput {
+            audioInput.expectsMediaDataInRealTime = false
+            guard writer.canAdd(audioInput) else {
+                throw TaptionVideoCoreError.exportFailed("Sized-encode audio input could not be added.")
+            }
+            writer.add(audioInput)
+        }
+
+        // Reading starts before the writer commits to the file. A 10-bit reader can refuse a source the 8-bit one
+        // accepted, and that should hand the job back to the export session instead of failing the encode.
+        guard reader.startReading() else {
+            if writesHighBitDepth {
+                try? FileManager.default.removeItem(at: request.outputURL)
+                return nil
+            }
+            throw reader.error ?? TaptionVideoCoreError.exportFailed("Sized-encode reader could not start.")
+        }
+        guard writer.startWriting() else {
+            reader.cancelReading()
+            throw writer.error ?? TaptionVideoCoreError.exportFailed("Sized-encode writer could not start.")
+        }
+        // Composition output restarts the timeline at zero; a plain track output keeps the source's start time.
+        let sessionStart = composition == nil ? timeRange.start : .zero
+        writer.startSession(atSourceTime: sessionStart)
+        let progressTimeRange = composition == nil
+            ? timeRange
+            : CMTimeRange(start: .zero, duration: timeRange.duration)
+
+        do {
+            async let videoFrameCount = appendReaderWriterVideoSamples(
+                output: videoOutput,
+                input: videoInput,
+                writer: writer,
+                timeRange: progressTimeRange,
+                progressFrameStride: max(1, Int((frameRate / 2).rounded())),
+                startedAt: startedAt,
+                progressEmitter: progressEmitter
+            )
+            async let audioSampleBufferCount = appendReaderWriterAudioSamples(
+                output: audioOutput,
+                input: audioInput,
+                writer: writer
+            )
+            let counts = try await (videoFrameCount, audioSampleBufferCount)
+            guard reader.status == .completed else {
+                throw reader.error ?? TaptionVideoCoreError.exportFailed("Sized-encode reader did not complete.")
+            }
+            guard counts.0 > 0 else {
+                throw TaptionVideoCoreError.exportFailed("Sized-encode reader produced no video frames.")
+            }
+
+            await writer.finishWriting()
+            guard writer.status == .completed,
+                  FileManager.default.fileExists(atPath: request.outputURL.path) else {
+                throw writer.error ?? TaptionVideoCoreError.exportFailed("Sized-encode writer did not finish.")
+            }
+
+            progressEmitter.submit(TaptionEncodingProgress(
+                stage: .waitingForSaveGate,
+                fractionCompleted: 1,
+                elapsedTime: Date().timeIntervalSince(startedAt),
+                estimatedRemainingTime: 0,
+                currentFrame: Int64(counts.0),
+                totalFrames: Int64(counts.0)
+            ), force: true)
+            trace.finish(
+                "completed",
+                metadata: [
+                    "videoFrames": "\(counts.0)",
+                    "audioSampleBuffers": "\(counts.1)",
+                    "bitrate": "\(targetBitrate)"
+                ]
+            )
+            return TaptionCodecTranscodeOutput(
+                outputURL: request.outputURL,
+                route: request.route,
+                usedMode: .hardware,
+                usedBackend: .appleVideoToolbox,
+                outputVideoCodec: .hevc,
+                outputAudioTrackCount: audioInput == nil ? 0 : 1
+            )
+        } catch {
+            reader.cancelReading()
+            writer.cancelWriting()
+            try? FileManager.default.removeItem(at: request.outputURL)
+            trace.finish("failed", metadata: ["error": error.localizedDescription])
+            throw error
+        }
+    }
+
+    /// How the audio track travels through the sized writer.
+    ///
+    /// The no-audio case is deliberately *not* called `none`. This enum is returned as `SizedWriterAudioPlan?`, where
+    /// a bare `.none` resolves to `Optional.none` — `nil` — and not to the case. That silently meant "give up, use
+    /// the export session" for every source without an audio track, which is exactly the bitrate defect this path
+    /// exists to fix.
+    enum SizedWriterAudioPlan {
+        case noAudio
+        /// The source already carries AAC, so its samples can be copied without being touched.
+        case passthrough(track: AVAssetTrack, formatHint: CMFormatDescription)
+        /// Anything else is decoded to PCM and encoded to AAC, which is the codec the plan asked for.
+        case reencode(track: AVAssetTrack, sampleRate: Double, channelCount: Int)
+    }
+
+    /// Resolves the audio plan, or `nil` when the writer cannot produce the requested audio faithfully.
+    static func sizedWriterAudioPlan(
+        for request: TaptionCodecTranscodeRequest,
+        asset: AVURLAsset
+    ) async throws -> SizedWriterAudioPlan? {
+        guard request.options.preserveAudioWhenPossible else {
+            return .noAudio
+        }
+        let tracks = try await asset.loadTracks(withMediaType: .audio)
+        guard tracks.count <= 1 else {
+            return nil
+        }
+        guard let track = tracks.first else {
+            return .noAudio
+        }
+        let descriptions = try await track.load(.formatDescriptions)
+        guard let formatHint = descriptions.first else {
+            return nil
+        }
+        if TaptionAudioFormatDescriptionParser.codec(from: descriptions) == .aac {
+            return .passthrough(track: track, formatHint: formatHint)
+        }
+        let info = TaptionAudioFormatDescriptionParser.trackInfo(
+            from: descriptions,
+            estimatedBitrate: nil
+        )
+        guard let channelCount = info.channelCount,
+              let sampleRate = info.sampleRate,
+              channelCount > 0,
+              sampleRate >= 8_000 else {
+            return nil
+        }
+        return .reencode(
+            track: track,
+            sampleRate: sampleRate,
+            channelCount: channelCount
+        )
+    }
+
     private static func appendReaderWriterVideoSamples(
-        output: AVAssetReaderTrackOutput,
+        output: AVAssetReaderOutput,
         input: AVAssetWriterInput,
         writer: AVAssetWriter,
         timeRange: CMTimeRange,
@@ -601,7 +1053,7 @@ enum HW_AppleHEVCCodecAlgorithm {
     }
 
     private static func appendReaderWriterAudioSamples(
-        output: AVAssetReaderTrackOutput?,
+        output: AVAssetReaderOutput?,
         input: AVAssetWriterInput?,
         writer: AVAssetWriter
     ) async throws -> Int {
@@ -1064,7 +1516,8 @@ enum HW_AppleHEVCCodecAlgorithm {
     private static func videoCompositionIfNeeded(
         for asset: AVAsset,
         targetSize: TaptionPixelSize?,
-        targetFrameRate: TaptionRationalFrameRate?
+        targetFrameRate: TaptionRationalFrameRate?,
+        scaleMode: TaptionVideoScaleMode = .default
     ) async throws -> AVMutableVideoComposition? {
         guard targetSize?.isValid == true || targetFrameRate != nil else {
             return nil
@@ -1117,18 +1570,33 @@ enum HW_AppleHEVCCodecAlgorithm {
             return nil
         }
 
-        let scale = min(
-            renderSize.width / displayedSize.width,
-            renderSize.height / displayedSize.height
-        )
+        let widthRatio = renderSize.width / displayedSize.width
+        let heightRatio = renderSize.height / displayedSize.height
+        let scaleX: CGFloat
+        let scaleY: CGFloat
+        switch scaleMode {
+        case .fit:
+            let scale = min(widthRatio, heightRatio)
+            scaleX = scale
+            scaleY = scale
+        case .fill:
+            let scale = max(widthRatio, heightRatio)
+            scaleX = scale
+            scaleY = scale
+        case .stretch:
+            scaleX = widthRatio
+            scaleY = heightRatio
+        }
         let scaledSize = CGSize(
-            width: displayedSize.width * scale,
-            height: displayedSize.height * scale
+            width: displayedSize.width * scaleX,
+            height: displayedSize.height * scaleY
         )
         let originTransform = preferredTransform.concatenating(
             CGAffineTransform(translationX: -displayedRect.minX, y: -displayedRect.minY)
         )
-        let scaleTransform = CGAffineTransform(scaleX: scale, y: scale)
+        let scaleTransform = CGAffineTransform(scaleX: scaleX, y: scaleY)
+        // Centred for all three modes: a `fill` picture is larger than the frame and the composition crops the
+        // overflow evenly on both sides.
         let centeringTransform = CGAffineTransform(
             translationX: (renderSize.width - scaledSize.width) / 2,
             y: (renderSize.height - scaledSize.height) / 2

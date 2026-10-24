@@ -2,8 +2,28 @@ import SwiftUI
 import UIKit
 
 struct HomeLayoutMetrics {
+    /// Short side, in points, at which the layout switches to the wide (iPad) arrangement.
+    ///
+    /// The idiom cannot answer this. A foldable iPhone keeps `UIUserInterfaceIdiom.phone` while it is
+    /// unfolded, but its short side grows past every phone's (393 pt at most, landscape included)
+    /// and into iPad mini territory (744 pt). Keying the wide layout on the short side means an
+    /// unfolded foldable gets the iPad layout without the app knowing any product name, and every
+    /// existing phone stays on the phone layout.
+    static let wideLayoutMinimumShortSide: CGFloat = 700
+
+    /// Whether this geometry gets the wide (iPad) arrangement.
+    ///
+    /// Shared with the orientation policy so the two cannot drift: a screen that is laid out like an
+    /// iPad should also rotate like one.
+    static func usesWideLayout(size: CGSize, userInterfaceIdiom: UIUserInterfaceIdiom) -> Bool {
+        userInterfaceIdiom == .pad || min(size.width, size.height) >= wideLayoutMinimumShortSide
+    }
+
     var canvasWidth: CGFloat
     var canvasHeight: CGFloat
+    /// True when the screen is laid out with the iPad arrangement — a real iPad, or a foldable
+    /// that is currently unfolded.
+    var usesWideLayout: Bool
     var usesPadLandscapeColumns: Bool
     var usesScrollableLayout: Bool
     var columnSpacing: CGFloat
@@ -37,17 +57,18 @@ struct HomeLayoutMetrics {
         reservesFailureLogArea: Bool,
         userInterfaceIdiom: UIUserInterfaceIdiom
     ) {
-        let isPad = userInterfaceIdiom == .pad
+        let usesWideLayout = Self.usesWideLayout(size: size, userInterfaceIdiom: userInterfaceIdiom)
+        self.usesWideLayout = usesWideLayout
         let availableWidth = max(1, size.width)
         let availableHeight = max(1, size.height)
         let portraitWidth = min(size.width, size.height)
-        usesPadLandscapeColumns = isPad && availableWidth > availableHeight
-        usesScrollableLayout = !isPad && availableHeight < 500
+        usesPadLandscapeColumns = usesWideLayout && availableWidth > availableHeight
+        usesScrollableLayout = !usesWideLayout && availableHeight < 500
 
         if usesPadLandscapeColumns {
             canvasWidth = min(availableWidth, 1_180)
             canvasHeight = availableHeight
-        } else if isPad {
+        } else if usesWideLayout {
             let idealAspect: CGFloat = 834 / 1194
             let portraitCanvasWidth = min(availableWidth, availableHeight * idealAspect)
             canvasWidth = min(max(portraitCanvasWidth, 600), 820)
@@ -57,20 +78,20 @@ struct HomeLayoutMetrics {
             canvasHeight = availableHeight
         }
 
-        let referenceWidth: CGFloat = usesPadLandscapeColumns ? 1194 : (isPad ? 834 : 390)
-        let referenceHeight: CGFloat = usesPadLandscapeColumns ? 834 : (isPad ? 1194 : 844)
-        let minimumScale: CGFloat = isPad ? 0.82 : 0.72
-        let maximumScale: CGFloat = isPad ? 1.18 : 1
+        let referenceWidth: CGFloat = usesPadLandscapeColumns ? 1194 : (usesWideLayout ? 834 : 390)
+        let referenceHeight: CGFloat = usesPadLandscapeColumns ? 834 : (usesWideLayout ? 1194 : 844)
+        let minimumScale: CGFloat = usesWideLayout ? 0.82 : 0.72
+        let maximumScale: CGFloat = usesWideLayout ? 1.18 : 1
         let heightScale = min(max(availableHeight / referenceHeight, minimumScale), maximumScale)
         let scaleWidth = usesPadLandscapeColumns ? availableWidth : portraitWidth
-        let widthScale = min(max(scaleWidth / referenceWidth, isPad ? 0.82 : 0.84), maximumScale)
+        let widthScale = min(max(scaleWidth / referenceWidth, usesWideLayout ? 0.82 : 0.84), maximumScale)
         let scale = min(heightScale, widthScale)
 
-        let compactHeightPressure = availableHeight < (usesPadLandscapeColumns ? 700 : (isPad ? 900 : 760))
+        let compactHeightPressure = availableHeight < (usesPadLandscapeColumns ? 700 : (usesWideLayout ? 900 : 760))
         contentScale = compactHeightPressure ? max(minimumScale, scale * 0.92) : scale
-        bannerScale = min(max(contentScale, isPad ? 0.74 : 0.68), 1)
+        bannerScale = min(max(contentScale, usesWideLayout ? 0.74 : 0.68), 1)
         verticalSpacing = compactHeightPressure ? max(4, 7 * contentScale) : max(5, 9 * contentScale)
-        horizontalPadding = isPad ? max(28, 40 * widthScale) : max(12, 20 * widthScale)
+        horizontalPadding = usesWideLayout ? max(28, 40 * widthScale) : max(12, 20 * widthScale)
         verticalPadding = compactHeightPressure ? max(4, 8 * contentScale) : max(5, 10 * contentScale)
         controlHeight = max(44, 42 * contentScale)
         footerExitButtonHeight = max(32, 40 * contentScale)
