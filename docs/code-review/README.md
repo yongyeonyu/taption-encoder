@@ -209,6 +209,44 @@ git config core.hooksPath .githooks
 CI 和钩子**调同一个脚本**，这是故意的：「验证通过」只能有一个定义，否则迟早出现本地绿、CI 红，
 然后没人再相信任何一边。
 
+### 一台机器、两个使用者：模拟器必须分开（2026-10-24 实测）
+
+runner 和开发机是同一台 Mac，而 `verify.sh` 原来是这样挑设备的：
+
+```bash
+UDID=$(xcrun simctl list devices booted | grep -oE '<uuid>' | head -1)
+```
+
+也就是「谁开着就用谁」。于是 CI 和本地各跑一次，就落到同一台模拟器上，后启动的 `xcodebuild test`
+把先启动的测试宿主 SIGKILL 掉。表现出来**完全像代码坏了**：
+
+| 现象 | 实际原因 |
+| --- | --- |
+| 473 passed / 3 failed，三条都是 `Test crashed with signal kill` | 测试宿主被杀 |
+| 三条都是最重的 VC-1 编码（`testBundledFFmpegDecodeBridge…` 等） | 跑得最久，撞上另一次启动的概率最高 |
+| 附带 `Failure collecting diagnostics from simulator: Timed out after 600.0 seconds` | 设备已被另一个 xcodebuild 占用 |
+| 单独跑或重跑就绿 | 没有竞争者了 |
+
+结论：**这不是偶发，是结构问题。** 重跑只是把碰撞概率降到零，没有修掉任何东西。
+
+现在的做法是不共享——每个使用者一台自己的模拟器，不再看「谁开着」：
+
+| 使用者 | 设备名 | 说明 |
+| --- | --- | --- |
+| CI | `verify-ci` | `CI=true` 时自动选择 |
+| 本地 / 钩子 | `verify-local` | 默认 |
+| 第三个并发 | 自己起名 | `TAPTION_SIMULATOR_NAME=verify-2 ./scripts/verify.sh` |
+
+同一台设备被两个进程抢时会立刻报错退出，而不是悄悄互相踩：
+
+```
+error: the 'verify-local' simulator is already in use (lock: /tmp/taption-verify-verify-local.lock).
+```
+
+另外每次运行都会 `simctl erase` 这台设备。跨次复用会留下上一次的 app 容器，残留的 `UserDefaults`
+会让少数测试**只在全量运行时**失败（典型是 `testAutoSizeShowsEstimatedOutputInMainTileAndPopoverValue`，
+单跑就过）。擦除只要几秒，直接消掉这一整类假红。
+
 ### 长期出路
 
 1. 等 GitHub 托管镜像带上 Xcode 27，把 `runs-on` 改回 `macos-26`，runner 降级为可选加速；
