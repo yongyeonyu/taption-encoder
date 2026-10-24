@@ -157,6 +157,27 @@
 - 新逻辑有测试吗？修 bug 是先写能复现的测试吗？
 - **新增测试文件必须手工注册到 `project.pbxproj`**，忘了会静默不执行。这一条本身是 blocker 级陷阱——它让"测试通过"变成假信号。
 
+#### 被退役的证明测试（retired proofs）
+
+有 34 个测试需要 57 个真实世界样本（`TaptionEncoder/TestVideos`），commit `02e3ad4`
+把那个目录从仓库里拿掉了（61 个文件 / 42 MB），所以它们被列进
+`retiredSourceOnlyProofTestNames`，默认不执行。
+
+要跑它们，用仓库里的脚本，**不要用 FFmpeg 生成样本**：
+
+```bash
+./scripts/restore-retired-samples.sh          # 从 git 历史恢复真实样本 + 打开开关
+./scripts/verify.sh                           # 默认套件 + 退役证明
+./scripts/restore-retired-samples.sh --clean  # 撤销
+```
+
+为什么不能生成：这些测试的目的是证明 App 能读**它自己没写出来的**格式（Cinepak、Sorenson
+Video 1、RealVideo、RoQ、ASUS V1）。用本机 FFmpeg 造出来的文件证明不了这一点，而且
+`testBundledSampleSourceNoticeRejectsGeneratedOnlyFixtures` 就是专门拦这种做法的。
+
+⚠️ 开关是 `/tmp` 下的**机器级**文件，不是仓库级的。开着它跑 CI 会让 CI 也去跑那 34 个测试。
+用完记得 `--clean`。
+
 ---
 
 ## 6. 自动化：机器先过一遍
