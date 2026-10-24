@@ -25,6 +25,31 @@ T1 改动必须附真机验证记录。
 ## 本地构建与测试
 
 ```bash
+./scripts/verify.sh           # 构建 + 全量测试（CI 现在做不了这件事，见 README §6）
+./scripts/verify.sh --build   # 只构建，快很多
+```
+
+**启用推送前自动验证（每个 clone 做一次）：**
+
+```bash
+git config core.hooksPath .githooks
+```
+
+之后 `git push` 会先跑构建和测试，失败就拒绝推送。纯文档改动会自动跳过。
+紧急情况：`SKIP_VERIFY=1 git push`，并在 PR 里说明原因。
+
+<details>
+<summary>为什么需要这一层</summary>
+
+GitHub 托管的 `macos-26` 镜像只带 Xcode 26.6，而本项目需要 iOS 27 SDK，
+所以托管 CI 的构建步骤目前是**被跳过**的——绿色不代表通过。在镜像更新之前，
+这个本地钩子是唯一真正的闸门。
+
+</details>
+
+### 底层命令
+
+```bash
 xcodebuild test \
   -project TaptionEncoder.xcodeproj \
   -scheme TaptionEncoder \

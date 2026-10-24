@@ -1,0 +1,49 @@
+#!/bin/bash
+# Blocks a push when the build or the test suite fails.
+#
+# Enable once per clone:
+#   git config core.hooksPath .githooks
+#
+# Skip in an emergency (and say why in the PR):
+#   SKIP_VERIFY=1 git push
+#
+# This exists because the hosted CI cannot build this project yet: the
+# macos-26 runner image only has Xcode 26.6 and the project needs the iOS 27
+# SDK. See docs/code-review/README.md §6.
+
+set -uo pipefail
+
+# Detach stdin: git feeds refs on it, and holding it open is one more way for a
+# child process to keep the push alive after the hook itself has finished.
+exec < /dev/null
+
+if [ "${SKIP_VERIFY:-}" = "1" ]; then
+  echo "verify: skipped (SKIP_VERIFY=1)"
+  exit 0
+fi
+
+# Only gate pushes that touch code. A docs-only push should not cost minutes.
+# .sh and .githooks are included on purpose: a change to the gate itself has to
+# be exercised by the gate, otherwise a broken script ships unverified.
+changed=$(git diff --name-only "@{push}" HEAD 2>/dev/null || git diff --name-only HEAD~1 HEAD 2>/dev/null || true)
+if [ -n "$changed" ] && ! echo "$changed" | grep -qE '(\.(swift|plist|pbxproj|xcprivacy|xcconfig|yml|yaml|sh)$|^\.githooks/)'; then
+  echo "verify: no code changes in this push, skipping"
+  exit 0
+fi
+
+root=$(git rev-parse --show-toplevel)
+echo "verify: running build + tests before push (SKIP_VERIFY=1 to bypass)"
+
+# The child writes to a file, not to our stdout. Anything holding this pipe open
+# would stall the push even after the hook itself has returned.
+HOOK_LOG=/tmp/taption-hook.log
+if ! "$root/scripts/verify.sh" > "$HOOK_LOG" 2>&1; then
+  tail -30 "$HOOK_LOG"
+  echo
+  echo "verify: push blocked — build or tests failed. Full log: $HOOK_LOG"
+  echo "verify: fix it, or push with SKIP_VERIFY=1 if you know why it is red."
+  exit 1
+fi
+
+tail -3 "$HOOK_LOG"
+echo "verify: passed"
