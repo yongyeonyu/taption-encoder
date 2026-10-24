@@ -23,10 +23,22 @@ if [ "${SKIP_VERIFY:-}" = "1" ]; then
 fi
 
 # Only gate pushes that touch code. A docs-only push should not cost minutes.
-# .sh and .githooks are included on purpose: a change to the gate itself has to
-# be exercised by the gate, otherwise a broken script ships unverified.
-changed=$(git diff --name-only "@{push}" HEAD 2>/dev/null || git diff --name-only HEAD~1 HEAD 2>/dev/null || true)
-if [ -n "$changed" ] && ! echo "$changed" | grep -qE '(\.(swift|plist|pbxproj|xcprivacy|xcconfig|yml|yaml|sh)$|^\.githooks/)'; then
+# .sh, .py and .githooks are included on purpose: a change to the gate itself has to be exercised
+# by the gate, otherwise a broken script ships unverified.
+#
+# The base is the merge-base with the default branch, not `@{push}`. On a branch that has never
+# been pushed `@{push}` is empty, and the old HEAD~1 fallback then looked at the last commit only.
+# That is enough to hide a code change behind a trailing docs or script commit: pushing a branch
+# whose tip touched only scripts/verify-refactor-move.py reported "no code changes" while
+# HomeViewModel.swift had been rewritten two commits earlier.
+default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')
+default_branch=${default_branch:-main}
+base=$(git merge-base "origin/$default_branch" HEAD 2>/dev/null || true)
+if [ -z "$base" ]; then
+  base=$(git rev-parse HEAD~1 2>/dev/null || true)
+fi
+changed=$(git diff --name-only ${base:+"$base"} HEAD 2>/dev/null || true)
+if [ -n "$changed" ] && ! echo "$changed" | grep -qE '(\.(swift|plist|pbxproj|xcprivacy|xcconfig|yml|yaml|sh|py)$|^\.githooks/)'; then
   echo "verify: no code changes in this push, skipping"
   exit 0
 fi
