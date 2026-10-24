@@ -65,22 +65,31 @@ else
     SIM_NAME="verify-local"
   fi
 
-  # A run killed with SIGKILL leaves the lock behind and would block this owner
-  # forever, so an old one is cleared. The age check matters: a live run holds
-  # the lock for the length of the suite, which is well under three hours.
-  LOCK="${TMPDIR:-/tmp}/taption-verify-${SIM_NAME}.lock"
-  if [ -d "$LOCK" ] && [ -n "$(find "$LOCK" -maxdepth 0 -mmin +180 2>/dev/null)" ]; then
-    echo "==> Clearing a stale simulator lock (older than 3h): $LOCK"
-    rmdir "$LOCK" 2>/dev/null || true
-  fi
+  # The lock names its owner, so a run that died without cleaning up — SIGKILL, or
+  # bash aborting on a script that was edited while it ran — can be told apart from
+  # a live one. Without that, a dead lock blocks this owner until someone notices.
+  tmp_root="${TMPDIR:-/tmp}"
+  tmp_root="${tmp_root%/}"
+  LOCK="$tmp_root/taption-verify-${SIM_NAME}.lock"
+
   if ! mkdir "$LOCK" 2>/dev/null; then
-    echo "error: the '$SIM_NAME' simulator is already in use (lock: $LOCK)." >&2
-    echo "       Two runs on one device kill each other's test host, so this one stops." >&2
-    echo "       Wait for the other run, or claim another device:" >&2
-    echo "         TAPTION_SIMULATOR_NAME=verify-2 ./scripts/verify.sh" >&2
-    exit 1
+    holder=$(cat "$LOCK/pid" 2>/dev/null || true)
+    if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
+      echo "error: the '$SIM_NAME' simulator is in use by pid $holder (lock: $LOCK)." >&2
+      echo "       Two runs on one device kill each other's test host, so this one stops." >&2
+      echo "       Wait for that run, or claim another device:" >&2
+      echo "         TAPTION_SIMULATOR_NAME=verify-2 ./scripts/verify.sh" >&2
+      exit 1
+    fi
+    echo "==> Reclaiming the '$SIM_NAME' lock from a run that is gone (pid ${holder:-unknown})"
+    rm -rf "$LOCK"
+    if ! mkdir "$LOCK" 2>/dev/null; then
+      echo "error: could not claim the '$SIM_NAME' simulator lock: $LOCK" >&2
+      exit 1
+    fi
   fi
-  trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT INT TERM
+  echo $$ > "$LOCK/pid"
+  trap 'rm -rf "$LOCK" 2>/dev/null || true' EXIT INT TERM
 
   # Matched on " name (" so a device called verify-local2 cannot be mistaken for
   # verify-local. The name is the whole contract, so this has to be exact.
