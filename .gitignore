@@ -14,3 +14,5 @@ build/
 /Samples/CodecFixtures/audio_generated_smoke/
 /Samples/CodecFixtures/transcode_reports/
 /Samples/Downloaded/
+# Local assistant workspace: internal notes and memory, never part of the product.
+.workbuddy-ai/
