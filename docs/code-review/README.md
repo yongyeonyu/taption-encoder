@@ -167,20 +167,38 @@
 2. 单元测试全过（当前 478 个，4 个 skip 属预期）。
 3. 无新增 `print(`、无新增 `try!` / `as!` / 强制解包。
 
-### CI 的当前限制（2026-10-24 实测）
+### 为什么必须自托管（2026-10-24 实测）
 
-第一次真实运行就暴露了两件事：
+第一次真实运行就暴露了：GitHub 托管的 `macos-26` 镜像**只带 Xcode 26.6 / iOS 26.x SDK**，而本项目
+需要 iOS 27 SDK（`AVAudioSession.activate(options:completionHandler:)` 这类 API 在 26 的 SDK 里标记
+为 iOS 不可用，编译直接报错）。托管 runner 连编译都过不去，所以 CI 从 2026-10-24 起跑在**维护者这台
+Mac** 上（`runs-on: [self-hosted, macOS, bokki]`），runner 目录在仓库之外（`~/actions-runner`）。
 
-- GitHub 托管的 `macos-26` 镜像**只带 Xcode 26.6 / iOS 26.x SDK**，而本项目需要 iOS 27 SDK
-  （`AVAudioSession.activate(options:completionHandler:)` 这类 API 在 26 的 SDK 里标记为
-  iOS 不可用，编译直接报错）。
-- 因此工作流拆成两个 job：`detect-xcode` 先探测版本，低于 27 时**跳过**构建并给 warning，
-  避免每次 PR 都挂一个看不懂的编译错误。
+**这意味着 CI 只在 Mac 开机、runner 在线时才工作。** 掉线时 job 会一直排队——不会变红，也不会
+变绿。分支保护**没有**把本 workflow 设为必需检查，正是为了让排队不阻塞合并。
 
-这意味着：**在镜像更新之前，CI 实际上没有验证任何代码。** 被跳过的检查不能当作通过。
+### self-hosted runner 的安全前提（public 仓库，必读）
 
-**当前采用的做法：本地闸门。** 仓库自带 `scripts/verify.sh`（构建 + 全量测试，用本机 Xcode 27）
-和 `.githooks/pre-push`（测试不通过就拒绝推送）。每个 clone 启用一次：
+runner 会执行 workflow 里写的任何东西；对 `pull_request` 事件，workflow 文件取自 PR 本身。
+也就是说 **fork 的 PR 可以改 workflow，然后在这台 Mac 上执行任意命令**——token、Keychain、
+Xcode 里的 Apple ID 全在里面。三道防线：
+
+| 防线 | 做法 | 作用 |
+| --- | --- | --- |
+| 1. job 级 `if` | `github.event.pull_request.head.repo.full_name == github.repository` | fork PR 在分配 runner **之前**被跳过 |
+| 2. 仓库设置 | 「Require approval for all outside collaborators」 | fork PR 的 workflow 根本不启动，除非人工点批准 |
+| 3. 分支保护 | 不把本 workflow 设为必需检查 | runner 掉线时排队不卡死合并 |
+
+**不要拆掉任何一道。** 第 2 道是真正拦得住的那一道——第 1 道写在 workflow 里，而 fork PR 恰好
+可以改 workflow。
+
+如果你不想承担这个风险，把 `runs-on` 改回 `macos-26` 并删掉 job 级 `if`，CI 会退化成「跳过构建」，
+本地闸门继续作为唯一的验证手段。
+
+### 本地闸门（保留）
+
+仓库自带 `scripts/verify.sh`（构建 + 全量测试，用本机 Xcode 27）和 `.githooks/pre-push`
+（测试不通过就拒绝推送）。每个 clone 启用一次：
 
 ```bash
 git config core.hooksPath .githooks
@@ -188,18 +206,15 @@ git config core.hooksPath .githooks
 
 紧急情况用 `SKIP_VERIFY=1 git push` 绕过，并在 PR 里写明原因。
 
-**为什么不用 self-hosted runner。** 本机确实有 Xcode 27.0，接上就能跑。但仓库是 public：
-任何人都能 fork 并提 PR，PR 里的 workflow 会在你的机器上执行——拿着 runner 的 token，
-能读本地文件、Keychain 和 Xcode 里的 Apple ID。GitHub 官方也明确不建议 public 仓库使用
-self-hosted runner。本地钩子拿到同样的效果，风险为零。
+CI 和钩子**调同一个脚本**，这是故意的：「验证通过」只能有一个定义，否则迟早出现本地绿、CI 红，
+然后没人再相信任何一边。
 
-三个长期出路，按推荐顺序：
+### 长期出路
 
-1. **保持本地闸门**（现在就是这样），等 GitHub 镜像带上 Xcode 27 后再启用托管 CI；
-2. 仓库转回 private + 升级 GitHub Pro，然后接 self-hosted runner；
+1. 等 GitHub 托管镜像带上 Xcode 27，把 `runs-on` 改回 `macos-26`，runner 降级为可选加速；
+2. 仓库转回 private + 升级 GitHub Pro，然后自托管 runner 的风险面会小很多（没有陌生 fork）；
 3. 自建一台专用机器跑 runner，与开发机隔离。
 
-在 CI 真正能构建之前，`build-and-test` 不得设为必需检查——它现在是被跳过的那一个。
 
 ### 按顺序引入，一次只加一层
 

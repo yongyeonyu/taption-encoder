@@ -1,17 +1,24 @@
 name: CI
 
-# 代码审查的第一道闸门：构建 + 全量单元测试。
-# 规则见 docs/code-review/README.md §6。
+# 构建 + 全量单元测试。规则见 docs/code-review/README.md §6。
 #
-# 已知限制（2026-10-24 实测）：GitHub 托管的 macos-26 镜像只带 Xcode 26.6 / iOS 26.x SDK，
+# 为什么是 self-hosted：GitHub 托管的 macos-26 镜像只带 Xcode 26.6 / iOS 26.x SDK，
 # 而本项目需要 iOS 27 SDK（例如 AVAudioSession.activate(options:completionHandler:)）。
-# 因此 detect-xcode 会先探测版本，低于 27 时跳过构建并给出 warning，
-# 而不是丢出一个看不懂的编译错误。等镜像更新（或接入 self-hosted runner）后自动恢复。
+# 托管 runner 连编译都过不去，只能跑在维护者这台装了 Xcode 27 的 Mac 上。
 #
-# 首次设为必需检查前，请先手动跑一次（Actions → CI → Run workflow），
-# 确认 "Build and test" 真的执行了、而不是被跳过。
+# ⚠️ 安全：本仓库是 public，而 runner 会执行 workflow 里写的任何东西。
+# 对 pull_request 事件，workflow 文件取自 PR 本身 —— 也就是说 fork 的 PR 可以改
+# workflow，然后在这台 Mac 上执行任意命令（token、Keychain、签名证书都在里面）。
+# 两道防线，任何一道都不要拆：
+#   1. 下面的 job 级 `if`：fork 的 PR 在分配 runner 之前就被跳过；
+#   2. 仓库设置「Require approval for all outside collaborators」：
+#      fork PR 的 workflow 根本不会启动，除非人工点批准。
+# 还有一条软防线：分支保护没有把本 workflow 设为必需检查，所以 runner 掉线时
+# job 会一直排队，但不会把合并卡死。详见 docs/code-review/README.md §6。
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -21,88 +28,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  detect-xcode:
-    # Xcode 27 需要 macOS 26.6+。
-    runs-on: macos-26
-    timeout-minutes: 10
-    outputs:
-      ready: ${{ steps.check.outputs.ready }}
-      version: ${{ steps.check.outputs.version }}
-
-    steps:
-      - name: Check Xcode version
-        id: check
-        run: |
-          set -euo pipefail
-          sudo xcode-select -s /Applications/Xcode.app
-          VERSION=$(xcodebuild -version | head -1 | awk '{print $2}')
-          MAJOR=${VERSION%%.*}
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "detected Xcode $VERSION"
-          if [ "$MAJOR" -ge 27 ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "::warning title=Xcode too old::Runner ships Xcode $VERSION, this project needs 27+ (iOS 27 SDK). Build and test were skipped, so this run proves nothing about the code."
-          fi
-
   build-and-test:
-    needs: detect-xcode
-    if: needs.detect-xcode.outputs.ready == 'true'
-    runs-on: macos-26
+    # fork 的 PR 永远不碰这台机器。push 事件没有 pull_request 字段，走左边分支。
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, macOS, bokki]
     timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: |
-          sudo xcode-select -s /Applications/Xcode.app
-          xcodebuild -version
-          xcrun simctl list runtimes
-
-      - name: Create simulator
-        id: sim
+      - name: Check toolchain
         run: |
           set -euo pipefail
-          RUNTIME=$(xcrun simctl list runtimes \
-            | grep -oE 'com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]+' | tail -1)
-          TYPE=""
-          for name in "iPhone 17" "iPhone 16" "iPhone 15"; do
-            line=$(xcrun simctl list devicetypes | grep -F "$name (" | head -1 || true)
-            if [ -n "$line" ]; then
-              TYPE=$(echo "$line" | grep -oE 'com\.apple\.CoreSimulator\.SimDeviceType\.[A-Za-z0-9.-]+')
-              break
-            fi
-          done
-          if [ -z "$RUNTIME" ] || [ -z "$TYPE" ]; then
-            echo "找不到可用的 runtime 或 device type"; exit 1
+          xcodebuild -version
+          VERSION=$(xcodebuild -version | head -1 | awk '{print $2}')
+          if [ "${VERSION%%.*}" -lt 27 ]; then
+            echo "::error title=Xcode too old::Xcode $VERSION cannot build this project; it needs the iOS 27 SDK."
+            exit 1
           fi
-          echo "runtime=$RUNTIME"
-          echo "type=$TYPE"
-          UDID=$(xcrun simctl create "CI-Phone" "$TYPE" "$RUNTIME")
-          xcrun simctl boot "$UDID"
-          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
 
+      # CI 和 pre-push hook 调同一个脚本，这样「验证通过」只有一个定义，
+      # 不会出现「本地绿、CI 红」这种两套标准。
+      #
+      # 路径用 shell 的 $RUNNER_TEMP 拼，不用 ${{ runner.temp }}：
+      # runner 上下文在 job 级 env 里不可用（GitHub 会报 Unrecognized named-value: 'runner'，
+      # 整个 workflow 直接解析失败、0 个 job）。放在 run 里就不存在这个限制。
       - name: Build and test
         run: |
-          set -o pipefail
-          rm -rf "$RUNNER_TEMP/TestResults.xcresult"
-          xcodebuild test \
-            -project TaptionEncoder.xcodeproj \
-            -scheme TaptionEncoder \
-            -destination "id=${{ steps.sim.outputs.udid }}" \
-            -derivedDataPath build \
-            -resultBundlePath "$RUNNER_TEMP/TestResults.xcresult" \
-            -parallel-testing-enabled NO \
-            OTHER_SWIFT_FLAGS='$(inherited) -disable-sandbox' \
-            | tee build/xcodebuild.log
-
-      - name: Summarize
-        if: always()
-        run: |
-          grep -E "error:|warning:|Test Case .*(passed|failed)|Executed [0-9]+ tests|TEST (SUCCEEDED|FAILED)" \
-            build/xcodebuild.log | tail -60 || true
+          set -euo pipefail
+          export TAPTION_DERIVED_DATA="$RUNNER_TEMP/derived"
+          export TAPTION_LOG="$RUNNER_TEMP/verify.log"
+          export TAPTION_RESULT_BUNDLE="$RUNNER_TEMP/TestResults.xcresult"
+          ./scripts/verify.sh
 
       - name: Upload results
         if: always()
@@ -111,5 +70,6 @@ jobs:
           name: test-results
           path: |
             ${{ runner.temp }}/TestResults.xcresult
-            build/xcodebuild.log
+            ${{ runner.temp }}/verify.log
           retention-days: 7
+          if-no-files-found: warn
