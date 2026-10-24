@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Taption Encoder privacy manifest.
+
+	  Maintenance rule: any new use of a "required reason" API must be added to
+	  NSPrivacyAccessedAPITypes in the same pull request. See
+	  docs/code-review/README.md §5.5.
+
+	  Current audit (2026-10-24):
+	    - UserDefaults ............ used (settings, flags)  -> CA92.1
+	    - File timestamp APIs ..... not used
+	    - Disk space APIs ......... not used
+	    - System boot time APIs ... not used
+	    - Active keyboard APIs .... not used
+	-->
+	<key>NSPrivacyTracking</key>
+	<!--
+	  false: the app does not request App Tracking Transparency and never reads
+	  the advertising identifier. Ads are served by Google Mobile Ads, which
+	  ships its own privacy manifest for the data it collects.
+	-->
+	<false/>
+
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+
+	<key>NSPrivacyCollectedDataTypes</key>
+	<!--
+	  Empty on purpose. All media processing happens on device and nothing is
+	  uploaded. Data collected by the advertising SDK is declared in that SDK's
+	  own manifest, not here.
+
+	  Note: App Store Connect still has to declare "Advertising Data / Device ID"
+	  in the privacy questionnaire because the app displays third-party ads.
+	  The manifest and the questionnaire are separate declarations.
+	-->
+	<array/>
+
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<!-- CA92.1: access to user defaults is limited to the app's own data. -->
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

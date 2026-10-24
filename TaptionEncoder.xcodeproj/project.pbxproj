@@ -10,6 +10,7 @@
 		1A2B3C4D5E6F701000000001 /* TaptionEncoderApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F701000000101 /* TaptionEncoderApp.swift */; };
 		1A2B3C4D5E6F701000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F701000000102 /* ContentView.swift */; };
 		1A2B3C4D5E6F701000000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F701000000103 /* Assets.xcassets */; };
+		1A2B3C4D5E6F701000000007 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 1A2B3C4D5E6F701000000107 /* PrivacyInfo.xcprivacy */; };
 		21C52B8B54CF862921B02809 /* EncodingLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F29AE51B747E6175D860B6F /* EncodingLiveActivityWidget.swift */; };
 		2A2B3C4D5E6F701000000001 /* TaptionVideoCoreModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2B3C4D5E6F701000000101 /* TaptionVideoCoreModels.swift */; };
 		2A2B3C4D5E6F701000000002 /* TaptionVideoEditingProject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A2B3C4D5E6F701000000102 /* TaptionVideoEditingProject.swift */; };
@@ -155,6 +156,7 @@
 		1A2B3C4D5E6F701000000102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		1A2B3C4D5E6F701000000103 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		1A2B3C4D5E6F701000000106 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		1A2B3C4D5E6F701000000107 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		25F139C19A60E48CE49E88B2 /* EncodingLiveActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = EncodingLiveActivityAttributes.swift; sourceTree = "<group>"; };
 		2A2B3C4D5E6F701000000101 /* TaptionVideoCoreModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionVideoCoreModels.swift; sourceTree = "<group>"; };
 		2A2B3C4D5E6F701000000102 /* TaptionVideoEditingProject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaptionVideoEditingProject.swift; sourceTree = "<group>"; };
@@ -322,6 +324,7 @@
 				4A2B3C4D5E6F701000000203 /* Shared */,
 				2A2B3C4D5E6F701000000300 /* Core */,
 				1A2B3C4D5E6F701000000103 /* Assets.xcassets */,
+				1A2B3C4D5E6F701000000107 /* PrivacyInfo.xcprivacy */,
 				9A2B3C4D5E6F701000000101 /* OpenSourceNotices */,
 			);
 			path = TaptionEncoder;
@@ -808,6 +811,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				1A2B3C4D5E6F701000000003 /* Assets.xcassets in Resources */,
+				1A2B3C4D5E6F701000000007 /* PrivacyInfo.xcprivacy in Resources */,
 				9A2B3C4D5E6F701000000001 /* OpenSourceNotices in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
