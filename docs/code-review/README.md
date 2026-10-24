@@ -177,14 +177,29 @@
 - 因此工作流拆成两个 job：`detect-xcode` 先探测版本，低于 27 时**跳过**构建并给 warning，
   避免每次 PR 都挂一个看不懂的编译错误。
 
-这意味着：**在镜像更新（或接入 self-hosted runner）之前，CI 实际上没有验证任何代码。**
-被跳过的检查不能当作通过。三个出路：
+这意味着：**在镜像更新之前，CI 实际上没有验证任何代码。** 被跳过的检查不能当作通过。
 
-1. 等 GitHub 镜像带上 Xcode 27（通常跟随 Xcode 正式版几周内更新）；
-2. 把本机注册为 **self-hosted runner**（本机已有 Xcode 27.0，今天就能用）；
-3. 暂时把构建移到发布前手动执行，CI 只留文档与静态检查。
+**当前采用的做法：本地闸门。** 仓库自带 `scripts/verify.sh`（构建 + 全量测试，用本机 Xcode 27）
+和 `.githooks/pre-push`（测试不通过就拒绝推送）。每个 clone 启用一次：
 
-在选定之前，`build-and-test` 不得设为必需检查——它现在经常是被跳过的那一个。
+```bash
+git config core.hooksPath .githooks
+```
+
+紧急情况用 `SKIP_VERIFY=1 git push` 绕过，并在 PR 里写明原因。
+
+**为什么不用 self-hosted runner。** 本机确实有 Xcode 27.0，接上就能跑。但仓库是 public：
+任何人都能 fork 并提 PR，PR 里的 workflow 会在你的机器上执行——拿着 runner 的 token，
+能读本地文件、Keychain 和 Xcode 里的 Apple ID。GitHub 官方也明确不建议 public 仓库使用
+self-hosted runner。本地钩子拿到同样的效果，风险为零。
+
+三个长期出路，按推荐顺序：
+
+1. **保持本地闸门**（现在就是这样），等 GitHub 镜像带上 Xcode 27 后再启用托管 CI；
+2. 仓库转回 private + 升级 GitHub Pro，然后接 self-hosted runner；
+3. 自建一台专用机器跑 runner，与开发机隔离。
+
+在 CI 真正能构建之前，`build-and-test` 不得设为必需检查——它现在是被跳过的那一个。
 
 ### 按顺序引入，一次只加一层
 
