@@ -38,6 +38,36 @@ git config core.hooksPath .githooks
 之后 `git push` 会先跑构建和测试，失败就拒绝推送。纯文档改动会自动跳过。
 紧急情况：`SKIP_VERIFY=1 git push`，并在 PR 里说明原因。
 
+### 模拟器是按名字占有的，不是共享的
+
+CI runner 和开发机是同一台 Mac，所以 `verify.sh` 不再复用「开着的任意设备」，而是各自持有：
+
+| 调用方 | 设备名 |
+|---|---|
+| CI | `verify-ci` |
+| 本地 / 钩子 | `verify-local` |
+| 第三个并发 | `TAPTION_SIMULATOR_NAME=verify-2 ./scripts/verify.sh` |
+
+同名占用会直接报错并打印持有者 pid，而不是让两边互相杀掉对方的测试宿主。每次运行还会先
+`simctl erase`，消掉一类「只在全量运行时失败」的假红。
+
+**并发是安全的，但不是免费的**：全套是视频编码瓶颈，CI 单独约 170 秒，CI + 本地并发约 1200 秒。
+默认请串行。
+
+### 被退役的证明测试
+
+有 34 个测试需要 57 个真实世界样本视频，这些样本为保持仓库「只含源码」被有意移除，对应测试按
+名字排除。要跑它们：
+
+```bash
+./scripts/restore-retired-samples.sh          # 从 git 历史恢复真实样本
+./scripts/verify.sh                           # 默认套件 + 退役证明
+./scripts/restore-retired-samples.sh --clean  # 撤销
+```
+
+样本是**从历史恢复**而不是生成的：这些测试要证明 App 能读它自己没写出来的格式，合成文件不构成
+证据。详见 [docs/code-review §5.7](docs/code-review/README.md)。
+
 <details>
 <summary>为什么需要这一层</summary>
 
