@@ -1451,10 +1451,13 @@ extension CodecRoutePlannerTests {
     }
 
     internal func requireLocalRealSampleProofs() throws {
-        let flagURL = URL(fileURLWithPath: "/tmp/taption_run_local_real_sample_tests")
-        guard ProcessInfo.processInfo.environment["TAPTION_RUN_LOCAL_REAL_SAMPLE_TESTS"] == "1"
-            || FileManager.default.fileExists(atPath: flagURL.path) else {
-            throw XCTSkip("Local downloaded real-sample proofs are opt-in. Set TAPTION_RUN_LOCAL_REAL_SAMPLE_TESTS=1 or create \(flagURL.path) to run them.")
+        guard TaptionOptInProofs.isEnabled(
+            environmentVariable: "TAPTION_RUN_LOCAL_REAL_SAMPLE_TESTS",
+            flagPath: TaptionOptInProofs.localRealSamplesFlagPath
+        ) else {
+            throw XCTSkip(
+                "Local downloaded real-sample proofs are opt-in. Set TAPTION_RUN_LOCAL_REAL_SAMPLE_TESTS=1 or create \(TaptionOptInProofs.localRealSamplesFlagPath) to run them."
+            )
         }
     }
 

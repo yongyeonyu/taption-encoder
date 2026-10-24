@@ -14,6 +14,11 @@ build/
 /Samples/CodecFixtures/audio_generated_smoke/
 /Samples/CodecFixtures/transcode_reports/
 /Samples/Downloaded/
+# Real-world sample library, restored on demand by scripts/restore-retired-samples.sh.
+# 61 files / 42 MB of them used to be committed; commit 02e3ad4 removed the folder
+# to keep the repository source-only. They stay in history, so a local restore is
+# still possible — but it must never come back as a commit.
+/TaptionEncoder/TestVideos/
 # Local assistant workspace: internal notes and memory, never part of the product.
 .workbuddy-ai/
 # Internal QA journals. They live in ~/Documents/taption_encoder-notes/ now; the

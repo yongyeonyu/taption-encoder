@@ -157,6 +157,27 @@
 - 新逻辑有测试吗？修 bug 是先写能复现的测试吗？
 - **新增测试文件必须手工注册到 `project.pbxproj`**，忘了会静默不执行。这一条本身是 blocker 级陷阱——它让"测试通过"变成假信号。
 
+#### 被退役的证明测试（retired proofs）
+
+有 34 个测试需要 57 个真实世界样本（`TaptionEncoder/TestVideos`），commit `02e3ad4`
+把那个目录从仓库里拿掉了（61 个文件 / 42 MB），所以它们被列进
+`retiredSourceOnlyProofTestNames`，默认不执行。
+
+要跑它们，用仓库里的脚本，**不要用 FFmpeg 生成样本**：
+
+```bash
+./scripts/restore-retired-samples.sh          # 从 git 历史恢复真实样本 + 打开开关
+./scripts/verify.sh                           # 默认套件 + 退役证明
+./scripts/restore-retired-samples.sh --clean  # 撤销
+```
+
+为什么不能生成：这些测试的目的是证明 App 能读**它自己没写出来的**格式（Cinepak、Sorenson
+Video 1、RealVideo、RoQ、ASUS V1）。用本机 FFmpeg 造出来的文件证明不了这一点，而且
+`testBundledSampleSourceNoticeRejectsGeneratedOnlyFixtures` 就是专门拦这种做法的。
+
+⚠️ 开关是 `/tmp` 下的**机器级**文件，不是仓库级的。开着它跑 CI 会让 CI 也去跑那 34 个测试。
+用完记得 `--clean`。
+
 ---
 
 ## 6. 自动化：机器先过一遍
@@ -208,6 +229,44 @@ git config core.hooksPath .githooks
 
 CI 和钩子**调同一个脚本**，这是故意的：「验证通过」只能有一个定义，否则迟早出现本地绿、CI 红，
 然后没人再相信任何一边。
+
+### 一台机器、两个使用者：模拟器必须分开（2026-10-24 实测）
+
+runner 和开发机是同一台 Mac，而 `verify.sh` 原来是这样挑设备的：
+
+```bash
+UDID=$(xcrun simctl list devices booted | grep -oE '<uuid>' | head -1)
+```
+
+也就是「谁开着就用谁」。于是 CI 和本地各跑一次，就落到同一台模拟器上，后启动的 `xcodebuild test`
+把先启动的测试宿主 SIGKILL 掉。表现出来**完全像代码坏了**：
+
+| 现象 | 实际原因 |
+| --- | --- |
+| 473 passed / 3 failed，三条都是 `Test crashed with signal kill` | 测试宿主被杀 |
+| 三条都是最重的 VC-1 编码（`testBundledFFmpegDecodeBridge…` 等） | 跑得最久，撞上另一次启动的概率最高 |
+| 附带 `Failure collecting diagnostics from simulator: Timed out after 600.0 seconds` | 设备已被另一个 xcodebuild 占用 |
+| 单独跑或重跑就绿 | 没有竞争者了 |
+
+结论：**这不是偶发，是结构问题。** 重跑只是把碰撞概率降到零，没有修掉任何东西。
+
+现在的做法是不共享——每个使用者一台自己的模拟器，不再看「谁开着」：
+
+| 使用者 | 设备名 | 说明 |
+| --- | --- | --- |
+| CI | `verify-ci` | `CI=true` 时自动选择 |
+| 本地 / 钩子 | `verify-local` | 默认 |
+| 第三个并发 | 自己起名 | `TAPTION_SIMULATOR_NAME=verify-2 ./scripts/verify.sh` |
+
+同一台设备被两个进程抢时会立刻报错退出，而不是悄悄互相踩：
+
+```
+error: the 'verify-local' simulator is already in use (lock: /tmp/taption-verify-verify-local.lock).
+```
+
+另外每次运行都会 `simctl erase` 这台设备。跨次复用会留下上一次的 app 容器，残留的 `UserDefaults`
+会让少数测试**只在全量运行时**失败（典型是 `testAutoSizeShowsEstimatedOutputInMainTileAndPopoverValue`，
+单跑就过）。擦除只要几秒，直接消掉这一整类假红。
 
 ### 长期出路
 

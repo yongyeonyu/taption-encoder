@@ -53,6 +53,28 @@ enum TaptionEncoderTestSuiteFilter {
     }
 }
 
+// Opt-in switches for the proof suites that need material a checkout does not have.
+//
+// `xcodebuild test` does not reliably forward the shell environment to the test
+// host, so an environment variable alone is not something a script can turn on.
+// A flag file is, which is why the local real-sample proofs already accept one.
+// Both switches now work the same way: env var first, flag file second.
+enum TaptionOptInProofs {
+    static let retiredProofsFlagPath = "/tmp/taption_run_retired_proof_tests"
+    static let localRealSamplesFlagPath = "/tmp/taption_run_local_real_sample_tests"
+
+    static func isEnabled(
+        environmentVariable: String,
+        flagPath: String,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        if environment[environmentVariable] == "1" {
+            return true
+        }
+        return FileManager.default.fileExists(atPath: flagPath)
+    }
+}
+
 //  The test methods themselves live in the CodecRoutePlannerTests+*.swift
 //  files, split out of this file for size only. This part keeps the class
 //  declaration, the shared helpers and the defaultTestSuite exclusion lists.
@@ -61,10 +83,18 @@ final class CodecRoutePlannerTests: XCTestCase {
         var excludedMethodNames: Set<String> = []
         let environment = ProcessInfo.processInfo.environment
 
-        if environment["TAPTION_RUN_RETIRED_PROOF_TESTS"] != "1" {
+        if !TaptionOptInProofs.isEnabled(
+            environmentVariable: "TAPTION_RUN_RETIRED_PROOF_TESTS",
+            flagPath: TaptionOptInProofs.retiredProofsFlagPath,
+            environment: environment
+        ) {
             excludedMethodNames.formUnion(retiredSourceOnlyProofTestNames)
         }
-        if environment["TAPTION_RUN_LOCAL_REAL_SAMPLE_TESTS"] != "1" {
+        if !TaptionOptInProofs.isEnabled(
+            environmentVariable: "TAPTION_RUN_LOCAL_REAL_SAMPLE_TESTS",
+            flagPath: TaptionOptInProofs.localRealSamplesFlagPath,
+            environment: environment
+        ) {
             excludedMethodNames.formUnion(localRealSampleProofTestNames)
         }
 #if !targetEnvironment(simulator)
