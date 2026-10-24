@@ -9,6 +9,13 @@
 #   ./scripts/verify.sh            # build + full test suite
 #   ./scripts/verify.sh --build    # build only, much faster
 #
+# Environment:
+#   TAPTION_SIMULATOR_NAME         which dedicated simulator this run owns
+#                                  (default: verify-ci under CI, else verify-local)
+#   TAPTION_TEST_DESTINATION       use this destination verbatim, skip device setup
+#   TAPTION_DERIVED_DATA           derived data path
+#   TAPTION_LOG / TAPTION_RESULT_BUNDLE   where the log and result bundle go
+#
 # Exit code is 0 only when everything passed.
 
 set -euo pipefail
@@ -29,14 +36,77 @@ echo "==> Xcode: $(xcodebuild -version | head -1)"
 if [ -n "${TAPTION_TEST_DESTINATION:-}" ]; then
   DESTINATION="$TAPTION_TEST_DESTINATION"
 else
-  UDID=$(xcrun simctl list devices booted | grep -oE '[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}' | head -1 || true)
-  if [ -z "$UDID" ]; then
-    echo "==> No booted simulator, looking for a usable one"
+  # ---------------------------------------------------------------------------
+  # Simulator isolation
+  #
+  # This Mac is the CI runner *and* the development machine. The runner executes
+  # jobs out of its own work folder, but both sides end up in this script, and
+  # the selection used to be "whatever is booted, first match":
+  #
+  #   UDID=$(xcrun simctl list devices booted | grep -oE '<uuid>' | head -1)
+  #
+  # So two runs landed on the same device, and the second `xcodebuild test`
+  # SIGKILLed the first one's test host. That is exactly what a red CI looked
+  # like while the same suite passed locally: 473 passed, 3 "Test crashed with
+  # signal kill" (all on the heaviest VC-1 encodes), plus "Failure collecting
+  # diagnostics from simulator: Timed out after 600.0 seconds". Nothing was
+  # wrong with the code, and re-running with no local run in flight turned it
+  # green — which is the tell that the two runs were fighting over one device.
+  #
+  # There is no shared state to arbitrate here, so the fix is to stop sharing:
+  # each owner gets its own device, named after itself, and never looks at what
+  # else happens to be booted. CI and a local run can then overlap safely.
+  # ---------------------------------------------------------------------------
+  if [ -n "${TAPTION_SIMULATOR_NAME:-}" ]; then
+    SIM_NAME="$TAPTION_SIMULATOR_NAME"
+  elif [ "${CI:-}" = "true" ]; then
+    SIM_NAME="verify-ci"
+  else
+    SIM_NAME="verify-local"
+  fi
+
+  # The lock names its owner, so a run that died without cleaning up — SIGKILL, or
+  # bash aborting on a script that was edited while it ran — can be told apart from
+  # a live one. Without that, a dead lock blocks this owner until someone notices.
+  tmp_root="${TMPDIR:-/tmp}"
+  tmp_root="${tmp_root%/}"
+  LOCK="$tmp_root/taption-verify-${SIM_NAME}.lock"
+
+  if ! mkdir "$LOCK" 2>/dev/null; then
+    holder=$(cat "$LOCK/pid" 2>/dev/null || true)
+    if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
+      echo "error: the '$SIM_NAME' simulator is in use by pid $holder (lock: $LOCK)." >&2
+      echo "       Two runs on one device kill each other's test host, so this one stops." >&2
+      echo "       Wait for that run, or claim another device:" >&2
+      echo "         TAPTION_SIMULATOR_NAME=verify-2 ./scripts/verify.sh" >&2
+      exit 1
+    fi
+    echo "==> Reclaiming the '$SIM_NAME' lock from a run that is gone (pid ${holder:-unknown})"
+    rm -rf "$LOCK"
+    if ! mkdir "$LOCK" 2>/dev/null; then
+      echo "error: could not claim the '$SIM_NAME' simulator lock: $LOCK" >&2
+      exit 1
+    fi
+  fi
+  echo $$ > "$LOCK/pid"
+  trap 'rm -rf "$LOCK" 2>/dev/null || true' EXIT INT TERM
+
+  # Matched on " name (" so a device called verify-local2 cannot be mistaken for
+  # verify-local. The name is the whole contract, so this has to be exact.
+  UDID=$(xcrun simctl list devices 2>/dev/null \
+    | grep -F " $SIM_NAME (" \
+    | grep -oE '[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}' \
+    | head -1 || true)
+
+  if [ -n "$UDID" ]; then
+    echo "==> Using simulator $SIM_NAME ($UDID)"
+  else
+    echo "==> Creating simulator $SIM_NAME"
     # A runtime does not support every device type. The iOS 27.1 runtime only ships
     # for the Duo-era models, so pairing it with an iPhone 18 Pro is refused with
     # "Incompatible device" — and `simctl create` reports that on stdout while still
     # exiting 0, so the reply has to be validated rather than trusted. Try the newest
-    # runtime first, then older ones, then any device that already exists.
+    # runtime first, then older ones.
     for runtime in $(xcrun simctl list runtimes \
       | grep -oE 'com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]+' | sort -rV || true); do
       for name in "iPhone 18 Pro" "iPhone 17" "iPhone 16"; do
@@ -45,31 +115,34 @@ else
           continue
         fi
         TYPE=$(echo "$line" | grep -oE 'com\.apple\.CoreSimulator\.SimDeviceType\.[A-Za-z0-9.-]+')
-        created=$(xcrun simctl create "verify-phone" "$TYPE" "$runtime" 2>&1 || true)
+        created=$(xcrun simctl create "$SIM_NAME" "$TYPE" "$runtime" 2>&1 || true)
         if echo "$created" | grep -qE '^[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}$'; then
           UDID="$created"
-          echo "==> Created verify-phone on $runtime"
+          echo "==> Created $SIM_NAME on $runtime"
           break 2
         fi
       done
     done
     if [ -z "$UDID" ]; then
-      UDID=$(xcrun simctl list devices available \
-        | grep -E '^ +iPhone' \
-        | grep -oE '[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}' | head -1 || true)
-      if [ -n "$UDID" ]; then
-        echo "==> Reusing an existing simulator: $UDID"
-      fi
-    fi
-    if [ -z "$UDID" ]; then
-      echo "error: no iPhone simulator could be created or found" >&2
+      echo "error: could not create a '$SIM_NAME' simulator on any installed runtime." >&2
+      echo "       Create one by hand and name it '$SIM_NAME', or point" >&2
+      echo "       TAPTION_SIMULATOR_NAME at an existing device." >&2
       exit 1
     fi
-    # Wait for the boot to finish. Without this the first test can be launched into
-    # a half-booted device and fail with "Invalid device state" / "(ipc/mig) server died".
-    xcrun simctl boot "$UDID" 2>/dev/null || true
-    xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
   fi
+
+  # Erased on every run. A device kept across runs also keeps the previous run's
+  # app container, and the leftover UserDefaults makes a handful of tests fail
+  # only in a full-suite run — testAutoSizeShowsEstimatedOutputInMainTileAndPopoverValue
+  # is the usual one, and it passes when run alone. That is a confusing failure
+  # to debug, and erasing costs seconds, so it is not optional.
+  xcrun simctl shutdown "$UDID" 2>/dev/null || true
+  xcrun simctl erase "$UDID" 2>/dev/null || true
+  # Wait for the boot to finish. Without this the first test can be launched into
+  # a half-booted device and fail with "Invalid device state" / "(ipc/mig) server died".
+  xcrun simctl boot "$UDID" 2>/dev/null || true
+  xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
+
   DESTINATION="id=$UDID"
 fi
 

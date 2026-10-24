@@ -3,7 +3,10 @@ import XCTest
 
 final class CodecFixtureEvidenceTests: XCTestCase {
     override class var defaultTestSuite: XCTestSuite {
-        guard ProcessInfo.processInfo.environment["TAPTION_RUN_RETIRED_PROOF_TESTS"] != "1" else {
+        guard !TaptionOptInProofs.isEnabled(
+            environmentVariable: "TAPTION_RUN_RETIRED_PROOF_TESTS",
+            flagPath: TaptionOptInProofs.retiredProofsFlagPath
+        ) else {
             return super.defaultTestSuite
         }
 
