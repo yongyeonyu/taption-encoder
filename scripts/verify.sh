@@ -75,11 +75,17 @@ echo "==> Building and testing (this takes a few minutes)"
 # simulator child hold the write end open, and the reader waits for an EOF that
 # never comes. That is what made the pre-push hook look like it hung after the
 # tests had already passed.
-LOG=/tmp/taption-verify.log
+LOG=${TAPTION_LOG:-/tmp/taption-verify.log}
 : > "$LOG"
 
+# Keeping the result bundle means a failure can be opened in Xcode instead of
+# being reconstructed from grep. CI overrides the path so it can upload it.
+RESULT_BUNDLE=${TAPTION_RESULT_BUNDLE:-/tmp/taption-verify.xcresult}
+rm -rf "$RESULT_BUNDLE"
+
 # -parallel-testing-enabled NO: parallel clones occasionally stall this suite.
-xcodebuild test "${COMMON[@]}" -parallel-testing-enabled NO > "$LOG" 2>&1 &
+xcodebuild test "${COMMON[@]}" -resultBundlePath "$RESULT_BUNDLE" \
+  -parallel-testing-enabled NO > "$LOG" 2>&1 &
 XCB_PID=$!
 
 # Bounded wait. The loop runs in this shell on purpose: a `( sleep N; kill ) &`

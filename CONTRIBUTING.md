@@ -25,7 +25,7 @@ T1 改动必须附真机验证记录。
 ## 本地构建与测试
 
 ```bash
-./scripts/verify.sh           # 构建 + 全量测试（CI 现在做不了这件事，见 README §6）
+./scripts/verify.sh           # 构建 + 全量测试（CI 跑的是同一个脚本）
 ./scripts/verify.sh --build   # 只构建，快很多
 ```
 
@@ -41,9 +41,14 @@ git config core.hooksPath .githooks
 <details>
 <summary>为什么需要这一层</summary>
 
-GitHub 托管的 `macos-26` 镜像只带 Xcode 26.6，而本项目需要 iOS 27 SDK，
-所以托管 CI 的构建步骤目前是**被跳过**的——绿色不代表通过。在镜像更新之前，
-这个本地钩子是唯一真正的闸门。
+GitHub 托管的 `macos-26` 镜像只带 Xcode 26.6，而本项目需要 iOS 27 SDK。CI 因此跑在
+维护者 Mac 上的 self-hosted runner（`~/actions-runner`），也就是说**CI 只在 Mac 开机、
+runner 在线时才工作**，掉线时 job 会一直排队而不是变红。
+
+本地钩子让「推上去之前就知道结果」，不依赖那台机器是否在线。CI 和钩子调同一个
+`scripts/verify.sh`，所以两边不会出现不同的判定标准。
+
+安全前提（public 仓库）见 [README §6](docs/code-review/README.md)。
 
 </details>
 
