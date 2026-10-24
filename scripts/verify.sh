@@ -31,22 +31,44 @@ if [ -n "${TAPTION_TEST_DESTINATION:-}" ]; then
 else
   UDID=$(xcrun simctl list devices booted | grep -oE '[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}' | head -1 || true)
   if [ -z "$UDID" ]; then
-    echo "==> No booted simulator, creating one"
-    RUNTIME=$(xcrun simctl list runtimes | grep -oE 'com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]+' | tail -1)
-    TYPE=""
-    for name in "iPhone 18 Pro" "iPhone 17" "iPhone 16"; do
-      line=$(xcrun simctl list devicetypes | grep -F "$name (" | head -1 || true)
-      if [ -n "$line" ]; then
+    echo "==> No booted simulator, looking for a usable one"
+    # A runtime does not support every device type. The iOS 27.1 runtime only ships
+    # for the Duo-era models, so pairing it with an iPhone 18 Pro is refused with
+    # "Incompatible device" — and `simctl create` reports that on stdout while still
+    # exiting 0, so the reply has to be validated rather than trusted. Try the newest
+    # runtime first, then older ones, then any device that already exists.
+    for runtime in $(xcrun simctl list runtimes \
+      | grep -oE 'com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]+' | sort -rV || true); do
+      for name in "iPhone 18 Pro" "iPhone 17" "iPhone 16"; do
+        line=$(xcrun simctl list devicetypes | grep -F "$name (" | head -1 || true)
+        if [ -z "$line" ]; then
+          continue
+        fi
         TYPE=$(echo "$line" | grep -oE 'com\.apple\.CoreSimulator\.SimDeviceType\.[A-Za-z0-9.-]+')
-        break
-      fi
+        created=$(xcrun simctl create "verify-phone" "$TYPE" "$runtime" 2>&1 || true)
+        if echo "$created" | grep -qE '^[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}$'; then
+          UDID="$created"
+          echo "==> Created verify-phone on $runtime"
+          break 2
+        fi
+      done
     done
-    if [ -z "$RUNTIME" ] || [ -z "$TYPE" ]; then
-      echo "error: no iOS runtime or iPhone device type available" >&2
+    if [ -z "$UDID" ]; then
+      UDID=$(xcrun simctl list devices available \
+        | grep -E '^ +iPhone' \
+        | grep -oE '[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}' | head -1 || true)
+      if [ -n "$UDID" ]; then
+        echo "==> Reusing an existing simulator: $UDID"
+      fi
+    fi
+    if [ -z "$UDID" ]; then
+      echo "error: no iPhone simulator could be created or found" >&2
       exit 1
     fi
-    UDID=$(xcrun simctl create "verify-phone" "$TYPE" "$RUNTIME")
-    xcrun simctl boot "$UDID"
+    # Wait for the boot to finish. Without this the first test can be launched into
+    # a half-booted device and fail with "Invalid device state" / "(ipc/mig) server died".
+    xcrun simctl boot "$UDID" 2>/dev/null || true
+    xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
   fi
   DESTINATION="id=$UDID"
 fi

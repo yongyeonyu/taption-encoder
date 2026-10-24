@@ -89,6 +89,16 @@
 		8A2B3C4D5E6F701000000001 /* CodecRoutePlannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000101 /* CodecRoutePlannerTests.swift */; };
 		8A2B3C4D5E6F701000000002 /* CodecFixtureEvidenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000102 /* CodecFixtureEvidenceTests.swift */; };
 		8A2B3C4D5E6F701000000003 /* ProjectDocumentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000103 /* ProjectDocumentTests.swift */; };
+		8A2B3C4D5E6F701000000201 /* CodecRoutePlannerTests+BundledAndLocal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000221 /* CodecRoutePlannerTests+BundledAndLocal.swift */; };
+		8A2B3C4D5E6F701000000202 /* CodecRoutePlannerTests+DeviceAndAudio.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000222 /* CodecRoutePlannerTests+DeviceAndAudio.swift */; };
+		8A2B3C4D5E6F701000000203 /* CodecRoutePlannerTests+EncodingAndStandard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000223 /* CodecRoutePlannerTests+EncodingAndStandard.swift */; };
+		8A2B3C4D5E6F701000000204 /* CodecRoutePlannerTests+FolderAndQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000224 /* CodecRoutePlannerTests+FolderAndQueue.swift */; };
+		8A2B3C4D5E6F701000000205 /* CodecRoutePlannerTests+HardwareAndLossless.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000225 /* CodecRoutePlannerTests+HardwareAndLossless.swift */; };
+		8A2B3C4D5E6F701000000206 /* CodecRoutePlannerTests+PreviewAndCloud.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000226 /* CodecRoutePlannerTests+PreviewAndCloud.swift */; };
+		8A2B3C4D5E6F701000000207 /* CodecRoutePlannerTests+PreviewAndStar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000227 /* CodecRoutePlannerTests+PreviewAndStar.swift */; };
+		8A2B3C4D5E6F701000000208 /* CodecRoutePlannerTests+SingleAndOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000228 /* CodecRoutePlannerTests+SingleAndOutput.swift */; };
+		8A2B3C4D5E6F701000000209 /* CodecRoutePlannerTests+SourceAndUniversal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000229 /* CodecRoutePlannerTests+SourceAndUniversal.swift */; };
+		8A2B3C4D5E6F701000000210 /* CodecRoutePlannerTests+UniversalAndApple.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A2B3C4D5E6F701000000230 /* CodecRoutePlannerTests+UniversalAndApple.swift */; };
 		9A2B3C4D5E6F701000000001 /* OpenSourceNotices in Resources */ = {isa = PBXBuildFile; fileRef = 9A2B3C4D5E6F701000000101 /* OpenSourceNotices */; };
 		AA2B3C4D5E6F701000000001 /* TestVideoSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2B3C4D5E6F701000000101 /* TestVideoSeeder.swift */; };
 		B10000000000000000000001 /* ThumbnailProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000101 /* ThumbnailProvider.swift */; };
@@ -234,6 +244,16 @@
 		8A2B3C4D5E6F701000000101 /* CodecRoutePlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecRoutePlannerTests.swift; sourceTree = "<group>"; };
 		8A2B3C4D5E6F701000000102 /* CodecFixtureEvidenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodecFixtureEvidenceTests.swift; sourceTree = "<group>"; };
 		8A2B3C4D5E6F701000000103 /* ProjectDocumentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDocumentTests.swift; sourceTree = "<group>"; };
+		8A2B3C4D5E6F701000000221 /* CodecRoutePlannerTests+BundledAndLocal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CodecRoutePlannerTests+BundledAndLocal.swift"; sourceTree = "<group>"; };
+		8A2B3C4D5E6F701000000222 /* CodecRoutePlannerTests+DeviceAndAudio.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CodecRoutePlannerTests+DeviceAndAudio.swift"; sourceTree = "<group>"; };
+		8A2B3C4D5E6F701000000223 /* CodecRoutePlannerTests+EncodingAndStandard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CodecRoutePlannerTests+EncodingAndStandard.swift"; sourceTree = "<group>"; };
+		8A2B3C4D5E6F701000000224 /* CodecRoutePlannerTests+FolderAndQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CodecRoutePlannerTests+FolderAndQueue.swift"; sourceTree = "<group>"; };
+		8A2B3C4D5E6F701000000225 /* CodecRoutePlannerTests+HardwareAndLossless.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CodecRoutePlannerTests+HardwareAndLossless.swift"; sourceTree = "<group>"; };
+		8A2B3C4D5E6F701000000226 /* CodecRoutePlannerTests+PreviewAndCloud.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CodecRoutePlannerTests+PreviewAndCloud.swift"; sourceTree = "<group>"; };
+		8A2B3C4D5E6F701000000227 /* CodecRoutePlannerTests+PreviewAndStar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CodecRoutePlannerTests+PreviewAndStar.swift"; sourceTree = "<group>"; };
+		8A2B3C4D5E6F701000000228 /* CodecRoutePlannerTests+SingleAndOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CodecRoutePlannerTests+SingleAndOutput.swift"; sourceTree = "<group>"; };
+		8A2B3C4D5E6F701000000229 /* CodecRoutePlannerTests+SourceAndUniversal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CodecRoutePlannerTests+SourceAndUniversal.swift"; sourceTree = "<group>"; };
+		8A2B3C4D5E6F701000000230 /* CodecRoutePlannerTests+UniversalAndApple.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CodecRoutePlannerTests+UniversalAndApple.swift"; sourceTree = "<group>"; };
 		9A2B3C4D5E6F701000000101 /* OpenSourceNotices */ = {isa = PBXFileReference; lastKnownFileType = folder; path = OpenSourceNotices; sourceTree = "<group>"; };
 		AA2B3C4D5E6F701000000101 /* TestVideoSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestVideoSeeder.swift; sourceTree = "<group>"; };
 		ACC87F4CD4CF9E262B4F4A5D /* TaptionEncoderLiveActivityExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; name = TaptionEncoderLiveActivityExtension.appex; path = TaptionEncoderLiveActivityExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -654,6 +674,16 @@
 				8A2B3C4D5E6F701000000101 /* CodecRoutePlannerTests.swift */,
 				8A2B3C4D5E6F701000000102 /* CodecFixtureEvidenceTests.swift */,
 				8A2B3C4D5E6F701000000103 /* ProjectDocumentTests.swift */,
+				8A2B3C4D5E6F701000000221 /* CodecRoutePlannerTests+BundledAndLocal.swift */,
+				8A2B3C4D5E6F701000000222 /* CodecRoutePlannerTests+DeviceAndAudio.swift */,
+				8A2B3C4D5E6F701000000223 /* CodecRoutePlannerTests+EncodingAndStandard.swift */,
+				8A2B3C4D5E6F701000000224 /* CodecRoutePlannerTests+FolderAndQueue.swift */,
+				8A2B3C4D5E6F701000000225 /* CodecRoutePlannerTests+HardwareAndLossless.swift */,
+				8A2B3C4D5E6F701000000226 /* CodecRoutePlannerTests+PreviewAndCloud.swift */,
+				8A2B3C4D5E6F701000000227 /* CodecRoutePlannerTests+PreviewAndStar.swift */,
+				8A2B3C4D5E6F701000000228 /* CodecRoutePlannerTests+SingleAndOutput.swift */,
+				8A2B3C4D5E6F701000000229 /* CodecRoutePlannerTests+SourceAndUniversal.swift */,
+				8A2B3C4D5E6F701000000230 /* CodecRoutePlannerTests+UniversalAndApple.swift */,
 				5F31DA34F2410418BCCCC3F7 /* Fixtures */,
 			);
 			path = TaptionEncoderTests;
@@ -960,6 +990,16 @@
 				B85C13A667EB4B66F41E9CFA /* RefactoringRegressionTests.swift in Sources */,
 				8A2B3C4D5E6F701000000002 /* CodecFixtureEvidenceTests.swift in Sources */,
 				8A2B3C4D5E6F701000000003 /* ProjectDocumentTests.swift in Sources */,
+				8A2B3C4D5E6F701000000201 /* CodecRoutePlannerTests+BundledAndLocal.swift in Sources */,
+				8A2B3C4D5E6F701000000202 /* CodecRoutePlannerTests+DeviceAndAudio.swift in Sources */,
+				8A2B3C4D5E6F701000000203 /* CodecRoutePlannerTests+EncodingAndStandard.swift in Sources */,
+				8A2B3C4D5E6F701000000204 /* CodecRoutePlannerTests+FolderAndQueue.swift in Sources */,
+				8A2B3C4D5E6F701000000205 /* CodecRoutePlannerTests+HardwareAndLossless.swift in Sources */,
+				8A2B3C4D5E6F701000000206 /* CodecRoutePlannerTests+PreviewAndCloud.swift in Sources */,
+				8A2B3C4D5E6F701000000207 /* CodecRoutePlannerTests+PreviewAndStar.swift in Sources */,
+				8A2B3C4D5E6F701000000208 /* CodecRoutePlannerTests+SingleAndOutput.swift in Sources */,
+				8A2B3C4D5E6F701000000209 /* CodecRoutePlannerTests+SourceAndUniversal.swift in Sources */,
+				8A2B3C4D5E6F701000000210 /* CodecRoutePlannerTests+UniversalAndApple.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
