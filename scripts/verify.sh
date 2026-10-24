@@ -92,18 +92,25 @@ XCB_PID=$!
 # watchdog leaves an orphan sleep holding our stdout, which hangs the caller
 # instead of protecting it.
 #
-# The grace period is not paranoia. xcodebuild on this machine routinely prints
-# the final "** TEST SUCCEEDED **" line and then never exits, stuck waiting on a
-# simctl child that has already done its job. Without the grace period the wait
-# burns the full 40-minute limit on a run that finished in three. Once the final
-# marker is in the log the result is decided, so we stop xcodebuild ourselves and
-# read the verdict from the log instead of from its exit status.
-LIMIT=2400
+# The grace period is not paranoia. xcodebuild on this machine routinely stops
+# emitting output and never exits, stuck on a simctl child that has already done
+# its job. Two different hangs have been observed, so the terminal signal is
+# whichever of these lands first:
+#
+#   Test Suite 'All tests' passed   <- xctest, printed at the end of the session
+#   ** TEST SUCCEEDED **            <- xcodebuild, printed after that ... or not
+#
+# The second one is NOT reliable: one run finished the whole suite, printed the
+# summary, and then hung before ever writing "** TEST SUCCEEDED **". Treating
+# that line as the only proof of success turns a passing run into a red build
+# after the full timeout. So either line ends the wait, and the verdict is read
+# from the log rather than from the exit status.
+LIMIT=1800
 GRACE=45
 WAITED=0
 DONE_AT=""
 while kill -0 "$XCB_PID" 2>/dev/null; do
-  if [ -z "$DONE_AT" ] && grep -qE '\*\* (TEST|BUILD) (SUCCEEDED|FAILED) \*\*' "$LOG"; then
+  if [ -z "$DONE_AT" ] && grep -qE "\*\* (TEST|BUILD) (SUCCEEDED|FAILED) \*\*|Test Suite 'All tests' (passed|failed)" "$LOG"; then
     DONE_AT=$WAITED
   fi
   if [ -n "$DONE_AT" ] && [ $((WAITED - DONE_AT)) -ge "$GRACE" ]; then
@@ -129,14 +136,14 @@ set -e
 
 grep -E "error:|Test Case .* failed|Executed [0-9]+ tests, with|TEST (SUCCEEDED|FAILED)" "$LOG" | tail -20 || true
 
-if grep -qE "\*\* (TEST|BUILD) FAILED \*\*|Test Case .* failed" "$LOG"; then
+if grep -qE "\*\* (TEST|BUILD) FAILED \*\*|Test Suite 'All tests' failed|Test Case .* failed" "$LOG"; then
   echo "==> FAILED. Full log: $LOG" >&2
   exit 1
 fi
 
 # Deliberately ignores $STATUS: when we stopped a hung xcodebuild above, its exit
 # code is our own SIGTERM, not a verdict. The log is the source of truth.
-if ! grep -qE "\*\* TEST SUCCEEDED \*\*" "$LOG"; then
+if ! grep -qE "\*\* TEST SUCCEEDED \*\*|Test Suite 'All tests' passed" "$LOG"; then
   echo "==> Could not determine the result (xcodebuild exited $STATUS). Full log: $LOG" >&2
   exit 1
 fi
