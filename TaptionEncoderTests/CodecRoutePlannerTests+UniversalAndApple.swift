@@ -213,6 +213,46 @@ extension CodecRoutePlannerTests {
         XCTAssertFalse(menuText.contains("AdPrivacyActionHandler"))
     }
 
+    /// Rules 3 and 4 of the design system: a view names a role, never a raw colour. The cheapest way
+    /// to keep that true is to fail when a palette entry or a hex literal leaks out of the design
+    /// system file, because a grep is easy to forget and a failing test is not.
+    func testDesignSystemPaletteIsNotReferencedOutsideItsFile() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let appURL = rootURL.appendingPathComponent("TaptionEncoder", isDirectory: true)
+        let designSystemURL = rootURL
+            .appendingPathComponent("TaptionEncoder/Shared/DesignSystem/TaptionDesignSystem.swift")
+            .standardizedFileURL
+
+        guard let enumerator = FileManager.default.enumerator(
+            at: appURL,
+            includingPropertiesForKeys: nil
+        ) else {
+            return XCTFail("could not enumerate \(appURL.path)")
+        }
+        var sources: [URL] = []
+        for case let url as URL in enumerator where url.pathExtension == "swift" {
+            sources.append(url)
+        }
+        // A sweep that finds nothing would pass silently and guard nothing.
+        XCTAssertGreaterThan(sources.count, 50, "the sweep found \(sources.count) sources; the path is wrong")
+
+        var offenders: [String] = []
+        for source in sources where source.standardizedFileURL != designSystemURL {
+            let text = try String(contentsOf: source, encoding: .utf8)
+            let relative = source.path.replacingOccurrences(of: rootURL.path + "/", with: "")
+            for token in ["TaptionColor.", "Color(taptionHex:"] where text.contains(token) {
+                offenders.append("\(relative) references \(token)")
+            }
+        }
+
+        XCTAssertTrue(
+            offenders.isEmpty,
+            "views must name a role, not a raw colour:\n" + offenders.joined(separator: "\n")
+        )
+    }
+
     func testTaptionThemeUsesBlueGreenSlateAndIcePalette() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
