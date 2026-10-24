@@ -858,7 +858,9 @@ extension CodecRoutePlannerTests {
 
         XCTAssertTrue(source.contains("private func startResourceMonitoring(sampleIntervalNanoseconds: UInt64)"))
         XCTAssertTrue(source.contains("optimizationProfile.resourceSampleIntervalNanoseconds"))
-        XCTAssertTrue(source.contains("Task(priority: taskPriority(for: optimizationProfile))"))
+        // Deliberately stops at the call: this asserts the task is created with the priority derived
+        // from the profile, not which expression holds the profile.
+        XCTAssertTrue(source.contains("Task(priority: taskPriority(for: "))
         XCTAssertTrue(source.contains("private func stopResourceMonitoring()"))
         XCTAssertTrue(source.contains("latestResourceUsage"))
         XCTAssertTrue(source.contains("resourceUsage: latestResourceUsage"))

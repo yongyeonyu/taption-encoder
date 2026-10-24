@@ -3978,14 +3978,82 @@ final class HomeViewModel: ObservableObject {
         guard preparationOperationID == operationID else { throw CancellationError() }
     }
 
+    /// The values computed before the encode task starts, so the task body stays about the work.
+    private struct EncodingStartContext {
+        let optimizationProfile: TaptionEncodingOptimizationProfile
+        let trace: TaptionEncodingPerformanceTrace
+    }
+
     private func startEncoding(review: PreparedEncodingReview, allowsBusyState: Bool = false) {
+        guard let context = beginEncodingStart(review: review, allowsBusyState: allowsBusyState) else {
+            return
+        }
+
+        activeTask = Task(priority: taskPriority(for: context.optimizationProfile)) { [weak self] in
+            guard let self else {
+                return
+            }
+
+            let core = TaptionVideoCore(services: environment.videoCoreServices)
+            var retainedBackgroundPlanID: UUID?
+            do {
+                let result = try await core.encodePreparedJob(
+                    review.job,
+                    backgroundTaskCompletionPolicy: .callerManaged,
+                    progress: makeEncodingProgressHandler(
+                        review: review,
+                        trace: context.trace
+                    )
+                )
+                // Claimed before anything else can throw, so the failure paths below still release
+                // the background lease for a plan that already started.
+                retainedBackgroundPlanID = result.planID
+                try await finishEncoding(
+                    result,
+                    review: review,
+                    optimizationProfile: context.optimizationProfile,
+                    trace: context.trace
+                )
+                retainedBackgroundPlanID = nil
+            } catch is CancellationError {
+                await handleEncodingCancellation(
+                    review: review,
+                    retainedBackgroundPlanID: retainedBackgroundPlanID,
+                    trace: context.trace
+                )
+            } catch let error as TaptionVideoCoreError {
+                await handleEncodingTaskFailure(
+                    error,
+                    review: review,
+                    retainedBackgroundPlanID: retainedBackgroundPlanID,
+                    trace: context.trace,
+                    logMessage: "Encoding task failed with TaptionVideoCoreError"
+                )
+            } catch {
+                await handleEncodingTaskFailure(
+                    error,
+                    review: review,
+                    retainedBackgroundPlanID: retainedBackgroundPlanID,
+                    trace: context.trace,
+                    logMessage: "Encoding task failed"
+                )
+            }
+        }
+    }
+
+    /// Validates the request, publishes the queued state and starts resource monitoring.
+    /// Returns `nil` when another flow owns the screen.
+    private func beginEncodingStart(
+        review: PreparedEncodingReview,
+        allowsBusyState: Bool
+    ) -> EncodingStartContext? {
         guard allowsBusyState || !state.isBusy else {
             AppLogger.warning(
                 "Start encoding ignored because state is busy",
                 category: .encoding,
                 metadata: ["name": review.source.displayName]
             )
-            return
+            return nil
         }
 
         let optimizationProfile = encodingOptimizationProfile(for: review)
@@ -4032,276 +4100,248 @@ final class HomeViewModel: ObservableObject {
         state = .encoding(initialProgress)
         startEncodingActivity(for: review, progress: initialProgress)
         startResourceMonitoring(sampleIntervalNanoseconds: optimizationProfile.resourceSampleIntervalNanoseconds)
+        return EncodingStartContext(
+            optimizationProfile: optimizationProfile,
+            trace: trace
+        )
+    }
 
-        activeTask = Task(priority: taskPriority(for: optimizationProfile)) { [weak self] in
-            guard let self else {
-                return
-            }
-
-            let core = TaptionVideoCore(services: environment.videoCoreServices)
-            var retainedBackgroundPlanID: UUID?
-            do {
-                var lastLoggedProgressBucket = -1
-                let firstProgressLock = NSLock()
-                var didMarkFirstProgress = false
-                let result = try await core.encodePreparedJob(
-                    review.job,
-                    backgroundTaskCompletionPolicy: .callerManaged
-                ) { [weak self] progress in
-                    let shouldMarkFirstProgress: Bool = {
-                        firstProgressLock.lock()
-                        defer {
-                            firstProgressLock.unlock()
-                        }
-                        guard !didMarkFirstProgress else {
-                            return false
-                        }
-                        didMarkFirstProgress = true
-                        return true
-                    }()
-                    if shouldMarkFirstProgress {
-                        trace.mark(
-                            "first_progress",
-                            metadata: [
-                                "stage": progress.stage.rawValue,
-                                "fraction": String(format: "%.3f", progress.fractionCompleted)
-                            ]
-                        )
-                    }
-                    Task { @MainActor [weak self] in
-                        guard let self else {
-                            return
-                        }
-                        let bucket = Int((progress.fractionCompleted * 10).rounded(.down))
-                        if bucket != lastLoggedProgressBucket || progress.stage == .waitingForSaveGate {
-                            lastLoggedProgressBucket = bucket
-                            AppLogger.debug(
-                                "Encoding progress",
-                                category: .encoding,
-                                metadata: [
-                                    "name": review.source.displayName,
-                                    "stage": progress.stage.rawValue,
-                                    "fraction": String(format: "%.3f", progress.fractionCompleted)
-                                ]
-                            )
-                        }
-                        let snapshot = self.encodingProgressSnapshot(
-                            from: progress,
-                            sourceName: review.source.displayName
-                        )
-                        self.captureDeferredBatteryStopIfNeeded()
-                        self.markBatchItem(
-                            review.source.url,
-                            videoInfo: review.videoInfo,
-                            statusText: snapshot.stageTitle,
-                            detailText: snapshot.backendLabel,
-                            progress: snapshot,
-                            isActive: true
-                        )
-                        self.state = .encoding(snapshot)
-                        self.updateEncodingActivity(for: review, progress: snapshot)
-                    }
+    /// Builds the progress closure. It owns the throttle state the inline version captured, so the
+    /// encode call site stays readable and the first-progress lock keeps its single instance.
+    private func makeEncodingProgressHandler(
+        review: PreparedEncodingReview,
+        trace: TaptionEncodingPerformanceTrace
+    ) -> (TaptionEncodingProgress) -> Void {
+        var lastLoggedProgressBucket = -1
+        let firstProgressLock = NSLock()
+        var didMarkFirstProgress = false
+        return { [weak self] progress in
+            let shouldMarkFirstProgress: Bool = {
+                firstProgressLock.lock()
+                defer {
+                    firstProgressLock.unlock()
                 }
-                retainedBackgroundPlanID = result.planID
-                activeBackgroundSavePlanIDs.insert(result.planID)
-
-                try Task.checkCancellation()
+                guard !didMarkFirstProgress else {
+                    return false
+                }
+                didMarkFirstProgress = true
+                return true
+            }()
+            if shouldMarkFirstProgress {
                 trace.mark(
-                    "encode_completed",
+                    "first_progress",
                     metadata: [
-                        "mode": result.usedMode.rawValue,
-                        "backend": result.usedBackend.rawValue,
-                        "optimizationProfile": optimizationProfile.rawValue
+                        "stage": progress.stage.rawValue,
+                        "fraction": String(format: "%.3f", progress.fractionCompleted)
                     ]
                 )
-
-                guard let pendingState = result.pendingSaveState else {
-                    throw TaptionVideoCoreError.missingTemporaryOutputURL
+            }
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    return
                 }
-                let restorablePendingState = await pendingSaveStateWithAccessBookmark(
-                    pendingState,
-                    source: review.source
+                let bucket = Int((progress.fractionCompleted * 10).rounded(.down))
+                if bucket != lastLoggedProgressBucket || progress.stage == .waitingForSaveGate {
+                    lastLoggedProgressBucket = bucket
+                    AppLogger.debug(
+                        "Encoding progress",
+                        category: .encoding,
+                        metadata: [
+                            "name": review.source.displayName,
+                            "stage": progress.stage.rawValue,
+                            "fraction": String(format: "%.3f", progress.fractionCompleted)
+                        ]
+                    )
+                }
+                let snapshot = self.encodingProgressSnapshot(
+                    from: progress,
+                    sourceName: review.source.displayName
                 )
-
-                let completedProgress = completedProgressSnapshot(label: codecPathTitle(mode: result.usedMode))
-                AppLogger.info(
-                    "Encoding completed and queued for final save",
-                    category: .encoding,
-                    metadata: [
-                        "name": review.source.displayName,
-                        "plan": result.planID.uuidString,
-                        "mode": result.usedMode.rawValue,
-                        "backend": result.usedBackend.rawValue,
-                        "temporary": result.temporaryOutputURL.lastPathComponent,
-                        "temporaryBytes": fileSizeInBytes(at: result.temporaryOutputURL).map(String.init) ?? "unknown",
-                        "optimizationProfile": optimizationProfile.rawValue
-                    ]
-                )
-                logCodecBenchmarkProbeCompletionIfNeeded(
-                    sourceName: review.source.displayName,
-                    result: result,
-                    optimizationProfile: optimizationProfile
-                )
-                clearActiveStarCharge(for: review.source)
-                let pendingJob = PendingSaveJob(
-                    sourceName: review.source.displayName,
-                    state: restorablePendingState
-                )
-                stopResourceMonitoring()
-                endEncodingAdSuppressionIfNeeded()
-                enqueuePendingSaveJob(pendingJob)
-                markBatchItem(
+                self.captureDeferredBatteryStopIfNeeded()
+                self.markBatchItem(
                     review.source.url,
                     videoInfo: review.videoInfo,
-                    statusText: "Saving",
-                    detailText: codecPathDetail(mode: result.usedMode, backend: result.usedBackend),
-                    progress: completedProgress,
+                    statusText: snapshot.stageTitle,
+                    detailText: snapshot.backendLabel,
+                    progress: snapshot,
                     isActive: true
                 )
-                updateEncodingActivity(
-                    for: review,
-                    progress: completedProgress,
-                    statusText: restorablePendingState.requiresRewardedAd ? "Ready to save" : "Saving"
-                )
-                if restorablePendingState.requiresRewardedAd && folderBatch == nil {
-                    endEncodingActivity(statusText: "Ready to save", fractionCompleted: 1)
-                }
-                activeTask = nil
-                state = .pendingSave(pendingJob)
-                trace.finish("pending_save_started", metadata: ["pendingSave": pendingJob.id.uuidString])
-                let didStartImmediateSave = requestSaveDestinationIfNeeded(for: pendingJob)
-                if !didStartImmediateSave {
-                    await completeBackgroundSaveLease(planID: result.planID)
-                }
-                retainedBackgroundPlanID = nil
-            } catch is CancellationError {
-                if let retainedBackgroundPlanID {
-                    await completeBackgroundSaveLease(planID: retainedBackgroundPlanID)
-                }
-                AppLogger.warning(
-                    "Encoding task cancelled",
-                    category: .encoding,
-                    metadata: ["name": review.source.displayName]
-                )
-                stopResourceMonitoring()
-                endEncodingAdSuppressionIfNeeded()
-                clearActiveStarCharge(for: review.source)
-                markBatchItem(
-                    review.source.url,
-                    videoInfo: review.videoInfo,
-                    statusText: "Cancelled",
-                    detailText: "The encoding job was cancelled.",
-                    progress: nil,
-                    isActive: false
-                )
-                state = .cancelled
-                endEncodingActivity(statusText: "Cancelled", fractionCompleted: lastEncodingActivitySnapshot?.fractionCompleted ?? 0)
-                activeTask = nil
-                currentReview = nil
-                folderBatch = nil
-                stopSecurityScopedAccess()
-                requestSessionEndAd(reason: .cancelledEncoding)
-                trace.finish("cancelled")
-            } catch let error as TaptionVideoCoreError {
-                if let retainedBackgroundPlanID {
-                    await completeBackgroundSaveLease(planID: retainedBackgroundPlanID)
-                }
-                logCodecBenchmarkProbeTerminalIfNeeded(
-                    status: "encode_failed",
-                    sourceName: review.source.displayName,
-                    errorMessage: error.localizedDescription
-                )
-                AppLogger.error(
-                    "Encoding task failed with TaptionVideoCoreError",
-                    category: .encoding,
-                    metadata: [
-                        "name": review.source.displayName,
-                        "error": error.localizedDescription
-                    ]
-                )
-                stopResourceMonitoring()
-                endEncodingAdSuppressionIfNeeded()
-                refundActiveStarChargeIfNeeded(for: review.source)
-                let failure = HomeErrorPresenter.error(
-                    title: "Encoding failed",
-                    summary: "The app could not finish encoding this video.",
-                    recovery: "Keep the app open and try again. If it repeats, choose another source or output setting.",
-                    error: error
-                )
-                let cardDetail = HomeErrorPresenter.cardDetail(
-                    summary: "The app could not finish encoding this video.",
-                    recovery: "Keep the app open and try again. If it repeats, choose another source or output setting.",
-                    error: error
-                )
-                markBatchItem(
-                    review.source.url,
-                    videoInfo: review.videoInfo,
-                    statusText: "Failed",
-                    detailText: cardDetail,
-                    progress: nil,
-                    isActive: false
-                )
-                if handleFolderItemFailure(source: review.source, errorMessage: cardDetail) {
-                    trace.finish("failed", metadata: ["error": error.localizedDescription])
-                    return
-                }
-                state = .failed(failure)
-                endEncodingActivity(statusText: "Failed", fractionCompleted: lastEncodingActivitySnapshot?.fractionCompleted ?? 0)
-                activeTask = nil
-                stopSecurityScopedAccess()
-                requestSessionEndAd(reason: .failedEncoding)
-                trace.finish("failed", metadata: ["error": error.localizedDescription])
-            } catch {
-                if let retainedBackgroundPlanID {
-                    await completeBackgroundSaveLease(planID: retainedBackgroundPlanID)
-                }
-                logCodecBenchmarkProbeTerminalIfNeeded(
-                    status: "encode_failed",
-                    sourceName: review.source.displayName,
-                    errorMessage: error.localizedDescription
-                )
-                AppLogger.error(
-                    "Encoding task failed",
-                    category: .encoding,
-                    metadata: [
-                        "name": review.source.displayName,
-                        "error": error.localizedDescription
-                    ]
-                )
-                stopResourceMonitoring()
-                endEncodingAdSuppressionIfNeeded()
-                refundActiveStarChargeIfNeeded(for: review.source)
-                let failure = HomeErrorPresenter.error(
-                    title: "Encoding failed",
-                    summary: "The app could not finish encoding this video.",
-                    recovery: "Keep the app open and try again. If it repeats, choose another source or output setting.",
-                    error: error
-                )
-                let cardDetail = HomeErrorPresenter.cardDetail(
-                    summary: "The app could not finish encoding this video.",
-                    recovery: "Keep the app open and try again. If it repeats, choose another source or output setting.",
-                    error: error
-                )
-                markBatchItem(
-                    review.source.url,
-                    videoInfo: review.videoInfo,
-                    statusText: "Failed",
-                    detailText: cardDetail,
-                    progress: nil,
-                    isActive: false
-                )
-                if handleFolderItemFailure(source: review.source, errorMessage: cardDetail) {
-                    trace.finish("failed", metadata: ["error": error.localizedDescription])
-                    return
-                }
-                state = .failed(failure)
-                endEncodingActivity(statusText: "Failed", fractionCompleted: lastEncodingActivitySnapshot?.fractionCompleted ?? 0)
-                activeTask = nil
-                stopSecurityScopedAccess()
-                requestSessionEndAd(reason: .failedEncoding)
-                trace.finish("failed", metadata: ["error": error.localizedDescription])
+                self.state = .encoding(snapshot)
+                self.updateEncodingActivity(for: review, progress: snapshot)
             }
         }
+    }
+
+    /// Turns a completed encode into a pending save. The caller owns the background plan id and
+    /// clears it only after this returns, so a throw in here still releases the lease.
+    private func finishEncoding(
+        _ result: TaptionEncodingResult,
+        review: PreparedEncodingReview,
+        optimizationProfile: TaptionEncodingOptimizationProfile,
+        trace: TaptionEncodingPerformanceTrace
+    ) async throws {
+        activeBackgroundSavePlanIDs.insert(result.planID)
+
+        try Task.checkCancellation()
+        trace.mark(
+            "encode_completed",
+            metadata: [
+                "mode": result.usedMode.rawValue,
+                "backend": result.usedBackend.rawValue,
+                "optimizationProfile": optimizationProfile.rawValue
+            ]
+        )
+
+        guard let pendingState = result.pendingSaveState else {
+            throw TaptionVideoCoreError.missingTemporaryOutputURL
+        }
+        let restorablePendingState = await pendingSaveStateWithAccessBookmark(
+            pendingState,
+            source: review.source
+        )
+
+        let completedProgress = completedProgressSnapshot(label: codecPathTitle(mode: result.usedMode))
+        AppLogger.info(
+            "Encoding completed and queued for final save",
+            category: .encoding,
+            metadata: [
+                "name": review.source.displayName,
+                "plan": result.planID.uuidString,
+                "mode": result.usedMode.rawValue,
+                "backend": result.usedBackend.rawValue,
+                "temporary": result.temporaryOutputURL.lastPathComponent,
+                "temporaryBytes": fileSizeInBytes(at: result.temporaryOutputURL).map(String.init) ?? "unknown",
+                "optimizationProfile": optimizationProfile.rawValue
+            ]
+        )
+        logCodecBenchmarkProbeCompletionIfNeeded(
+            sourceName: review.source.displayName,
+            result: result,
+            optimizationProfile: optimizationProfile
+        )
+        clearActiveStarCharge(for: review.source)
+        let pendingJob = PendingSaveJob(
+            sourceName: review.source.displayName,
+            state: restorablePendingState
+        )
+        stopResourceMonitoring()
+        endEncodingAdSuppressionIfNeeded()
+        enqueuePendingSaveJob(pendingJob)
+        markBatchItem(
+            review.source.url,
+            videoInfo: review.videoInfo,
+            statusText: "Saving",
+            detailText: codecPathDetail(mode: result.usedMode, backend: result.usedBackend),
+            progress: completedProgress,
+            isActive: true
+        )
+        updateEncodingActivity(
+            for: review,
+            progress: completedProgress,
+            statusText: restorablePendingState.requiresRewardedAd ? "Ready to save" : "Saving"
+        )
+        if restorablePendingState.requiresRewardedAd && folderBatch == nil {
+            endEncodingActivity(statusText: "Ready to save", fractionCompleted: 1)
+        }
+        activeTask = nil
+        state = .pendingSave(pendingJob)
+        trace.finish("pending_save_started", metadata: ["pendingSave": pendingJob.id.uuidString])
+        let didStartImmediateSave = requestSaveDestinationIfNeeded(for: pendingJob)
+        if !didStartImmediateSave {
+            await completeBackgroundSaveLease(planID: result.planID)
+        }
+    }
+
+    private func handleEncodingCancellation(
+        review: PreparedEncodingReview,
+        retainedBackgroundPlanID: UUID?,
+        trace: TaptionEncodingPerformanceTrace
+    ) async {
+        if let retainedBackgroundPlanID {
+            await completeBackgroundSaveLease(planID: retainedBackgroundPlanID)
+        }
+        AppLogger.warning(
+            "Encoding task cancelled",
+            category: .encoding,
+            metadata: ["name": review.source.displayName]
+        )
+        stopResourceMonitoring()
+        endEncodingAdSuppressionIfNeeded()
+        clearActiveStarCharge(for: review.source)
+        markBatchItem(
+            review.source.url,
+            videoInfo: review.videoInfo,
+            statusText: "Cancelled",
+            detailText: "The encoding job was cancelled.",
+            progress: nil,
+            isActive: false
+        )
+        state = .cancelled
+        endEncodingActivity(statusText: "Cancelled", fractionCompleted: lastEncodingActivitySnapshot?.fractionCompleted ?? 0)
+        activeTask = nil
+        currentReview = nil
+        folderBatch = nil
+        stopSecurityScopedAccess()
+        requestSessionEndAd(reason: .cancelledEncoding)
+        trace.finish("cancelled")
+    }
+
+    /// Shared by the typed and the untyped failure paths, which differed only in their log line.
+    private func handleEncodingTaskFailure(
+        _ error: Error,
+        review: PreparedEncodingReview,
+        retainedBackgroundPlanID: UUID?,
+        trace: TaptionEncodingPerformanceTrace,
+        logMessage: String
+    ) async {
+        if let retainedBackgroundPlanID {
+            await completeBackgroundSaveLease(planID: retainedBackgroundPlanID)
+        }
+        logCodecBenchmarkProbeTerminalIfNeeded(
+            status: "encode_failed",
+            sourceName: review.source.displayName,
+            errorMessage: error.localizedDescription
+        )
+        AppLogger.error(
+            logMessage,
+            category: .encoding,
+            metadata: [
+                "name": review.source.displayName,
+                "error": error.localizedDescription
+            ]
+        )
+        stopResourceMonitoring()
+        endEncodingAdSuppressionIfNeeded()
+        refundActiveStarChargeIfNeeded(for: review.source)
+        let failure = HomeErrorPresenter.error(
+            title: "Encoding failed",
+            summary: "The app could not finish encoding this video.",
+            recovery: "Keep the app open and try again. If it repeats, choose another source or output setting.",
+            error: error
+        )
+        let cardDetail = HomeErrorPresenter.cardDetail(
+            summary: "The app could not finish encoding this video.",
+            recovery: "Keep the app open and try again. If it repeats, choose another source or output setting.",
+            error: error
+        )
+        markBatchItem(
+            review.source.url,
+            videoInfo: review.videoInfo,
+            statusText: "Failed",
+            detailText: cardDetail,
+            progress: nil,
+            isActive: false
+        )
+        if handleFolderItemFailure(source: review.source, errorMessage: cardDetail) {
+            trace.finish("failed", metadata: ["error": error.localizedDescription])
+            return
+        }
+        state = .failed(failure)
+        endEncodingActivity(statusText: "Failed", fractionCompleted: lastEncodingActivitySnapshot?.fractionCompleted ?? 0)
+        activeTask = nil
+        stopSecurityScopedAccess()
+        requestSessionEndAd(reason: .failedEncoding)
+        trace.finish("failed", metadata: ["error": error.localizedDescription])
     }
 
     private func savePendingJob(
