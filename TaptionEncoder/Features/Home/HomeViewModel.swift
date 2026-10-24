@@ -3512,6 +3512,29 @@ final class HomeViewModel: ObservableObject {
         )
     }
 
+    /// The caller's intent for a preparation run, bundled so the stage helpers below can share it
+    /// without repeating four flags in every signature.
+    private struct PreparationRequest {
+        let autoStartAfterPrepare: Bool
+        let autoOpenPreviewAfterPrepare: Bool
+        let deferEncodingPreparationUntilStart: Bool
+        let allowsBusyState: Bool
+    }
+
+    /// What the inspection stage hands to the gates and to the ready stage.
+    private struct PreparedEncodingJobResult {
+        let job: TaptionPreparedEncodingJob
+        let isPlaybackOnlyPreparation: Bool
+    }
+
+    /// The outcome of the checks that sit between job preparation and the ready state.
+    private enum PreparationGateResult {
+        /// Every check passed; preparation can move on to building the review.
+        case proceed
+        /// A check already put the UI into a terminal state; the task must stop here.
+        case stopped
+    }
+
     private func prepareEncodingFlow(
         source: HomeSelectedSource,
         autoStartAfterPrepare: Bool = false,
@@ -3520,40 +3543,15 @@ final class HomeViewModel: ObservableObject {
         allowsBusyState: Bool = false,
         preinspectedAsset: TaptionVideoAsset? = nil
     ) {
-        guard state.canSelectSource || autoStartAfterPrepare || allowsBusyState else {
-            AppLogger.warning(
-                "Prepare encoding ignored because state is busy",
-                category: .encoding,
-                metadata: [
-                    "name": source.displayName,
-                    "autoStart": "\(autoStartAfterPrepare)",
-                    "allowsBusyState": "\(allowsBusyState)"
-                ]
-            )
+        let request = PreparationRequest(
+            autoStartAfterPrepare: autoStartAfterPrepare,
+            autoOpenPreviewAfterPrepare: autoOpenPreviewAfterPrepare,
+            deferEncodingPreparationUntilStart: deferEncodingPreparationUntilStart,
+            allowsBusyState: allowsBusyState
+        )
+        guard let preparationID = beginPreparation(source: source, request: request) else {
             return
         }
-
-        invalidateEncodingStart()
-        let preparationID = UUID()
-        preparationOperationID = preparationID
-        AppLogger.info(
-            "Prepare encoding started",
-            category: .encoding,
-            metadata: [
-                "name": source.displayName,
-                "kind": source.kind.rawValue,
-                "autoStart": "\(autoStartAfterPrepare)"
-            ]
-        )
-        activeTask?.cancel()
-        markBatchItem(
-            source.url,
-            statusText: "Importing",
-            detailText: "Opening the selected video.",
-            progress: nil,
-            isActive: true
-        )
-        state = .importing(source)
 
         activeTask = Task { [weak self] in
             guard let self else {
@@ -3575,402 +3573,513 @@ final class HomeViewModel: ObservableObject {
             )
 
             do {
-                try checkPreparationOperation(preparationID)
-                markBatchItem(
-                    source.url,
-                    statusText: "Inspecting",
-                    detailText: "Reading codec and track details.",
-                    progress: nil,
-                    isActive: true
-                )
-                state = .inspecting(source)
-
-                trace.mark("inspection_start")
-                let inspected = try await inspectVideoReusingCache(
-                    at: source.url,
-                    preinspectedAsset: preinspectedAsset
-                )
-                try checkPreparationOperation(preparationID)
-                let asset = inspected.asset
-                trace.mark(
-                    "inspection_complete",
-                    metadata: [
-                        "cacheHit": "\(inspected.reusedCache)",
-                        "codec": asset.videoTrack?.codec.rawValue ?? "unknown",
-                        "audioTracks": "\(asset.audioTracks.count)"
-                    ]
-                )
-                guard asset.videoTrack != nil else {
-                    throw TaptionVideoCoreError.noVideoTrack
-                }
-
-                let temporaryOutputURL = makeTemporaryOutputURL(for: source)
-                let core = TaptionVideoCore(services: environment.videoCoreServices)
-                let savePolicy = defaultSavePolicy(for: source)
-                let isPlaybackOnlyPreparation = (autoOpenPreviewAfterPrepare || deferEncodingPreparationUntilStart)
-                    && !autoStartAfterPrepare
-                    && isPreviewableInCurrentBuild(asset: asset)
-                var job: TaptionPreparedEncodingJob
-                if isPlaybackOnlyPreparation {
-                    let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
-                        asset: asset,
-                        sourceURL: source.url,
-                        temporaryOutputURL: temporaryOutputURL,
-                        outputPolicy: selectedOutput.outputPolicy(for: asset),
-                        preferredMode: .automatic,
-                        savePolicy: savePolicy
-                    )
-                    job = TaptionPreparedEncodingJob(
-                        asset: asset,
-                        plan: plan,
-                        routeSelection: TaptionCodecRoutePlanner.selectRoute(
-                            for: asset,
-                            outputCodec: selectedOutput.videoCodec,
-                            requestedMode: .automatic
-                        ),
-                        storageRequirement: TaptionStorageRequirement(
-                            estimatedOutputBytes: plan.estimatedOutputBytes ?? 0,
-                            requiredWorkingBytes: 0
-                        )
-                    )
-                    trace.mark("playback_prepared_storage_deferred")
-                } else {
-                    job = try await core.prepareSingleAssetJob(
-                        asset: asset,
-                        sourceURL: source.url,
-                        temporaryOutputURL: temporaryOutputURL,
-                        outputPolicy: selectedOutput.outputPolicy(for: asset),
-                        preferredMode: .automatic,
-                        savePolicy: savePolicy
-                    )
-                }
-                try checkPreparationOperation(preparationID)
-                trace.mark(
-                    "job_prepared",
-                    metadata: [
-                        "plan": job.plan.id.uuidString,
-                        "route": job.routeSelection.route.displayName,
-                        "executionKind": job.routeSelection.executionKind.rawValue
-                    ]
-                )
-                if source.kind == .photos {
-                    job.plan.finalOutputURL = nil
-                }
-                applySelectedFolderBatchDestination(to: &job, source: source)
-                AppLogger.info(
-                    "Prepare encoding job created",
-                    category: .mediaInspection,
-                    metadata: [
-                        "name": source.displayName,
-                        "codec": job.asset.videoTrack?.codec.displayName ?? "unknown",
-                        "container": job.asset.container.defaultFileExtension,
-                        "plan": job.plan.id.uuidString,
-                        "temporary": temporaryOutputURL.lastPathComponent
-                    ]
-                )
-
-                try checkPreparationOperation(preparationID)
-                if !isPlaybackOnlyPreparation {
-                    markBatchItem(
-                        source.url,
-                        statusText: "Checking Storage",
-                        detailText: "Confirming temporary and final output space.",
-                        progress: nil,
-                        isActive: true
-                    )
-                    state = .storageChecking(source)
-                    trace.mark(
-                        "storage_checked",
-                        metadata: [
-                            "requiredBytes": "\(job.storageRequirement.requiredWorkingBytes)",
-                            "availableBytes": job.storageRequirement.availableBytes.map(String.init) ?? "unknown",
-                            "hasEnoughSpace": "\(job.storageRequirement.hasEnoughSpace)"
-                        ]
-                    )
-                }
-
-                let canEncodeSelectedOutput = job.routeSelection.isEncodableNow && selectedOutput.isImplementedNow
-                guard isPlaybackOnlyPreparation || canEncodeSelectedOutput else {
-                    let detail = selectedOutput.isImplementedNow
-                        ? job.routeSelection.reason
-                        : "\(selectedOutput.implementationState.rawValue) output path is not executable in this build."
-                    AppLogger.error(
-                        "Prepare encoding blocked due to unsupported route/output",
-                        category: .encoding,
-                        metadata: [
-                            "name": source.displayName,
-                            "route": job.routeSelection.route.displayName,
-                            "output": selectedOutput.summary,
-                            "routeSelection": job.routeSelection.support.rawValue,
-                            "state": selectedOutput.implementationState.rawValue
-                        ]
-                    )
-                    markBatchItem(
-                        source.url,
-                        statusText: "Blocked",
-                        detailText: detail,
-                        progress: nil,
-                        isActive: false
-                    )
-                    if handleFolderItemFailure(
-                        source: source,
-                        errorMessage: detail
-                    ) {
-                        trace.finish("blocked", metadata: ["reason": detail])
-                        return
-                    }
-                    state = .failed(HomeEncodingError(
-                        title: "Encoding blocked",
-                        message: detail
-                    ))
-                    trace.finish("blocked", metadata: ["reason": detail])
-                    activeTask = nil
-                    stopSecurityScopedAccess()
-                    requestSessionEndAd(reason: .failedEncoding)
-                    return
-                }
-
-                guard isPlaybackOnlyPreparation || job.storageRequirement.hasEnoughSpace else {
-                    AppLogger.error(
-                        "Storage check blocked encoding",
-                        category: .storage,
-                        metadata: [
-                            "name": source.displayName,
-                            "required": "\(job.storageRequirement.requiredWorkingBytes)",
-                            "available": job.storageRequirement.availableBytes.map(String.init) ?? "unknown"
-                        ]
-                    )
-                    let storageMessage = storageWarningMessage(
-                        requiredBytes: job.storageRequirement.requiredWorkingBytes,
-                        availableBytes: job.storageRequirement.availableBytes
-                    )
-                    markBatchItem(
-                        source.url,
-                        statusText: "Blocked",
-                        detailText: storageMessage,
-                        progress: nil,
-                        isActive: false
-                    )
-                    if handleFolderItemFailure(
-                        source: source,
-                        errorMessage: storageMessage
-                    ) {
-                        trace.finish("storage_blocked", metadata: ["reason": storageMessage])
-                        return
-                    }
-                    state = .storageBlocked(StorageIssue(
-                        requiredBytes: job.storageRequirement.requiredWorkingBytes,
-                        availableBytes: job.storageRequirement.availableBytes,
-                        message: storageMessage
-                    ))
-                    trace.finish("storage_blocked", metadata: ["reason": storageMessage])
-                    activeTask = nil
-                    return
-                }
-
-                let review = PreparedEncodingReview(
+                let prepared = try await inspectAndBuildJob(
                     source: source,
-                    job: job,
-                    videoInfo: makeLoadedVideoInfo(source: source, job: job),
-                    folderQueue: folderBatch?.snapshot(currentFileName: source.displayName),
-                    requiresEncodingPreparation: isPlaybackOnlyPreparation
+                    request: request,
+                    preinspectedAsset: preinspectedAsset,
+                    preparationID: preparationID,
+                    trace: trace
                 )
-                currentReview = review
-                AppLogger.info(
-                    "Prepare encoding ready",
-                    category: .encoding,
-                    metadata: [
-                        "name": source.displayName,
-                        "plan": job.plan.id.uuidString
-                    ]
+                let gate = try runPreparationGates(
+                    prepared,
+                    source: source,
+                    preparationID: preparationID,
+                    trace: trace
                 )
-                markBatchItem(
-                    source.url,
-                    asset: job.asset,
-                    videoInfo: review.videoInfo,
-                    statusText: review.videoInfo.readinessStatusText,
-                    detailText: review.videoInfo.readinessDetailText,
-                    progress: nil,
-                    isActive: true,
-                    isEnabled: review.videoInfo.isRouteEncodable,
-                    isPreviewable: isPreviewableInCurrentBuild(asset: job.asset)
-                )
-
-                activeTask = nil
-                state = .readyToStart(review)
-                if autoStartAfterPrepare {
-                    trace.finish("ready_auto_start")
-                    requestEncodingStart(
-                        for: review,
-                        autoResumeAfterStarEarn: true
-                    )
-                } else {
-                    if let batch = folderBatch {
-                        folderBatch = applyFolderStarBudget(to: batch)
-                    }
-                    state = .readyToStart(review)
-                    trace.finish("ready")
-                    if autoOpenPreviewAfterPrepare {
-                        openPreviewAfterImportIfAvailable(for: review)
-                    }
+                guard gate == .proceed else {
+                    return
                 }
+                finishPreparation(
+                    prepared,
+                    source: source,
+                    request: request,
+                    trace: trace
+                )
             } catch is CancellationError {
-                guard preparationOperationID == preparationID else {
-                    trace.finish("superseded")
-                    return
-                }
-                AppLogger.warning(
-                    "Prepare encoding cancelled",
-                    category: .encoding,
-                    metadata: ["name": source.displayName]
+                handlePreparationCancellation(
+                    source: source,
+                    preparationID: preparationID,
+                    trace: trace
                 )
-                markBatchItem(
-                    source.url,
-                    statusText: "Cancelled",
-                    detailText: "The encoding job was cancelled.",
-                    progress: nil,
-                    isActive: false
-                )
-                state = .cancelled
-                activeTask = nil
-                currentReview = nil
-                folderBatch = nil
-                stopSecurityScopedAccess()
-                requestSessionEndAd(reason: .cancelledEncoding)
-                trace.finish("cancelled")
             } catch TaptionVideoCoreError.insufficientStorage(let requiredBytes, let availableBytes) {
-                guard preparationOperationID == preparationID else {
-                    trace.finish("superseded")
-                    return
-                }
-                let storageMessage = storageWarningMessage(
-                    requiredBytes: requiredBytes,
-                    availableBytes: availableBytes
-                )
-                logCodecBenchmarkProbeTerminalIfNeeded(
-                    status: "prepare_failed",
-                    sourceName: source.displayName,
-                    errorMessage: storageMessage
-                )
-                AppLogger.error(
-                    "Prepare encoding blocked due to insufficient storage",
-                    category: .storage,
-                    metadata: [
-                        "name": source.displayName,
-                        "required": "\(requiredBytes)",
-                        "available": availableBytes.map(String.init) ?? "unknown"
-                    ]
-                )
-                markBatchItem(
-                    source.url,
-                    statusText: "Blocked",
-                    detailText: storageMessage,
-                    progress: nil,
-                    isActive: false
-                )
-                if handleFolderItemFailure(source: source, errorMessage: storageMessage) {
-                    trace.finish("storage_blocked", metadata: ["reason": storageMessage])
-                    return
-                }
-                state = .storageBlocked(StorageIssue(
+                handlePreparationStorageFailure(
                     requiredBytes: requiredBytes,
                     availableBytes: availableBytes,
-                    message: storageMessage
-                ))
-                trace.finish("storage_blocked", metadata: ["reason": storageMessage])
-                activeTask = nil
+                    source: source,
+                    preparationID: preparationID,
+                    trace: trace
+                )
             } catch let error as TaptionVideoCoreError {
-                guard preparationOperationID == preparationID else {
-                    trace.finish("superseded")
-                    return
-                }
-                logCodecBenchmarkProbeTerminalIfNeeded(
-                    status: "prepare_failed",
-                    sourceName: source.displayName,
-                    errorMessage: error.localizedDescription
+                handlePreparationFailure(
+                    error,
+                    source: source,
+                    preparationID: preparationID,
+                    trace: trace,
+                    logMessage: "Prepare encoding failed with TaptionVideoCoreError"
                 )
-                AppLogger.error(
-                    "Prepare encoding failed with TaptionVideoCoreError",
-                    category: .encoding,
-                    metadata: [
-                        "name": source.displayName,
-                        "error": error.localizedDescription
-                    ]
-                )
-                let failure = HomeErrorPresenter.error(
-                    title: "Encoding failed",
-                    summary: "The app could not prepare this video for encoding.",
-                    recovery: "Choose another source or output setting, then try again.",
-                    error: error
-                )
-                let cardDetail = HomeErrorPresenter.cardDetail(
-                    summary: "The app could not prepare this video for encoding.",
-                    recovery: "Choose another source or output setting, then try again.",
-                    error: error
-                )
-                markBatchItem(
-                    source.url,
-                    statusText: "Failed",
-                    detailText: cardDetail,
-                    progress: nil,
-                    isActive: false
-                )
-                if handleFolderItemFailure(source: source, errorMessage: cardDetail) {
-                    trace.finish("failed", metadata: ["error": error.localizedDescription])
-                    return
-                }
-                state = .failed(failure)
-                activeTask = nil
-                stopSecurityScopedAccess()
-                requestSessionEndAd(reason: .failedEncoding)
-                trace.finish("failed", metadata: ["error": error.localizedDescription])
             } catch {
-                guard preparationOperationID == preparationID else {
-                    trace.finish("superseded")
-                    return
-                }
-                logCodecBenchmarkProbeTerminalIfNeeded(
-                    status: "prepare_failed",
-                    sourceName: source.displayName,
-                    errorMessage: error.localizedDescription
+                handlePreparationFailure(
+                    error,
+                    source: source,
+                    preparationID: preparationID,
+                    trace: trace,
+                    logMessage: "Prepare encoding failed"
                 )
-                AppLogger.error(
-                    "Prepare encoding failed",
-                    category: .encoding,
-                    metadata: [
-                        "name": source.displayName,
-                        "error": error.localizedDescription
-                    ]
-                )
-                let failure = HomeErrorPresenter.error(
-                    title: "Encoding failed",
-                    summary: "The app could not prepare this video for encoding.",
-                    recovery: "Choose another source or output setting, then try again.",
-                    error: error
-                )
-                let cardDetail = HomeErrorPresenter.cardDetail(
-                    summary: "The app could not prepare this video for encoding.",
-                    recovery: "Choose another source or output setting, then try again.",
-                    error: error
-                )
-                markBatchItem(
-                    source.url,
-                    statusText: "Failed",
-                    detailText: cardDetail,
-                    progress: nil,
-                    isActive: false
-                )
-                if handleFolderItemFailure(source: source, errorMessage: cardDetail) {
-                    trace.finish("failed", metadata: ["error": error.localizedDescription])
-                    return
-                }
-                state = .failed(failure)
-                activeTask = nil
-                stopSecurityScopedAccess()
-                requestSessionEndAd(reason: .failedEncoding)
-                trace.finish("failed", metadata: ["error": error.localizedDescription])
             }
         }
+    }
+
+    /// Validates that a preparation may start and puts the UI into the importing state.
+    /// Returns the operation identifier the task must check against, or `nil` when another flow
+    /// owns the screen and the request was rejected.
+    private func beginPreparation(
+        source: HomeSelectedSource,
+        request: PreparationRequest
+    ) -> UUID? {
+        guard state.canSelectSource || request.autoStartAfterPrepare || request.allowsBusyState else {
+            AppLogger.warning(
+                "Prepare encoding ignored because state is busy",
+                category: .encoding,
+                metadata: [
+                    "name": source.displayName,
+                    "autoStart": "\(request.autoStartAfterPrepare)",
+                    "allowsBusyState": "\(request.allowsBusyState)"
+                ]
+            )
+            return nil
+        }
+
+        invalidateEncodingStart()
+        let preparationID = UUID()
+        preparationOperationID = preparationID
+        AppLogger.info(
+            "Prepare encoding started",
+            category: .encoding,
+            metadata: [
+                "name": source.displayName,
+                "kind": source.kind.rawValue,
+                "autoStart": "\(request.autoStartAfterPrepare)"
+            ]
+        )
+        activeTask?.cancel()
+        markBatchItem(
+            source.url,
+            statusText: "Importing",
+            detailText: "Opening the selected video.",
+            progress: nil,
+            isActive: true
+        )
+        state = .importing(source)
+        return preparationID
+    }
+
+    /// Inspects the source and builds the encoding job, which is the only stage that touches
+    /// the media layer. Everything after this point works on an already prepared job.
+    private func inspectAndBuildJob(
+        source: HomeSelectedSource,
+        request: PreparationRequest,
+        preinspectedAsset: TaptionVideoAsset?,
+        preparationID: UUID,
+        trace: TaptionEncodingPerformanceTrace
+    ) async throws -> PreparedEncodingJobResult {
+        try checkPreparationOperation(preparationID)
+        markBatchItem(
+            source.url,
+            statusText: "Inspecting",
+            detailText: "Reading codec and track details.",
+            progress: nil,
+            isActive: true
+        )
+        state = .inspecting(source)
+
+        trace.mark("inspection_start")
+        let inspected = try await inspectVideoReusingCache(
+            at: source.url,
+            preinspectedAsset: preinspectedAsset
+        )
+        try checkPreparationOperation(preparationID)
+        let asset = inspected.asset
+        trace.mark(
+            "inspection_complete",
+            metadata: [
+                "cacheHit": "\(inspected.reusedCache)",
+                "codec": asset.videoTrack?.codec.rawValue ?? "unknown",
+                "audioTracks": "\(asset.audioTracks.count)"
+            ]
+        )
+        guard asset.videoTrack != nil else {
+            throw TaptionVideoCoreError.noVideoTrack
+        }
+
+        let temporaryOutputURL = makeTemporaryOutputURL(for: source)
+        let core = TaptionVideoCore(services: environment.videoCoreServices)
+        let savePolicy = defaultSavePolicy(for: source)
+        let isPlaybackOnlyPreparation = (request.autoOpenPreviewAfterPrepare || request.deferEncodingPreparationUntilStart)
+            && !request.autoStartAfterPrepare
+            && isPreviewableInCurrentBuild(asset: asset)
+        var job: TaptionPreparedEncodingJob
+        if isPlaybackOnlyPreparation {
+            let plan = TaptionEncodingPlanner.makeSingleAssetPlan(
+                asset: asset,
+                sourceURL: source.url,
+                temporaryOutputURL: temporaryOutputURL,
+                outputPolicy: selectedOutput.outputPolicy(for: asset),
+                preferredMode: .automatic,
+                savePolicy: savePolicy
+            )
+            job = TaptionPreparedEncodingJob(
+                asset: asset,
+                plan: plan,
+                routeSelection: TaptionCodecRoutePlanner.selectRoute(
+                    for: asset,
+                    outputCodec: selectedOutput.videoCodec,
+                    requestedMode: .automatic
+                ),
+                storageRequirement: TaptionStorageRequirement(
+                    estimatedOutputBytes: plan.estimatedOutputBytes ?? 0,
+                    requiredWorkingBytes: 0
+                )
+            )
+            trace.mark("playback_prepared_storage_deferred")
+        } else {
+            job = try await core.prepareSingleAssetJob(
+                asset: asset,
+                sourceURL: source.url,
+                temporaryOutputURL: temporaryOutputURL,
+                outputPolicy: selectedOutput.outputPolicy(for: asset),
+                preferredMode: .automatic,
+                savePolicy: savePolicy
+            )
+        }
+        try checkPreparationOperation(preparationID)
+        trace.mark(
+            "job_prepared",
+            metadata: [
+                "plan": job.plan.id.uuidString,
+                "route": job.routeSelection.route.displayName,
+                "executionKind": job.routeSelection.executionKind.rawValue
+            ]
+        )
+        if source.kind == .photos {
+            job.plan.finalOutputURL = nil
+        }
+        applySelectedFolderBatchDestination(to: &job, source: source)
+        AppLogger.info(
+            "Prepare encoding job created",
+            category: .mediaInspection,
+            metadata: [
+                "name": source.displayName,
+                "codec": job.asset.videoTrack?.codec.displayName ?? "unknown",
+                "container": job.asset.container.defaultFileExtension,
+                "plan": job.plan.id.uuidString,
+                "temporary": temporaryOutputURL.lastPathComponent
+            ]
+        )
+        return PreparedEncodingJobResult(
+            job: job,
+            isPlaybackOnlyPreparation: isPlaybackOnlyPreparation
+        )
+    }
+
+    /// Runs the storage check UI and both blocking checks. A `.stopped` result means the caller
+    /// must return immediately: the terminal state has already been published.
+    private func runPreparationGates(
+        _ prepared: PreparedEncodingJobResult,
+        source: HomeSelectedSource,
+        preparationID: UUID,
+        trace: TaptionEncodingPerformanceTrace
+    ) throws -> PreparationGateResult {
+        let job = prepared.job
+        let isPlaybackOnlyPreparation = prepared.isPlaybackOnlyPreparation
+        try checkPreparationOperation(preparationID)
+        if !isPlaybackOnlyPreparation {
+            markBatchItem(
+                source.url,
+                statusText: "Checking Storage",
+                detailText: "Confirming temporary and final output space.",
+                progress: nil,
+                isActive: true
+            )
+            state = .storageChecking(source)
+            trace.mark(
+                "storage_checked",
+                metadata: [
+                    "requiredBytes": "\(job.storageRequirement.requiredWorkingBytes)",
+                    "availableBytes": job.storageRequirement.availableBytes.map(String.init) ?? "unknown",
+                    "hasEnoughSpace": "\(job.storageRequirement.hasEnoughSpace)"
+                ]
+            )
+        }
+
+        let canEncodeSelectedOutput = job.routeSelection.isEncodableNow && selectedOutput.isImplementedNow
+        guard isPlaybackOnlyPreparation || canEncodeSelectedOutput else {
+            let detail = selectedOutput.isImplementedNow
+                ? job.routeSelection.reason
+                : "\(selectedOutput.implementationState.rawValue) output path is not executable in this build."
+            AppLogger.error(
+                "Prepare encoding blocked due to unsupported route/output",
+                category: .encoding,
+                metadata: [
+                    "name": source.displayName,
+                    "route": job.routeSelection.route.displayName,
+                    "output": selectedOutput.summary,
+                    "routeSelection": job.routeSelection.support.rawValue,
+                    "state": selectedOutput.implementationState.rawValue
+                ]
+            )
+            markBatchItem(
+                source.url,
+                statusText: "Blocked",
+                detailText: detail,
+                progress: nil,
+                isActive: false
+            )
+            if handleFolderItemFailure(
+                source: source,
+                errorMessage: detail
+            ) {
+                trace.finish("blocked", metadata: ["reason": detail])
+                return .stopped
+            }
+            state = .failed(HomeEncodingError(
+                title: "Encoding blocked",
+                message: detail
+            ))
+            trace.finish("blocked", metadata: ["reason": detail])
+            activeTask = nil
+            stopSecurityScopedAccess()
+            requestSessionEndAd(reason: .failedEncoding)
+            return .stopped
+        }
+
+        guard isPlaybackOnlyPreparation || job.storageRequirement.hasEnoughSpace else {
+            AppLogger.error(
+                "Storage check blocked encoding",
+                category: .storage,
+                metadata: [
+                    "name": source.displayName,
+                    "required": "\(job.storageRequirement.requiredWorkingBytes)",
+                    "available": job.storageRequirement.availableBytes.map(String.init) ?? "unknown"
+                ]
+            )
+            let storageMessage = storageWarningMessage(
+                requiredBytes: job.storageRequirement.requiredWorkingBytes,
+                availableBytes: job.storageRequirement.availableBytes
+            )
+            markBatchItem(
+                source.url,
+                statusText: "Blocked",
+                detailText: storageMessage,
+                progress: nil,
+                isActive: false
+            )
+            if handleFolderItemFailure(
+                source: source,
+                errorMessage: storageMessage
+            ) {
+                trace.finish("storage_blocked", metadata: ["reason": storageMessage])
+                return .stopped
+            }
+            state = .storageBlocked(StorageIssue(
+                requiredBytes: job.storageRequirement.requiredWorkingBytes,
+                availableBytes: job.storageRequirement.availableBytes,
+                message: storageMessage
+            ))
+            trace.finish("storage_blocked", metadata: ["reason": storageMessage])
+            activeTask = nil
+            return .stopped
+        }
+
+        return .proceed
+    }
+
+    /// Publishes the review and hands control to the start or preview step.
+    private func finishPreparation(
+        _ prepared: PreparedEncodingJobResult,
+        source: HomeSelectedSource,
+        request: PreparationRequest,
+        trace: TaptionEncodingPerformanceTrace
+    ) {
+        let job = prepared.job
+        let review = PreparedEncodingReview(
+            source: source,
+            job: job,
+            videoInfo: makeLoadedVideoInfo(source: source, job: job),
+            folderQueue: folderBatch?.snapshot(currentFileName: source.displayName),
+            requiresEncodingPreparation: prepared.isPlaybackOnlyPreparation
+        )
+        currentReview = review
+        AppLogger.info(
+            "Prepare encoding ready",
+            category: .encoding,
+            metadata: [
+                "name": source.displayName,
+                "plan": job.plan.id.uuidString
+            ]
+        )
+        markBatchItem(
+            source.url,
+            asset: job.asset,
+            videoInfo: review.videoInfo,
+            statusText: review.videoInfo.readinessStatusText,
+            detailText: review.videoInfo.readinessDetailText,
+            progress: nil,
+            isActive: true,
+            isEnabled: review.videoInfo.isRouteEncodable,
+            isPreviewable: isPreviewableInCurrentBuild(asset: job.asset)
+        )
+
+        activeTask = nil
+        state = .readyToStart(review)
+        if request.autoStartAfterPrepare {
+            trace.finish("ready_auto_start")
+            requestEncodingStart(
+                for: review,
+                autoResumeAfterStarEarn: true
+            )
+        } else {
+            if let batch = folderBatch {
+                folderBatch = applyFolderStarBudget(to: batch)
+            }
+            state = .readyToStart(review)
+            trace.finish("ready")
+            if request.autoOpenPreviewAfterPrepare {
+                openPreviewAfterImportIfAvailable(for: review)
+            }
+        }
+    }
+
+    private func handlePreparationCancellation(
+        source: HomeSelectedSource,
+        preparationID: UUID,
+        trace: TaptionEncodingPerformanceTrace
+    ) {
+        guard preparationOperationID == preparationID else {
+            trace.finish("superseded")
+            return
+        }
+        AppLogger.warning(
+            "Prepare encoding cancelled",
+            category: .encoding,
+            metadata: ["name": source.displayName]
+        )
+        markBatchItem(
+            source.url,
+            statusText: "Cancelled",
+            detailText: "The encoding job was cancelled.",
+            progress: nil,
+            isActive: false
+        )
+        state = .cancelled
+        activeTask = nil
+        currentReview = nil
+        folderBatch = nil
+        stopSecurityScopedAccess()
+        requestSessionEndAd(reason: .cancelledEncoding)
+        trace.finish("cancelled")
+    }
+
+    private func handlePreparationStorageFailure(
+        requiredBytes: Int64,
+        availableBytes: Int64?,
+        source: HomeSelectedSource,
+        preparationID: UUID,
+        trace: TaptionEncodingPerformanceTrace
+    ) {
+        guard preparationOperationID == preparationID else {
+            trace.finish("superseded")
+            return
+        }
+        let storageMessage = storageWarningMessage(
+            requiredBytes: requiredBytes,
+            availableBytes: availableBytes
+        )
+        logCodecBenchmarkProbeTerminalIfNeeded(
+            status: "prepare_failed",
+            sourceName: source.displayName,
+            errorMessage: storageMessage
+        )
+        AppLogger.error(
+            "Prepare encoding blocked due to insufficient storage",
+            category: .storage,
+            metadata: [
+                "name": source.displayName,
+                "required": "\(requiredBytes)",
+                "available": availableBytes.map(String.init) ?? "unknown"
+            ]
+        )
+        markBatchItem(
+            source.url,
+            statusText: "Blocked",
+            detailText: storageMessage,
+            progress: nil,
+            isActive: false
+        )
+        if handleFolderItemFailure(source: source, errorMessage: storageMessage) {
+            trace.finish("storage_blocked", metadata: ["reason": storageMessage])
+            return
+        }
+        state = .storageBlocked(StorageIssue(
+            requiredBytes: requiredBytes,
+            availableBytes: availableBytes,
+            message: storageMessage
+        ))
+        trace.finish("storage_blocked", metadata: ["reason": storageMessage])
+        activeTask = nil
+    }
+
+    /// Shared by the typed and the untyped failure paths, which differed only in their log line.
+    private func handlePreparationFailure(
+        _ error: Error,
+        source: HomeSelectedSource,
+        preparationID: UUID,
+        trace: TaptionEncodingPerformanceTrace,
+        logMessage: String
+    ) {
+        guard preparationOperationID == preparationID else {
+            trace.finish("superseded")
+            return
+        }
+        logCodecBenchmarkProbeTerminalIfNeeded(
+            status: "prepare_failed",
+            sourceName: source.displayName,
+            errorMessage: error.localizedDescription
+        )
+        AppLogger.error(
+            logMessage,
+            category: .encoding,
+            metadata: [
+                "name": source.displayName,
+                "error": error.localizedDescription
+            ]
+        )
+        let failure = HomeErrorPresenter.error(
+            title: "Encoding failed",
+            summary: "The app could not prepare this video for encoding.",
+            recovery: "Choose another source or output setting, then try again.",
+            error: error
+        )
+        let cardDetail = HomeErrorPresenter.cardDetail(
+            summary: "The app could not prepare this video for encoding.",
+            recovery: "Choose another source or output setting, then try again.",
+            error: error
+        )
+        markBatchItem(
+            source.url,
+            statusText: "Failed",
+            detailText: cardDetail,
+            progress: nil,
+            isActive: false
+        )
+        if handleFolderItemFailure(source: source, errorMessage: cardDetail) {
+            trace.finish("failed", metadata: ["error": error.localizedDescription])
+            return
+        }
+        state = .failed(failure)
+        activeTask = nil
+        stopSecurityScopedAccess()
+        requestSessionEndAd(reason: .failedEncoding)
+        trace.finish("failed", metadata: ["error": error.localizedDescription])
     }
 
     private func checkPreparationOperation(_ operationID: UUID) throws {
