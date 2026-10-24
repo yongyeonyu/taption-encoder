@@ -41,6 +41,39 @@ git config core.hooksPath .githooks
 After that, `git push` runs the build and the tests first and refuses to push on failure. Docs-only
 pushes skip automatically. `SKIP_VERIFY=1 git push` bypasses it — say why in the PR if you use it.
 
+### Simulators are owned, not shared
+
+The CI runner and the development machine are the same Mac. `verify.sh` therefore gives each caller
+its **own** simulator instead of reusing whatever happens to be booted:
+
+| Caller | Simulator |
+|---|---|
+| CI | `verify-ci` |
+| local / pre-push hook | `verify-local` |
+| a third concurrent run | `TAPTION_SIMULATOR_NAME=verify-2 ./scripts/verify.sh` |
+
+Claiming the same name twice fails loudly with the holder's pid rather than letting the two runs kill
+each other's test host. Each run also erases its device first, which removes a class of failures that
+only appeared in full-suite runs.
+
+Concurrent runs are **safe but not free** — the suite is video-encode bound, so CI alone takes ~170 s
+while CI plus a local run takes ~1200 s. Serialize by default.
+
+### Retired proof suites
+
+34 tests need 57 real-world sample videos. Those samples were deliberately removed from the
+repository to keep it source-only, so those tests are excluded by name. To run them:
+
+```bash
+./scripts/restore-retired-samples.sh          # restore the real samples from git history
+./scripts/verify.sh                           # default suite + retired proofs
+./scripts/restore-retired-samples.sh --clean  # undo
+```
+
+The samples are restored from git history rather than generated: the tests exist to prove the app
+reads formats it did not write, and synthetic fixtures would not be evidence. See
+`docs/code-review/README.md` §5.7.
+
 ## Layout
 
 ```

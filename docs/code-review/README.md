@@ -268,6 +268,63 @@ error: the 'verify-local' simulator is already in use (lock: /tmp/taption-verify
 会让少数测试**只在全量运行时**失败（典型是 `testAutoSizeShowsEstimatedOutputInMainTileAndPopoverValue`，
 单跑就过）。擦除只要几秒，直接消掉这一整类假红。
 
+#### 隔离是「安全」了，不是「免费」了（实测）
+
+| 场景 | 耗时 |
+| --- | --- |
+| CI 单独 | 169 s |
+| CI + 本地并发 | **1174 s**（约 7 倍） |
+
+视频编码测试吃满核心，并发时双方互相拖慢。不会像以前那样把对方杀死，但也不会快。
+**默认原则仍然是串行**——本地闸门等 CI 结束再跑。并发只在赶时间时用。
+
+### runner 会继承桌面 shell 的环境（2026-10-24 实测）
+
+修完模拟器之后 CI 又红了一次，而这次连测试都没开始：**18 秒**失败，唯一失败的 step 是
+`actions/checkout@v4`，`Check toolchain` 和 `Build and test` 全是 `skipped`。
+
+```
+Error: File was unable to be removed
+  Error: [safe-delete][SAFE_DELETE_BULK_CONFIRM_REQUIRED] {"count":50,"threshold":50,...}
+```
+
+runner 是一台普通桌面 Mac，会继承**启动它的那个 shell** 的环境。这份环境里带着 agent 沙箱的
+shell 包装器：`NODE_OPTIONS=--require=.../node-language-shim.cjs`、`BASH_ENV=.../shell-runtime-bash-env.sh`、
+`CODEBUDDY_SAFE_DELETE_BULK_THRESHOLD=50`，以及排在 `/usr/bin` 前面的 `shim/` 目录。
+
+`actions/checkout` 是 node 写的，第一件事是删掉上一次的检出目录（远超 50 个文件）→ 包装器拒绝
+→ checkout 死在任何代码跑起来之前。
+
+**修法在仓库这一侧**，job 级 `env` 对所有 step 生效（包括 `uses:` 的 action）：
+
+```yaml
+env:
+  NODE_OPTIONS: ""
+  BASH_ENV: /dev/null
+  PATH: /usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin
+```
+
+`BASH_ENV` 必须指向 `/dev/null` 而不是空串——bash 只检查变量是否存在，空值会让它去 source 一个
+名字都没有的文件。
+
+机器侧的 `~/actions-runner/.path` 也顺手清了（原文件备份为 `.path.bak-with-workbuddy-shims`），但**不够**：
+runner 在启动时就把 `.path` 和进程环境缓存下来了，而它不是一个 launchd 服务，job 内部没法重载。
+
+### 两种「CI 红、本地绿」怎么区分
+
+| | 失败位置 | 日志特征 |
+| --- | --- | --- |
+| 模拟器争用 | 测试执行中 | `Test crashed with signal kill`、600 s diagnostics 超时、`verify.log` 有内容 |
+| shell 环境泄漏 | 代码启动前 | 唯一失败的 step 是 checkout、后续全 `skipped`、`verify.log` **0 字节** |
+
+**`verify.log` 是 0 字节，就一定不是代码问题。**
+
+### `cancel-in-progress` 和同一个 work 目录
+
+`concurrency.cancel-in-progress: true` 加上同一个 `_work` 目录，意味着同一个 ref 上间隔太近的两次推送
+会让前一次在构建中途被取消，后一次紧接着在它上面开始。实测见过 `verify.log` 0 字节 + exit 2 的失败。
+同一个 ref 连续推送时，等前一个 run 结束更稳。
+
 ### 长期出路
 
 1. 等 GitHub 托管镜像带上 Xcode 27，把 `runs-on` 改回 `macos-26`，runner 降级为可选加速；
