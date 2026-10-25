@@ -903,8 +903,10 @@ extension CodecRoutePlannerTests {
         XCTAssertTrue(loadedFilesText.contains("GridItem(.flexible(minimum: 82)"))
         XCTAssertTrue(loadedFilesText.contains("ImportBrowserBackButton("))
         XCTAssertTrue(loadedFilesText.contains("ImportBrowserToolbarButton("))
-        XCTAssertTrue(loadedFilesText.contains("ImportBrowserExplorerStyle.navigationBar"))
-        XCTAssertTrue(loadedFilesText.contains("ImportBrowserExplorerStyle.blueAccent"))
+        // The browser's chrome names the semantic roles directly; the private alias palette it
+        // used to carry is gone (see the design-system document's adoption rules).
+        XCTAssertTrue(loadedFilesText.contains(".background(TaptionTheme.surface)"))
+        XCTAssertTrue(loadedFilesText.contains("TaptionTheme.accent.opacity(0.22)"))
         XCTAssertTrue(loadedFilesText.contains(".simultaneousGesture(backSwipeGesture)"))
         XCTAssertTrue(loadedFilesText.contains("DragGesture(minimumDistance: 24"))
         XCTAssertTrue(loadedFilesText.contains("guard context?.canGoUp == true"))
