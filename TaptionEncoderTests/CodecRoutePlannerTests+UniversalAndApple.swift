@@ -406,6 +406,29 @@ extension CodecRoutePlannerTests {
         XCTAssertTrue(offenders.isEmpty, offenders.joined(separator: "\n"))
     }
 
+    /// §7 says Reduce Motion removes travel, not feedback. The queue card is the case where that
+    /// is easy to get wrong: `isBundledByGroupPress` is true for the pressed anchor too, so its
+    /// scale is the only thing separating it from the cards bundled with it. Drop the scale
+    /// without handing the job to opacity and the anchor becomes indistinguishable — less
+    /// feedback for the people who asked for less motion.
+    func testReduceMotionKeepsTheQueueAnchorDistinguishable() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: rootURL.appendingPathComponent("TaptionEncoder/Features/Home/LoadedFilesPanelView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(
+            source.contains("if reduceMotion, isGroupPressAnchor"),
+            "cardOpacity must hand the anchor its base opacity back once cardScale stops moving"
+        )
+        // Both halves of the trade have to be visible in the same file, or the pair drifts apart.
+        XCTAssertTrue(source.contains("guard !reduceMotion else { return 1 }"))
+        XCTAssertTrue(source.contains("return isBundledByGroupPress ? 0.46 : baseOpacity"))
+    }
+
     func testHelpSheetIntegratesVersionDeviceInfoAndOpenSourceNotices() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

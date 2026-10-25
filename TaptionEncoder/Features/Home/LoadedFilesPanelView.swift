@@ -584,8 +584,8 @@ private struct EncodingFileCardView: View {
     }
 
     private var cardScale: CGFloat {
-        // Scale is the only transform on the card, and `cardOpacity` already carries the same
-        // state, so Reduce Motion drops the movement without losing the feedback.
+        // Scale is the only transform on the card, so Reduce Motion drops it. The emphasis it
+        // carried moves to `cardOpacity` below — the two have to be read together.
         guard !reduceMotion else { return 1 }
         if isGroupPressAnchor {
             return 1.025
@@ -595,6 +595,13 @@ private struct EncodingFileCardView: View {
 
     private var cardOpacity: Double {
         let baseOpacity = file.isInteractable ? 1 : 0.58
+        // `isBundledByGroupPress` is true for the anchor as well, so at 0.46 every card in the
+        // group lands on the same value. That is harmless while the anchor is 1.025 against 0.94,
+        // but with the scale gone the pressed card would have no cue left at all — so under
+        // Reduce Motion the anchor keeps its base opacity and reads as the bright one instead.
+        if reduceMotion, isGroupPressAnchor {
+            return baseOpacity
+        }
         return isBundledByGroupPress ? 0.46 : baseOpacity
     }
 
