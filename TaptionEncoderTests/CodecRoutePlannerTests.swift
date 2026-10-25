@@ -269,3 +269,139 @@ final class DuoAppStoreScreenshotTests: XCTestCase {
         }
     }
 }
+
+/// Renders the surfaces a colour change actually reaches, at iPhone 11 size (414 × 896 pt).
+///
+/// Why it exists: the Duo render above covers `HomeView` only, so the file rows, folder tiles and
+/// the import browser had no visual evidence for a design-token change. This hosts the real views
+/// with fixtures — no device capture, no ad, no folder-access sheet — and writes PNGs into the app
+/// container, which `devicectl device copy from` can pull off a phone.
+///
+/// Marker-gated like the Duo render, so ordinary runs and CI skip it. On a simulator create
+/// `/tmp/taption-render-phone`; on a device copy a file to `tmp/taption-render-phone` inside the
+/// app data container, because `/tmp` there is the sandbox's own tmp.
+@MainActor
+final class PhoneUIRenderTests: XCTestCase {
+    /// iPhone 11: 414 × 896 pt. Rendered at 3× so text stays legible when inspected.
+    private let points = CGSize(width: 414, height: 896)
+
+    func testRenderPhoneSurfacesWhenRequested() throws {
+        // On a device the app's tmp is `<container>/tmp`, and a literal `/tmp` is not redirected
+        // there — so the marker has to be looked up through NSTemporaryDirectory() as well.
+        // On a simulator both resolve to paths the host can see.
+        let sandboxTmp = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        let markerCandidates = [
+            sandboxTmp.appendingPathComponent("taption-render-phone"),
+            URL(fileURLWithPath: "/tmp/taption-render-phone"),
+        ]
+        guard markerCandidates.contains(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
+            throw XCTSkip("Create taption-render-phone in tmp to render the phone surfaces.")
+        }
+
+        let output = sandboxTmp.appendingPathComponent("taption-phone-shots", isDirectory: true)
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+
+        try render(
+            named: "home",
+            view: AnyView(HomeView().background(TaptionTheme.appBackground)),
+            into: output
+        )
+        try render(
+            named: "queue",
+            view: AnyView(
+                LoadedFilesPanelView(
+                    files: Self.queueFixtures,
+                    contentScale: 1,
+                    panelHeight: 86 * CGFloat(Self.queueFixtures.count),
+                    onSelect: { _ in },
+                    onPlay: { _ in },
+                    onToggleSelection: { _ in },
+                    onDelete: { _ in },
+                    onMove: { _, _ in },
+                    onMoveEnded: {}
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(TaptionTheme.appBackground)
+            ),
+            into: output
+        )
+    }
+
+    private func render(named name: String, view: AnyView, into output: URL) throws {
+        let frame = CGRect(origin: .zero, size: points)
+        let window = UIWindow(frame: frame)
+        let host = UIHostingController(rootView: view)
+        host.view.frame = frame
+        window.rootViewController = host
+        window.makeKeyAndVisible()
+        window.layoutIfNeeded()
+
+        // SwiftUI lays out on the next run-loop turn; the panel settles after that.
+        RunLoop.current.run(until: Date().addingTimeInterval(1.5))
+
+        // A first launch raises the folder-access alert in its own window, which would composite
+        // into the render as a stray overlay.
+        for _ in 0..<3 where host.presentedViewController != nil {
+            host.dismiss(animated: false)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        }
+        window.layoutIfNeeded()
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 3
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: points, format: format)
+        let image = renderer.image { context in
+            window.layer.render(in: context.cgContext)
+        }
+
+        let data = try XCTUnwrap(image.pngData(), "PNG encoding failed for \(name)")
+        try data.write(to: output.appendingPathComponent("phone-\(name).png"))
+    }
+
+    /// One row per state the panel draws: active and selected, idle, star-limited, disabled.
+    private static var queueFixtures: [EncodingFileCardSnapshot] {
+        [
+            EncodingFileCardSnapshot(
+                id: "active",
+                fileName: "beach-4k.mp4",
+                sourceKind: .files,
+                videoInfo: nil,
+                statusText: "Ready",
+                detailText: "3840×2160 · 60 fps · 12.4 s",
+                progress: nil,
+                isActive: true,
+                isSelected: true,
+                isEnabled: true,
+                isPreviewable: true
+            ),
+            EncodingFileCardSnapshot(
+                id: "idle",
+                fileName: "interview-hevc.mov",
+                sourceKind: .photos,
+                videoInfo: nil,
+                statusText: "Ready",
+                detailText: nil,
+                progress: nil,
+                isActive: false,
+                isSelected: false,
+                isEnabled: true,
+                isPreviewable: true
+            ),
+            EncodingFileCardSnapshot(
+                id: "limited",
+                fileName: "timelapse.mov",
+                sourceKind: .folder,
+                videoInfo: nil,
+                statusText: "Star limited",
+                detailText: nil,
+                progress: nil,
+                isActive: false,
+                isSelected: false,
+                isEnabled: false,
+                isStarLimited: true,
+                isPreviewable: true
+            ),
+        ]
+    }
+}
