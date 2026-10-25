@@ -56,6 +56,7 @@ final class HomeDocumentPickerHandoff: ObservableObject {
 }
 
 struct HomeView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var viewModel: HomeViewModel
     @State private var activeImportBrowser: HomeImportBrowserMode?
     @State private var didCompleteImportBrowserSelection = false
@@ -114,7 +115,12 @@ struct HomeView: View {
                             containerSize: geometry.size,
                             safeAreaInsets: geometry.safeAreaInsets
                         )
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .transition(
+                            TaptionMotion.transition(
+                                .move(edge: .bottom).combined(with: .opacity),
+                                reduceMotion: reduceMotion
+                            )
+                        )
                         .zIndex(20)
                     }
                 }

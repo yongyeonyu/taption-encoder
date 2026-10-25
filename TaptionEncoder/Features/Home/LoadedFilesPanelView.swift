@@ -31,6 +31,7 @@ struct LoadedFilesPanelView: View {
     var onMove: (String, String) -> Void
     var onMoveEnded: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var draggedFileID: String?
     @State private var pressedGroupAnchorID: String?
     @State private var hoveredDropTargetID: String?
@@ -148,8 +149,8 @@ struct LoadedFilesPanelView: View {
         .clipped()
     }
 
-    private var queueSpringAnimation: Animation {
-        .spring(response: 0.28, dampingFraction: 0.84)
+    private var queueSpringAnimation: Animation? {
+        TaptionMotion.spring(.spring(response: 0.28, dampingFraction: 0.84), reduceMotion: reduceMotion)
     }
 
     private func autoScrollQueue(
@@ -219,6 +220,7 @@ private struct EncodingFileCardView: View {
     var onDragStarted: () -> Void
     var onGroupPressChanged: (Bool) -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var swipeOffset: CGFloat = 0
     @State private var isSwipeGestureActive = false
     @State private var isCardPressActive = false
@@ -582,6 +584,9 @@ private struct EncodingFileCardView: View {
     }
 
     private var cardScale: CGFloat {
+        // Scale is the only transform on the card, and `cardOpacity` already carries the same
+        // state, so Reduce Motion drops the movement without losing the feedback.
+        guard !reduceMotion else { return 1 }
         if isGroupPressAnchor {
             return 1.025
         }
@@ -616,8 +621,8 @@ private struct EncodingFileCardView: View {
         TaptionTheme.coral
     }
 
-    private var queueSpringAnimation: Animation {
-        .spring(response: 0.26, dampingFraction: 0.82)
+    private var queueSpringAnimation: Animation? {
+        TaptionMotion.spring(.spring(response: 0.26, dampingFraction: 0.82), reduceMotion: reduceMotion)
     }
 
     private func clampedSwipeOffset(_ offset: CGFloat) -> CGFloat {

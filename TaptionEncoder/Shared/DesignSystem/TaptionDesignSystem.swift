@@ -156,6 +156,22 @@ enum TaptionMotion {
     static let slow = Animation.easeInOut(duration: 0.35)
     /// Spring for anything the finger directly moves.
     static let interactive = Animation.spring(response: 0.32, dampingFraction: 0.86)
+
+    /// The curve to actually run, given the Reduce Motion setting (§7).
+    ///
+    /// A spring overshoots and settles, which is exactly the travel the setting asks us to drop, so
+    /// it becomes an instant change rather than a shorter spring. `nil` is accepted by both
+    /// `withAnimation` and `.animation(_:value:)`.
+    static func spring(_ animation: Animation, reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : animation
+    }
+
+    /// A transition that carries travel (a slide, a zoom) collapses to a cross-fade. One that is
+    /// already a fade passes through untouched, so callers can route every transition through here
+    /// without having to remember which is which.
+    static func transition(_ transition: AnyTransition, reduceMotion: Bool) -> AnyTransition {
+        reduceMotion ? .opacity : transition
+    }
 }
 
 // MARK: - Elevation

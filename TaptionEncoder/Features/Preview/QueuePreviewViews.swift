@@ -570,6 +570,7 @@ struct QueuePreviewCenterControls: View {
 }
 
 private struct VLCQueueVideoPreviewView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var preview: QueueVideoPreview
     var adUnitID: String
     var isAddedToList: Bool
@@ -648,7 +649,12 @@ private struct VLCQueueVideoPreviewView: View {
 
                 if let gestureFeedback {
                     QueuePreviewGestureFeedbackView(feedback: gestureFeedback)
-                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                        .transition(
+                            TaptionMotion.transition(
+                                .opacity.combined(with: .scale(scale: 0.96)),
+                                reduceMotion: reduceMotion
+                            )
+                        )
                 }
 
                 QueuePreviewSystemVolumeBridgeView(controller: systemVolumeController)
@@ -795,7 +801,12 @@ private struct VLCQueueVideoPreviewView: View {
                     isPlaying: player.isPlaying, canSeek: hasUsableTimeline,
                     onBackward: skipBackward, onToggle: togglePlayback, onForward: skipForward
                 )
-                .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                .transition(
+                    TaptionMotion.transition(
+                        .opacity.combined(with: .scale(scale: 0.92)),
+                        reduceMotion: reduceMotion
+                    )
+                )
             }
         }
     }

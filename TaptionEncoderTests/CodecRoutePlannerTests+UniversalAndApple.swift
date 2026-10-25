@@ -369,6 +369,43 @@ extension CodecRoutePlannerTests {
         XCTAssertTrue(offenders.isEmpty, offenders.joined(separator: "\n"))
     }
 
+    /// §7: motion is gated on Reduce Motion. The setting removes travel, not feedback, so a
+    /// spring becomes an instant change and a slide or zoom collapses to a cross-fade. A pure
+    /// fade is already the reduced form and is allowed to stay as written.
+    func testMotionRespectsReduceMotion() throws {
+        let spring = Animation.spring(response: 0.28, dampingFraction: 0.84)
+        XCTAssertNil(TaptionMotion.spring(spring, reduceMotion: true))
+        XCTAssertNotNil(TaptionMotion.spring(spring, reduceMotion: false))
+
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let animatedSources = [
+            "TaptionEncoder/Features/Home/HomeView.swift",
+            "TaptionEncoder/Features/Home/LoadedFilesPanelView.swift",
+            "TaptionEncoder/Features/Preview/QueuePreviewViews.swift",
+            "TaptionEncoder/Features/Preview/NativeQueueVideoPreviewView.swift",
+        ]
+        // Same line only. A gated transition wraps onto the next line, which is the shape that is
+        // allowed; an inline `.transition(.move(…))` is the one that ignores the setting.
+        let travellingTransition = try NSRegularExpression(
+            pattern: "\\.transition\\([^\\n]*(move|scale)"
+        )
+
+        var offenders: [String] = []
+        for relative in animatedSources {
+            let text = try String(contentsOf: rootURL.appendingPathComponent(relative), encoding: .utf8)
+            let matches = travellingTransition.numberOfMatches(
+                in: text,
+                range: NSRange(text.startIndex..., in: text)
+            )
+            if matches > 0 {
+                offenders.append("\(relative): \(matches) transition(s) carry travel regardless of Reduce Motion")
+            }
+        }
+        XCTAssertTrue(offenders.isEmpty, offenders.joined(separator: "\n"))
+    }
+
     func testHelpSheetIntegratesVersionDeviceInfoAndOpenSourceNotices() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

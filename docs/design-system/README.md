@@ -261,7 +261,12 @@ a machined corner and clashes with the rest.
 | `interactive` | `.spring(0.32, 0.86)` | anything the finger drags |
 
 Respect Reduce Motion: gate transforms on `@Environment(\.accessibilityReduceMotion)` and fall back
-to a cross-fade. Not yet enforced anywhere — tracked in §10.
+to a cross-fade. `TaptionMotion` in `TaptionDesignSystem.swift` is that rule in code —
+`TaptionMotion.spring(_:reduceMotion:)` returns `nil` (apply instantly, since the overshoot is the
+travel the setting asks us to drop) and `TaptionMotion.transition(_:reduceMotion:)` returns
+`.opacity`. Pure fades are already the reduced form and pass through untouched.
+`testMotionRespectsReduceMotion` keeps a new inline `.transition(.move(…))` or `.transition(.scale…)`
+from creeping back in.
 
 ---
 
@@ -333,6 +338,5 @@ Never signal state by colour alone — the banner always carries text.
   1.51:1 hairline on purpose.
 - Sub-0.86 `Color.white.opacity(…)` labels and the white ad placeholder card are still unmigrated
   (§3.4 F3).
-- Reduce Motion is not honoured yet (§7).
 - The palette guard (`testDesignSystemPaletteIsNotReferencedOutsideItsFile`) covers `TaptionColor.`
   and `Color(taptionHex:`; a role that is named but misused still passes.
