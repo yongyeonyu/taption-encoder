@@ -36,6 +36,11 @@ enum TaptionColor {
     static let ink200 = Color(taptionHex: 0x9AAFBA)
     static let ink100 = Color(taptionHex: 0xE8F3F7)
 
+    /// The one palette step that clears 3:1 against every surface (3.70:1 on `surface`).
+    /// It exists for control boundaries — see `TaptionTheme.focusBorder` and §3.4 F1 of the
+    /// design-system document.
+    static let focus500 = Color(taptionHex: 0x628391)
+
     static let cyan500 = Color(taptionHex: 0x6DD0E5)
     static let coral500 = Color(taptionHex: 0xEBA58B)
     static let mint500 = Color(taptionHex: 0x91CBB6)
@@ -56,6 +61,9 @@ enum TaptionTheme {
     static let selectedSurface = TaptionColor.ink600
     static let border = TaptionColor.ink500
     static let strongBorder = TaptionColor.ink400
+    /// The border for anything interactive or focused. `border` stays decorative; this is
+    /// the one that carries WCAG 1.4.11's 3:1 control-boundary requirement (§3.4 F1).
+    static let focusBorder = TaptionColor.focus500
     static let primaryText = TaptionColor.ink100
     static let mutedText = TaptionColor.ink200
     static let disabledText = TaptionColor.ink300

@@ -1042,7 +1042,7 @@ struct HomeView: View {
 
                 Text(viewModel.starBalanceDisplayText)
                     .font((metrics.contentScale < 0.84 ? Font.caption : Font.subheadline).monospacedDigit().weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.92))
+                    .foregroundStyle(TaptionTheme.primaryText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                 Rectangle()
@@ -1307,7 +1307,7 @@ struct HomeView: View {
 
                 Text(outputSizeDraftText(fallback: viewModel.selectedOutputTargetSizeText))
                     .font(.title3.weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.92))
+                    .foregroundStyle(TaptionTheme.primaryText)
 
                 if let statusMessage = viewModel.outputSizeStatusMessage {
                     HStack(alignment: .top, spacing: 8 * metrics.contentScale) {
@@ -1358,7 +1358,7 @@ struct HomeView: View {
                 .font(.caption2)
                 .foregroundStyle(TaptionTheme.mutedText)
             }
-            .foregroundStyle(Color.white.opacity(0.92))
+            .foregroundStyle(TaptionTheme.primaryText)
             .padding(18)
             .frame(width: 280)
             .background(TaptionTheme.elevatedSurface)
@@ -1482,14 +1482,14 @@ struct HomeView: View {
             }
             Spacer(minLength: 0)
         }
-        .foregroundStyle(isEnabled ? Color.white.opacity(0.9) : TaptionTheme.disabledText)
+        .foregroundStyle(isEnabled ? TaptionTheme.primaryText : TaptionTheme.disabledText)
         .padding(.horizontal, 10 * metrics.contentScale)
         .frame(maxWidth: .infinity)
         .frame(minHeight: max(metrics.controlHeight, 52 * metrics.contentScale))
         .background(TaptionTheme.elevatedSurface)
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(isEnabled ? TaptionTheme.border : Color.white.opacity(0.06), lineWidth: 1)
+                .stroke(isEnabled ? TaptionTheme.focusBorder : Color.white.opacity(0.06), lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .opacity(isEnabled ? 1 : 0.48)
@@ -1508,7 +1508,7 @@ struct HomeView: View {
             Text(title)
             Spacer(minLength: 0)
         }
-        .foregroundStyle(isEnabled ? Color.white.opacity(0.92) : TaptionTheme.disabledText)
+        .foregroundStyle(isEnabled ? TaptionTheme.primaryText : TaptionTheme.disabledText)
     }
 }
 
