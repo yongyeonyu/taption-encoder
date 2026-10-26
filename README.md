@@ -99,6 +99,12 @@ scripts/                        verification and App Store pipelines
 
 ## Notes
 
+- Preview is a convenience, not a promise. libVLC decodes most containers, but a handful of legacy
+  codecs (`RealVideo 1.0/2.0`, `RoQ`, `H.261`, `R210`) have no decoder in it. Encoding runs on
+  FFmpeg and does not go through the preview engine, so such a file is not rejected from the queue;
+  the player reports "Preview unavailable" rather than spinning. There is deliberately no per-codec
+  pre-flight list — it could never be verified against real samples, so it would be a table of
+  guesses that ages badly.
 - The repository is public and single-maintainer. Review is a 24-hour self-review plus an AI pass
   rather than a second human; see `docs/code-review/README.md` for how that is enforced.
 - App Store screenshots are generated and uploaded by the scripts in `scripts/`; the pixel sizes and

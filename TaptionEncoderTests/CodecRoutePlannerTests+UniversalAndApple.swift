@@ -369,6 +369,66 @@ extension CodecRoutePlannerTests {
         XCTAssertTrue(offenders.isEmpty, offenders.joined(separator: "\n"))
     }
 
+    /// §7: motion is gated on Reduce Motion. The setting removes travel, not feedback, so a
+    /// spring becomes an instant change and a slide or zoom collapses to a cross-fade. A pure
+    /// fade is already the reduced form and is allowed to stay as written.
+    func testMotionRespectsReduceMotion() throws {
+        let spring = Animation.spring(response: 0.28, dampingFraction: 0.84)
+        XCTAssertNil(TaptionMotion.spring(spring, reduceMotion: true))
+        XCTAssertNotNil(TaptionMotion.spring(spring, reduceMotion: false))
+
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let animatedSources = [
+            "TaptionEncoder/Features/Home/HomeView.swift",
+            "TaptionEncoder/Features/Home/LoadedFilesPanelView.swift",
+            "TaptionEncoder/Features/Preview/QueuePreviewViews.swift",
+            "TaptionEncoder/Features/Preview/NativeQueueVideoPreviewView.swift",
+        ]
+        // Same line only. A gated transition wraps onto the next line, which is the shape that is
+        // allowed; an inline `.transition(.move(…))` is the one that ignores the setting.
+        let travellingTransition = try NSRegularExpression(
+            pattern: "\\.transition\\([^\\n]*(move|scale)"
+        )
+
+        var offenders: [String] = []
+        for relative in animatedSources {
+            let text = try String(contentsOf: rootURL.appendingPathComponent(relative), encoding: .utf8)
+            let matches = travellingTransition.numberOfMatches(
+                in: text,
+                range: NSRange(text.startIndex..., in: text)
+            )
+            if matches > 0 {
+                offenders.append("\(relative): \(matches) transition(s) carry travel regardless of Reduce Motion")
+            }
+        }
+        XCTAssertTrue(offenders.isEmpty, offenders.joined(separator: "\n"))
+    }
+
+    /// §7 says Reduce Motion removes travel, not feedback. The queue card is the case where that
+    /// is easy to get wrong: `isBundledByGroupPress` is true for the pressed anchor too, so its
+    /// scale is the only thing separating it from the cards bundled with it. Drop the scale
+    /// without handing the job to opacity and the anchor becomes indistinguishable — less
+    /// feedback for the people who asked for less motion.
+    func testReduceMotionKeepsTheQueueAnchorDistinguishable() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: rootURL.appendingPathComponent("TaptionEncoder/Features/Home/LoadedFilesPanelView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(
+            source.contains("if reduceMotion, isGroupPressAnchor"),
+            "cardOpacity must hand the anchor its base opacity back once cardScale stops moving"
+        )
+        // Both halves of the trade have to be visible in the same file, or the pair drifts apart.
+        XCTAssertTrue(source.contains("guard !reduceMotion else { return 1 }"))
+        XCTAssertTrue(source.contains("return isBundledByGroupPress ? 0.46 : baseOpacity"))
+    }
+
     func testHelpSheetIntegratesVersionDeviceInfoAndOpenSourceNotices() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
