@@ -972,13 +972,13 @@ struct HomeImportBrowserView: View {
                 .padding(.top, 24)
                 .padding(.bottom, 28)
             }
-            .background(ImportBrowserExplorerStyle.background)
+            .background(TaptionTheme.appBackground)
 
             if context?.hasLocation == true {
                 bottomBar
             }
         }
-        .background(ImportBrowserExplorerStyle.background.ignoresSafeArea())
+        .background(TaptionTheme.appBackground.ignoresSafeArea())
         .simultaneousGesture(backSwipeGesture)
     }
 
@@ -1009,7 +1009,7 @@ struct HomeImportBrowserView: View {
         }
         .frame(height: 78)
         .padding(.horizontal, 16)
-        .background(ImportBrowserExplorerStyle.navigationBar)
+        .background(TaptionTheme.surface)
     }
 
     private var bottomBar: some View {
@@ -1022,16 +1022,16 @@ struct HomeImportBrowserView: View {
             }
             .buttonStyle(.plain)
             .disabled(!canImport)
-            .foregroundStyle(canImport ? TaptionTheme.accentButtonText : ImportBrowserExplorerStyle.secondaryText)
-            .background(canImport ? ImportBrowserExplorerStyle.blueAccent : ImportBrowserExplorerStyle.disabledControl)
+            .foregroundStyle(canImport ? TaptionTheme.accentButtonText : TaptionTheme.mutedText)
+            .background(canImport ? TaptionTheme.accent : TaptionTheme.elevatedSurface)
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .padding(12)
         .background(
-            ImportBrowserExplorerStyle.background
+            TaptionTheme.appBackground
                 .overlay(alignment: .top) {
                     Rectangle()
-                        .fill(ImportBrowserExplorerStyle.blueAccent.opacity(0.22))
+                        .fill(TaptionTheme.accent.opacity(0.22))
                         .frame(height: 1)
                 }
         )
@@ -1084,18 +1084,6 @@ struct HomeImportBrowserView: View {
     }
 }
 
-private enum ImportBrowserExplorerStyle {
-    static let navigationBar = TaptionTheme.surface
-    static let background = TaptionTheme.appBackground
-    static let primaryText = TaptionTheme.primaryText
-    static let secondaryText = TaptionTheme.mutedText
-    static let blueAccent = TaptionTheme.accent
-    static let disabledControl = TaptionTheme.elevatedSurface
-    static let folderFront = TaptionTheme.accent
-    static let folderBack = TaptionTheme.selectedSurface
-    static let selectedRing = TaptionTheme.accent
-}
-
 private struct ImportBrowserBackButton: View {
     var title: String
     var isEnabled: Bool
@@ -1116,7 +1104,7 @@ private struct ImportBrowserBackButton: View {
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
-        .foregroundStyle(isEnabled ? ImportBrowserExplorerStyle.secondaryText : Color.white.opacity(0.32))
+        .foregroundStyle(isEnabled ? TaptionTheme.mutedText : Color.white.opacity(0.32))
         .accessibilityLabel("Back")
     }
 }
@@ -1133,7 +1121,7 @@ private struct ImportBrowserToolbarButton: View {
                 .frame(width: 36, height: 36)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(ImportBrowserExplorerStyle.secondaryText)
+        .foregroundStyle(TaptionTheme.mutedText)
         .accessibilityLabel(accessibilityLabel)
     }
 }
@@ -1151,13 +1139,13 @@ private struct ImportBrowserFolderArtwork: View {
 
             ZStack(alignment: .bottom) {
                 RoundedRectangle(cornerRadius: max(width * 0.055, 6), style: .continuous)
-                    .fill(ImportBrowserExplorerStyle.folderFront)
+                    .fill(TaptionTheme.accent)
                     .frame(width: width * 0.92, height: bodyHeight)
                     .offset(y: -height * 0.02)
 
                 HStack {
                     RoundedRectangle(cornerRadius: max(width * 0.035, 4), style: .continuous)
-                        .fill(ImportBrowserExplorerStyle.folderBack)
+                        .fill(TaptionTheme.selectedSurface)
                         .frame(width: tabWidth, height: tabHeight)
                     Spacer(minLength: 0)
                 }
@@ -1186,22 +1174,22 @@ private struct HomeImportBrowserEmptyTileView: View {
         VStack(alignment: .center, spacing: 10) {
             ZStack {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(ImportBrowserExplorerStyle.disabledControl)
+                    .fill(TaptionTheme.elevatedSurface)
 
                 Image(systemName: "tray")
                     .font(.system(size: 26, weight: .semibold))
-                    .foregroundStyle(ImportBrowserExplorerStyle.secondaryText)
+                    .foregroundStyle(TaptionTheme.mutedText)
             }
             .frame(height: 82)
             .overlay(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(ImportBrowserExplorerStyle.blueAccent.opacity(0.18), lineWidth: 1)
+                    .stroke(TaptionTheme.accent.opacity(0.18), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             Text(title)
                 .font(.callout.weight(.bold))
-                .foregroundStyle(ImportBrowserExplorerStyle.primaryText)
+                .foregroundStyle(TaptionTheme.primaryText)
                 .lineLimit(2)
                 .minimumScaleFactor(0.76)
                 .multilineTextAlignment(.center)
@@ -1209,7 +1197,7 @@ private struct HomeImportBrowserEmptyTileView: View {
 
             Text(statusText)
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(ImportBrowserExplorerStyle.secondaryText)
+                .foregroundStyle(TaptionTheme.mutedText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.78)
         }
@@ -1229,7 +1217,7 @@ private struct HomeImportBrowserFolderTileView: View {
 
                 Text(folder.folderName)
                     .font(.callout.weight(.bold))
-                    .foregroundStyle(ImportBrowserExplorerStyle.primaryText)
+                    .foregroundStyle(TaptionTheme.primaryText)
                     .lineLimit(2)
                     .minimumScaleFactor(0.76)
                     .multilineTextAlignment(.center)
@@ -1237,7 +1225,7 @@ private struct HomeImportBrowserFolderTileView: View {
 
                 Text(folder.detailText)
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(ImportBrowserExplorerStyle.secondaryText)
+                    .foregroundStyle(TaptionTheme.mutedText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }
@@ -1266,18 +1254,18 @@ private struct HomeImportBrowserFileTileView: View {
                     if file.isSelected {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(Color.white, ImportBrowserExplorerStyle.selectedRing)
+                            .foregroundStyle(Color.white, TaptionTheme.accent)
                             .padding(6)
                     }
                 }
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(file.isSelected ? ImportBrowserExplorerStyle.selectedRing : ImportBrowserExplorerStyle.blueAccent.opacity(0.18), lineWidth: file.isSelected ? 2 : 1)
+                        .stroke(file.isSelected ? TaptionTheme.accent : TaptionTheme.accent.opacity(0.18), lineWidth: file.isSelected ? 2 : 1)
                 )
 
                 Text(file.fileName)
                     .font(.callout.weight(.bold))
-                    .foregroundStyle(isSelectable ? ImportBrowserExplorerStyle.primaryText : ImportBrowserExplorerStyle.secondaryText)
+                    .foregroundStyle(isSelectable ? TaptionTheme.primaryText : TaptionTheme.mutedText)
                     .lineLimit(2)
                     .minimumScaleFactor(0.76)
                     .multilineTextAlignment(.center)
@@ -1285,7 +1273,7 @@ private struct HomeImportBrowserFileTileView: View {
 
                 Text(file.detailText)
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(ImportBrowserExplorerStyle.secondaryText)
+                    .foregroundStyle(TaptionTheme.mutedText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.78)
             }

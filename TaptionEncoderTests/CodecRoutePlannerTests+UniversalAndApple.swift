@@ -299,7 +299,10 @@ extension CodecRoutePlannerTests {
         XCTAssertTrue(primaryButtonText.contains("TaptionTheme.accentButtonText"))
         XCTAssertTrue(homeText.contains(".foregroundStyle(TaptionTheme.reward)"))
         XCTAssertTrue(homeText.contains(".background(TaptionTheme.coral)"))
-        XCTAssertTrue(loadedFilesText.contains("static let blueAccent = TaptionTheme.accent"))
+        // The import browser used to keep a private alias palette of its own; it now names the
+        // semantic roles directly, so a second vocabulary cannot drift from the theme.
+        XCTAssertFalse(loadedFilesText.contains("ImportBrowserExplorerStyle"))
+        XCTAssertTrue(loadedFilesText.contains("TaptionTheme.selectedSurface"))
         XCTAssertTrue(outputSummaryText.contains(".foregroundStyle(TaptionTheme.success)"))
     }
 

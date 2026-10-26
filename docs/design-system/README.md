@@ -334,7 +334,5 @@ Never signal state by colour alone — the banner always carries text.
 - Sub-0.86 `Color.white.opacity(…)` labels and the white ad placeholder card are still unmigrated
   (§3.4 F3).
 - Reduce Motion is not honoured yet (§7).
-- `ImportBrowserExplorerStyle` (`LoadedFilesPanelView.swift`) keeps its own private palette and
-  should fold into `TaptionTheme`.
 - The palette guard (`testDesignSystemPaletteIsNotReferencedOutsideItsFile`) covers `TaptionColor.`
   and `Color(taptionHex:`; a role that is named but misused still passes.
