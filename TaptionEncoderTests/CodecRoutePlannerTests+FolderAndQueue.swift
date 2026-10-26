@@ -1789,7 +1789,12 @@ extension CodecRoutePlannerTests {
         XCTAssertTrue(loadedFilesPanelText.contains("isCardPressActive = isPressing"))
         XCTAssertTrue(loadedFilesPanelText.contains("selectedGroupCount"))
         XCTAssertTrue(loadedFilesPanelText.contains("groupStackLayer"))
-        XCTAssertTrue(loadedFilesPanelText.contains("withAnimation(.spring(response: 0.28, dampingFraction: 0.84))"))
+        // The reorder spring used to be written inline. It goes through the Reduce Motion helper
+        // now, so this pins the gated form — an ungated `withAnimation(.spring(…)` here would mean
+        // the queue animates for people who asked it not to.
+        XCTAssertTrue(loadedFilesPanelText.contains(
+            "withAnimation(TaptionMotion.curve(.spring(response: 0.28, dampingFraction: 0.84), reduceMotion: reduceMotion))"
+        ))
         XCTAssertTrue(loadedFilesPanelText.contains("infoGrid(info)"))
         XCTAssertTrue(loadedFilesPanelText.contains("tableValue(info.duration)"))
         XCTAssertTrue(loadedFilesPanelText.contains("tableValue(info.frameRate)"))
