@@ -335,7 +335,7 @@ private struct EncodingFileCardView: View {
 
             Text(file.fileName)
                 .font(contentScale < 0.9 ? .caption.weight(.semibold) : .subheadline.weight(.semibold))
-                .foregroundStyle(file.isInteractable ? Color.white.opacity(0.92) : TaptionTheme.disabledText)
+                .foregroundStyle(file.isInteractable ? TaptionTheme.primaryText : TaptionTheme.disabledText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
 
@@ -411,7 +411,7 @@ private struct EncodingFileCardView: View {
         if file.isSelected {
             return TaptionTheme.accent
         }
-        return file.isInteractable ? TaptionTheme.border : Color.white.opacity(0.08)
+        return file.isInteractable ? TaptionTheme.focusBorder : Color.white.opacity(0.08)
     }
 
     private var statusColor: Color {
@@ -421,7 +421,7 @@ private struct EncodingFileCardView: View {
         if !file.isInteractable {
             return TaptionTheme.disabledText
         }
-        return file.isSelected || file.isActive ? Color.white.opacity(0.92) : TaptionTheme.mutedText
+        return file.isSelected || file.isActive ? TaptionTheme.primaryText : TaptionTheme.mutedText
     }
 
     private var starLimitedStatusColor: Color {
@@ -671,7 +671,7 @@ private struct EncodingFileCardView: View {
     }
 
     private var defaultValueColor: Color {
-        file.isInteractable ? Color.white.opacity(0.88) : TaptionTheme.disabledText
+        file.isInteractable ? TaptionTheme.primaryText : TaptionTheme.disabledText
     }
 
     private func formatTime(_ seconds: TimeInterval) -> String {
@@ -878,7 +878,7 @@ struct FolderPreviewBrowserView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(context.folderName)
                     .font(.headline.weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.92))
+                    .foregroundStyle(TaptionTheme.primaryText)
                     .lineLimit(1)
                     .minimumScaleFactor(0.72)
 
@@ -895,7 +895,7 @@ struct FolderPreviewBrowserView: View {
                     .frame(width: 36, height: 36)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Color.white.opacity(0.88))
+            .foregroundStyle(TaptionTheme.primaryText)
             .background(Color.white.opacity(0.10))
             .clipShape(Circle())
             .accessibilityLabel("Close")
@@ -1167,7 +1167,7 @@ private struct ImportBrowserFolderArtwork: View {
                 if let systemBadge {
                     Image(systemName: systemBadge)
                         .font(.system(size: max(width * 0.18, 18), weight: .bold))
-                        .foregroundStyle(Color.white.opacity(0.96))
+                        .foregroundStyle(TaptionTheme.primaryText)
                         .shadow(color: Color.black.opacity(0.12), radius: 1, x: 0, y: 1)
                         .offset(y: -height * 0.22)
                 }
@@ -1319,7 +1319,7 @@ private struct FolderPreviewTileView: View {
 
                 Text(file.fileName)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color.white.opacity(0.9))
+                    .foregroundStyle(TaptionTheme.primaryText)
                     .lineLimit(2)
                     .minimumScaleFactor(0.76)
                     .frame(height: 32, alignment: .topLeading)
@@ -1335,7 +1335,7 @@ private struct FolderPreviewTileView: View {
             .background(file.isSelected ? TaptionTheme.selectedSurface : TaptionTheme.elevatedSurface)
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(file.isSelected ? Color.white.opacity(0.36) : TaptionTheme.border, lineWidth: 1)
+                    .stroke(file.isSelected ? Color.white.opacity(0.36) : TaptionTheme.focusBorder, lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .contentShape(Rectangle())

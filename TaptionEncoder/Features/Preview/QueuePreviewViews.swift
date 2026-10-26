@@ -861,13 +861,13 @@ private struct VLCQueueVideoPreviewView: View {
                         .tint(Color.white)
                     Text("Loading preview")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.white.opacity(0.86))
+                        .foregroundStyle(TaptionTheme.primaryText)
                 }
 
                 if let playbackError {
                     Text(playbackError)
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Color.white.opacity(0.92))
+                        .foregroundStyle(TaptionTheme.primaryText)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -1810,7 +1810,7 @@ private struct VLCQueueMiniPlayerView: View {
                 if let playbackError {
                     Text(playbackError)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.white.opacity(0.92))
+                        .foregroundStyle(TaptionTheme.primaryText)
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                         .minimumScaleFactor(0.7)
@@ -1850,7 +1850,7 @@ private struct VLCQueueMiniPlayerView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(preview.displayName)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.white.opacity(0.94))
+                        .foregroundStyle(TaptionTheme.primaryText)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Text(QueuePreviewPlaybackMath.formattedTime(player.currentTime))

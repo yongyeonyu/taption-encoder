@@ -203,7 +203,7 @@ struct EncodingProgressView: View {
             .background(TaptionTheme.elevatedSurface)
             .overlay(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(state.canCancel ? TaptionTheme.border : Color.white.opacity(0.06), lineWidth: 1)
+                    .stroke(state.canCancel ? TaptionTheme.focusBorder : Color.white.opacity(0.06), lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .disabled(!state.canCancel)
@@ -296,7 +296,7 @@ private struct EncodingResourceUsageWidget: View {
                             VStack(alignment: .leading, spacing: 2 * contentScale) {
                                 Text(warning.title)
                                     .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(Color.white.opacity(0.86))
+                                    .foregroundStyle(TaptionTheme.primaryText)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.82)
                                 Text(warning.message)

@@ -53,6 +53,6 @@ struct PrimaryActionButton: View {
         if isProminent {
             return TaptionTheme.accent.opacity(isEnabled ? 0.65 : 0.18)
         }
-        return isEnabled ? TaptionTheme.border : Color.white.opacity(0.06)
+        return isEnabled ? TaptionTheme.focusBorder : Color.white.opacity(0.06)
     }
 }

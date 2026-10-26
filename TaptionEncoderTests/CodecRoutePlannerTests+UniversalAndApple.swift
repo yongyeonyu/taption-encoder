@@ -303,6 +303,69 @@ extension CodecRoutePlannerTests {
         XCTAssertTrue(outputSummaryText.contains(".foregroundStyle(TaptionTheme.success)"))
     }
 
+    /// §3.4 F1 of the design-system document: the measured 3.70:1 step has to exist as a role,
+    /// and it has to be used where the border already carries interactivity. An enabled control's
+    /// edge is its only boundary, so a 1.51:1 hairline leaves a low-vision user without one.
+    func testFocusBorderIsTheAccessibleEdgeForInteractiveControls() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let themeText = try String(
+            contentsOf: rootURL.appendingPathComponent(
+                "TaptionEncoder/Shared/DesignSystem/TaptionDesignSystem.swift"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(themeText.contains("0x628391"), "the measured focus step must be in the palette")
+        XCTAssertTrue(themeText.contains("static let focusBorder"))
+
+        // Every file that draws an edge on a tappable thing. `ProgressCard` is absent on purpose:
+        // it is the decorative container, and `border` stays decorative.
+        let interactiveEdgeSources = [
+            "TaptionEncoder/Shared/UI/PrimaryActionButton.swift",
+            "TaptionEncoder/Features/Home/HomeView.swift",
+            "TaptionEncoder/Features/Home/LoadedFilesPanelView.swift",
+            "TaptionEncoder/Features/Encoding/EncodingProgressView.swift",
+        ]
+        for relative in interactiveEdgeSources {
+            let text = try String(contentsOf: rootURL.appendingPathComponent(relative), encoding: .utf8)
+            XCTAssertTrue(
+                text.contains("TaptionTheme.focusBorder"),
+                "\(relative) draws an interactive edge but names the decorative border role"
+            )
+        }
+    }
+
+    /// §3.4 F3: enabled labels used ad-hoc `Color.white.opacity(0.86…0.96)` instead of
+    /// `primaryText`, which does not follow a palette change and does not participate in
+    /// Increase Contrast. The sites are migrated; this keeps a new one from creeping back in.
+    ///
+    /// Excluded on purpose: opacities below 0.86 (secondary labels, hairline strokes) and
+    /// `AdProviders`' white placeholder card, which is a surface rather than text.
+    func testNearWhiteLabelsUseTheTextToken() throws {
+        let rootURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let migratedSources = [
+            "TaptionEncoder/Features/Preview/QueuePreviewViews.swift",
+            "TaptionEncoder/Features/Home/HomeView.swift",
+            "TaptionEncoder/Features/Home/LoadedFilesPanelView.swift",
+            "TaptionEncoder/Features/Encoding/EncodingProgressView.swift",
+        ]
+        let pattern = try NSRegularExpression(
+            pattern: "Color\\.white\\.opacity\\(0\\.(8[6-9]|9[0-6])\\)"
+        )
+
+        var offenders: [String] = []
+        for relative in migratedSources {
+            let text = try String(contentsOf: rootURL.appendingPathComponent(relative), encoding: .utf8)
+            let matches = pattern.numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text))
+            if matches > 0 {
+                offenders.append("\(relative): \(matches) near-white label(s) bypass the palette")
+            }
+        }
+        XCTAssertTrue(offenders.isEmpty, offenders.joined(separator: "\n"))
+    }
+
     func testHelpSheetIntegratesVersionDeviceInfoAndOpenSourceNotices() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

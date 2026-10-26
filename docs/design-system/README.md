@@ -104,6 +104,7 @@ Raw values. Only `TaptionDesignSystem.swift` may reference these.
 | `ink300` | `#78909B` | — | disabled text |
 | `ink200` | `#9AAFBA` | — | secondary text |
 | `ink100` | `#E8F3F7` | — | primary text |
+| `focus500` | `#628391` | — | interactive edge, 3.70:1 on `surface` |
 | `cyan500` | `#6DD0E5` | — | accent |
 | `coral500` | `#EBA58B` | — | warning / destructive |
 | `mint500` | `#91CBB6` | — | success |
@@ -119,6 +120,7 @@ Raw values. Only `TaptionDesignSystem.swift` may reference these.
 | `selectedSurface` | `ink600` | selected queue row |
 | `border` | `ink500` | card hairline |
 | `strongBorder` | `ink400` | dividers that must be seen, disabled glyphs |
+| `focusBorder` | `focus500` | enabled controls, tappable rows and tiles, focus rings |
 | `primaryText` | `ink100` | body, titles |
 | `mutedText` | `ink200` | secondary labels, metadata |
 | `disabledText` | `ink300` | **disabled controls only** |
@@ -147,6 +149,7 @@ Non-text pairs:
 
 | Pair | Ratio | Requirement |
 | --- | --- | --- |
+| `focusBorder` on `surface` | 3.70 | 3.0 — meets it |
 | `border` on `surface` | 1.51 | 3.0 for meaningful boundaries |
 | `strongBorder` on `surface` | 2.76 | 3.0 |
 | `surface` on `appBackground` | 1.19 | 3.0 if the edge is the only affordance |
@@ -160,8 +163,9 @@ plus a 1.51:1 hairline. Neither reaches the 3:1 that WCAG 1.4.11 asks of a contr
 card still reads correctly for a sighted user (the eye uses the hairline plus layout), but a
 low-vision user gets no reliable edge.
 
-Recommended fix, additive and non-breaking: keep `border` as decoration, and introduce a
-`focusBorder` for anything interactive or focused.
+The fix is additive and non-breaking: `border` stays decoration, and `focusBorder` carries
+anything interactive — enabled buttons, tappable file rows and folder tiles, menu items, the
+cancel control. Decorative containers keep the hairline.
 
 | Candidate | vs `surface` | vs `elevatedSurface` | vs `appBackground` |
 | --- | --- | --- | --- |
@@ -169,17 +173,22 @@ Recommended fix, additive and non-breaking: keep `border` as decoration, and int
 | **`#628391`** | **3.70** | **3.25** | **4.39** |
 | `#6B8E9C` | 4.27 | 3.75 | 5.07 |
 
-`#628391` is the smallest step that clears 3:1 on every surface. Not applied yet — it changes the
-look of every card, so it needs a screenshot pass of its own.
+`#628391` is the smallest step that clears 3:1 on every surface. It ships as `focusBorder` and is
+verified with the Duo render pass (`scripts/render-duo-screenshots.sh`); the guard test
+`testFocusBorderIsTheAccessibleEdgeForInteractiveControls` keeps it on the interactive edges.
 
 **F2 — `disabledText` is 3.93:1 on `elevatedSurface`.** Below 4.5:1 for body text. WCAG exempts
 disabled controls, so this is compliant, but it is close enough that the token must not be reused
 for live text. Audited: all 13 call sites gate on a disabled/interactable flag. Keep it that way.
 
-**F3 — ad-hoc white.** 32 call sites use `Color.white.opacity(0.88…0.92)` for enabled labels
-instead of `primaryText`. On the dark surfaces the result is visually near-identical but it is a
-separate value that will not follow a palette change and does not participate in Increase
-Contrast. Migrate to `primaryText` as files are touched.
+**F3 — ad-hoc white.** Enabled labels used `Color.white.opacity(0.86…0.96)` instead of
+`primaryText`. On the dark surfaces the result is visually near-identical (0.92 over `surface`
+composites to `#ECEEEF` against `#E8F3F7`) but it is a separate value that will not follow a
+palette change and does not participate in Increase Contrast. The 17 near-white sites are migrated
+to `primaryText`; `testNearWhiteLabelsUseTheTextToken` fails if one comes back.
+
+What remains is deliberate: opacities below 0.86 are secondary labels and hairline strokes, and
+`AdProviders` draws a white placeholder card — a surface, not text.
 
 ---
 
@@ -320,10 +329,12 @@ Never signal state by colour alone — the banner always carries text.
 
 ### Known gaps
 
-- `focusBorder` (§3.4 F1) is measured but not applied.
-- 32 `Color.white.opacity(…)` sites still to migrate (§3.4 F3).
+- `focusBorder` (§3.4 F1) covers interactive edges; purely decorative containers still carry the
+  1.51:1 hairline on purpose.
+- Sub-0.86 `Color.white.opacity(…)` labels and the white ad placeholder card are still unmigrated
+  (§3.4 F3).
 - Reduce Motion is not honoured yet (§7).
 - `ImportBrowserExplorerStyle` (`LoadedFilesPanelView.swift`) keeps its own private palette and
   should fold into `TaptionTheme`.
-- No automated guard yet. A future test can assert that no `Color(taptionHex:` appears outside the
-  design system file — that is the cheapest way to keep rule 3 true.
+- The palette guard (`testDesignSystemPaletteIsNotReferencedOutsideItsFile`) covers `TaptionColor.`
+  and `Color(taptionHex:`; a role that is named but misused still passes.
