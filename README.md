@@ -86,7 +86,7 @@ TaptionEncoderThumbnailExtension/
 TaptionEncoderTests/            unit tests and media fixtures
 Vendor/                         third-party binaries and frameworks
 design/                         design system spec and App Store assets
-docs/                           code review standard, design system notes
+docs/                           code review standard, design system notes, release runbook
 scripts/                        verification and App Store pipelines
 ```
 
@@ -95,6 +95,7 @@ scripts/                        verification and App Store pipelines
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — branch, PR and review workflow
 - [`docs/code-review/`](docs/code-review/) — the review standard, risk tiers, and checklist
 - [`docs/design-system/`](docs/design-system/) — design tokens and usage rules
+- [`docs/release/`](docs/release/) — the release runbook, from version bump to App Store review
 - [`design/appstore/`](design/appstore/) — screenshot pipeline, including the iPhone Duo sizes
 
 ## Notes
