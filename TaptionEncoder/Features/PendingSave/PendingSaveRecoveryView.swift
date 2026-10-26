@@ -40,7 +40,7 @@ struct PendingSaveRecoveryView: View {
                 .background(TaptionTheme.elevatedSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(TaptionTheme.border, lineWidth: 1)
+                        .stroke(TaptionTheme.focusBorder, lineWidth: 1)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }

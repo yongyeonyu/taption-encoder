@@ -307,8 +307,14 @@ extension CodecRoutePlannerTests {
     }
 
     /// §3.4 F1 of the design-system document: the measured 3.70:1 step has to exist as a role,
-    /// and it has to be used where the border already carries interactivity. An enabled control's
-    /// edge is its only boundary, so a 1.51:1 hairline leaves a low-vision user without one.
+    /// and it has to be used where the border carries interactivity. An enabled control's edge is
+    /// its only boundary, so a 1.51:1 hairline leaves a low-vision user without one.
+    ///
+    /// The first version of this test only asked whether a file *mentioned* `focusBorder`. That
+    /// passed while `HomeView.starBadge` and the Reset button in `PendingSaveRecoveryView` still
+    /// drew a hairline — one correct use anywhere in the file hid every wrong one. It counts
+    /// strokes now: a file whose edges are all interactive may not use the decorative role at all,
+    /// and the purely decorative containers are enumerated so a new site cannot slip in unnoticed.
     func testFocusBorderIsTheAccessibleEdgeForInteractiveControls() throws {
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -321,19 +327,54 @@ extension CodecRoutePlannerTests {
         XCTAssertTrue(themeText.contains("0x628391"), "the measured focus step must be in the palette")
         XCTAssertTrue(themeText.contains("static let focusBorder"))
 
-        // Every file that draws an edge on a tappable thing. `ProgressCard` is absent on purpose:
-        // it is the decorative container, and `border` stays decorative.
-        let interactiveEdgeSources = [
+        let decorativeStroke = "stroke(TaptionTheme.border,"
+
+        // Every edge in these files belongs to something the user can tap, so the decorative role
+        // must not appear as a stroke at all.
+        let allEdgesInteractive = [
             "TaptionEncoder/Shared/UI/PrimaryActionButton.swift",
             "TaptionEncoder/Features/Home/HomeView.swift",
             "TaptionEncoder/Features/Home/LoadedFilesPanelView.swift",
-            "TaptionEncoder/Features/Encoding/EncodingProgressView.swift",
+            "TaptionEncoder/Features/PendingSave/PendingSaveRecoveryView.swift",
         ]
-        for relative in interactiveEdgeSources {
+        // `EncodingProgressView` carries both: a Cancel button (focusBorder) and a static log panel
+        // (border). It is held to the "uses focusBorder" rule and to the budget below.
+        let mixedSources = ["TaptionEncoder/Features/Encoding/EncodingProgressView.swift"]
+
+        for relative in allEdgesInteractive {
             let text = try String(contentsOf: rootURL.appendingPathComponent(relative), encoding: .utf8)
             XCTAssertTrue(
                 text.contains("TaptionTheme.focusBorder"),
                 "\(relative) draws an interactive edge but names the decorative border role"
+            )
+            XCTAssertFalse(
+                text.contains(decorativeStroke),
+                "\(relative) still strokes a decorative hairline on an interactive edge"
+            )
+        }
+        for relative in mixedSources {
+            let text = try String(contentsOf: rootURL.appendingPathComponent(relative), encoding: .utf8)
+            XCTAssertTrue(
+                text.contains("TaptionTheme.focusBorder"),
+                "\(relative) draws an interactive edge but names the decorative border role"
+            )
+        }
+
+        // Static containers keep the hairline. The counts are the audit: a changed number means
+        // someone added or removed an edge and has to decide whether it is tappable.
+        let decorativeStrokeBudget: [String: Int] = [
+            "TaptionEncoder/Shared/UI/StatusBanner.swift": 1,
+            "TaptionEncoder/Shared/UI/ProgressCard.swift": 1,
+            "TaptionEncoder/Features/Home/HomeMenuSheetView.swift": 8,
+            "TaptionEncoder/Features/Encoding/OutputSummaryView.swift": 1,
+            "TaptionEncoder/Features/Encoding/EncodingProgressView.swift": 1,
+        ]
+        for (relative, expected) in decorativeStrokeBudget.sorted(by: { $0.key < $1.key }) {
+            let text = try String(contentsOf: rootURL.appendingPathComponent(relative), encoding: .utf8)
+            let actual = text.components(separatedBy: decorativeStroke).count - 1
+            XCTAssertEqual(
+                actual, expected,
+                "\(relative) draws \(actual) decorative hairline(s), the audit recorded \(expected)"
             )
         }
     }
@@ -374,8 +415,8 @@ extension CodecRoutePlannerTests {
     /// fade is already the reduced form and is allowed to stay as written.
     func testMotionRespectsReduceMotion() throws {
         let spring = Animation.spring(response: 0.28, dampingFraction: 0.84)
-        XCTAssertNil(TaptionMotion.spring(spring, reduceMotion: true))
-        XCTAssertNotNil(TaptionMotion.spring(spring, reduceMotion: false))
+        XCTAssertNil(TaptionMotion.curve(spring, reduceMotion: true))
+        XCTAssertNotNil(TaptionMotion.curve(spring, reduceMotion: false))
 
         let rootURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -391,16 +432,25 @@ extension CodecRoutePlannerTests {
         let travellingTransition = try NSRegularExpression(
             pattern: "\\.transition\\([^\\n]*(move|scale)"
         )
+        // A spring overshoots and a linear ramp slides a viewport — both are travel. They have to
+        // go through `TaptionMotion.curve`, which is the only place that reads the setting. An
+        // `easeInOut` is deliberately absent from this list: it is what the remaining sites use to
+        // fade controls and gesture feedback in, and a fade is already the reduced form.
+        let ungatedTravel = try NSRegularExpression(
+            pattern: "withAnimation\\(\\.(spring|linear)"
+        )
 
         var offenders: [String] = []
         for relative in animatedSources {
             let text = try String(contentsOf: rootURL.appendingPathComponent(relative), encoding: .utf8)
-            let matches = travellingTransition.numberOfMatches(
-                in: text,
-                range: NSRange(text.startIndex..., in: text)
-            )
-            if matches > 0 {
-                offenders.append("\(relative): \(matches) transition(s) carry travel regardless of Reduce Motion")
+            let range = NSRange(text.startIndex..., in: text)
+            let transitions = travellingTransition.numberOfMatches(in: text, range: range)
+            if transitions > 0 {
+                offenders.append("\(relative): \(transitions) transition(s) carry travel regardless of Reduce Motion")
+            }
+            let curves = ungatedTravel.numberOfMatches(in: text, range: range)
+            if curves > 0 {
+                offenders.append("\(relative): \(curves) withAnimation(.spring|.linear) call(s) bypass TaptionMotion.curve")
             }
         }
         XCTAssertTrue(offenders.isEmpty, offenders.joined(separator: "\n"))
