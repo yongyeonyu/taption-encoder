@@ -159,10 +159,10 @@ enum TaptionMotion {
 
     /// The curve to actually run, given the Reduce Motion setting (§7).
     ///
-    /// A spring overshoots and settles, which is exactly the travel the setting asks us to drop, so
-    /// it becomes an instant change rather than a shorter spring. `nil` is accepted by both
-    /// `withAnimation` and `.animation(_:value:)`.
-    static func spring(_ animation: Animation, reduceMotion: Bool) -> Animation? {
+    /// A spring overshoots and settles and a linear ramp slides a viewport — both are exactly the
+    /// travel the setting asks us to drop, so they become instant changes rather than shorter
+    /// ones. `nil` is accepted by both `withAnimation` and `.animation(_:value:)`.
+    static func curve(_ animation: Animation, reduceMotion: Bool) -> Animation? {
         reduceMotion ? nil : animation
     }
 

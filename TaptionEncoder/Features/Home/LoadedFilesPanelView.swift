@@ -138,7 +138,8 @@ struct LoadedFilesPanelView: View {
                                     direction: direction,
                                     proxy: scrollProxy
                                 )
-                            }
+                            },
+                            reduceMotion: reduceMotion
                         )
                     )
                 }
@@ -150,7 +151,7 @@ struct LoadedFilesPanelView: View {
     }
 
     private var queueSpringAnimation: Animation? {
-        TaptionMotion.spring(.spring(response: 0.28, dampingFraction: 0.84), reduceMotion: reduceMotion)
+        TaptionMotion.curve(.spring(response: 0.28, dampingFraction: 0.84), reduceMotion: reduceMotion)
     }
 
     private func autoScrollQueue(
@@ -187,7 +188,9 @@ struct LoadedFilesPanelView: View {
 
         lastAutoScrollRequest = request
         lastAutoScrollAt = now
-        withAnimation(.linear(duration: 0.14)) {
+        // A linear ramp is travel: it glides the viewport while the finger is dragging a card
+        // toward an edge band. Under Reduce Motion the viewport jumps to the new position instead.
+        withAnimation(TaptionMotion.curve(.linear(duration: 0.14), reduceMotion: reduceMotion)) {
             proxy.scrollTo(files[destinationIndex].id, anchor: anchor)
         }
     }
@@ -629,7 +632,7 @@ private struct EncodingFileCardView: View {
     }
 
     private var queueSpringAnimation: Animation? {
-        TaptionMotion.spring(.spring(response: 0.26, dampingFraction: 0.82), reduceMotion: reduceMotion)
+        TaptionMotion.curve(.spring(response: 0.26, dampingFraction: 0.82), reduceMotion: reduceMotion)
     }
 
     private func clampedSwipeOffset(_ offset: CGFloat) -> CGFloat {
@@ -710,6 +713,7 @@ private struct QueueFileDropContainer<Content: View>: View {
     var onAutoScroll: (String, QueueAutoScrollDirection) -> Void
     var onHover: (String) -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var targetHeight: CGFloat = 0
 
     private var content: Content
@@ -757,7 +761,8 @@ private struct QueueFileDropContainer<Content: View>: View {
                     onMove: onMove,
                     onMoveEnded: onMoveEnded,
                     onAutoScroll: onAutoScroll,
-                    onHover: onHover
+                    onHover: onHover,
+                    reduceMotion: reduceMotion
                 )
             )
     }
@@ -770,6 +775,9 @@ private struct QueuePanelDropDelegate: DropDelegate {
     var anchorTargetID: String?
     var onMoveEnded: () -> Void
     var onAutoScroll: (QueueAutoScrollDirection) -> Void
+    /// A `DropDelegate` is not a `View`, so the setting has to be handed in rather than read from
+    /// the environment. Without it the drop animations below would ignore Reduce Motion.
+    var reduceMotion: Bool
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
         guard draggedFileID != nil,
@@ -781,7 +789,7 @@ private struct QueuePanelDropDelegate: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+        withAnimation(TaptionMotion.curve(.spring(response: 0.28, dampingFraction: 0.84), reduceMotion: reduceMotion)) {
             onMoveEnded()
         }
         draggedFileID = nil
@@ -810,6 +818,8 @@ private struct QueueFileDropDelegate: DropDelegate {
     var onMoveEnded: () -> Void
     var onAutoScroll: (String, QueueAutoScrollDirection) -> Void
     var onHover: (String) -> Void
+    /// See `QueuePanelDropDelegate.reduceMotion`.
+    var reduceMotion: Bool
 
     func dropEntered(info: DropInfo) {
         guard let draggedFileID,
@@ -817,13 +827,13 @@ private struct QueueFileDropDelegate: DropDelegate {
             return
         }
         onHover(targetID)
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+        withAnimation(TaptionMotion.curve(.spring(response: 0.28, dampingFraction: 0.84), reduceMotion: reduceMotion)) {
             onMove(draggedFileID, targetID)
         }
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.84)) {
+        withAnimation(TaptionMotion.curve(.spring(response: 0.28, dampingFraction: 0.84), reduceMotion: reduceMotion)) {
             onMoveEnded()
         }
         draggedFileID = nil

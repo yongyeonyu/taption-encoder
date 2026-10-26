@@ -1070,7 +1070,7 @@ struct HomeView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(TaptionTheme.border, lineWidth: 1)
+                .stroke(TaptionTheme.focusBorder, lineWidth: 1)
         )
         .accessibilityLabel("Watch Ad for Star. Balance \(viewModel.starBalanceDisplayText)")
     }

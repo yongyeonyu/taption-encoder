@@ -177,6 +177,13 @@ cancel control. Decorative containers keep the hairline.
 verified with the Duo render pass (`scripts/render-duo-screenshots.sh`); the guard test
 `testFocusBorderIsTheAccessibleEdgeForInteractiveControls` keeps it on the interactive edges.
 
+The guard counts strokes rather than looking for the role's name. Its first version only asked
+whether a file *mentioned* `focusBorder`, and that passed while `HomeView.starBadge` and the Reset
+button in `PendingSaveRecoveryView` still drew a 1.51:1 hairline — one correct use anywhere in a
+file hid every wrong one. Both are migrated, and the test now holds a file whose edges are all
+interactive to zero decorative strokes, plus an explicit count for each container that is allowed
+to keep the hairline. Changing a count means deciding whether the edge you touched is tappable.
+
 **F2 — `disabledText` is 3.93:1 on `elevatedSurface`.** Below 4.5:1 for body text. WCAG exempts
 disabled controls, so this is compliant, but it is close enough that the token must not be reused
 for live text. Audited: all 13 call sites gate on a disabled/interactable flag. Keep it that way.
